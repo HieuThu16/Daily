@@ -203,7 +203,7 @@ export function HabitsPage() {
                       ) : (
                         <span />
                       )}
-                      {h.tracking_type === 'COUNT' && <input aria-label={`Giá trị hôm nay cho ${h.name}`} type="number" min="0" value={todayValue(h.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => setCount(h, e.target.value)} style={{ width: 58, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6 }} />}
+                      {h.tracking_type === 'COUNT' && <input aria-label={`Giá trị hôm nay cho ${h.name}`} type="text" inputMode="numeric" pattern="[0-9]*" value={todayValue(h.id) || ''} onClick={(e) => e.stopPropagation()} onChange={(e) => setCount(h, e.target.value)} placeholder="0" style={{ width: 58, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6, textAlign: 'center' }} />}
                       <button
                         className="icon small"
                         aria-label="Edit habit"
@@ -247,11 +247,18 @@ export function HabitsPage() {
                 </h3>
                 {hs.map((h) => (
                   <div className={'check-row ' + (completed.has(h.id) ? 'checked' : '')} key={h.id}>
-                    <button className="habit-check" onClick={() => h.tracking_type === 'CHECK' && toggle(h)}>
-                      <span className="checkbox">{completed.has(h.id) && <Check size={14} />}</span>
-                      <span>{h.name}{h.tracking_type === 'COUNT' ? ` (${todayValue(h.id)})` : ''}</span>
-                    </button>
-                    {h.tracking_type === 'COUNT' && <input aria-label={`Giá trị hôm nay cho ${h.name}`} type="number" min="0" value={todayValue(h.id)} onChange={(e) => setCount(h, e.target.value)} style={{ width: 58, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6 }} />}
+                    {h.tracking_type === 'CHECK' ? (
+                      <button className="habit-check" onClick={() => toggle(h)}>
+                        <span className="checkbox">{completed.has(h.id) && <Check size={14} />}</span>
+                        <span>{h.name}</span>
+                      </button>
+                    ) : (
+                      <div className="habit-check">
+                        <span className="category-chip">{todayValue(h.id)}</span>
+                        <span>{h.name}</span>
+                      </div>
+                    )}
+                    {h.tracking_type === 'COUNT' && <input aria-label={`Giá trị hôm nay cho ${h.name}`} type="text" inputMode="numeric" pattern="[0-9]*" value={todayValue(h.id) || ''} onChange={(e) => setCount(h, e.target.value)} placeholder="0" style={{ width: 58, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6, textAlign: 'center' }} />}
                     <button
                       className="icon small"
                       aria-label="Edit habit"
@@ -283,12 +290,12 @@ export function HabitsPage() {
             {habits.items.flatMap((h) => [
               <strong key={h.id}>{h.name}</strong>,
               ...week.map((d) => {
-                const done = logs.some((l) => l.habit_id === h.id && l.date === d && l.completed)
-                return (
-                  <span key={h.id + d} className={done ? 'history-done' : 'history-empty'}>
-                    {done ? '✓' : '·'}
-                  </span>
-                )
+                const log = logs.find((l) => l.habit_id === h.id && l.date === d)
+                if (h.tracking_type === 'COUNT') {
+                  const value = log?.value ?? 0
+                  return <span key={h.id + d} className={value > 0 ? 'history-value' : 'history-empty'}>{value > 0 ? value : '–'}</span>
+                }
+                return <span key={h.id + d} className={log?.completed ? 'history-done' : 'history-empty'}>{log?.completed ? '✓' : '·'}</span>
               }),
             ])}
           </div>
