@@ -13,13 +13,15 @@ export type Todo = {
 export type Idea = { id: string; title: string; content: string; created_at: string }
 export type Media = {
   id: string
-  type: 'BOOK' | 'MOVIE' | 'YOUTUBE' | 'MUSIC'
+  type: 'BOOK' | 'MOVIE' | 'YOUTUBE' | 'MUSIC' | 'STORY'
   name: string
   description: string | null
   channel?: string | null
   artist?: string | null
+  movie_genre_id?: string | null
   status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
   is_favorite: boolean
 }
+export type MovieGenre = { id: string; name: string }
 export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
 export type Entry = { id: string; content: string; entry_date: string; created_at: string; entry_type: DailyType }
