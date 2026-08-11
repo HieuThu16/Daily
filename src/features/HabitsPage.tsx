@@ -98,6 +98,20 @@ export function HabitsPage() {
     setNewCategory('')
   }
 
+  const addCategoryFromHabitForm = async () => {
+    const value = prompt('Tên thể loại thói quen mới')?.trim()
+    if (!value) return
+    const { data, error } = await supabase!
+      .from('habit_categories')
+      .insert({ name: value, color: colors[categories.items.length % colors.length] })
+      .select()
+      .single()
+    if (error || !data) return alert('Không thể thêm thể loại. Tên có thể đã tồn tại.')
+    const category = data as HabitCategory
+    categories.setItems((prev) => [...prev, category])
+    setCategoryId(category.id)
+  }
+
   const renameCategory = async (c: HabitCategory) => {
     const value = prompt('Category name', c.name)?.trim()
     if (!value || value === c.name) return
@@ -297,14 +311,13 @@ export function HabitsPage() {
           </label>
           <label>
             Category
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">No category</option>
-              {categories.items.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">No category</option>
+                {categories.items.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button type="button" className="icon" aria-label="Thêm thể loại" title="Thêm thể loại" onClick={addCategoryFromHabitForm}><Plus size={16} /></button>
+            </div>
           </label>
           <div className="modal-actions">
             <button className="primary" onClick={create} style={{ marginLeft: 'auto' }}>
@@ -329,14 +342,13 @@ export function HabitsPage() {
           </label>
           <label>
             Category
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">No category</option>
-              {categories.items.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">No category</option>
+                {categories.items.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button type="button" className="icon" aria-label="Thêm thể loại" title="Thêm thể loại" onClick={addCategoryFromHabitForm}><Plus size={16} /></button>
+            </div>
           </label>
           <div className="modal-actions">
             <DeleteButton onDelete={deleteHabit} />
