@@ -399,7 +399,7 @@ export function HabitsPage() {
               Chưa có thói quen nào. Bấm "+ Thêm" để tạo mới nhé!
             </Empty>
           ) : (
-            <div style={{ display: 'grid', gap: 10, maxHeight: '250px', overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 230px)', minHeight: 220, overflowY: 'auto' }}>
               {/* SECTION 1: THÓI QUEN TỐT (GOOD HABITS) */}
               {goodHabits.length > 0 && (
                 <div>

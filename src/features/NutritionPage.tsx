@@ -1,281 +1,507 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { localDate } from '../lib/date';
-import { useToast } from './ToastContext';
-import { Modal } from './shared';
+import { useState, useEffect, useMemo } from 'react'
+import { Moon, Plus, Trash2, UtensilsCrossed } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { localDate } from '../lib/date'
+import { useToast } from './ToastContext'
+import { Modal } from './shared'
 
-type MealSlot = 'MORNING' | 'LUNCH' | 'AFTERNOON' | 'EVENING';
+type MealSlot = 'MORNING' | 'LUNCH' | 'AFTERNOON' | 'EVENING'
+type SubTab = 'food' | 'sleep'
 
 interface NutritionLog {
-  id: string;
-  meal_slot: MealSlot;
-  food_name: string;
-  price: number;
-  log_date: string;
-  created_at: string;
+  id: string
+  meal_slot: MealSlot
+  food_name: string
+  price: number
+  log_date: string
+  created_at: string
 }
 
-const mealSlotInfo = {
-  MORNING: { label: 'Sáng', color: '#f59e0b', bg: '#fef3c7' },
-  LUNCH: { label: 'Trưa', color: '#10b981', bg: '#d1fae5' },
-  AFTERNOON: { label: 'Chiều', color: '#f43f5e', bg: '#ffe4e6' },
-  EVENING: { label: 'Tối', color: '#6366f1', bg: '#e0e7ff' },
-};
+interface SleepLog {
+  id: string
+  sleep_start: string  // "HH:MM"
+  sleep_end: string    // "HH:MM"
+  log_date: string
+  duration_minutes: number
+  created_at: string
+}
+
+const MEALS: { slot: MealSlot; label: string; emoji: string; color: string; bg: string }[] = [
+  { slot: 'MORNING',   label: 'Sáng',  emoji: '🌅', color: '#f59e0b', bg: 'rgba(245,158,11,0.10)' },
+  { slot: 'LUNCH',     label: 'Trưa',  emoji: '☀️',  color: '#10b981', bg: 'rgba(16,185,129,0.10)' },
+  { slot: 'AFTERNOON', label: 'Chiều', emoji: '🌤️', color: '#f97316', bg: 'rgba(249,115,22,0.10)' },
+  { slot: 'EVENING',   label: 'Tối',   emoji: '🌙', color: '#6366f1', bg: 'rgba(99,102,241,0.10)' },
+]
+
+function fmt(price: number) {
+  return new Intl.NumberFormat('vi-VN').format(price) + 'đ'
+}
+
+function calcDuration(start: string, end: string): number {
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  let minutes = eh * 60 + em - (sh * 60 + sm)
+  if (minutes < 0) minutes += 24 * 60 // cross midnight
+  return minutes
+}
+
+function fmtDuration(minutes: number) {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h > 0 ? `${h}h${m > 0 ? m + 'm' : ''}` : `${m}m`
+}
+
+function sleepQuality(minutes: number) {
+  if (minutes >= 450) return { label: 'Đủ giấc ✅', color: '#10b981' }
+  if (minutes >= 360) return { label: 'Tạm ổn ⚠️', color: '#f59e0b' }
+  return { label: 'Thiếu ngủ ❌', color: '#ef4444' }
+}
 
 export function NutritionPage() {
-  const [currentDate, setCurrentDate] = useState(localDate(new Date()));
-  const [logs, setLogs] = useState<NutritionLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newItem, setNewItem] = useState({ food_name: '', price: '', meal_slot: 'MORNING' as MealSlot });
-  const { showToast } = useToast();
+  const { showToast } = useToast()
+  const [tab, setTab] = useState<SubTab>('food')
+  const [currentDate, setCurrentDate] = useState(localDate(new Date()))
 
-  useEffect(() => {
-    fetchLogs();
-  }, [currentDate]);
+  // Food state
+  const [logs, setLogs] = useState<NutritionLog[]>([])
+  const [foodLoading, setFoodLoading] = useState(true)
+  const [foodModal, setFoodModal] = useState(false)
+  const [activeMeal, setActiveMeal] = useState<MealSlot>('MORNING')
+  const [foodName, setFoodName] = useState('')
+  const [foodPrice, setFoodPrice] = useState('')
 
-  const fetchLogs = async () => {
-    setLoading(true);
+  // Sleep state
+  const [sleepLogs, setSleepLogs] = useState<SleepLog[]>([])
+  const [sleepLoading, setSleepLoading] = useState(true)
+  const [sleepModal, setSleepModal] = useState(false)
+  const [sleepStart, setSleepStart] = useState('22:00')
+  const [sleepEnd, setSleepEnd] = useState('06:00')
+
+  useEffect(() => { fetchFood() }, [currentDate])
+  useEffect(() => { fetchSleep() }, [currentDate])
+
+  // ─── Food ───────────────────────────────────────────────────────────────────
+
+  async function fetchFood() {
+    setFoodLoading(true)
     try {
       const { data, error } = await supabase!
-        .from('nutrition_logs')
-        .select('*')
-        .eq('log_date', currentDate)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: true });
+        .from('nutrition_logs').select('*')
+        .eq('log_date', currentDate).is('deleted_at', null)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      setLogs(data || [])
+    } catch {
+      const local = localStorage.getItem(`nutrition_${currentDate}`)
+      setLogs(local ? JSON.parse(local) : [])
+    } finally { setFoodLoading(false) }
+  }
 
-      if (error) throw error;
-      setLogs(data || []);
-    } catch (error) {
-      console.error('Error fetching logs, using fallback', error);
-      const localData = localStorage.getItem(`nutrition_logs_${currentDate}`);
-      if (localData) {
-        setLogs(JSON.parse(localData));
-      } else {
-        setLogs([]);
-      }
-      showToast('Offline mode or fetch failed');
-    } finally {
-      setLoading(false);
+  async function addFood() {
+    if (!foodName.trim()) { showToast('Nhập tên món đã'); return }
+    const price = parseInt(foodPrice.replace(/\D/g, ''), 10) || 0
+    const payload = { meal_slot: activeMeal, food_name: foodName.trim(), price, log_date: currentDate }
+    try {
+      const { data, error } = await supabase!.from('nutrition_logs').insert(payload).select().single()
+      if (error) throw error
+      setLogs(p => [...p, data])
+      showToast('✅ Đã thêm món!')
+    } catch {
+      const fb = { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() } as NutritionLog
+      const next = [...logs, fb]
+      setLogs(next)
+      localStorage.setItem(`nutrition_${currentDate}`, JSON.stringify(next))
+      showToast('📴 Đã lưu offline')
     }
-  };
+    setFoodName(''); setFoodPrice(''); setFoodModal(false)
+  }
 
-  const handleAddItem = async () => {
-    if (!newItem.food_name.trim() || !newItem.price) {
-      showToast('Vui lòng nhập tên món và giá');
-      return;
-    }
+  async function deleteFood(id: string) {
+    try {
+      await supabase!.from('nutrition_logs').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+    } catch {}
+    const next = logs.filter(l => l.id !== id)
+    setLogs(next)
+    localStorage.setItem(`nutrition_${currentDate}`, JSON.stringify(next))
+    showToast('🗑️ Đã xoá')
+  }
 
-    const priceNum = parseInt(newItem.price.replace(/,/g, ''), 10) || 0;
+  // ─── Sleep ──────────────────────────────────────────────────────────────────
 
-    const newLog: Partial<NutritionLog> = {
-      meal_slot: newItem.meal_slot,
-      food_name: newItem.food_name.trim(),
-      price: priceNum,
-      log_date: currentDate,
-    };
-
+  async function fetchSleep() {
+    setSleepLoading(true)
     try {
       const { data, error } = await supabase!
-        .from('nutrition_logs')
-        .insert(newLog)
-        .select()
-        .single();
+        .from('sleep_logs').select('*')
+        .eq('log_date', currentDate).is('deleted_at', null)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      setSleepLogs(data || [])
+    } catch {
+      const local = localStorage.getItem(`sleep_${currentDate}`)
+      setSleepLogs(local ? JSON.parse(local) : [])
+    } finally { setSleepLoading(false) }
+  }
 
-      if (error) throw error;
-      setLogs(prev => [...prev, data]);
-      showToast('Thêm món thành công', 'success');
-    } catch (error) {
-      console.error('Error saving to supabase, using fallback', error);
-      const fallbackLog = { ...newLog, id: Date.now().toString(), created_at: new Date().toISOString() } as NutritionLog;
-      const updatedLogs = [...logs, fallbackLog];
-      setLogs(updatedLogs);
-      localStorage.setItem(`nutrition_logs_${currentDate}`, JSON.stringify(updatedLogs));
-      showToast('Đã lưu offline', 'success');
-    }
-
-    setNewItem({ food_name: '', price: '', meal_slot: 'MORNING' });
-    setIsModalOpen(false);
-  };
-
-  const handleDeleteItem = async (id: string) => {
+  async function addSleep() {
+    const dur = calcDuration(sleepStart, sleepEnd)
+    const payload = { sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate, duration_minutes: dur }
     try {
-      const { error } = await supabase!
-        .from('nutrition_logs')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
-      setLogs(prev => prev.filter(log => log.id !== id));
-      showToast('Đã xóa món', 'success');
-    } catch (error) {
-      console.error('Error deleting, using fallback', error);
-      const updatedLogs = logs.filter(log => log.id !== id);
-      setLogs(updatedLogs);
-      localStorage.setItem(`nutrition_logs_${currentDate}`, JSON.stringify(updatedLogs));
-      showToast('Đã xóa offline', 'success');
+      const { data, error } = await supabase!.from('sleep_logs').insert(payload).select().single()
+      if (error) throw error
+      setSleepLogs(p => [...p, data])
+      showToast('✅ Đã ghi giấc ngủ!')
+    } catch {
+      const fb = { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() } as SleepLog
+      const next = [...sleepLogs, fb]
+      setSleepLogs(next)
+      localStorage.setItem(`sleep_${currentDate}`, JSON.stringify(next))
+      showToast('📴 Đã lưu offline')
     }
-  };
+    setSleepModal(false)
+  }
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
-  };
+  async function deleteSleep(id: string) {
+    try {
+      await supabase!.from('sleep_logs').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+    } catch {}
+    const next = sleepLogs.filter(l => l.id !== id)
+    setSleepLogs(next)
+    localStorage.setItem(`sleep_${currentDate}`, JSON.stringify(next))
+    showToast('🗑️ Đã xoá')
+  }
 
-  const changeDate = (days: number) => {
-    const date = new Date(currentDate);
-    date.setDate(date.getDate() + days);
-    setCurrentDate(localDate(date));
-  };
+  // ─── Derived ────────────────────────────────────────────────────────────────
 
-  const groupedLogs = {
-    MORNING: logs.filter(log => log.meal_slot === 'MORNING'),
-    LUNCH: logs.filter(log => log.meal_slot === 'LUNCH'),
-    AFTERNOON: logs.filter(log => log.meal_slot === 'AFTERNOON'),
-    EVENING: logs.filter(log => log.meal_slot === 'EVENING'),
-  };
+  const groupedLogs = useMemo(() => {
+    const g: Record<MealSlot, NutritionLog[]> = { MORNING: [], LUNCH: [], AFTERNOON: [], EVENING: [] }
+    logs.forEach(l => g[l.meal_slot].push(l))
+    return g
+  }, [logs])
 
-  const grandTotal = logs.reduce((sum, log) => sum + log.price, 0);
+  const grandTotal = logs.reduce((s, l) => s + l.price, 0)
+  const totalSleep = sleepLogs.reduce((s, l) => s + l.duration_minutes, 0)
+
+  const changeDate = (d: number) => {
+    const date = new Date(currentDate)
+    date.setDate(date.getDate() + d)
+    setCurrentDate(localDate(date))
+  }
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ margin: 0, fontSize: '24px', color: 'var(--primary)', fontWeight: 'bold' }}>Dinh dưỡng</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button onClick={() => changeDate(-1)} style={btnStyle}>&lt;</button>
-          <span style={{ fontWeight: '600', minWidth: '100px', textAlign: 'center' }}>{currentDate}</span>
-          <button onClick={() => changeDate(1)} style={btnStyle}>&gt;</button>
+    <section style={{ maxWidth: 700, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      {/* ── Header row ─────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Sub-tabs */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => setTab('food')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+              borderRadius: 20, fontSize: '0.8rem', fontWeight: 700, border: '1.5px solid',
+              borderColor: tab === 'food' ? 'var(--primary)' : 'var(--card-border)',
+              background: tab === 'food' ? 'var(--primary)' : 'var(--card-bg)',
+              color: tab === 'food' ? 'white' : 'var(--text-main)', cursor: 'pointer',
+              transition: 'all 0.18s'
+            }}
+          >
+            <UtensilsCrossed size={13} /> Ăn uống
+          </button>
+          <button
+            onClick={() => setTab('sleep')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+              borderRadius: 20, fontSize: '0.8rem', fontWeight: 700, border: '1.5px solid',
+              borderColor: tab === 'sleep' ? '#6366f1' : 'var(--card-border)',
+              background: tab === 'sleep' ? '#6366f1' : 'var(--card-bg)',
+              color: tab === 'sleep' ? 'white' : 'var(--text-main)', cursor: 'pointer',
+              transition: 'all 0.18s'
+            }}
+          >
+            <Moon size={13} /> Ngủ
+          </button>
+        </div>
+
+        {/* Date nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => changeDate(-1)} className="icon" style={{ padding: '3px 7px', fontSize: '0.85rem' }}>‹</button>
+          <span style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)', minWidth: 78, textAlign: 'center' }}>{currentDate}</span>
+          <button onClick={() => changeDate(1)} className="icon" style={{ padding: '3px 7px', fontSize: '0.85rem' }}>›</button>
         </div>
       </div>
 
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-        <span style={{ fontSize: '18px', fontWeight: '500' }}>Tổng chi phí hôm nay</span>
-        <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{formatPrice(grandTotal)}</span>
-      </div>
+      {/* ═══════════════════ FOOD TAB ═══════════════════════════════════════ */}
+      {tab === 'food' && (
+        <>
+          {/* Total bar */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '8px 14px', borderRadius: 12,
+            background: 'var(--primary)', color: 'white',
+            boxShadow: '0 3px 12px rgba(37,99,235,0.18)'
+          }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Tổng chi phí hôm nay</span>
+            <span style={{ fontSize: '1rem', fontWeight: 800 }}>{fmt(grandTotal)}</span>
+          </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px' }}>Đang tải...</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', flex: 1, overflowY: 'auto', paddingBottom: '20px' }}>
-          {(Object.keys(mealSlotInfo) as MealSlot[]).map(slot => {
-            const slotLogs = groupedLogs[slot];
-            const slotTotal = slotLogs.reduce((sum, log) => sum + log.price, 0);
-            const info = mealSlotInfo[slot];
+          {/* 4 compact meal buttons + quick-add */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+            {MEALS.map(m => (
+              <button
+                key={m.slot}
+                onClick={() => { setActiveMeal(m.slot); setFoodModal(true) }}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                  padding: '8px 4px', borderRadius: 12,
+                  border: '1.5px solid', borderColor: m.color,
+                  background: m.bg, cursor: 'pointer', transition: 'all 0.18s'
+                }}
+              >
+                <span style={{ fontSize: '1.1rem' }}>{m.emoji}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: m.color }}>{m.label}</span>
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: m.color }}>
+                  {fmt(groupedLogs[m.slot].reduce((s, l) => s + l.price, 0))}
+                </span>
+                <Plus size={11} color={m.color} />
+              </button>
+            ))}
+          </div>
 
-            return (
-              <div key={slot} style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', borderBottom: '1px solid var(--card-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: info.color }}></div>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>{info.label}</h3>
-                  </div>
-                  <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{formatPrice(slotTotal)}</span>
-                </div>
-                
-                <div style={{ padding: '15px 20px', flex: 1, overflowY: 'auto' }}>
-                  {slotLogs.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#888', fontStyle: 'italic', padding: '20px 0' }}>Chưa có món nào</div>
-                  ) : (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {slotLogs.map(log => (
-                        <li key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: 'var(--bg-main)', borderRadius: '8px' }}>
-                          <span style={{ fontWeight: '500' }}>{log.food_name}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <span style={{ color: '#555' }}>{formatPrice(log.price)}</span>
-                            <button onClick={() => handleDeleteItem(log.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px' }}>✕</button>
-                          </div>
-                        </li>
+          {/* Items list (scrollable) */}
+          {foodLoading ? (
+            <p className="muted" style={{ textAlign: 'center', padding: 20 }}>Đang tải…</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', maxHeight: 'calc(100vh - 310px)', minHeight: 120 }}>
+              {MEALS.map(m => {
+                const items = groupedLogs[m.slot]
+                if (!items.length) return null
+                return (
+                  <div key={m.slot} className="card" style={{ padding: 10, margin: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: '0.95rem' }}>{m.emoji}</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.82rem', color: m.color }}>{m.label}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 700, color: m.color }}>
+                        {fmt(items.reduce((s, l) => s + l.price, 0))}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {items.map(log => (
+                        <div key={log.id} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '5px 8px', borderRadius: 8,
+                          background: m.bg, fontSize: '0.8rem'
+                        }}>
+                          <span style={{ fontWeight: 500, flex: 1, wordBreak: 'break-word' }}>{log.food_name}</span>
+                          <span style={{ fontWeight: 600, color: m.color, marginLeft: 8, whiteSpace: 'nowrap' }}>{fmt(log.price)}</span>
+                          <button onClick={() => deleteFood(log.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 0 8px', color: '#ef4444', display: 'flex' }}>
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       ))}
-                    </ul>
-                  )}
-                </div>
-                
-                <div style={{ padding: '15px 20px', borderTop: '1px solid var(--card-border)' }}>
-                  <button 
-                    onClick={() => { setNewItem(prev => ({ ...prev, meal_slot: slot })); setIsModalOpen(true); }}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px dashed var(--primary)', backgroundColor: 'transparent', color: 'var(--primary)', cursor: 'pointer', fontWeight: '500', transition: 'all 0.2s' }}
-                    onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.03)'}
-                    onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    + Thêm món
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                    </div>
+                  </div>
+                )
+              })}
+              {!logs.length && (
+                <p className="muted" style={{ textAlign: 'center', padding: 20 }}>Chưa có gì hôm nay 🍽️</p>
+              )}
+            </div>
+          )}
+        </>
       )}
 
-      {isModalOpen && (
-        <Modal onClose={() => setIsModalOpen(false)} title="Thêm món ăn">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      {/* ═══════════════════ SLEEP TAB ══════════════════════════════════════ */}
+      {tab === 'sleep' && (
+        <>
+          {/* Sleep summary card */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '10px 14px', borderRadius: 12,
+            background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white',
+            boxShadow: '0 3px 12px rgba(99,102,241,0.25)'
+          }}>
             <div>
-              <label style={labelStyle}>Bữa ăn</label>
-              <select 
-                value={newItem.meal_slot} 
-                onChange={e => setNewItem({...newItem, meal_slot: e.target.value as MealSlot})}
-                style={inputStyle}
-              >
-                {Object.entries(mealSlotInfo).map(([key, info]) => (
-                  <option key={key} value={key}>{info.label}</option>
-                ))}
-              </select>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, opacity: 0.85 }}>Tổng ngủ hôm nay</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800 }}>{totalSleep ? fmtDuration(totalSleep) : '—'}</div>
             </div>
-            <div>
-              <label style={labelStyle}>Tên món</label>
-              <input 
-                type="text" 
-                value={newItem.food_name} 
-                onChange={e => setNewItem({...newItem, food_name: e.target.value})}
-                placeholder="Ví dụ: Phở bò"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Giá (VNĐ)</label>
-              <input 
-                type="number" 
-                value={newItem.price} 
-                onChange={e => setNewItem({...newItem, price: e.target.value})}
-                placeholder="Ví dụ: 35000"
-                style={inputStyle}
-              />
-            </div>
-            <button 
-              onClick={handleAddItem}
-              style={{ padding: '12px', backgroundColor: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }}
+            {totalSleep > 0 && (
+              <div style={{
+                fontSize: '0.72rem', fontWeight: 700,
+                padding: '4px 10px', borderRadius: 20,
+                background: 'rgba(255,255,255,0.18)',
+                color: sleepQuality(totalSleep).color === '#10b981' ? '#bbf7d0' : sleepQuality(totalSleep).color === '#f59e0b' ? '#fde68a' : '#fecaca'
+              }}>
+                {sleepQuality(totalSleep).label}
+              </div>
+            )}
+            <button
+              className="primary"
+              onClick={() => setSleepModal(true)}
+              style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'rgba(255,255,255,0.22)', border: '1.5px solid rgba(255,255,255,0.4)', gap: 4 }}
             >
+              <Plus size={13} /> Ghi
+            </button>
+          </div>
+
+          {/* Stats row: avg / target */}
+          {sleepLogs.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+              {[
+                { label: 'Số lần', value: String(sleepLogs.length), color: '#6366f1' },
+                { label: 'Trung bình', value: fmtDuration(Math.round(totalSleep / sleepLogs.length)), color: '#8b5cf6' },
+                { label: 'Mục tiêu', value: '7h30m', color: '#10b981' },
+              ].map(s => (
+                <div key={s.label} className="card" style={{ padding: '8px 10px', margin: 0, textAlign: 'center' }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Sleep log list */}
+          {sleepLoading ? (
+            <p className="muted" style={{ textAlign: 'center', padding: 20 }}>Đang tải…</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', maxHeight: 'calc(100vh - 310px)', minHeight: 120 }}>
+              {sleepLogs.length === 0 ? (
+                <div className="card" style={{ padding: 28, margin: 0, textAlign: 'center' }}>
+                  <Moon size={32} color="#6366f1" style={{ margin: '0 auto 8px' }} />
+                  <p className="muted" style={{ margin: 0 }}>Chưa có dữ liệu giấc ngủ hôm nay.<br />Nhấn "Ghi" để thêm.</p>
+                </div>
+              ) : (
+                sleepLogs.map(s => {
+                  const dur = s.duration_minutes
+                  const q = sleepQuality(dur)
+                  return (
+                    <div key={s.id} className="card" style={{
+                      padding: '10px 14px', margin: 0,
+                      display: 'flex', alignItems: 'center', gap: 10
+                    }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: '50%',
+                        background: 'rgba(99,102,241,0.12)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                      }}>
+                        <Moon size={18} color="#6366f1" />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                          {s.sleep_start} → {s.sleep_end}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {fmtDuration(dur)} · <span style={{ color: q.color, fontWeight: 600 }}>{q.label}</span>
+                        </div>
+                      </div>
+                      {/* Visual bar */}
+                      <div style={{ width: 60, height: 6, borderRadius: 4, background: 'var(--card-border)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 4,
+                          width: `${Math.min(100, (dur / 540) * 100)}%`,
+                          background: dur >= 450 ? '#10b981' : dur >= 360 ? '#f59e0b' : '#ef4444'
+                        }} />
+                      </div>
+                      <button onClick={() => deleteSleep(s.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4, display: 'flex' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══════════════════ MODALS ════════════════════════════════════════ */}
+
+      {/* Food modal */}
+      {foodModal && (
+        <Modal onClose={() => setFoodModal(false)} title="Thêm món ăn">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Meal selector inline */}
+            <label>
+              Bữa ăn
+              <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
+                {MEALS.map(m => (
+                  <button
+                    key={m.slot} type="button"
+                    onClick={() => setActiveMeal(m.slot)}
+                    style={{
+                      flex: 1, padding: '5px 2px', borderRadius: 8, fontSize: '0.72rem', fontWeight: 700,
+                      border: '1.5px solid', borderColor: activeMeal === m.slot ? m.color : 'var(--card-border)',
+                      background: activeMeal === m.slot ? m.bg : 'var(--bg-main)',
+                      color: activeMeal === m.slot ? m.color : 'var(--text-muted)', cursor: 'pointer'
+                    }}
+                  >
+                    {m.emoji} {m.label}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <label>
+              Tên món
+              <input
+                autoFocus type="text" value={foodName}
+                onChange={e => setFoodName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addFood()}
+                placeholder="Ví dụ: Phở bò"
+              />
+            </label>
+            <label>
+              Giá (VNĐ)
+              <input
+                type="number" value={foodPrice}
+                onChange={e => setFoodPrice(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addFood()}
+                placeholder="35000"
+              />
+            </label>
+            <button className="primary" onClick={addFood} style={{ marginTop: 4 }}>
               Lưu món ăn
             </button>
           </div>
         </Modal>
       )}
-    </div>
-  );
+
+      {/* Sleep modal */}
+      {sleepModal && (
+        <Modal onClose={() => setSleepModal(false)} title="Ghi giấc ngủ">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <label>
+                Ngủ từ
+                <input type="time" value={sleepStart} onChange={e => setSleepStart(e.target.value)} />
+              </label>
+              <label>
+                Đến
+                <input type="time" value={sleepEnd} onChange={e => setSleepEnd(e.target.value)} />
+              </label>
+            </div>
+            {/* Preview */}
+            <div style={{
+              padding: '10px 14px', borderRadius: 10, background: 'rgba(99,102,241,0.08)',
+              border: '1px solid rgba(99,102,241,0.25)', textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#6366f1' }}>
+                {fmtDuration(calcDuration(sleepStart, sleepEnd))}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#6366f1', marginTop: 2 }}>
+                {sleepQuality(calcDuration(sleepStart, sleepEnd)).label}
+              </div>
+            </div>
+            <button
+              className="primary" onClick={addSleep}
+              style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none' }}
+            >
+              <Moon size={14} /> Lưu giấc ngủ
+            </button>
+          </div>
+        </Modal>
+      )}
+    </section>
+  )
 }
-
-const btnStyle = {
-  padding: '6px 12px',
-  borderRadius: '6px',
-  border: '1px solid var(--card-border)',
-  backgroundColor: 'var(--card-bg)',
-  cursor: 'pointer',
-  fontWeight: 'bold',
-  color: 'var(--primary)'
-};
-
-const labelStyle = {
-  display: 'block',
-  marginBottom: '5px',
-  fontWeight: '500',
-  fontSize: '14px',
-  color: '#555'
-};
-
-const inputStyle = {
-  width: '100%',
-  padding: '10px',
-  borderRadius: '8px',
-  border: '1px solid var(--card-border)',
-  backgroundColor: 'var(--bg-main)',
-  boxSizing: 'border-box' as const
-};
