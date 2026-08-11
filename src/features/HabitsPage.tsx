@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Calendar, Check, Flame, FolderCog, LayoutGrid, List, MoreHorizontal, Pencil, Plus } from 'lucide-react'
+import { Calendar, Check, Flame, FolderCog, LayoutGrid, List, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import type { Habit, HabitCategory, HabitLog } from '../types'
@@ -16,6 +16,8 @@ export function HabitsPage() {
   const categories = useQuery<HabitCategory>('habit_categories', 'name')
 
   const [logs, setLogs] = useState<HabitLog[]>([])
+  const [countDrafts, setCountDrafts] = useState<Record<string, string>>({})
+  const [savingCountId, setSavingCountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('today')
   const [editing, setEditing] = useState<Habit | null>(null)
   const [addModal, setAddModal] = useState(false)
@@ -30,7 +32,7 @@ export function HabitsPage() {
     if (!supabase) return
     supabase
       .from('habit_logs')
-      .select('habit_id,date,completed')
+      .select('habit_id,date,completed,value')
       .gte('date', `${month}-01`)
       .lte('date', `${month}-31`)
       .then(({ data }) => setLogs((data ?? []) as HabitLog[]))
@@ -51,11 +53,26 @@ export function HabitsPage() {
     await supabase!.from('habit_logs').upsert({ habit_id: h.id, date: localDate(), completed: done }, { onConflict: 'habit_id,date' })
   }
 
-  const setCount = async (h: Habit, rawValue: string) => {
-    const value = Math.max(0, Number.parseInt(rawValue, 10) || 0)
+  const countValue = (habitId: string) => countDrafts[habitId] ?? (todayValue(habitId) ? String(todayValue(habitId)) : '')
+
+  const updateCountDraft = (habitId: string, rawValue: string) => {
+    const normalized = rawValue.replace(/\D/g, '').replace(/^0+(?=\d)/, '')
+    setCountDrafts((drafts) => ({ ...drafts, [habitId]: normalized }))
+  }
+
+  const saveCount = async (h: Habit) => {
+    const value = Math.max(0, Number.parseInt(countValue(h.id), 10) || 0)
     const completed = value > 0
-    setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())), { habit_id: h.id, date: localDate(), completed, value }])
-    await supabase!.from('habit_logs').upsert({ habit_id: h.id, date: localDate(), completed, value }, { onConflict: 'habit_id,date' })
+    setSavingCountId(h.id)
+    const { data, error } = await supabase!
+      .from('habit_logs')
+      .upsert({ habit_id: h.id, date: localDate(), completed, value }, { onConflict: 'habit_id,date' })
+      .select('habit_id,date,completed,value')
+      .single()
+    setSavingCountId(null)
+    if (error || !data) return alert('Không thể lưu số liệu. Hãy kiểm tra migration habit_tracking_types đã được chạy trên Supabase.')
+    setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())), data as HabitLog])
+    setCountDrafts((drafts) => ({ ...drafts, [h.id]: value ? String(value) : '' }))
   }
 
   const create = async () => {
@@ -203,7 +220,7 @@ export function HabitsPage() {
                       ) : (
                         <span />
                       )}
-                      {h.tracking_type === 'COUNT' && <input aria-label={`Giá trị hôm nay cho ${h.name}`} type="text" inputMode="numeric" pattern="[0-9]*" value={todayValue(h.id) || ''} onClick={(e) => e.stopPropagation()} onChange={(e) => setCount(h, e.target.value)} placeholder="0" style={{ width: 58, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6, textAlign: 'center' }} />}
+                      {h.tracking_type === 'COUNT' && <div style={{ display: 'flex', gap: 4 }}><input aria-label={`Giá trị hôm nay cho ${h.name}`} type="text" inputMode="numeric" pattern="[0-9]*" value={countValue(h.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => updateCountDraft(h.id, e.target.value)} placeholder="0" style={{ width: 50, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6, textAlign: 'center' }} /><button className="icon small" aria-label={`Lưu số liệu cho ${h.name}`} title="Lưu số liệu" disabled={savingCountId === h.id} onClick={(e) => { e.stopPropagation(); saveCount(h) }}><Save size={14} /></button></div>}
                       <button
                         className="icon small"
                         aria-label="Edit habit"
@@ -258,7 +275,7 @@ export function HabitsPage() {
                         <span>{h.name}</span>
                       </div>
                     )}
-                    {h.tracking_type === 'COUNT' && <input aria-label={`Giá trị hôm nay cho ${h.name}`} type="text" inputMode="numeric" pattern="[0-9]*" value={todayValue(h.id) || ''} onChange={(e) => setCount(h, e.target.value)} placeholder="0" style={{ width: 58, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6, textAlign: 'center' }} />}
+                    {h.tracking_type === 'COUNT' && <div style={{ display: 'flex', gap: 4 }}><input aria-label={`Giá trị hôm nay cho ${h.name}`} type="text" inputMode="numeric" pattern="[0-9]*" value={countValue(h.id)} onChange={(e) => updateCountDraft(h.id, e.target.value)} placeholder="0" style={{ width: 50, padding: '3px 5px', border: '1px solid var(--line)', borderRadius: 6, textAlign: 'center' }} /><button className="icon small" aria-label={`Lưu số liệu cho ${h.name}`} title="Lưu số liệu" disabled={savingCountId === h.id} onClick={() => saveCount(h)}><Save size={14} /></button></div>}
                     <button
                       className="icon small"
                       aria-label="Edit habit"
