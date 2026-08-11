@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, BookOpen, Calendar, Check, CheckSquare, Flame, Gamepad2, NotebookPen, Star } from 'lucide-react'
+import { ArrowRight, BookOpen, Calendar, Check, CheckSquare, Flame, NotebookPen } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
-import type { Entry, Habit, HabitLog, Media as MediaItem, PlayTogetherAccount, PlayTogetherLog, Todo } from '../types'
+import type { Entry, Habit, HabitLog, Media as MediaItem, Todo } from '../types'
 import { useToast } from './ToastContext'
 
 function getFormattedVietnameseDate() {
@@ -36,23 +36,18 @@ export function HomePage() {
   const [dailyEntries, setDailyEntries] = useState<Entry[]>([])
   const [media, setMedia] = useState<MediaItem[]>([])
 
-  // Play Together Main Account State for Home
-  const [playAccs, setPlayAccs] = useState<PlayTogetherAccount[]>([])
-  const [playLogs, setPlayLogs] = useState<PlayTogetherLog[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     ;(async () => {
       if (!supabase) return
       setLoading(true)
-      const [h, l, t, d, m, pa, pl] = await Promise.all([
+      const [h, l, t, d, m] = await Promise.all([
         supabase.from('habits').select('*').eq('is_active', true).is('deleted_at', null),
         supabase.from('habit_logs').select('*').eq('date', localDate()),
         supabase.from('todos').select('*').eq('completed', false).is('deleted_at', null).limit(4),
         supabase.from('daily_entries').select('*').eq('entry_date', localDate()).is('deleted_at', null).limit(3),
         supabase.from('media_items').select('*').eq('status', 'IN_PROGRESS').is('deleted_at', null).limit(3),
-        supabase.from('playtogether_accounts').select('*').is('deleted_at', null),
-        supabase.from('playtogether_logs').select('*').is('deleted_at', null),
       ])
 
       setHabits((h.data ?? []) as Habit[])
@@ -60,8 +55,6 @@ export function HomePage() {
       setTodos((t.data ?? []) as Todo[])
       setDailyEntries((d.data ?? []) as Entry[])
       setMedia((m.data ?? []) as MediaItem[])
-      setPlayAccs((pa.data ?? []) as PlayTogetherAccount[])
-      setPlayLogs((pl.data ?? []) as PlayTogetherLog[])
       setLoading(false)
     })()
   }, [])
@@ -75,20 +68,6 @@ export function HomePage() {
   const goodHabits = useMemo(() => slotHabits.filter((h) => h.habit_type !== 'BAD'), [slotHabits])
   const badHabits = useMemo(() => slotHabits.filter((h) => h.habit_type === 'BAD'), [slotHabits])
 
-  // Determine Main Account & Stats
-  const mainAccountData = useMemo(() => {
-    const storedMainId = localStorage.getItem('playtogether_main_acc_id')
-    const mainAcc = playAccs.find((a) => a.id === storedMainId) || playAccs[0] || null
-
-    if (!mainAcc) return null
-
-    const logsForMain = playLogs.filter((l) => l.account_name === mainAcc.name)
-    const coupons = logsForMain.reduce((sum, l) => sum + (l.coupons || 0), 0)
-    const gems = logsForMain.reduce((sum, l) => sum + (l.gems || 0), 0)
-    const cards = logsForMain.reduce((sum, l) => sum + (l.cards || 0), 0)
-
-    return { acc: mainAcc, coupons, gems, cards }
-  }, [playAccs, playLogs])
 
   const toggleHabit = async (h: Habit) => {
     const done = !completedHabitIds.has(h.id)
@@ -290,36 +269,6 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* CARD 5: MAIN ACCOUNT SUMMARY BANNER FOR PLAY TOGETHER */}
-      <div className="card" style={{ padding: '10px 14px', margin: '10px 0 0 0', background: 'linear-gradient(135deg, var(--card-bg) 0%, var(--cyan-bg) 100%)', borderColor: 'var(--cyan)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="icon-box icon-box-cyan" style={{ width: 30, height: 30 }}>
-              <Gamepad2 size={16} />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Star size={11} fill="var(--amber)" color="var(--amber)" /> Acc Chính Play Together
-              </div>
-              <div style={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--primary)' }}>
-                {mainAccountData ? mainAccountData.acc.name : 'Chưa có Acc'}
-              </div>
-            </div>
-          </div>
-
-          {mainAccountData ? (
-            <div style={{ display: 'flex', gap: 8, fontSize: '0.82rem', fontWeight: 800 }}>
-              <span style={{ color: 'var(--amber)', background: 'var(--card-bg)', padding: '2px 8px', borderRadius: 6 }}>🎟️ {mainAccountData.coupons}</span>
-              <span style={{ color: 'var(--cyan)', background: 'var(--card-bg)', padding: '2px 8px', borderRadius: 6 }}>💎 {mainAccountData.gems}</span>
-              <span style={{ color: 'var(--purple)', background: 'var(--card-bg)', padding: '2px 8px', borderRadius: 6 }}>🎴 {mainAccountData.cards}</span>
-            </div>
-          ) : (
-            <a href="/playtogether" style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--primary)' }}>
-              Vào Game chọn Acc chính →
-            </a>
-          )}
-        </div>
-      </div>
     </section>
   )
 }
