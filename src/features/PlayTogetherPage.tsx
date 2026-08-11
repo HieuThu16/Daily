@@ -276,7 +276,7 @@ export function PlayTogetherPage() {
             Chưa có Acc Play Together nào. Bấm "+ Thêm Acc" ở trên để tạo mới nhé!
           </Empty>
         ) : (
-          <div style={{ overflowX: 'auto', maxHeight: '210px', overflowY: 'auto' }}>
+          <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
               <thead>
                 <tr>

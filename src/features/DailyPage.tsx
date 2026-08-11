@@ -196,7 +196,7 @@ export function DailyPage() {
         {loading ? (
           <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải nhật ký…</p>
         ) : todayEntries.length ? (
-          <div style={{ display: 'grid', gap: 6, maxHeight: '160px', overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
             {todayEntries.map((entry) => {
               const cat = categories.find((c) => c.type === entry.entry_type) ?? categories[0]
               const Icon = cat.icon

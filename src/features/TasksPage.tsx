@@ -211,7 +211,7 @@ export function TasksPage() {
           </div>
 
           {/* SINGLE CONTAINED SCROLLABLE TASK LIST CONTAINER */}
-          <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'grid', gap: 6 }}>
+          <div style={{ maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto', display: 'grid', gap: 6 }}>
             {/* OVERDUE PENDING TASKS SECTION */}
             {overduePreviousTodos.length > 0 && (
               <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber)', borderRadius: 10, padding: 6 }}>
@@ -296,7 +296,7 @@ export function TasksPage() {
           {ideas.loading ? (
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải ý tưởng…</p>
           ) : filteredIdeas.length ? (
-            <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
               {filteredIdeas.map((i) => (
                 <div key={i.id} className="check-row" style={{ justifyContent: 'space-between', background: 'var(--bg-main)', borderRadius: 8, padding: '6px 8px', marginBottom: 0 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>

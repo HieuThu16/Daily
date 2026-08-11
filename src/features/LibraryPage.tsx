@@ -636,7 +636,7 @@ export function LibraryPage() {
           {loading ? (
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải thư viện…</p>
           ) : filteredOverviewItems.length ? (
-            <div style={{ display: 'grid', gap: 6, maxHeight: '220px', overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
               {filteredOverviewItems.map(renderMediaRow)}
             </div>
           ) : (
@@ -661,7 +661,7 @@ export function LibraryPage() {
           {loading ? (
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải yêu thích…</p>
           ) : favoriteItems.length ? (
-            <div style={{ display: 'grid', gap: 6, maxHeight: '220px', overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
               {favoriteItems.map(renderMediaRow)}
             </div>
           ) : (
