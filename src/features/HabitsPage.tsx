@@ -31,6 +31,7 @@ export function HabitsPage() {
   const [categoryId, setCategoryId] = useState('')
   const [habitType, setHabitType] = useState<'GOOD' | 'BAD'>('GOOD')
   const [trackingType, setTrackingType] = useState<'CHECK' | 'COUNT'>('CHECK')
+  const [routineSlot, setRoutineSlot] = useState<'MORNING' | 'AFTERNOON' | 'EVENING'>('MORNING')
   const [newCategory, setNewCategory] = useState('')
   const [categoryName, setCategoryName] = useState('')
 
@@ -96,17 +97,17 @@ export function HabitsPage() {
 
   const create = async () => {
     if (!name.trim()) return
-    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType }
+    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType, routine: routineSlot }
 
     let { data, error } = await supabase!.from('habits').insert(payload).select().single()
 
     if (!error && data) {
-      habits.setItems((x) => [{ ...(data as Habit), habit_type: habitType }, ...x])
+      habits.setItems((x) => [{ ...(data as Habit), habit_type: habitType, routine: routineSlot }, ...x])
       showSaveToast(true, `thói quen "${payload.name}"`)
     } else {
       const fallback = await supabase!
         .from('habits')
-        .insert({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type })
+        .insert({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type, routine: payload.routine })
         .select()
         .single()
 
@@ -123,12 +124,13 @@ export function HabitsPage() {
     setCategoryId('')
     setHabitType('GOOD')
     setTrackingType('CHECK')
+    setRoutineSlot('MORNING')
     setAddModal(false)
   }
 
   const save = async () => {
     if (!editing || !name.trim()) return
-    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType }
+    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType, routine: routineSlot }
 
     // Update local state immediately (Optimistic Persistence)
     habits.setItems((xs) => xs.map((h) => (h.id === editing.id ? { ...h, ...payload } : h)))
@@ -138,7 +140,7 @@ export function HabitsPage() {
     if (!error) {
       showSaveToast(true, `cập nhật thói quen "${payload.name}"`)
     } else {
-      await supabase!.from('habits').update({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type }).eq('id', editing.id)
+      await supabase!.from('habits').update({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type, routine: payload.routine }).eq('id', editing.id)
       showSaveToast(false, `cập nhật thói quen "${payload.name}"`)
     }
   }
@@ -200,6 +202,11 @@ export function HabitsPage() {
     const isDone = completed.has(h.id)
     const isBad = h.habit_type === 'BAD'
     const cat = category(h)
+    
+    const routine = h.routine || 'MORNING'
+    const routineIcon = routine === 'MORNING' ? '🌅' : routine === 'AFTERNOON' ? '☀️' : '🌙'
+    const routineColor = routine === 'MORNING' ? 'var(--amber)' : routine === 'AFTERNOON' ? '#f97316' : 'var(--purple)' // using hex for orange since it might not be in css
+    const routineBg = routine === 'MORNING' ? 'var(--amber-bg)' : routine === 'AFTERNOON' ? 'rgba(249, 115, 22, 0.1)' : 'var(--purple-bg)'
 
     return (
       <div
@@ -271,6 +278,21 @@ export function HabitsPage() {
               >
                 {isBad ? '⚠️ Thói quen xấu' : '🌟 Thói quen tốt'}
               </span>
+              <span
+                style={{
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  color: routineColor,
+                  background: routineBg,
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2
+                }}
+              >
+                {routineIcon} {routine === 'MORNING' ? 'Sáng' : routine === 'AFTERNOON' ? 'Trưa' : 'Tối'}
+              </span>
             </div>
           </div>
         </div>
@@ -316,6 +338,7 @@ export function HabitsPage() {
               setCategoryId(h.category_id ?? '')
               setHabitType(h.habit_type ?? 'GOOD')
               setTrackingType(h.tracking_type ?? 'CHECK')
+              setRoutineSlot(h.routine ?? 'MORNING')
             }}
             style={{ padding: 3 }}
           >
@@ -337,7 +360,7 @@ export function HabitsPage() {
           <h1 style={{ fontSize: '1.2rem', margin: 0 }}>Habits</h1>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="primary" onClick={() => { setName(''); setCategoryId(''); setHabitType('GOOD'); setTrackingType('CHECK'); setAddModal(true) }} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4 }}>
+          <button className="primary" onClick={() => { setName(''); setCategoryId(''); setHabitType('GOOD'); setTrackingType('CHECK'); setRoutineSlot('MORNING'); setAddModal(true) }} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4 }}>
             <Plus size={14} /> Thêm
           </button>
           <button className="icon" aria-label="Manage categories" onClick={() => setManage(true)} style={{ padding: 5 }}>
@@ -427,6 +450,7 @@ export function HabitsPage() {
                         setCategoryId(h.category_id ?? '')
                         setHabitType(h.habit_type ?? 'GOOD')
                         setTrackingType(h.tracking_type ?? 'CHECK')
+                        setRoutineSlot(h.routine ?? 'MORNING')
                       }}
                       style={{ padding: 2 }}
                     >
@@ -505,6 +529,32 @@ export function HabitsPage() {
             </button>
           </label>
           <label>
+            Buổi thực hiện
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              <button
+                type="button"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'MORNING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
+                onClick={() => setRoutineSlot('MORNING')}
+              >
+                🌅 Sáng
+              </button>
+              <button
+                type="button"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'AFTERNOON' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
+                onClick={() => setRoutineSlot('AFTERNOON')}
+              >
+                ☀️ Trưa
+              </button>
+              <button
+                type="button"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'EVENING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
+                onClick={() => setRoutineSlot('EVENING')}
+              >
+                🌙 Tối
+              </button>
+            </div>
+          </label>
+          <label>
             Kiểu theo dõi
             <select value={trackingType} onChange={(e) => setTrackingType(e.target.value as 'CHECK' | 'COUNT')}>
               <option value="CHECK">Tích hoàn thành (Checkmark)</option>
@@ -546,6 +596,32 @@ export function HabitsPage() {
             <button type="button" className="icon small" onClick={() => setManage(true)} title="Quản lý thể loại" aria-label="Quản lý thể loại" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--primary)' }}>
               <FolderCog size={14} /> Quản lý thể loại
             </button>
+          </label>
+          <label>
+            Buổi thực hiện
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              <button
+                type="button"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'MORNING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
+                onClick={() => setRoutineSlot('MORNING')}
+              >
+                🌅 Sáng
+              </button>
+              <button
+                type="button"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'AFTERNOON' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
+                onClick={() => setRoutineSlot('AFTERNOON')}
+              >
+                ☀️ Trưa
+              </button>
+              <button
+                type="button"
+                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'EVENING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
+                onClick={() => setRoutineSlot('EVENING')}
+              >
+                🌙 Tối
+              </button>
+            </div>
           </label>
           <label>
             Kiểu theo dõi

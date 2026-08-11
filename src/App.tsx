@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CheckSquare, Flame, Gamepad2, Home, LogOut, NotebookPen, Sparkles, SunMoon } from 'lucide-react'
+import { BookOpen, CheckSquare, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -10,6 +10,7 @@ import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
 import { PlayTogetherPage } from './features/PlayTogetherPage'
+import { NutritionPage } from './features/NutritionPage'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -18,6 +19,7 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
   { id: 'playtogether', label: 'Game', icon: Gamepad2, colorClass: 'icon-box-cyan' },
+  { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
 ]
 
 function Login() {
@@ -133,6 +135,7 @@ function Protected() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/playtogether" element={<PlayTogetherPage />} />
+          <Route path="/nutrition" element={<NutritionPage />} />
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </Shell>

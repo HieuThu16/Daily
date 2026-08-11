@@ -1,4 +1,13 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'library' | 'playtogether'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'library' | 'playtogether' | 'nutrition'
+
+export type NutritionLog = {
+  id: string
+  meal_slot: 'MORNING' | 'LUNCH' | 'AFTERNOON' | 'EVENING'
+  food_name: string
+  price: number
+  log_date: string
+  created_at?: string
+}
 
 export type Habit = {
   id: string
@@ -7,6 +16,7 @@ export type Habit = {
   category_id: string | null
   tracking_type?: 'CHECK' | 'COUNT'
   habit_type?: 'GOOD' | 'BAD'
+  routine?: 'MORNING' | 'AFTERNOON' | 'EVENING'
   daily_target?: number
 }
 

@@ -15,6 +15,19 @@ function getFormattedVietnameseDate() {
   return `${dayName}, ngày ${day}/${month}/${year}`
 }
 
+function getCurrentRoutineSlot(): 'MORNING' | 'AFTERNOON' | 'EVENING' {
+  const hour = new Date().getHours()
+  if (hour >= 6 && hour < 11) return 'MORNING'
+  if (hour >= 11 && hour < 18) return 'AFTERNOON'
+  return 'EVENING'
+}
+
+const ROUTINE_LABEL: Record<string, string> = {
+  MORNING: '🌅 Sáng (6h–11h)',
+  AFTERNOON: '☀️ Trưa (11h–18h)',
+  EVENING: '🌙 Tối (18h–6h)',
+}
+
 export function HomePage() {
   const { showToast } = useToast()
   const [habits, setHabits] = useState<Habit[]>([])
@@ -55,8 +68,12 @@ export function HomePage() {
 
   const completedHabitIds = new Set(logs.filter((l) => l.completed).map((l) => l.habit_id))
 
-  const goodHabits = useMemo(() => habits.filter((h) => h.habit_type !== 'BAD'), [habits])
-  const badHabits = useMemo(() => habits.filter((h) => h.habit_type === 'BAD'), [habits])
+  const currentSlot = getCurrentRoutineSlot()
+
+  // Filter habits by current time slot (default habits with no routine to MORNING)
+  const slotHabits = useMemo(() => habits.filter((h) => (h.routine ?? 'MORNING') === currentSlot), [habits, currentSlot])
+  const goodHabits = useMemo(() => slotHabits.filter((h) => h.habit_type !== 'BAD'), [slotHabits])
+  const badHabits = useMemo(() => slotHabits.filter((h) => h.habit_type === 'BAD'), [slotHabits])
 
   // Determine Main Account & Stats
   const mainAccountData = useMemo(() => {
@@ -101,22 +118,25 @@ export function HomePage() {
       <div className="home-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
         {/* Card 1: Today's Habits (DIVIDED INTO GOOD HABITS & BAD HABITS WITH A DIVIDER LINE) */}
         <div className="card" style={{ padding: 12, margin: 0, height: 210, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--card-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 6, borderBottom: '1px solid var(--card-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.88rem' }}>
               <div className="icon-box icon-box-sm icon-box-amber" style={{ width: 22, height: 22 }}>
                 <Flame size={13} />
               </div>
-              <span>Habits</span>
+              <div>
+                <div style={{ lineHeight: 1 }}>Habits</div>
+                <div style={{ fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)', marginTop: 1 }}>{ROUTINE_LABEL[currentSlot]}</div>
+              </div>
             </div>
             <span style={{ fontSize: '0.74rem', color: 'var(--primary)', fontWeight: 700 }}>
-              {completedHabitIds.size}/{habits.length}
+              {slotHabits.filter((h) => completedHabitIds.has(h.id)).length}/{slotHabits.length}
             </span>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gap: 6 }}>
             {loading ? (
               <p className="muted" style={{ fontSize: '0.78rem' }}>Đang tải…</p>
-            ) : habits.length ? (
+            ) : slotHabits.length ? (
               <>
                 {/* SECTION 1: GOOD HABITS */}
                 {goodHabits.length > 0 && (
