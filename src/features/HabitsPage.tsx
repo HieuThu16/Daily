@@ -7,6 +7,7 @@ import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 
 type Tab = 'today' | 'categories' | 'history'
+type GroupView = 'type' | 'routine'
 
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
 const now = new Date()
@@ -22,6 +23,7 @@ export function HabitsPage() {
   const [countDrafts, setCountDrafts] = useState<Record<string, string>>({})
   const [savingCountId, setSavingCountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('today')
+  const [groupView, setGroupView] = useState<GroupView>('type')
   const [editing, setEditing] = useState<Habit | null>(null)
   const [addModal, setAddModal] = useState(false)
   const [manage, setManage] = useState(false)
@@ -49,7 +51,17 @@ export function HabitsPage() {
   const category = (h: Habit) => categories.items.find((c) => c.id === h.category_id)
 
   const goodHabits = useMemo(() => habits.items.filter((h) => h.habit_type !== 'BAD'), [habits.items])
-  const badHabits = useMemo(() => habits.items.filter((h) => h.habit_type === 'BAD'), [habits.items])
+  const badHabits  = useMemo(() => habits.items.filter((h) => h.habit_type === 'BAD'),  [habits.items])
+
+  const SLOTS = [
+    { key: 'MORNING',   label: '🌅 Sáng',  color: 'var(--amber)',   bg: 'var(--amber-bg)'   },
+    { key: 'AFTERNOON', label: '☀️ Trưa',  color: '#f97316',       bg: 'rgba(249,115,22,0.1)' },
+    { key: 'EVENING',   label: '🌙 Tối',   color: 'var(--purple)', bg: 'var(--purple-bg)' },
+  ] as const
+
+  const routineGroups = useMemo(() =>
+    SLOTS.map((s) => ({ ...s, habits: habits.items.filter((h) => (h.routine ?? 'MORNING') === s.key) }))
+  , [habits.items])
 
   const groups = useMemo(() => {
     const result: Array<[HabitCategory | null, Habit[]]> = categories.items.map((c) => [c, habits.items.filter((h) => h.category_id === c.id)])
@@ -399,31 +411,80 @@ export function HabitsPage() {
               Chưa có thói quen nào. Bấm "+ Thêm" để tạo mới nhé!
             </Empty>
           ) : (
-            <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 230px)', minHeight: 220, overflowY: 'auto' }}>
-              {/* SECTION 1: THÓI QUEN TỐT (GOOD HABITS) */}
-              {goodHabits.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--emerald)', marginBottom: 4 }}>
-                    🌟 Thói quen tốt ({goodHabits.filter((h) => completed.has(h.id)).length}/{goodHabits.length})
-                  </div>
-                  <div style={{ display: 'grid', gap: 5 }}>
-                    {goodHabits.map(renderHabitItem)}
-                  </div>
-                </div>
-              )}
+            <>
+              {/* View toggle */}
+              <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+                <button
+                  onClick={() => setGroupView('type')}
+                  style={{
+                    flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
+                    border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
+                    borderColor: groupView === 'type' ? 'var(--emerald)' : 'var(--card-border)',
+                    background: groupView === 'type' ? 'var(--emerald-bg)' : 'var(--bg-main)',
+                    color: groupView === 'type' ? 'var(--emerald)' : 'var(--text-muted)',
+                  }}
+                >
+                  🌟 Tốt / ⚠️ Xấu
+                </button>
+                <button
+                  onClick={() => setGroupView('routine')}
+                  style={{
+                    flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
+                    border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
+                    borderColor: groupView === 'routine' ? 'var(--primary)' : 'var(--card-border)',
+                    background: groupView === 'routine' ? 'var(--primary-light)' : 'var(--bg-main)',
+                    color: groupView === 'routine' ? 'var(--primary)' : 'var(--text-muted)',
+                  }}
+                >
+                  🌅 Sáng / ☀️ Trưa / 🌙 Tối
+                </button>
+              </div>
 
-              {/* SECTION 2: THÓI QUEN XẤU / CẦN BỎ (BAD HABITS WITH RED HIGHLIGHT) */}
-              {badHabits.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--rose)', marginBottom: 4 }}>
-                    ⚠️ Thói quen cần bỏ ({badHabits.filter((h) => completed.has(h.id)).length}/{badHabits.length})
-                  </div>
-                  <div style={{ display: 'grid', gap: 5 }}>
-                    {badHabits.map(renderHabitItem)}
-                  </div>
-                </div>
-              )}
-            </div>
+              <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 265px)', minHeight: 180, overflowY: 'auto' }}>
+                {/* ── BY TYPE (Tốt / Xấu) ── */}
+                {groupView === 'type' && (
+                  <>
+                    {goodHabits.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--emerald)', marginBottom: 4 }}>
+                          🌟 Thói quen tốt ({goodHabits.filter((h) => completed.has(h.id)).length}/{goodHabits.length})
+                        </div>
+                        <div style={{ display: 'grid', gap: 5 }}>{goodHabits.map(renderHabitItem)}</div>
+                      </div>
+                    )}
+                    {badHabits.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--rose)', marginBottom: 4 }}>
+                          ⚠️ Thói quen cần bỏ ({badHabits.filter((h) => completed.has(h.id)).length}/{badHabits.length})
+                        </div>
+                        <div style={{ display: 'grid', gap: 5 }}>{badHabits.map(renderHabitItem)}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* ── BY ROUTINE (Sáng / Trưa / Tối) ── */}
+                {groupView === 'routine' && (
+                  <>
+                    {routineGroups.map((slot) => slot.habits.length > 0 && (
+                      <div key={slot.key}>
+                        <div style={{
+                          fontSize: '0.76rem', fontWeight: 800, marginBottom: 4,
+                          color: slot.color,
+                          display: 'flex', alignItems: 'center', gap: 6,
+                        }}>
+                          <span>{slot.label}</span>
+                          <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: '0.68rem' }}>
+                            ({slot.habits.filter((h) => completed.has(h.id)).length}/{slot.habits.length})
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gap: 5 }}>{slot.habits.map(renderHabitItem)}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
