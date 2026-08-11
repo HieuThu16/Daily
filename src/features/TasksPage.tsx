@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertCircle, BarChart3, Calendar, Check, CheckSquare, Lightbulb, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { AlertCircle, BarChart3, Calendar, Check, CheckSquare, Eye, Lightbulb, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import type { Idea, Todo } from '../types'
@@ -7,8 +7,12 @@ import { DeleteButton, Empty, Modal, useQuery } from './shared'
 
 type Tab = 'tasks' | 'ideas' | 'stats'
 type EditState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
+import { useToast } from './ToastContext'
+
+type ViewState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
 
 export function TasksPage() {
+  const { showToast } = useToast()
   const todos = useQuery<Todo>('todos')
   const ideas = useQuery<Idea>('ideas')
 
@@ -19,6 +23,8 @@ export function TasksPage() {
   // Form states
   const [newTitle, setNewTitle] = useState('')
   const [edit, setEdit] = useState<EditState | null>(null)
+  const [viewDetail, setViewDetail] = useState<ViewState | null>(null)
+
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [editDueDate, setEditDueDate] = useState(localDate())
@@ -40,13 +46,21 @@ export function TasksPage() {
       if (fallback.data) todos.setItems((prev) => [fallback.data as Todo, ...prev])
     }
     setNewTitle('')
+    showToast('➕ Đã thêm công việc mới!')
   }
 
-  // Toggle Todo completion
+  // Toggle Todo completion with completion timestamp logging
   const flipTodo = async (t: Todo) => {
     const next = !t.completed
-    todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, completed: next } : i)))
-    await supabase!.from('todos').update({ completed: next }).eq('id', t.id)
+    const completedAt = next ? new Date().toISOString() : null
+    const updateData = { completed: next, completed_at: completedAt }
+
+    todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
+    const { error } = await supabase!.from('todos').update(updateData).eq('id', t.id)
+    if (error) {
+      await supabase!.from('todos').update({ completed: next }).eq('id', t.id)
+    }
+    showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
   }
 
   // Create Idea
@@ -55,6 +69,7 @@ export function TasksPage() {
     const { data } = await supabase!.from('ideas').insert({ title: newTitle.trim(), content: '' }).select().single()
     if (data) ideas.setItems((prev) => [data as Idea, ...prev])
     setNewTitle('')
+    showToast('💡 Đã thêm ý tưởng mới!')
   }
 
   // Open Edit Modal
@@ -85,6 +100,7 @@ export function TasksPage() {
       await supabase!.from('ideas').update(updateData).eq('id', edit.item.id)
     }
     setEdit(null)
+    showToast('✏️ Đã lưu thay đổi!')
   }
 
   // Delete item
@@ -98,6 +114,7 @@ export function TasksPage() {
       ideas.setItems((prev) => prev.filter((i) => i.id !== edit.item.id))
     }
     setEdit(null)
+    showToast('🗑️ Đã xóa mục thành công', 'delete')
   }
 
   // Filter Tasks by Selected Date
@@ -130,6 +147,17 @@ export function TasksPage() {
     const percent = totalTodos ? Math.round((completedTodos / totalTodos) * 100) : 0
     return { totalTodos, completedTodos, overdueCount, totalIdeas, percent }
   }, [todos.items, overduePreviousTodos.length, ideas.items.length])
+
+  // Helper date formatter
+  const formatDate = (isoString?: string | null) => {
+    if (!isoString) return 'Chưa có thông tin'
+    try {
+      const d = new Date(isoString)
+      return d.toLocaleString('vi-VN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return isoString
+    }
+  }
 
   return (
     <section style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -198,10 +226,11 @@ export function TasksPage() {
                         <span className="checkbox">{t.completed && <Check size={13} />}</span>
                         <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{t.title}</span>
                       </button>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--amber)', fontWeight: 700, background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4 }}>
-                          {t.due_date ?? t.created_at?.slice(0, 10)}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        {/* Eye (Xem) Button next to Pencil (Sửa) */}
+                        <button className="icon small" aria-label="View task details" onClick={() => setViewDetail({ kind: 'todo', item: t })} style={{ padding: 2 }}>
+                          <Eye size={13} />
+                        </button>
                         <button className="icon small" aria-label="Edit task" onClick={() => openEdit({ kind: 'todo', item: t })} style={{ padding: 2 }}>
                           <Pencil size={12} />
                         </button>
@@ -222,9 +251,15 @@ export function TasksPage() {
                     <span className="checkbox">{t.completed && <Check size={13} />}</span>
                     <span style={{ fontSize: '0.84rem' }}>{t.title}</span>
                   </button>
-                  <button className="icon small" aria-label="Edit task" onClick={() => openEdit({ kind: 'todo', item: t })} style={{ padding: 3 }}>
-                    <Pencil size={13} />
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {/* Eye (Xem) Button next to Pencil (Sửa) */}
+                    <button className="icon small" aria-label="View task details" onClick={() => setViewDetail({ kind: 'todo', item: t })} style={{ padding: 3 }}>
+                      <Eye size={14} />
+                    </button>
+                    <button className="icon small" aria-label="Edit task" onClick={() => openEdit({ kind: 'todo', item: t })} style={{ padding: 3 }}>
+                      <Pencil size={13} />
+                    </button>
+                  </div>
                 </div>
               ))
             ) : overduePreviousTodos.length === 0 ? (
@@ -252,7 +287,7 @@ export function TasksPage() {
               placeholder="Bắt trọn một ý tưởng mới…"
               style={{ flex: 1, minWidth: 0, fontSize: '0.84rem', padding: '6px 10px', borderRadius: 10, border: '1px solid var(--card-border)' }}
             />
-            <button className="primary" onClick={addIdea} style={{ padding: '6px 14px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
+            <button className="primary" onClick={addIdea} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
               <Plus size={14} /> Thêm
             </button>
             <input className="mini-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm…" style={{ padding: '4px 8px', fontSize: '0.76rem', width: 90 }} />
@@ -263,13 +298,21 @@ export function TasksPage() {
           ) : filteredIdeas.length ? (
             <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
               {filteredIdeas.map((i) => (
-                <article className="idea" key={i.id} onClick={() => openEdit({ kind: 'idea', item: i })} style={{ margin: 0, padding: '6px 8px', borderRadius: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div key={i.id} className="check-row" style={{ justifyContent: 'space-between', background: 'var(--bg-main)', borderRadius: 8, padding: '6px 8px', marginBottom: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <strong style={{ fontSize: '0.84rem' }}>{i.title}</strong>
-                    <Pencil size={12} style={{ color: 'var(--text-muted)' }} />
+                    {i.content && <p style={{ fontSize: '0.76rem', margin: '2px 0 0', color: 'var(--text-muted)' }}>{i.content}</p>}
                   </div>
-                  {i.content && <p style={{ fontSize: '0.76rem', margin: '2px 0 0' }}>{i.content}</p>}
-                </article>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {/* Eye (Xem) Button next to Pencil (Sửa) */}
+                    <button className="icon small" aria-label="View idea details" onClick={() => setViewDetail({ kind: 'idea', item: i })} style={{ padding: 3 }}>
+                      <Eye size={14} />
+                    </button>
+                    <button className="icon small" aria-label="Edit idea" onClick={() => openEdit({ kind: 'idea', item: i })} style={{ padding: 3 }}>
+                      <Pencil size={13} />
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
@@ -312,6 +355,47 @@ export function TasksPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* VIEW DETAIL MODAL (Displays creation time and completion time) */}
+      {viewDetail && (
+        <Modal title={viewDetail.kind === 'todo' ? 'Chi tiết công việc' : 'Chi tiết ý tưởng'} onClose={() => setViewDetail(null)}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Tên mục</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', marginTop: 2 }}>{viewDetail.item.title}</div>
+            </div>
+
+            {viewDetail.kind === 'idea' && viewDetail.item.content && (
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Ghi chú</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-main)', marginTop: 2, background: 'var(--bg-main)', padding: 8, borderRadius: 8 }}>{viewDetail.item.content}</div>
+              </div>
+            )}
+
+            <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: 10, display: 'grid', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>🕒 Thời gian tạo:</span>
+                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatDate(viewDetail.item.created_at)}</span>
+              </div>
+
+              {viewDetail.kind === 'todo' && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>✅ Thời gian hoàn thành:</span>
+                  <span style={{ fontWeight: 700, color: viewDetail.item.completed ? 'var(--emerald)' : 'var(--amber)' }}>
+                    {viewDetail.item.completed ? formatDate(viewDetail.item.completed_at) : 'Chưa tích hoàn thành'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="modal-actions" style={{ justifyContent: 'flex-end' }}>
+            <button className="primary" onClick={() => setViewDetail(null)}>
+              Đóng
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* Edit Modal for Task or Idea */}

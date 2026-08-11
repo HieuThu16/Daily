@@ -12,7 +12,10 @@ const categories: Array<{ type: DailyType; title: string; icon: any; color: stri
   { type: 'SMALL_WIN', title: 'Việc nhỏ', icon: Plus, color: 'var(--emerald)', bg: 'var(--emerald-bg)' },
 ]
 
+import { useToast } from './ToastContext'
+
 export function DailyPage() {
+  const { showToast } = useToast()
   const { items, setItems, loading } = useQuery<Entry>('daily_entries')
 
   // Selected Category for writing
@@ -53,6 +56,7 @@ export function DailyPage() {
     if (!error && data) {
       setItems((prev) => [...(data as Entry[]), ...prev])
       setContent('')
+      showToast(`✅ Đã lưu ${lines.length} bài nhật ký mới!`)
       setSaveSuccess(`Đã lưu ${lines.length} nội dung lúc ${currentTimeString} ✨`)
       setTimeout(() => setSaveSuccess(''), 3500)
     }
@@ -63,12 +67,14 @@ export function DailyPage() {
     if (!editing || !editText.trim()) return
     await supabase!.from('daily_entries').update({ content: editText.trim(), entry_date: date }).eq('id', editing.id)
     setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, content: editText.trim(), entry_date: date } : i)))
+    showToast('✏️ Đã cập nhật bài viết!')
     setEditing(null)
   }
 
   const removeEntry = async (id: string) => {
     await supabase!.from('daily_entries').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     setItems((prev) => prev.filter((i) => i.id !== id))
+    showToast('🗑️ Đã xóa bài nhật ký thành công', 'delete')
     setEditing(null)
   }
 
@@ -77,17 +83,22 @@ export function DailyPage() {
 
   return (
     <section style={{ maxWidth: 800, margin: '0 auto' }}>
-      {/* 4 Icon Categories in 1 Horizontal Row */}
-      <div className="daily-4-icons" style={{ marginBottom: 10 }}>
+      {/* 4 ICON-ONLY CATEGORIES IN 1 HORIZONTAL ROW */}
+      <div className="daily-4-icons" style={{ marginBottom: 8 }}>
         {categories.map((cat) => {
           const Icon = cat.icon
           const isSelected = selectedType === cat.type
           return (
-            <button key={cat.type} className={'daily-icon-btn ' + (isSelected ? 'active' : '')} onClick={() => setSelectedType(cat.type)} style={{ padding: '6px 4px', borderRadius: 12 }}>
-              <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 26, height: 26 }}>
+            <button
+              key={cat.type}
+              className={'daily-icon-btn ' + (isSelected ? 'active' : '')}
+              onClick={() => setSelectedType(cat.type)}
+              title={cat.title}
+              style={{ padding: '6px 0', borderRadius: 12, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 28, height: 28 }}>
                 <Icon size={15} />
               </div>
-              <span style={{ fontSize: '0.7rem' }}>{cat.title}</span>
             </button>
           )
         })}

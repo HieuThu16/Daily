@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CheckSquare, Flame, Home, LogOut, NotebookPen, Sparkles, SunMoon } from 'lucide-react'
+import { BookOpen, CheckSquare, Flame, Gamepad2, Home, LogOut, NotebookPen, Sparkles, SunMoon } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -9,6 +9,7 @@ import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
+import { PlayTogetherPage } from './features/PlayTogetherPage'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -16,6 +17,7 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
+  { id: 'playtogether', label: 'Game', icon: Gamepad2, colorClass: 'icon-box-cyan' },
 ]
 
 function Login() {
@@ -97,6 +99,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
+import { ToastProvider } from './features/ToastContext'
+
 function Protected() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<unknown>(null)
@@ -120,16 +124,19 @@ function Protected() {
   if (!user) return <Navigate to="/login" replace />
 
   return (
-    <Shell>
-      <Routes>
-        <Route path="/home" element={<HomePage />} />
-        <Route path="/habit" element={<HabitsPage />} />
-        <Route path="/daily" element={<DailyPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/library" element={<LibraryPage />} />
-        <Route path="*" element={<Navigate to="/home" replace />} />
-      </Routes>
-    </Shell>
+    <ToastProvider>
+      <Shell>
+        <Routes>
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/habit" element={<HabitsPage />} />
+          <Route path="/daily" element={<DailyPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/library" element={<LibraryPage />} />
+          <Route path="/playtogether" element={<PlayTogetherPage />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
+      </Shell>
+    </ToastProvider>
   )
 }
 

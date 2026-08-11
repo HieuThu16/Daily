@@ -1,14 +1,40 @@
 create extension if not exists pgcrypto;
-create type media_type as enum ('BOOK','MOVIE','YOUTUBE','MUSIC');
-create type media_status as enum ('PLANNED','IN_PROGRESS','COMPLETED');
-create table public.daily_entries (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), entry_date date not null, content text not null check (length(trim(content)) > 0), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
-create table public.habits (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), name text not null check (length(trim(name)) > 0), is_active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
-create table public.habit_logs (id uuid primary key default gen_random_uuid(), habit_id uuid not null references public.habits(id), user_id uuid not null default auth.uid() references auth.users(id), date date not null, completed boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique(habit_id,date));
-create table public.todos (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), title text not null check (length(trim(title)) > 0), completed boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
-create table public.ideas (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), title text not null check (length(trim(title)) > 0), content text not null default '', created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
-create table public.media_items (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), type media_type not null, name text not null check (length(trim(name)) > 0), description text, status media_status not null default 'PLANNED', is_favorite boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
-create index on public.daily_entries(user_id,entry_date) where deleted_at is null; create index on public.habits(user_id) where deleted_at is null; create index on public.todos(user_id) where deleted_at is null; create index on public.ideas(user_id) where deleted_at is null; create index on public.media_items(user_id,type,status) where deleted_at is null;
-create function public.set_updated_at() returns trigger language plpgsql security invoker set search_path=public as $$ begin new.updated_at=now(); return new; end $$;
-create trigger daily_updated before update on public.daily_entries for each row execute function public.set_updated_at(); create trigger habits_updated before update on public.habits for each row execute function public.set_updated_at(); create trigger habit_logs_updated before update on public.habit_logs for each row execute function public.set_updated_at(); create trigger todos_updated before update on public.todos for each row execute function public.set_updated_at(); create trigger ideas_updated before update on public.ideas for each row execute function public.set_updated_at(); create trigger media_updated before update on public.media_items for each row execute function public.set_updated_at();
-alter table public.daily_entries enable row level security; alter table public.habits enable row level security; alter table public.habit_logs enable row level security; alter table public.todos enable row level security; alter table public.ideas enable row level security; alter table public.media_items enable row level security;
-create policy "own daily" on public.daily_entries for all using (user_id=auth.uid()) with check (user_id=auth.uid()); create policy "own habits" on public.habits for all using (user_id=auth.uid()) with check (user_id=auth.uid()); create policy "own habit logs" on public.habit_logs for all using (user_id=auth.uid()) with check (user_id=auth.uid()); create policy "own todos" on public.todos for all using (user_id=auth.uid()) with check (user_id=auth.uid()); create policy "own ideas" on public.ideas for all using (user_id=auth.uid()) with check (user_id=auth.uid()); create policy "own media" on public.media_items for all using (user_id=auth.uid()) with check (user_id=auth.uid());
+
+do $$ begin create type media_type as enum ('BOOK','MOVIE','YOUTUBE','MUSIC'); exception when duplicate_object then null; end $$;
+do $$ begin create type media_status as enum ('PLANNED','IN_PROGRESS','COMPLETED'); exception when duplicate_object then null; end $$;
+
+create table if not exists public.daily_entries (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), entry_date date not null, content text not null check (length(trim(content)) > 0), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
+create table if not exists public.habits (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), name text not null check (length(trim(name)) > 0), is_active boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
+create table if not exists public.habit_logs (id uuid primary key default gen_random_uuid(), habit_id uuid not null references public.habits(id), user_id uuid not null default auth.uid() references auth.users(id), date date not null, completed boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique(habit_id,date));
+create table if not exists public.todos (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), title text not null check (length(trim(title)) > 0), completed boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
+create table if not exists public.ideas (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), title text not null check (length(trim(title)) > 0), content text not null default '', created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
+create table if not exists public.media_items (id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id), type media_type not null, name text not null check (length(trim(name)) > 0), description text, status media_status not null default 'PLANNED', is_favorite boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), deleted_at timestamptz);
+
+create index if not exists daily_entries_user_date_idx on public.daily_entries(user_id,entry_date) where deleted_at is null;
+create index if not exists habits_user_idx on public.habits(user_id) where deleted_at is null;
+create index if not exists todos_user_idx on public.todos(user_id) where deleted_at is null;
+create index if not exists ideas_user_idx on public.ideas(user_id) where deleted_at is null;
+create index if not exists media_items_user_type_status_idx on public.media_items(user_id,type,status) where deleted_at is null;
+
+create or replace function public.set_updated_at() returns trigger language plpgsql security invoker set search_path=public as $$ begin new.updated_at=now(); return new; end $$;
+
+do $$ begin create trigger daily_updated before update on public.daily_entries for each row execute function public.set_updated_at(); exception when duplicate_object then null; end $$;
+do $$ begin create trigger habits_updated before update on public.habits for each row execute function public.set_updated_at(); exception when duplicate_object then null; end $$;
+do $$ begin create trigger habit_logs_updated before update on public.habit_logs for each row execute function public.set_updated_at(); exception when duplicate_object then null; end $$;
+do $$ begin create trigger todos_updated before update on public.todos for each row execute function public.set_updated_at(); exception when duplicate_object then null; end $$;
+do $$ begin create trigger ideas_updated before update on public.ideas for each row execute function public.set_updated_at(); exception when duplicate_object then null; end $$;
+do $$ begin create trigger media_updated before update on public.media_items for each row execute function public.set_updated_at(); exception when duplicate_object then null; end $$;
+
+alter table public.daily_entries enable row level security;
+alter table public.habits enable row level security;
+alter table public.habit_logs enable row level security;
+alter table public.todos enable row level security;
+alter table public.ideas enable row level security;
+alter table public.media_items enable row level security;
+
+do $$ begin create policy "own daily" on public.daily_entries for all using (user_id=auth.uid()) with check (user_id=auth.uid()); exception when duplicate_object then null; end $$;
+do $$ begin create policy "own habits" on public.habits for all using (user_id=auth.uid()) with check (user_id=auth.uid()); exception when duplicate_object then null; end $$;
+do $$ begin create policy "own habit logs" on public.habit_logs for all using (user_id=auth.uid()) with check (user_id=auth.uid()); exception when duplicate_object then null; end $$;
+do $$ begin create policy "own todos" on public.todos for all using (user_id=auth.uid()) with check (user_id=auth.uid()); exception when duplicate_object then null; end $$;
+do $$ begin create policy "own ideas" on public.ideas for all using (user_id=auth.uid()) with check (user_id=auth.uid()); exception when duplicate_object then null; end $$;
+do $$ begin create policy "own media" on public.media_items for all using (user_id=auth.uid()) with check (user_id=auth.uid()); exception when duplicate_object then null; end $$;

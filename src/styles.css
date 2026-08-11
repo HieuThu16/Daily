@@ -366,31 +366,36 @@ header {
   bottom: 0;
   left: 0;
   right: 0;
-  background: color-mix(in srgb, var(--card-bg) 85%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 88%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--card-border);
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 16px 12px;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 6px 4px 10px;
   z-index: 100;
   box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.05);
 }
 
 .bottom-nav button {
+  flex: 1;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  padding: 8px 14px;
+  padding: 4px 2px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  font-size: 0.7rem;
+  gap: 2px;
+  font-size: 0.63rem;
   font-weight: 600;
-  border-radius: 14px;
+  border-radius: 10px;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bottom-nav button:hover {
@@ -405,16 +410,16 @@ header {
 }
 
 .bottom-nav .nav-icon-wrapper {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   transition: transform 0.2s ease;
 }
 
 .bottom-nav button.active .nav-icon-wrapper {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
 }
 
@@ -1232,4 +1237,15 @@ header {
   border-radius: 6px;
   display: inline-block;
   margin-top: 2px;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }
