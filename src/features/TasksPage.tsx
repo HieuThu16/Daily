@@ -4,12 +4,12 @@ import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import type { Idea, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
+import { useToast } from './ToastContext'
 
 type Tab = 'tasks' | 'ideas' | 'stats'
 type EditState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
-import { useToast } from './ToastContext'
-
 type ViewState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
+type AddModalState = { kind: 'todo' } | { kind: 'idea' } | null
 
 export function TasksPage() {
   const { showToast } = useToast()
@@ -20,8 +20,12 @@ export function TasksPage() {
   const [selectedDate, setSelectedDate] = useState<string>(localDate())
   const [search, setSearch] = useState('')
 
-  // Form states
+  // Form & Modal states
+  const [addModal, setAddModal] = useState<AddModalState>(null)
   const [newTitle, setNewTitle] = useState('')
+  const [newDueDate, setNewDueDate] = useState(localDate())
+  const [newIdeaContent, setNewIdeaContent] = useState('')
+
   const [edit, setEdit] = useState<EditState | null>(null)
   const [viewDetail, setViewDetail] = useState<ViewState | null>(null)
 
@@ -29,24 +33,69 @@ export function TasksPage() {
   const [editContent, setEditContent] = useState('')
   const [editDueDate, setEditDueDate] = useState(localDate())
 
+  // Open Add Modal
+  const openAddModal = (kind: 'todo' | 'idea') => {
+    setNewTitle('')
+    setNewDueDate(selectedDate)
+    setNewIdeaContent('')
+    setAddModal({ kind })
+  }
+
   // Create Todo
-  const addTodo = async () => {
+  const saveNewTodo = async () => {
     if (!newTitle.trim()) return
+    const title = newTitle.trim()
     const payload = {
-      title: newTitle.trim(),
+      title,
       completed: false,
-      due_date: selectedDate,
+      due_date: newDueDate,
     }
+
+    const tempTodo: Todo = {
+      id: Date.now().toString(),
+      title,
+      completed: false,
+      due_date: newDueDate,
+      created_at: new Date().toISOString(),
+    }
+
+    todos.setItems((prev) => [tempTodo, ...prev])
+    setAddModal(null)
+    setNewTitle('')
+    showToast('➕ Đã thêm công việc mới!')
 
     const { data, error } = await supabase!.from('todos').insert(payload).select().single()
     if (!error && data) {
-      todos.setItems((prev) => [data as Todo, ...prev])
+      todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (data as Todo) : item)))
     } else {
-      const fallback = await supabase!.from('todos').insert({ title: newTitle.trim(), completed: false }).select().single()
-      if (fallback.data) todos.setItems((prev) => [fallback.data as Todo, ...prev])
+      const fallback = await supabase!.from('todos').insert({ title, completed: false }).select().single()
+      if (fallback.data) todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (fallback.data as Todo) : item)))
     }
+  }
+
+  // Create Idea
+  const saveNewIdea = async () => {
+    if (!newTitle.trim()) return
+    const title = newTitle.trim()
+    const content = newIdeaContent.trim()
+
+    const tempIdea: Idea = {
+      id: Date.now().toString(),
+      title,
+      content: content || '',
+      created_at: new Date().toISOString(),
+    }
+
+    ideas.setItems((prev) => [tempIdea, ...prev])
+    setAddModal(null)
     setNewTitle('')
-    showToast('➕ Đã thêm công việc mới!')
+    setNewIdeaContent('')
+    showToast('💡 Đã thêm ý tưởng mới!')
+
+    const { data } = await supabase!.from('ideas').insert({ title, content }).select().single()
+    if (data) {
+      ideas.setItems((prev) => prev.map((item) => (item.id === tempIdea.id ? (data as Idea) : item)))
+    }
   }
 
   // Toggle Todo completion with completion timestamp logging
@@ -61,15 +110,6 @@ export function TasksPage() {
       await supabase!.from('todos').update({ completed: next }).eq('id', t.id)
     }
     showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
-  }
-
-  // Create Idea
-  const addIdea = async () => {
-    if (!newTitle.trim()) return
-    const { data } = await supabase!.from('ideas').insert({ title: newTitle.trim(), content: '' }).select().single()
-    if (data) ideas.setItems((prev) => [data as Idea, ...prev])
-    setNewTitle('')
-    showToast('💡 Đã thêm ý tưởng mới!')
   }
 
   // Open Edit Modal
@@ -172,6 +212,12 @@ export function TasksPage() {
         <button className={activeTab === 'stats' ? 'active' : ''} onClick={() => setActiveTab('stats')}>
           <BarChart3 size={14} /> Thống kê
         </button>
+        <button
+          onClick={() => openAddModal(activeTab === 'ideas' ? 'idea' : 'todo')}
+          style={{ background: 'var(--primary)', color: 'white', fontWeight: 700, padding: '5px 8px', fontSize: '0.74rem', gap: 2 }}
+        >
+          <Plus size={13} /> Thêm
+        </button>
       </div>
 
       {/* TAB 1: TASKS */}
@@ -191,7 +237,7 @@ export function TasksPage() {
             <input className="mini-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm công việc…" style={{ padding: '3px 8px', fontSize: '0.76rem', width: 110 }} />
           </div>
 
-          {/* Quick Add Row */}
+          {/* Quick Add Row & Open Modal Button */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             <input
               value={newTitle}
@@ -199,13 +245,14 @@ export function TasksPage() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
-                  addTodo()
+                  if (newTitle.trim()) saveNewTodo()
+                  else openAddModal('todo')
                 }
               }}
-              placeholder="Thêm việc cần làm mới…"
+              placeholder="Nhập công việc..."
               style={{ flex: 1, minWidth: 0, fontSize: '0.84rem', padding: '6px 10px', borderRadius: 10, border: '1px solid var(--card-border)' }}
             />
-            <button className="primary" onClick={addTodo} style={{ padding: '6px 14px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
+            <button className="primary" onClick={() => (newTitle.trim() ? saveNewTodo() : openAddModal('todo'))} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
               <Plus size={14} /> Thêm
             </button>
           </div>
@@ -227,7 +274,6 @@ export function TasksPage() {
                         <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{t.title}</span>
                       </button>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        {/* Eye (Xem) Button next to Pencil (Sửa) */}
                         <button className="icon small" aria-label="View task details" onClick={() => setViewDetail({ kind: 'todo', item: t })} style={{ padding: 2 }}>
                           <Eye size={13} />
                         </button>
@@ -241,7 +287,7 @@ export function TasksPage() {
               </div>
             )}
 
-            {/* CURRENT SELECTED DATE TASKS */}
+            {/* CURRENT SELECTED DATE TASKS SECTION */}
             {todos.loading ? (
               <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải công việc…</p>
             ) : currentSelectedDateTodos.length ? (
@@ -252,7 +298,6 @@ export function TasksPage() {
                     <span style={{ fontSize: '0.84rem' }}>{t.title}</span>
                   </button>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* Eye (Xem) Button next to Pencil (Sửa) */}
                     <button className="icon small" aria-label="View task details" onClick={() => setViewDetail({ kind: 'todo', item: t })} style={{ padding: 3 }}>
                       <Eye size={14} />
                     </button>
@@ -264,7 +309,7 @@ export function TasksPage() {
               ))
             ) : overduePreviousTodos.length === 0 ? (
               <Empty icon={CheckSquare} colorClass="icon-box-purple">
-                Chưa có công việc nào cho ngày này. Thêm ở trên nhé!
+                Chưa có công việc nào cho ngày này. Bấm "+ Thêm" ở trên để tạo mới nhé!
               </Empty>
             ) : null}
           </div>
@@ -281,13 +326,14 @@ export function TasksPage() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
-                  addIdea()
+                  if (newTitle.trim()) saveNewIdea()
+                  else openAddModal('idea')
                 }
               }}
               placeholder="Bắt trọn một ý tưởng mới…"
               style={{ flex: 1, minWidth: 0, fontSize: '0.84rem', padding: '6px 10px', borderRadius: 10, border: '1px solid var(--card-border)' }}
             />
-            <button className="primary" onClick={addIdea} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
+            <button className="primary" onClick={() => (newTitle.trim() ? saveNewIdea() : openAddModal('idea'))} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
               <Plus size={14} /> Thêm
             </button>
             <input className="mini-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm…" style={{ padding: '4px 8px', fontSize: '0.76rem', width: 90 }} />
@@ -304,7 +350,6 @@ export function TasksPage() {
                     {i.content && <p style={{ fontSize: '0.76rem', margin: '2px 0 0', color: 'var(--text-muted)' }}>{i.content}</p>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* Eye (Xem) Button next to Pencil (Sửa) */}
                     <button className="icon small" aria-label="View idea details" onClick={() => setViewDetail({ kind: 'idea', item: i })} style={{ padding: 3 }}>
                       <Eye size={14} />
                     </button>
@@ -317,7 +362,7 @@ export function TasksPage() {
             </div>
           ) : (
             <Empty icon={Lightbulb} colorClass="icon-box-amber">
-              Chưa có ý tưởng nào. Tạo ý tưởng đầu tiên của bạn nhé!
+              Chưa có ý tưởng nào. Bấm "+ Thêm" ở trên để tạo mới nhé!
             </Empty>
           )}
         </div>
@@ -357,7 +402,37 @@ export function TasksPage() {
         </div>
       )}
 
-      {/* VIEW DETAIL MODAL (Displays creation time and completion time) */}
+      {/* ADD MODAL FOR TASK OR IDEA */}
+      {addModal && (
+        <Modal title={addModal.kind === 'todo' ? 'Thêm công việc mới' : 'Thêm ý tưởng mới'} onClose={() => setAddModal(null)}>
+          <label>
+            {addModal.kind === 'todo' ? 'Tên công việc' : 'Tiêu đề ý tưởng'}
+            <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Nhập tên..." autoFocus />
+          </label>
+
+          {addModal.kind === 'todo' && (
+            <label>
+              Hạn hoàn thành (Ngày)
+              <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
+            </label>
+          )}
+
+          {addModal.kind === 'idea' && (
+            <label>
+              Ghi chú ý tưởng
+              <textarea value={newIdeaContent} onChange={(e) => setNewIdeaContent(e.target.value)} rows={3} placeholder="Chi tiết ý tưởng…" />
+            </label>
+          )}
+
+          <div className="modal-actions" style={{ justifyContent: 'flex-end' }}>
+            <button className="primary" onClick={addModal.kind === 'todo' ? saveNewTodo : saveNewIdea}>
+              {addModal.kind === 'todo' ? 'Lưu công việc' : 'Lưu ý tưởng'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* VIEW DETAIL MODAL */}
       {viewDetail && (
         <Modal title={viewDetail.kind === 'todo' ? 'Chi tiết công việc' : 'Chi tiết ý tưởng'} onClose={() => setViewDetail(null)}>
           <div style={{ display: 'grid', gap: 12 }}>
