@@ -285,8 +285,24 @@ export function TasksPage() {
     const completedTodos = todos.items.filter((t) => t.completed).length
     const overdueCount = overduePreviousTodos.length
     const totalIdeas = ideas.items.length
+    const easyCount = todos.items.filter((t) => (t.difficulty ?? 'EASY') === 'EASY').length
+    const normalDiffCount = todos.items.filter((t) => t.difficulty === 'NORMAL').length
+    const hardCount = todos.items.filter((t) => t.difficulty === 'HARD').length
+    const urgentCount = todos.items.filter((t) => t.priority === 'URGENT').length
+    const normalPrioCount = todos.items.filter((t) => (t.priority ?? 'NORMAL') === 'NORMAL').length
     const percent = totalTodos ? Math.round((completedTodos / totalTodos) * 100) : 0
-    return { totalTodos, completedTodos, overdueCount, totalIdeas, percent }
+    return {
+      totalTodos,
+      completedTodos,
+      overdueCount,
+      totalIdeas,
+      easyCount,
+      normalDiffCount,
+      hardCount,
+      urgentCount,
+      normalPrioCount,
+      percent,
+    }
   }, [todos.items, overduePreviousTodos.length, ideas.items.length])
 
   // Helper date formatter
