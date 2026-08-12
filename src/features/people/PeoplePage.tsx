@@ -9,18 +9,10 @@ import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import { avatarStyle, initials } from './avatar'
 import { DualCalendarDate } from './DualCalendarDate'
+import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
-
-const GROUPS: { key: PersonGroup; label: string }[] = [
-  { key: 'FAMILY', label: 'Gia đình' },
-  { key: 'FRIEND', label: 'Bạn bè' },
-  { key: 'COLLEAGUE', label: 'Đồng nghiệp' },
-  { key: 'OTHER', label: 'Khác' },
-]
-
-const groupLabel = (key?: PersonGroup | null) => GROUPS.find((g) => g.key === key)?.label ?? null
 
 /** Sinh nhật sắp tới của một người, để hiện trên thẻ. */
 function birthdayInfo(occasions: PersonOccasion[], personId: string) {
@@ -34,7 +26,7 @@ function birthdayInfo(occasions: PersonOccasion[], personId: string) {
 
 export function PeoplePage() {
   const { showToast } = useToast()
-  const { people, occasions, loading, addPerson, addOccasion, removeOccasion } = usePeopleData()
+  const { people, occasions, loading, addPerson, updatePerson, addOccasion, removeOccasion } = usePeopleData()
   const [selected, setSelected] = useState<Person | null>(null)
   const [search, setSearch] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
@@ -71,6 +63,12 @@ export function PeoplePage() {
     showToast(saveSourceLabel(savedTo))
   }
 
+  const handleUpdatePerson = async (id: string, patch: Pick<Person, 'name' | 'group_key'>) => {
+    const savedTo = await updatePerson(id, patch)
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev))
+    showToast(saveSourceLabel(savedTo))
+  }
+
   const closeForm = () => {
     setFormOpen(false)
     setName('')
@@ -103,6 +101,7 @@ export function PeoplePage() {
         onBack={() => setSelected(null)}
         onAddOccasion={handleAddOccasion}
         onRemoveOccasion={removeOccasion}
+        onUpdatePerson={handleUpdatePerson}
       />
     )
   }

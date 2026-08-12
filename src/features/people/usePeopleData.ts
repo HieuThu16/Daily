@@ -102,6 +102,29 @@ export function usePeopleData() {
     return withBirthday((data as Person).id, 'Supabase')
   }
 
+  /** Sửa tên/nhóm của một người. */
+  const updatePerson = async (id: string, patch: Pick<Person, 'name' | 'group_key'>): Promise<DataSource> => {
+    const name = patch.name.trim()
+    if (!name) return source
+    const next = people.map((p) => (p.id === id ? { ...p, name, group_key: patch.group_key ?? null } : p))
+
+    if (!supabase) {
+      persistPeople(next)
+      setSource('Local')
+      return 'Local'
+    }
+
+    const { error } = await supabase.from('people').update({ name, group_key: patch.group_key ?? null }).eq('id', id)
+    setPeople(next)
+    if (error) {
+      saveLocal(PEOPLE_KEY, next)
+      setSource('Local')
+      return 'Local'
+    }
+    setSource('Supabase')
+    return 'Supabase'
+  }
+
   const addOccasion = async (input: NewOccasion): Promise<DataSource> => {
     const local: PersonOccasion = { id: crypto.randomUUID(), ...input, title: input.title.trim() }
 
@@ -137,5 +160,5 @@ export function usePeopleData() {
     await supabase.from('person_occasions').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   }
 
-  return { people, occasions, source, loading, addPerson, addOccasion, removeOccasion }
+  return { people, occasions, source, loading, addPerson, updatePerson, addOccasion, removeOccasion }
 }
