@@ -881,8 +881,8 @@ header {
   font-size: 0.85rem;
 }
 
-/* Desktop Responsiveness */
-@media (min-width: 768px) {
+/* Desktop Responsiveness — pointer: fine keeps the phone/tablet layout in landscape */
+@media (min-width: 768px) and (pointer: fine) {
   .app-shell {
     padding: 0 40px 40px;
   }
