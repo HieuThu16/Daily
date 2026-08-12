@@ -49,7 +49,10 @@ Ngoài phạm vi (v1):
 - `book_reading_logs` lưu tiến độ đọc/nghe theo ngày, có `page`, `listen_hours`,
   `listen_minutes`, `note`.
 - Đã có tiền lệ dùng Supabase Storage (bucket `media-audio`) và Edge Function.
-- Repo chưa có test runner.
+- Repo đã có sẵn Vitest 4 + jsdom + Testing Library, script `npm test` / `npm run test:watch`,
+  setup ở `src/test/setup.ts`. Test đặt cạnh file nguồn (`LibraryAudioView.test.tsx`).
+- Đã có thư mục con `src/features/library/` (`LibraryAudioView.tsx`) — feature này đi
+  theo cùng pattern đó thay vì tạo thư mục mới.
 
 ## Kiến trúc
 
@@ -57,18 +60,19 @@ Ngoài phạm vi (v1):
 
 ```
 src/lib/book/
-  types.ts          RawBook, RawChapter, ExtractProgress
-  pdfExtract.ts     File PDF  -> RawBook
-  epubExtract.ts    File EPUB -> RawBook
-  cleanText.ts      Làm sạch văn bản dùng chung (hàm thuần)
-  chapters.ts       Dò chương, tách chương quá dài, tính offset (hàm thuần)
-  repository.ts     Mọi truy vấn Supabase của feature
-  index.ts          extractBook(file, onProgress) — dispatch theo định dạng
+  types.ts               RawBook, RawChapter, ExtractProgress
+  pdfExtract.ts          File PDF  -> RawBook
+  epubExtract.ts         File EPUB -> RawBook
+  cleanText.ts           Làm sạch văn bản dùng chung (hàm thuần)  + cleanText.test.ts
+  chapters.ts            Dò chương, tách chương dài, tính offset  + chapters.test.ts
+  repository.ts          Mọi truy vấn Supabase của feature
+  index.ts               extractBook(file, onProgress) — dispatch theo định dạng
 
-src/features/book/
-  ImportBookModal.tsx     Chọn file -> tiến trình -> xem trước/sửa mục lục -> lưu
-  ReaderPage.tsx          Màn hình đọc
-  useReadingProgress.ts   Khôi phục vị trí, auto-save, auto-ghi log ngày
+src/features/library/          (thư mục đã có sẵn, thêm vào)
+  BookChapterEditor.tsx        Danh sách chương sửa được  + BookChapterEditor.test.tsx
+  BookImportModal.tsx          Chọn file -> tiến trình -> xem trước -> lưu
+  BookReaderPage.tsx           Màn hình đọc
+  useBookReadingProgress.ts    Khôi phục vị trí, auto-save, auto-ghi log ngày
 
 supabase/migrations/20260813020000_book_documents.sql
 ```
@@ -346,8 +350,7 @@ Lỗi khi lưu tiến độ không chặn việc đọc: log ra console, thử l
 
 ## Kiểm thử
 
-Thêm **Vitest** vào repo (chưa có test runner). Chỉ test hàm thuần, không cần môi
-trường trình duyệt.
+Dùng Vitest + Testing Library đã có sẵn trong repo. Chạy bằng `npm test`.
 
 `src/lib/book/cleanText.test.ts`:
 
@@ -365,6 +368,14 @@ trường trình duyệt.
 - `char_offset` tích luỹ đúng và tổng khớp `total_chars`.
 - Không dò được gì thì trả về một chương *"Toàn bộ nội dung"*.
 
-Phần UI (nhập sách và đọc) kiểm thử tay theo checklist, dùng một file PDF và một file
-EPUB mẫu: nhập được, mục lục đúng, sửa mục lục có hiệu lực, đọc và chuyển chương mượt,
-thoát rồi mở lại đúng vị trí, `book_reading_logs` có dòng của hôm nay.
+`src/features/library/BookChapterEditor.test.tsx` (jsdom + Testing Library, đã có sẵn):
+
+- Hiện đúng danh sách chương kèm số chữ.
+- Đổi tên chương gọi callback với tiêu đề mới.
+- Xoá chương gộp nội dung vào chương liền trên.
+- Chương đầu tiên không có nút xoá và nút gộp lên.
+
+Phần còn lại (bóc tách file thật, cuộn, lưu tiến độ) kiểm thử tay theo checklist, dùng
+một file PDF và một file EPUB mẫu: nhập được, mục lục đúng, sửa mục lục có hiệu lực,
+đọc và chuyển chương mượt, thoát rồi mở lại đúng vị trí, `book_reading_logs` có dòng
+của hôm nay.
