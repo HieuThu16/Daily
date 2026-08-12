@@ -1097,6 +1097,37 @@ header {
   white-space: nowrap;
 }
 
+.library-category-bar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.library-category-button {
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px 0;
+  justify-content: center;
+}
+
+.library-category-button .icon-box {
+  width: 26px;
+  height: 26px;
+}
+
+@media (max-width: 420px) {
+  .library-category-bar {
+    gap: 4px;
+  }
+
+  .library-category-button .icon-box {
+    width: 24px;
+    height: 24px;
+  }
+}
+
 .daily-line-row {
   display: flex;
   align-items: center;
