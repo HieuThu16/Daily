@@ -20,6 +20,17 @@ const { mediaItems } = vi.hoisted(() => ({
       audio_url: 'https://example.com/hen-mot-mai.mp3',
       youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     },
+    {
+      id: 'book-1',
+      type: 'BOOK',
+      name: 'Đắc Nhân Tâm',
+      description: null,
+      status: 'IN_PROGRESS',
+      is_favorite: false,
+      author: 'Dale Carnegie',
+      book_format: 'READ',
+      cover_url: 'https://example.com/bia.jpg?v=1',
+    },
   ],
 }))
 
@@ -38,6 +49,20 @@ vi.mock('./shared', () => ({
 
 vi.mock('./ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), showSaveToast: vi.fn() }),
+}))
+
+// Phải khai đủ mọi export mà LibraryPage dùng trực tiếp (loadImportedMediaItemIds,
+// saveReadingLogEntry) lẫn gián tiếp qua BookImportModal (saveBook) và BookDetailView.
+vi.mock('../lib/book/repository', () => ({
+  CHARS_PER_PAGE: 1800,
+  loadImportedMediaItemIds: vi.fn(async () => new Set<string>()),
+  saveReadingLogEntry: vi.fn(async () => null),
+  saveBook: vi.fn(),
+  loadBookDocument: vi.fn(async () => null),
+  loadChapterList: vi.fn(async () => []),
+  uploadCover: vi.fn(),
+  saveCoverUrl: vi.fn(),
+  removeCover: vi.fn(),
 }))
 
 afterEach(cleanup)
@@ -68,5 +93,61 @@ describe('LibraryPage audio navigation', () => {
 
     expect(document.querySelectorAll('audio')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Nghe Hẹn một mai' })).toBeInTheDocument()
+  })
+})
+
+describe('LibraryPage book navigation', () => {
+  it('mở màn chi tiết khi bấm vào thẻ sách', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm' }))
+
+    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quay lại thư viện' })).toBeInTheDocument()
+  })
+
+  it('mở màn chi tiết bằng phím Enter', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm' }).focus()
+    await user.keyboard('{Enter}')
+
+    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+  })
+
+  it('bấm nút Chỉnh sửa trên thẻ không mở màn chi tiết', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getAllByRole('button', { name: 'Edit item' })[1])
+
+    expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
+  })
+
+  it('hiện ảnh bìa thay icon trên thẻ sách', () => {
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('img', { name: 'Bìa Đắc Nhân Tâm' })).toHaveAttribute(
+      'src',
+      'https://example.com/bia.jpg?v=1',
+    )
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart3, BookMarked, BookOpen, Calendar, Clock, Download, FileText, FileUp, Film, FolderCog, Heart, History, Layers, Music, Pencil, Play, Plus, RefreshCw, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -8,7 +8,9 @@ import type { BookAuthor, BookFormat, BookReadingLog, Media, MovieGenre, MusicAr
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './library/LibraryAudioView'
-import { BookImportModal } from './library/BookImportModal'
+import { BookCover } from './library/BookCover'
+import { BookDetailView } from './library/BookDetailView'
+import { BookImportModal, type ImportResult } from './library/BookImportModal'
 
 const categories = [
   { id: 'BOOK', label: 'Books', icon: BookOpen, colorClass: 'icon-box-purple', color: 'var(--purple)', bg: 'var(--purple-bg)', labels: ['Sẽ đọc', 'Đang đọc', 'Đã đọc'] },
@@ -106,6 +108,7 @@ export function LibraryPage() {
   const nav = useNavigate()
   const [importOpen, setImportOpen] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
+  const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
 
   useEffect(() => {
     void loadImportedMediaItemIds().then(setImportedIds)
@@ -685,11 +688,26 @@ export function LibraryPage() {
         key={item.id}
         className="check-row library-media-card"
       >
-        <div className="library-media-main">
+        <div
+          className="library-media-main"
+          {...(isBook
+            ? {
+                role: 'button',
+                tabIndex: 0,
+                'aria-label': `Xem chi tiết ${item.name}`,
+                onClick: () => setSelectedBookItemId(item.id),
+                onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  setSelectedBookItemId(item.id)
+                },
+              }
+            : {})}
+        >
           {/* Left Column: Icon + Wrappable Title + Badges */}
           <div className="library-media-identity">
             <div className="icon-box library-media-icon" style={{ background: cat.bg, color: cat.color }}>
-              <Icon size={19} />
+              {isBook ? <BookCover url={item.cover_url} alt={`Bìa ${item.name}`} size="thumb" /> : <Icon size={19} />}
             </div>
             <div className="library-media-copy">
               <div
@@ -729,7 +747,7 @@ export function LibraryPage() {
           </div>
 
           {/* Right Column: Controls always stay 100% inside card bounds */}
-          <div className="library-media-actions">
+          <div className="library-media-actions" onClick={(event) => event.stopPropagation()}>
             <LibraryAudioAction item={item} onListen={(audioItem) => setSelectedAudioItemId(audioItem.id)} onAddMp3={openEdit} />
             <select
               className="library-status-select"
@@ -813,6 +831,24 @@ export function LibraryPage() {
         onEdit={(item) => {
           setSelectedAudioItemId(null)
           openEdit(item)
+        }}
+      />
+    )
+  }
+
+  const selectedBookItem = items.find((item) => item.id === selectedBookItemId) ?? null
+
+  if (selectedBookItem) {
+    return (
+      <BookDetailView
+        item={selectedBookItem}
+        onBack={() => setSelectedBookItemId(null)}
+        onEdit={(item) => {
+          setSelectedBookItemId(null)
+          openEdit(item)
+        }}
+        onCoverChange={(mediaItemId, coverUrl) => {
+          setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
         }}
       />
     )
@@ -1744,11 +1780,16 @@ export function LibraryPage() {
         <BookImportModal
           attachableBooks={items.filter((item) => item.type === 'BOOK' && !importedIds.has(item.id))}
           onClose={() => setImportOpen(false)}
-          onImported={({ mediaItemId, createdItem }) => {
+          onImported={({ mediaItemId, createdItem, coverUrl, coverFailed }: ImportResult) => {
             if (createdItem) setItems((prev) => [createdItem, ...prev])
+            else if (coverUrl) {
+              setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
+            }
             setImportedIds((prev) => new Set(prev).add(mediaItemId))
             setImportOpen(false)
-            showToast('📚 Đã nhập sách vào thư viện!')
+            showToast(
+              coverFailed ? '📚 Đã nhập sách nhưng chưa lưu được ảnh bìa' : '📚 Đã nhập sách vào thư viện!',
+            )
             nav(`/read/${mediaItemId}`)
           }}
         />
