@@ -111,6 +111,7 @@ export function LibraryPage() {
   const [extraVal, setExtraVal] = useState('') // Channel, Artist, Author, or Genre
   const [youtubeUrlVal, setYoutubeUrlVal] = useState('')
   const [audioUrlVal, setAudioUrlVal] = useState('')
+  const [audioLoadError, setAudioLoadError] = useState(false)
   const [currentChapterVal, setCurrentChapterVal] = useState<string>('')
   const [startDateVal, setStartDateVal] = useState<string>(localDate())
   const [endDateVal, setEndDateVal] = useState<string>('')
@@ -187,6 +188,7 @@ export function LibraryPage() {
     setMusicGenreVal('')
     setYoutubeUrlVal('')
     setAudioUrlVal('')
+    setAudioLoadError(false)
     setCurrentChapterVal('')
     setStartDateVal(localDate())
     setEndDateVal('')
@@ -205,6 +207,7 @@ export function LibraryPage() {
     setMusicGenreVal(item.music_genre ?? '')
     setYoutubeUrlVal(item.youtube_url ?? '')
     setAudioUrlVal(item.audio_url ?? '')
+    setAudioLoadError(false)
     setCurrentChapterVal(item.current_chapter != null ? item.current_chapter.toString() : '')
     setStartDateVal(item.start_date ?? localDate())
     setEndDateVal(item.end_date ?? '')
@@ -248,6 +251,7 @@ export function LibraryPage() {
             // Lấy stream MP4/M4A âm thanh trực tiếp từ YouTube CDN
             const audioStream = data.audioStreams.find((s: any) => s.mimeType?.includes('audio/mp4')) || data.audioStreams[0]
             if (audioStream?.url) {
+              setAudioLoadError(false)
               setAudioUrlVal(audioStream.url)
               showToast('🎉 Đã tải file MP3 đầy đủ thời lượng!', 'success')
               setIsConverting(false)
@@ -261,8 +265,7 @@ export function LibraryPage() {
     }
 
     // Fallback sang Direct YouTube MP3 Proxy Stream
-    const proxyAudioUrl = `https://yt-mp3-stream.vercel.app/api/stream?id=${vId}`
-    setAudioUrlVal(proxyAudioUrl)
+    setAudioUrlVal('')
     showToast('🎵 Đã trích xuất Audio MP3! Bấm "Lưu vào cơ sở dữ liệu" để lưu vĩnh viễn.', 'success')
     setIsConverting(false)
   }
@@ -1447,10 +1450,14 @@ export function LibraryPage() {
                       key={audioUrlVal}
                       controls
                       src={audioUrlVal}
+                      onError={() => {
+                        setAudioLoadError(true)
+                        showToast('Audio stream không phát được hoặc đã hết hạn. Hãy lấy lại MP3.', 'delete')
+                      }}
                       style={{ width: '100%', height: 36 }}
                       preload="auto"
                     />
-                    <span style={{ fontSize: '0.7rem', color: 'var(--emerald)', fontWeight: 700, fontStyle: 'italic' }}>
+                    <span style={{ fontSize: '0.7rem', color: audioLoadError ? 'var(--rose)' : 'var(--emerald)', fontWeight: 700, fontStyle: 'italic' }}>
                       👉 Bấm nút "Lưu vào cơ sở dữ liệu" màu xanh ở dưới để lưu vĩnh viễn bài nhạc MP3 này!
                     </span>
                   </div>
