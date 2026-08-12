@@ -12,6 +12,7 @@ import { LibraryPage } from './features/LibraryPage'
 import { PlayTogetherPage } from './features/PlayTogetherPage'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/PeoplePage'
+import { BookReaderPage } from './features/library/BookReaderPage'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -184,19 +185,28 @@ function Protected() {
 
   return (
     <ToastProvider>
-      <Shell>
-        <Routes>
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/habit" element={<HabitsPage />} />
-          <Route path="/daily" element={<DailyPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/people" element={<PeoplePage />} />
-          <Route path="/library" element={<LibraryPage />} />
-          <Route path="/playtogether" element={<PlayTogetherPage />} />
-          <Route path="/nutrition" element={<NutritionPage />} />
-          <Route path="*" element={<Navigate to="/home" replace />} />
-        </Routes>
-      </Shell>
+      <Routes>
+        {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
+        <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
+        <Route
+          path="*"
+          element={
+            <Shell>
+              <Routes>
+                <Route path="/home" element={<HomePage />} />
+                <Route path="/habit" element={<HabitsPage />} />
+                <Route path="/daily" element={<DailyPage />} />
+                <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/people" element={<PeoplePage />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/playtogether" element={<PlayTogetherPage />} />
+                <Route path="/nutrition" element={<NutritionPage />} />
+                <Route path="*" element={<Navigate to="/home" replace />} />
+              </Routes>
+            </Shell>
+          }
+        />
+      </Routes>
     </ToastProvider>
   )
 }

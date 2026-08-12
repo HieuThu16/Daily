@@ -1,0 +1,327 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, CheckCircle2, List, Type } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { loadLocal, saveLocal } from '../../lib/persistence'
+import { loadBookDocument, loadChapterContent, loadChapterList } from '../../lib/book/repository'
+import type { BookChapterMeta, BookDocument } from '../../types'
+import { useBookReadingProgress } from './useBookReadingProgress'
+
+type ReaderTheme = 'light' | 'sepia' | 'dark'
+type ReaderFont = 'sans' | 'serif'
+
+type ReaderSettings = {
+  fontSize: number
+  lineHeight: number
+  font: ReaderFont
+  theme: ReaderTheme
+}
+
+const SETTINGS_KEY = 'book-reader-settings'
+const DEFAULT_SETTINGS: ReaderSettings = { fontSize: 17, lineHeight: 1.8, font: 'serif', theme: 'light' }
+const HIDE_BAR_AFTER_PX = 80
+const COMPLETED_RATIO = 0.98
+
+export function BookReaderPage() {
+  const { mediaItemId = '' } = useParams()
+  const nav = useNavigate()
+  const scroller = useRef<HTMLDivElement>(null)
+  const pendingRatio = useRef<number | null>(null)
+  const lastScrollTop = useRef(0)
+
+  const [bookDocument, setBookDocument] = useState<BookDocument | null>(null)
+  const [chapters, setChapters] = useState<BookChapterMeta[]>([])
+  const [bookName, setBookName] = useState('')
+  const [activeIdx, setActiveIdx] = useState(0)
+  const [contentByIdx, setContentByIdx] = useState<Record<number, string>>({})
+  const [loadError, setLoadError] = useState('')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>('loading')
+  const [percent, setPercent] = useState(0)
+  const [tocOpen, setTocOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [barHidden, setBarHidden] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const [settings, setSettings] = useState<ReaderSettings>(() => loadLocal(SETTINGS_KEY, DEFAULT_SETTINGS))
+
+  const activeChapter = chapters[activeIdx]
+  const content = contentByIdx[activeIdx]
+
+  const { report, flush } = useBookReadingProgress({
+    documentId: bookDocument?.id ?? null,
+    mediaItemId,
+    totalChars: bookDocument?.total_chars ?? 0,
+    pageCount: bookDocument?.page_count ?? null,
+  })
+
+  useEffect(() => {
+    saveLocal(SETTINGS_KEY, settings)
+  }, [settings])
+
+  // Nạp tài liệu, mục lục và tên sách.
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      if (!supabase || !mediaItemId) {
+        setStatus('missing')
+        return
+      }
+      try {
+        const doc = await loadBookDocument(mediaItemId)
+        if (!doc) {
+          if (!cancelled) setStatus('missing')
+          return
+        }
+        const list = await loadChapterList(doc.id)
+        const { data: item } = await supabase
+          .from('media_items')
+          .select('name, status')
+          .eq('id', mediaItemId)
+          .single()
+        if (cancelled) return
+
+        const media = item as { name?: string; status?: string } | null
+        setBookDocument(doc)
+        setChapters(list)
+        setBookName(media?.name ?? 'Đang đọc')
+        setActiveIdx(Math.min(doc.last_chapter_idx, Math.max(0, list.length - 1)))
+        setPercent(doc.percent)
+        pendingRatio.current = doc.last_scroll_ratio
+        setStatus('ready')
+
+        if (media?.status === 'PLANNED') {
+          void supabase.from('media_items').update({ status: 'IN_PROGRESS' }).eq('id', mediaItemId)
+        }
+      } catch {
+        if (!cancelled) setStatus('missing')
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [mediaItemId])
+
+  const fetchChapter = useCallback(
+    async (idx: number) => {
+      const chapter = chapters[idx]
+      if (!chapter) return
+      setLoadError('')
+      try {
+        const text = await loadChapterContent(chapter.id)
+        setContentByIdx((prev) => ({ ...prev, [idx]: text }))
+      } catch {
+        setLoadError('Không tải được nội dung chương này.')
+      }
+    },
+    [chapters],
+  )
+
+  useEffect(() => {
+    if (chapters.length > 0 && contentByIdx[activeIdx] === undefined) void fetchChapter(activeIdx)
+  }, [activeIdx, chapters, contentByIdx, fetchChapter])
+
+  // Khôi phục vị trí cuộn sau khi nội dung chương đã render.
+  useEffect(() => {
+    const ratio = pendingRatio.current
+    const node = scroller.current
+    if (ratio === null || content === undefined || !node) return
+    pendingRatio.current = null
+    requestAnimationFrame(() => {
+      node.scrollTop = ratio * Math.max(0, node.scrollHeight - node.clientHeight)
+    })
+  }, [content])
+
+  const onScroll = () => {
+    const node = scroller.current
+    if (!node || !activeChapter || !bookDocument) return
+
+    const scrollable = Math.max(1, node.scrollHeight - node.clientHeight)
+    const ratio = Math.min(1, Math.max(0, node.scrollTop / scrollable))
+
+    setBarHidden(node.scrollTop > lastScrollTop.current && node.scrollTop > HIDE_BAR_AFTER_PX)
+    lastScrollTop.current = node.scrollTop
+
+    const offset = activeChapter.char_offset + ratio * activeChapter.char_count
+    setPercent(bookDocument.total_chars > 0 ? Math.min(100, (offset / bookDocument.total_chars) * 100) : 0)
+    setCompleted(activeIdx === chapters.length - 1 && ratio > COMPLETED_RATIO)
+
+    report({
+      chapterIdx: activeIdx,
+      charOffset: activeChapter.char_offset,
+      charCount: activeChapter.char_count,
+      ratio,
+    })
+  }
+
+  const goToChapter = (idx: number) => {
+    if (idx < 0 || idx >= chapters.length) return
+    void flush()
+    setActiveIdx(idx)
+    setTocOpen(false)
+    setCompleted(false)
+    lastScrollTop.current = 0
+    setBarHidden(false)
+    requestAnimationFrame(() => scroller.current?.scrollTo({ top: 0 }))
+  }
+
+  const leave = () => {
+    void flush()
+    nav('/library')
+  }
+
+  const markCompleted = async () => {
+    if (supabase) await supabase.from('media_items').update({ status: 'COMPLETED' }).eq('id', mediaItemId)
+    nav('/library')
+  }
+
+  const paragraphs = useMemo(() => (content ? content.split('\n\n') : []), [content])
+
+  if (status === 'loading') return <div className="center">Đang mở sách…</div>
+
+  if (status === 'missing') {
+    return (
+      <div className="center" style={{ display: 'grid', gap: 12, textAlign: 'center' }}>
+        <p style={{ margin: 0 }}>Sách này chưa có nội dung đã nhập.</p>
+        <button className="primary" onClick={() => nav('/library')}>
+          Quay lại thư viện
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="book-reader" data-reader-theme={settings.theme}>
+      <div className="book-reader-bar" data-hidden={barHidden}>
+        <button aria-label="Quay lại thư viện" onClick={leave}>
+          <ArrowLeft size={20} />
+        </button>
+        <span className="book-reader-title">{bookName}</span>
+        <button aria-label="Mục lục" onClick={() => setTocOpen(true)}>
+          <List size={20} />
+        </button>
+        <button aria-label="Cỡ chữ và giao diện" onClick={() => setSettingsOpen((open) => !open)}>
+          <Type size={20} />
+        </button>
+      </div>
+
+      <div className="book-reader-progress">
+        <div style={{ width: `${percent.toFixed(1)}%` }} />
+      </div>
+
+      {settingsOpen && (
+        <div className="book-reader-settings">
+          <label>
+            Cỡ chữ — {settings.fontSize}px
+            <input
+              type="range"
+              min={14}
+              max={24}
+              step={1}
+              value={settings.fontSize}
+              onChange={(event) => setSettings({ ...settings, fontSize: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Giãn dòng — {settings.lineHeight.toFixed(1)}
+            <input
+              type="range"
+              min={1.5}
+              max={2.1}
+              step={0.1}
+              value={settings.lineHeight}
+              onChange={(event) => setSettings({ ...settings, lineHeight: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Kiểu chữ
+            <span className="book-reader-choices">
+              {(['sans', 'serif'] as ReaderFont[]).map((font) => (
+                <button key={font} aria-pressed={settings.font === font} onClick={() => setSettings({ ...settings, font })}>
+                  {font === 'sans' ? 'Sans' : 'Serif'}
+                </button>
+              ))}
+            </span>
+          </label>
+          <label>
+            Nền
+            <span className="book-reader-choices">
+              {(['light', 'sepia', 'dark'] as ReaderTheme[]).map((theme) => (
+                <button key={theme} aria-pressed={settings.theme === theme} onClick={() => setSettings({ ...settings, theme })}>
+                  {theme === 'light' ? 'Sáng' : theme === 'sepia' ? 'Sepia' : 'Tối'}
+                </button>
+              ))}
+            </span>
+          </label>
+        </div>
+      )}
+
+      {tocOpen && (
+        <div className="book-reader-drawer">
+          <nav aria-label="Mục lục">
+            {chapters.map((chapter, idx) => (
+              <button
+                key={chapter.id}
+                className="book-reader-toc-item"
+                aria-current={idx === activeIdx}
+                onClick={() => goToChapter(idx)}
+              >
+                {idx + 1}. {chapter.title}
+              </button>
+            ))}
+          </nav>
+          <button aria-label="Đóng mục lục" onClick={() => setTocOpen(false)} />
+        </div>
+      )}
+
+      <div
+        className="book-reader-content"
+        ref={scroller}
+        onScroll={onScroll}
+        style={{
+          fontSize: settings.fontSize,
+          lineHeight: settings.lineHeight,
+          fontFamily: settings.font === 'serif' ? 'Georgia, "Times New Roman", serif' : 'inherit',
+        }}
+      >
+        <article className="book-reader-page">
+          <h1>{activeChapter?.title}</h1>
+
+          {loadError && (
+            <p className="book-reader-load-error">
+              {loadError} <button onClick={() => void fetchChapter(activeIdx)}>Tải lại</button>
+            </p>
+          )}
+
+          {content === undefined && !loadError && <p style={{ opacity: 0.6 }}>Đang tải chương…</p>}
+
+          {paragraphs.map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+          ))}
+
+          {completed && (
+            <div className="book-reader-finished">
+              <strong>🎉 Bạn đã đọc hết cuốn sách này</strong>
+              <button className="primary" onClick={() => void markCompleted()}>
+                <CheckCircle2 size={16} /> Đánh dấu đã đọc xong
+              </button>
+            </div>
+          )}
+
+          <div className="book-reader-nav">
+            <button disabled={activeIdx === 0} onClick={() => goToChapter(activeIdx - 1)}>
+              ‹ Chương trước
+            </button>
+            <span>
+              {activeIdx + 1}/{chapters.length}
+            </span>
+            <button disabled={activeIdx >= chapters.length - 1} onClick={() => goToChapter(activeIdx + 1)}>
+              Chương sau ›
+            </button>
+          </div>
+        </article>
+      </div>
+    </div>
+  )
+}
