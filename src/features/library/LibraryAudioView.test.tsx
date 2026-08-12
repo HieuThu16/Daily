@@ -54,7 +54,11 @@ describe('LibraryAudioAction', () => {
     const onListen = vi.fn()
     render(<LibraryAudioAction item={withAudio} onListen={onListen} onAddMp3={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Nghe Hẹn một mai' }))
+    const listenButton = screen.getByRole('button', { name: 'Nghe Hẹn một mai' })
+    expect(listenButton.textContent).toBe('')
+    expect(listenButton).toHaveAttribute('title', 'Nghe Hẹn một mai')
+
+    await user.click(listenButton)
 
     expect(onListen).toHaveBeenCalledWith(withAudio)
   })
@@ -64,7 +68,11 @@ describe('LibraryAudioAction', () => {
     const onAddMp3 = vi.fn()
     render(<LibraryAudioAction item={withoutAudio} onListen={vi.fn()} onAddMp3={onAddMp3} />)
 
-    await user.click(screen.getByRole('button', { name: 'Thêm MP3 cho Chưa có MP3' }))
+    const addButton = screen.getByRole('button', { name: 'Thêm MP3 cho Chưa có MP3' })
+    expect(addButton.textContent).toBe('')
+    expect(addButton).toHaveAttribute('title', 'Thêm MP3 cho Chưa có MP3')
+
+    await user.click(addButton)
 
     expect(onAddMp3).toHaveBeenCalledWith(withoutAudio)
   })
@@ -79,6 +87,8 @@ describe('LibraryAudioDetail', () => {
     expect(screen.getByRole('heading', { name: 'Hẹn một mai' })).toBeInTheDocument()
     expect(screen.getByText('Bùi Anh Tuấn')).toBeInTheDocument()
     expect(screen.getByText('Ballad')).toBeInTheDocument()
+    expect(screen.getByText(/2026-08-12/)).toBeInTheDocument()
+    expect(screen.getByText(/10:04/)).toBeInTheDocument()
     expect(document.querySelectorAll('audio')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Mở trên YouTube' })).toHaveAttribute('href', withAudio.youtube_url)
 

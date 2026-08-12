@@ -649,7 +649,6 @@ export function LibraryPage() {
     const cat = categories.find((c) => c.id === item.type) ?? categories[0]
     const Icon = cat.icon
     const meta = getItemExtraMeta(item)
-    const dateTime = getItemDateTime(item)
     const isBook = item.type === 'BOOK'
     const isMusic = item.type === 'MUSIC'
     const genreStyle = getMusicGenreStyle(item.music_genre)
@@ -664,35 +663,19 @@ export function LibraryPage() {
     return (
       <div
         key={item.id}
-        className="check-row"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          background: 'var(--bg-main)',
-          borderRadius: 8,
-          padding: '7px 8px',
-          marginBottom: 0,
-          width: '100%',
-          boxSizing: 'border-box',
-          overflow: 'hidden',
-        }}
+        className="check-row library-media-card"
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <div className="library-media-main">
           {/* Left Column: Icon + Wrappable Title + Badges */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-            <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 22, height: 22, flexShrink: 0, marginTop: 2 }}>
-              <Icon size={12} />
+          <div className="library-media-identity">
+            <div className="icon-box library-media-icon" style={{ background: cat.bg, color: cat.color }}>
+              <Icon size={19} />
             </div>
-            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <div className="library-media-copy">
               <div
+                className="library-media-title"
                 style={{
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
                   color: isMusic && item.music_genre ? genreStyle.color : 'var(--text-main)',
-                  lineHeight: 1.3,
-                  wordBreak: 'break-word',
-                  overflowWrap: 'break-word',
                 }}
               >
                 {item.name}
@@ -710,7 +693,7 @@ export function LibraryPage() {
                   </span>
                 )}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+              <div className="library-media-badges">
                 {(item.type === 'BOOK' || item.type === 'MANGA') && item.current_chapter != null && (
                   <span style={{ fontSize: '0.64rem', fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'var(--emerald-bg)', color: 'var(--emerald)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                     📑 Chap {item.current_chapter}
@@ -744,9 +727,6 @@ export function LibraryPage() {
                     {meta.label}{meta.value}
                   </span>
                 )}
-                <span style={{ fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                  📅 {dateTime.date} ⏰ {dateTime.time}
-                </span>
                 {isBook && latestLog && (
                   <span style={{ fontSize: '0.62rem', fontWeight: 700, color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)', background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                     {fmt === 'READ'
@@ -760,9 +740,10 @@ export function LibraryPage() {
           </div>
 
           {/* Right Column: Controls always stay 100% inside card bounds */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+          <div className="library-media-actions">
             <LibraryAudioAction item={item} onListen={(audioItem) => setSelectedAudioItemId(audioItem.id)} onAddMp3={openEdit} />
             <select
+              className="library-status-select"
               value={item.status}
               onChange={(e) => patchStatusOrFavorite(item.id, { status: e.target.value as Media['status'] })}
               style={{
@@ -770,10 +751,6 @@ export function LibraryPage() {
                 background: 'var(--card-bg)',
                 color: cat.color,
                 fontWeight: 700,
-                borderRadius: 6,
-                padding: '2px 4px',
-                fontSize: '0.68rem',
-                maxWidth: 78,
                 cursor: 'pointer',
               }}
             >
@@ -788,12 +765,12 @@ export function LibraryPage() {
               className={'icon small favorite ' + (item.is_favorite ? 'on' : '')}
               aria-label="Toggle favorite"
               onClick={() => patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })}
-              style={{ padding: 3, flexShrink: 0 }}
+              title={item.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
             >
-              <Heart size={13} fill={item.is_favorite ? 'currentColor' : 'none'} />
+              <Heart size={17} fill={item.is_favorite ? 'currentColor' : 'none'} />
             </button>
-            <button className="icon small" aria-label="Edit item" onClick={() => openEdit(item)} style={{ padding: 3, flexShrink: 0 }}>
-              <Pencil size={12} />
+            <button className="icon small" aria-label="Edit item" title="Chỉnh sửa" onClick={() => openEdit(item)}>
+              <Pencil size={16} />
             </button>
           </div>
         </div>

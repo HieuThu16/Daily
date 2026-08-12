@@ -48,11 +48,15 @@ describe('LibraryPage audio navigation', () => {
 
     expect(screen.getByRole('group', { name: 'Thể loại thư viện' }).querySelectorAll('button')).toHaveLength(6)
     expect(document.querySelectorAll('audio')).toHaveLength(0)
+    expect(screen.queryByText(/2026-08-12/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/10:04/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Nghe Hẹn một mai' }))
 
     expect(screen.getByRole('heading', { name: 'Hẹn một mai' })).toBeInTheDocument()
     expect(document.querySelectorAll('audio')).toHaveLength(1)
+    expect(screen.getByText(/2026-08-12/)).toBeInTheDocument()
+    expect(screen.getByText(/10:04/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Quay lại thư viện' }))
 

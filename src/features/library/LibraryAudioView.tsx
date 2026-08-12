@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Music2, Pencil, Play, Youtube } from 'lucide-react'
+import { ArrowLeft, CloudUpload, Music2, Pencil, Play, Youtube } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Media } from '../../types'
 
@@ -53,28 +53,30 @@ export function LibraryAudioAction({ item, onListen, onAddMp3 }: LibraryAudioAct
   if (item.type !== 'MUSIC' && item.type !== 'YOUTUBE') return null
 
   if (!item.audio_url) {
+    const label = `Thêm MP3 cho ${item.name}`
     return (
       <button
         type="button"
         className="library-audio-action library-audio-action-add"
-        aria-label={`Thêm MP3 cho ${item.name}`}
+        aria-label={label}
+        title={label}
         onClick={() => onAddMp3(item)}
       >
-        <Music2 size={12} />
-        Thêm MP3
+        <CloudUpload size={19} />
       </button>
     )
   }
 
+  const label = `Nghe ${item.name}`
   return (
     <button
       type="button"
       className="library-audio-action library-audio-action-listen"
-      aria-label={`Nghe ${item.name}`}
+      aria-label={label}
+      title={label}
       onClick={() => onListen(item)}
     >
-      <Play size={12} fill="currentColor" />
-      Nghe
+      <Play size={18} fill="currentColor" />
     </button>
   )
 }
