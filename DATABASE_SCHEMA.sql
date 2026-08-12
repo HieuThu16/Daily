@@ -265,7 +265,7 @@ create table if not exists public.media_items (
   -- book-specific: format READ or LISTEN
   book_format    text        check (book_format in ('READ', 'LISTEN')),
   -- migration: 20260815000000_person_occasions_media_cover — URL ảnh bìa,
-  -- file nằm trong bucket book-covers (20260816000000_book_covers_storage)
+  -- file nằm trong bucket book-covers (20260818000000_book_covers_storage)
   cover_url      text,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),

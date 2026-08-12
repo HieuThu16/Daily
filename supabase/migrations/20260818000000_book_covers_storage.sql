@@ -1,4 +1,4 @@
--- migration: 20260816000000_book_covers_storage
+-- migration: 20260818000000_book_covers_storage
 -- Bucket chứa ảnh bìa sách do trình duyệt upload trực tiếp.
 -- Cột media_items.cover_url đã được thêm ở 20260815000000; dòng dưới chỉ để migration
 -- này chạy được độc lập trên một database chưa có nó.
