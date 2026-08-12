@@ -5,6 +5,7 @@ import { localDate } from '../lib/date'
 import type { Habit, HabitCategory, HabitLog } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { HabitHistoryTable } from './habits/HabitHistoryTable'
 
 type Tab = 'today' | 'categories' | 'history'
 type GroupView = 'tracking' | 'type' | 'routine'
@@ -571,36 +572,7 @@ export function HabitsPage() {
               ☑️ Thói quen Tích ({checkHabits.length})
             </h3>
             {checkHabits.length ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
-                      {week.map((d) => (
-                        <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                          {d.slice(8)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {checkHabits.map((h) => (
-                      <tr key={h.id}>
-                        <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
-                        {week.map((d) => {
-                          const log = logs.find((l) => l.habit_id === h.id && l.date === d)
-                          const isDone = log?.completed
-                          return (
-                            <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                              {isDone ? <span style={{ color: h.habit_type === 'BAD' ? 'var(--rose)' : 'var(--emerald)', fontWeight: 800 }}>✓</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <HabitHistoryTable habits={checkHabits} logs={logs} dates={week} mode="CHECK" />
             ) : (
               <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Tích.</p>
             )}
@@ -612,36 +584,7 @@ export function HabitsPage() {
               🔢 Thói quen Số liệu ({countHabits.length})
             </h3>
             {countHabits.length ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
-                      {week.map((d) => (
-                        <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                          {d.slice(8)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {countHabits.map((h) => (
-                      <tr key={h.id}>
-                        <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
-                        {week.map((d) => {
-                          const log = logs.find((l) => l.habit_id === h.id && l.date === d)
-                          const val = log?.value ?? (log?.completed ? '✓' : null)
-                          return (
-                            <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                              {val !== null ? <span style={{ color: '#f97316', fontWeight: 800 }}>{val}</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <HabitHistoryTable habits={countHabits} logs={logs} dates={week} mode="COUNT" />
             ) : (
               <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Số liệu.</p>
             )}

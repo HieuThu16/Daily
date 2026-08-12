@@ -1,0 +1,55 @@
+.habit-history-scroll { overflow-x: auto; }
+
+.habit-history-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: .76rem;
+}
+
+.habit-history-table th,
+.habit-history-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--card-border);
+  text-align: center;
+}
+
+.habit-history-table th:first-child,
+.habit-history-table td:first-child {
+  min-width: 170px;
+  padding-left: 7px;
+  text-align: left;
+}
+
+.habit-history-table tbody tr td:first-child { border-radius: 7px 0 0 7px; }
+.habit-history-table tbody tr td:last-child { border-radius: 0 7px 7px 0; }
+.habit-history-row-good td { background: rgba(16, 185, 129, .075); }
+.habit-history-row-bad td { background: rgba(244, 63, 94, .075); }
+
+.habit-history-name-good,
+.habit-history-name-bad { font-weight: 700; }
+.habit-history-name-good,
+.habit-history-value-good { color: var(--emerald); }
+.habit-history-name-bad,
+.habit-history-value-bad { color: var(--rose); }
+.habit-history-value-good,
+.habit-history-value-bad { font-weight: 850; }
+.habit-history-empty { color: var(--text-muted); }
+
+.habit-history-badge {
+  display: inline-flex;
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: .52rem;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
+.habit-history-badge-good { background: var(--emerald-bg); color: var(--emerald); }
+.habit-history-badge-bad { background: var(--rose-bg); color: var(--rose); }
+
+@media (max-width: 420px) {
+  .habit-history-table th:first-child,
+  .habit-history-table td:first-child { min-width: 145px; }
+}
