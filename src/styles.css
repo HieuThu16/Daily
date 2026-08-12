@@ -3454,3 +3454,128 @@ button.primary.block:disabled { opacity: 0.5; cursor: not-allowed; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ── Home: báo cáo ngày / tuần, gói gọn trong một màn hình ───────────────── */
+
+.home-page .segmented { margin-bottom: 12px; }
+
+.report { display: grid; gap: 10px; }
+
+.report-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--primary-light) 0%, var(--bg-subtle) 100%);
+}
+.report-hero h2 { margin: 0; font-size: 1.18rem; font-weight: 800; }
+.report-hero p { margin: 4px 0 0; font-size: 0.8rem; color: var(--text-muted); }
+
+.report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.report-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.report-tile {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+  text-align: left;
+  cursor: pointer;
+}
+.report-tile:active { transform: scale(0.99); }
+.report-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.report-tile strong { font-size: 1.25rem; font-weight: 800; line-height: 1.15; }
+.report-tile-hint {
+  font-size: 0.71rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.icon-box-sm { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; }
+
+.report-bar { display: block; height: 5px; border-radius: 99px; background: var(--card-border); overflow: hidden; }
+.report-bar i { display: block; height: 100%; border-radius: 99px; }
+
+.report-meals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.report-meal {
+  display: grid;
+  gap: 2px;
+  padding: 9px 6px;
+  border: 1px solid var(--card-border);
+  border-radius: 13px;
+  text-align: center;
+}
+.report-meal span { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+.report-meal strong { font-size: 0.86rem; font-weight: 800; }
+.report-meal.empty { opacity: 0.45; }
+
+.report-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--rose-bg);
+  color: var(--rose);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.report-note span { margin-left: auto; font-size: 0.75rem; }
+
+.report-chart, .report-rank { margin-bottom: 0; padding: 14px 16px; }
+
+.week-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.week-bar { display: grid; justify-items: center; gap: 4px; }
+.week-bar-value { font-size: 0.64rem; color: var(--text-muted); font-weight: 700; }
+.week-bar-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 92px;
+  border-radius: 8px;
+  background: var(--soft);
+  overflow: hidden;
+}
+.week-bar-track i { width: 100%; background: var(--primary); border-radius: 8px; }
+.week-bar-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 700; }
+.week-bar.today .week-bar-label { color: var(--primary); }
+.week-bar.today .week-bar-track i { background: var(--primary-gradient); }
+
+.rank-row { display: flex; align-items: center; gap: 9px; padding: 7px 0; }
+.rank-row + .rank-row { border-top: 1px solid var(--card-border); }
+.rank-tag {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.rank-tag.good { background: var(--emerald-bg); color: var(--emerald); }
+.rank-tag.bad { background: var(--amber-bg); color: var(--amber); }
+.rank-name { flex: 1; min-width: 0; font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-row strong { font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+/* Màn nhỏ: siết khoảng cách để báo cáo vẫn nằm gọn một màn hình. */
+@media (max-height: 720px) {
+  .report { gap: 8px; }
+  .report-hero { padding: 11px 14px; }
+  .week-bar-track { height: 74px; }
+}

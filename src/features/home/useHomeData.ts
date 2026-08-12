@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { weekDays } from '../../lib/homeProgress'
-import type { Entry, Habit, HabitLog, Media, Person, PersonOccasion, Todo } from '../../types'
+import type { Entry, Habit, HabitLog, Media, NutritionLog, Person, PersonOccasion, Todo } from '../../types'
 import { useToast } from '../ToastContext'
 
 /**
@@ -18,6 +18,10 @@ export function useHomeData() {
   const [todos, setTodos] = useState<Todo[]>([])
   const [todosDoneToday, setTodosDoneToday] = useState<Todo[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
+  const [weekEntries, setWeekEntries] = useState<Entry[]>([])
+  const [meals, setMeals] = useState<NutritionLog[]>([])
+  const [weekMeals, setWeekMeals] = useState<NutritionLog[]>([])
+  const [weekTodosDone, setWeekTodosDone] = useState<Todo[]>([])
   const [media, setMedia] = useState<Media[]>([])
   const [occasions, setOccasions] = useState<PersonOccasion[]>([])
   const [people, setPeople] = useState<Person[]>([])
@@ -34,7 +38,7 @@ export function useHomeData() {
       setLoading(true)
       const today = localDate()
 
-      const [h, tl, wl, t, td, e, m, o, p] = await Promise.all([
+      const [h, tl, wl, t, td, e, m, o, p, we, nt, nw, wt] = await Promise.all([
         supabase.from('habits').select('*').eq('is_active', true).is('deleted_at', null),
         supabase.from('habit_logs').select('*').eq('date', today),
         supabase.from('habit_logs').select('*').gte('date', week[0].key).lte('date', week[6].key),
@@ -44,6 +48,10 @@ export function useHomeData() {
         supabase.from('media_items').select('*').eq('status', 'IN_PROGRESS').is('deleted_at', null).limit(5),
         supabase.from('person_occasions').select('*').is('deleted_at', null),
         supabase.from('people').select('*').is('deleted_at', null),
+        supabase.from('daily_entries').select('*').gte('entry_date', week[0].key).lte('entry_date', week[6].key).is('deleted_at', null),
+        supabase.from('nutrition_logs').select('*').eq('log_date', today),
+        supabase.from('nutrition_logs').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key),
+        supabase.from('todos').select('*').eq('completed', true).gte('completed_at', week[0].key).is('deleted_at', null),
       ])
 
       setHabits((h.data ?? []) as Habit[])
@@ -55,6 +63,10 @@ export function useHomeData() {
       setMedia((m.data ?? []) as Media[])
       setOccasions((o.data ?? []) as PersonOccasion[])
       setPeople((p.data ?? []) as Person[])
+      setWeekEntries((we.data ?? []) as Entry[])
+      setMeals((nt.data ?? []) as NutritionLog[])
+      setWeekMeals((nw.data ?? []) as NutritionLog[])
+      setWeekTodosDone((wt.data ?? []) as Todo[])
       setLoading(false)
     })()
   }, [week])
@@ -95,6 +107,10 @@ export function useHomeData() {
     todos,
     todosDoneToday,
     entries,
+    weekEntries,
+    meals,
+    weekMeals,
+    weekTodosDone,
     media,
     occasions,
     people,
