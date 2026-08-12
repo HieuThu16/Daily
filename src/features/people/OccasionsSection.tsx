@@ -63,13 +63,18 @@ export function OccasionsSection({
         <h3>
           <Cake size={17} color="var(--rose)" /> {title}
         </h3>
-        <button type="button" className="icon" onClick={() => setOpen(true)} aria-label="Thêm dịp" style={{ color: 'var(--primary)' }}>
-          <Plus size={18} />
+        <button type="button" className="link-add" onClick={() => setOpen(true)}>
+          <Plus size={16} /> Thêm dịp
         </button>
       </div>
 
       {items.length === 0 ? (
-        <p className="home-card-empty">Chưa có dịp nào — bấm dấu cộng để thêm.</p>
+        <div className="occasions-empty">
+          <div className="icon-box" style={{ background: 'var(--rose-bg)', color: 'var(--rose)' }}>
+            <Cake size={22} />
+          </div>
+          <p>Chưa có dịp nào</p>
+        </div>
       ) : (
         items.map(({ occasion, days, date: next, label: name }) => {
           const Icon = occasion.kind === 'BIRTHDAY' ? Cake : Heart

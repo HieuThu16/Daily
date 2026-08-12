@@ -5,8 +5,8 @@ import { PeoplePage } from './PeoplePage'
 
 const rows: Record<string, unknown[]> = {
   people: [
-    { id: 'p1', name: 'Nguyễn Thuỳ Linh' },
-    { id: 'p2', name: 'Minh' },
+    { id: 'p1', name: 'Nguyễn Thuỳ Linh', group_key: 'FAMILY' },
+    { id: 'p2', name: 'Minh', group_key: 'FRIEND' },
   ],
   person_occasions: [],
   person_interests: [],
@@ -47,9 +47,24 @@ describe('PeoplePage', () => {
 
   it('mở được form thêm dịp', async () => {
     render(<PeoplePage />)
-    await userEvent.click(await screen.findByLabelText('Thêm dịp'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Thêm dịp' }))
     expect(screen.getByLabelText('Loại dịp')).toBeInTheDocument()
     expect(screen.getByLabelText('Gắn với người')).toBeInTheDocument()
+  })
+
+  it('hiện chip nhóm của từng người', async () => {
+    render(<PeoplePage />)
+    expect(await screen.findByText('Gia đình')).toBeInTheDocument()
+    expect(screen.getByText('Bạn bè')).toBeInTheDocument()
+  })
+
+  it('lọc theo nhóm', async () => {
+    render(<PeoplePage />)
+    await screen.findByText('Minh')
+    await userEvent.click(screen.getByLabelText('Lọc theo nhóm'))
+    await userEvent.click(screen.getByRole('button', { name: 'Bạn bè', pressed: false }))
+    expect(screen.queryByText('Nguyễn Thuỳ Linh')).not.toBeInTheDocument()
+    expect(screen.getByText('Minh')).toBeInTheDocument()
   })
 
   it('mở màn chi tiết khi bấm vào một người', async () => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal, type SaveSource } from '../../lib/persistence'
-import type { OccasionCalendar, OccasionKind, Person, PersonOccasion } from '../../types'
+import type { OccasionCalendar, OccasionKind, Person, PersonGroup, PersonOccasion } from '../../types'
 
 const PEOPLE_KEY = 'daily_people_local'
 const OCCASIONS_KEY = 'daily_occasions_local'
@@ -18,6 +18,7 @@ export type NewOccasion = {
 /** Thông tin nhập ở form thêm người; sinh nhật lưu thành một dịp BIRTHDAY. */
 export type NewPerson = {
   name: string
+  group_key?: PersonGroup | null
   birthday?: string
   birthdayCalendar?: OccasionCalendar
 }
@@ -68,7 +69,8 @@ export function usePeopleData() {
     const raw = typeof input === 'string' ? { name: input } : input
     const name = raw.name.trim()
     if (!name) return source
-    const local: Person = { id: crypto.randomUUID(), name }
+    const group_key = raw.group_key ?? null
+    const local: Person = { id: crypto.randomUUID(), name, group_key }
 
     const withBirthday = async (personId: string, savedTo: DataSource) => {
       if (!raw.birthday) return savedTo
@@ -89,7 +91,7 @@ export function usePeopleData() {
       return withBirthday(local.id, 'Local')
     }
 
-    const { data, error } = await supabase.from('people').insert({ name }).select().single()
+    const { data, error } = await supabase.from('people').insert({ name, group_key }).select().single()
     if (error || !data) {
       persistPeople([local, ...people])
       setSource('Local')

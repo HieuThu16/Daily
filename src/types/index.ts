@@ -126,9 +126,13 @@ export type MusicGenre = { id: string; name: string }
 
 export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
 export type Entry = { id: string; content: string; entry_date: string; created_at: string; entry_type: DailyType }
+/** Nhóm quan hệ, dùng làm chip trên thẻ người. */
+export type PersonGroup = 'FAMILY' | 'FRIEND' | 'COLLEAGUE' | 'OTHER'
+
 export type Person = {
   id: string
   name: string
+  group_key?: PersonGroup | null
   avatar_url?: string | null
   notes?: string | null
   created_at?: string
