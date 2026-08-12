@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, Calendar, Clock, Download, FileUp, Film, FolderCog, Heart, History, Layers, Music, Pencil, Play, Plus, RefreshCw, Tv, Volume2, Youtube } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, Calendar, Clock, Download, FileText, FileUp, Film, FolderCog, Heart, History, Layers, Music, Pencil, Play, Plus, RefreshCw, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -42,6 +42,11 @@ function getItemExtraMeta(item: Media) {
   if (item.type === 'BOOK') return { label: '📖 Tác giả: ', value: item.author ?? parseDescPrefix(item.description, 'Tác giả:') }
   if (item.type === 'MOVIE') return { label: '🎬 Thể loại: ', value: item.genre ?? parseDescPrefix(item.description, 'Thể loại:') }
   return { label: '', value: '' }
+}
+
+/** '2026-08-12' -> '12/08'. Chuỗi rỗng khi không có ngày. */
+function shortDate(value?: string | null) {
+  return value && value.length >= 10 ? `${value.slice(8, 10)}/${value.slice(5, 7)}` : ''
 }
 
 function getItemDateTime(item: Media) {
@@ -658,6 +663,19 @@ export function LibraryPage() {
           .sort((a, b) => b.log_date.localeCompare(a.log_date))[0]
       : null
 
+    // Một dòng meta xám gọn thay cho chuỗi pill nhỏ trước đây.
+    const metaParts: string[] = []
+    if (isBook) metaParts.push(fmt === 'READ' ? '📖 Đọc' : '🎧 Nghe')
+    if (meta.value) metaParts.push(meta.value)
+    if ((item.type === 'BOOK' || item.type === 'MANGA') && item.current_chapter != null) {
+      metaParts.push(`Chương ${item.current_chapter}`)
+    }
+    if ((item.type === 'BOOK' || item.type === 'MANGA') && item.start_date) {
+      metaParts.push(
+        item.end_date ? `${shortDate(item.start_date)} → ${shortDate(item.end_date)}` : `từ ${shortDate(item.start_date)}`,
+      )
+    }
+
     return (
       <div
         key={item.id}
@@ -677,63 +695,32 @@ export function LibraryPage() {
                 }}
               >
                 {item.name}
-                {isBook && (
-                  <span style={{
-                    marginLeft: 5,
-                    fontSize: '0.6rem',
-                    fontWeight: 700,
-                    padding: '1px 5px',
-                    borderRadius: 4,
-                    background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
-                    color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
-                  }}>
-                    {fmt === 'READ' ? '📖 Đọc' : '🎧 Nghe'}
-                  </span>
-                )}
               </div>
-              <div className="library-media-badges">
-                {(item.type === 'BOOK' || item.type === 'MANGA') && item.current_chapter != null && (
-                  <span style={{ fontSize: '0.64rem', fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'var(--emerald-bg)', color: 'var(--emerald)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                    📑 Chap {item.current_chapter}
-                  </span>
-                )}
-                {(item.type === 'BOOK' || item.type === 'MANGA') && (item.start_date || item.end_date) && (
-                  <span style={{ fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                    🚀 Bắt đầu: {item.start_date || '—'} {item.end_date ? `🏁 Kết thúc: ${item.end_date}` : ''}
-                  </span>
-                )}
+              <div className="library-media-meta">
+                {metaParts.length > 0 && <span className="library-media-meta-text">{metaParts.join(' · ')}</span>}
                 {isMusic && (
                   <span
-                    style={{
-                      fontSize: '0.64rem',
-                      fontWeight: 700,
-                      padding: '1px 6px',
-                      borderRadius: 4,
-                      background: genreStyle.bg,
-                      color: genreStyle.color,
-                      border: `1px solid ${genreStyle.border}`,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 2,
-                    }}
+                    className="library-chip"
+                    style={{ background: genreStyle.bg, color: genreStyle.color, border: `1px solid ${genreStyle.border}` }}
                   >
-                    🎼 {item.music_genre || 'Chưa phân loại'}
-                  </span>
-                )}
-                {meta.value && (
-                  <span className="library-meta-tag" style={{ fontSize: '0.64rem', padding: '1px 5px', borderRadius: 4, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {meta.label}{meta.value}
+                    {item.music_genre || 'Chưa phân loại'}
                   </span>
                 )}
                 {isBook && latestLog && (
-                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)', background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                  <span
+                    className="library-chip"
+                    title={`Ghi ngày ${latestLog.log_date}`}
+                    style={{
+                      background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
+                      color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
+                    }}
+                  >
                     {fmt === 'READ'
-                      ? `📄 Trang ${latestLog.page ?? '?'} (${latestLog.log_date})`
-                      : `⏱ ${latestLog.listen_hours}h${latestLog.listen_minutes}m (${latestLog.log_date})`}
+                      ? `Trang ${latestLog.page ?? '?'}`
+                      : `${latestLog.listen_hours}h${latestLog.listen_minutes}m`}
                   </span>
                 )}
               </div>
-
             </div>
           </div>
 
@@ -773,24 +760,19 @@ export function LibraryPage() {
           </div>
         </div>
 
-        {/* Book Row: nút Đọc cho sách đã nhập, nút ghi tiến độ cho sách đang/đã đọc */}
+        {/* Book Row: nút Đọc cho sách đã nhập, nút ghi tiến độ cho sách đang/đã đọc.
+            Thẳng cột với tiêu đề, một hệ nút chung, chỉ nút Đọc được tô đậm. */}
         {isBook && (importedIds.has(item.id) || item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
-          <div style={{ display: 'flex', gap: 4, paddingLeft: 28 }}>
+          <div className="library-book-actions">
             {importedIds.has(item.id) && (
-              <button
-                onClick={() => nav(`/read/${item.id}`)}
-                style={{
-                  fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6,
-                  border: '1px solid var(--primary)', background: 'var(--primary)', color: 'white',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
-                }}
-              >
-                <BookOpen size={10} /> Đọc
+              <button className="library-book-btn is-primary" onClick={() => nav(`/read/${item.id}`)}>
+                <BookOpen size={13} /> Đọc
               </button>
             )}
             {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
               <>
                 <button
+                  className="library-book-btn"
                   onClick={() => {
                     setBookLogModal({ item })
                     setLogProgressDate(localDate())
@@ -799,25 +781,15 @@ export function LibraryPage() {
                     setLogListenMinutes(latestLog?.listen_minutes?.toString() ?? '0')
                     setLogNote('')
                   }}
-                  style={{
-                    fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid',
-                    borderColor: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
-                    background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
-                    color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
-                  }}
                 >
-                  {fmt === 'READ' ? '📄 Ghi trang' : '⏱ Ghi giờ'}
+                  {fmt === 'READ' ? <FileText size={13} /> : <Clock size={13} />}
+                  {fmt === 'READ' ? 'Ghi trang' : 'Ghi giờ'}
                 </button>
-                <button
-                  onClick={() => setBookHistoryModal({ item })}
-                  style={{
-                    fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--card-border)',
-                    background: 'var(--card-bg)', color: 'var(--text-muted)',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
-                  }}
-                >
-                  <History size={10} /> Lịch sử ({bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length})
+                <button className="library-book-btn" onClick={() => setBookHistoryModal({ item })}>
+                  <History size={13} /> Lịch sử
+                  <span className="library-book-count">
+                    {bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length}
+                  </span>
                 </button>
               </>
             )}

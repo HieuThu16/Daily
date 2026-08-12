@@ -1228,12 +1228,105 @@ header {
 }
 
 .library-status-select {
-  width: 76px;
-  max-width: 76px;
+  width: 92px;
+  max-width: 92px;
   height: 38px;
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: 11px !important;
   font-size: 0.68rem;
+}
+
+/* Một dòng meta xám gọn, thay cho chuỗi pill nhỏ rời rạc trước đây. */
+.library-media-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  min-width: 0;
+}
+
+.library-media-meta-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-chip {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Hàng nút của thẻ sách: thẳng cột với tiêu đề (40px icon + 9px gap). */
+.library-book-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 49px;
+}
+
+.library-book-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.71rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.library-book-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: var(--card-shadow);
+}
+
+.library-book-btn.is-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.library-book-btn.is-primary:hover {
+  color: #fff;
+}
+
+.library-book-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  line-height: 18px;
+  text-align: center;
+}
+
+.library-book-btn.is-primary .library-book-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+@media (max-width: 420px) {
+  .library-book-actions {
+    padding-left: 0;
+  }
 }
 
 .library-media-actions > .icon.small {
