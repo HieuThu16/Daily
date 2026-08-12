@@ -1,19 +1,21 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { localDate } from '../../lib/date'
 import { todayCompletion } from '../../lib/homeProgress'
-import { upcomingOccasions } from '../../lib/occasions'
-import { DailyCard } from './DailyCard'
-import { GreetingBanner } from './GreetingBanner'
-import { HabitsCard } from './HabitsCard'
-import { ReadingCard } from './ReadingCard'
-import { TodosCard } from './TodosCard'
-import { UpcomingCard } from './UpcomingCard'
+import { parseLocalDate, upcomingOccasions } from '../../lib/occasions'
+import { DatePager } from './DatePager'
+import { ReportDay } from './ReportDay'
+import { ReportWeek } from './ReportWeek'
 import { useHomeData } from './useHomeData'
-import { WeekProgressCard } from './WeekProgressCard'
+
+type ReportTab = 'day' | 'week'
 
 export function HomePage() {
-  const data = useHomeData()
   const nav = useNavigate()
+  const [tab, setTab] = useState<ReportTab>('day')
+  const [dateKey, setDateKey] = useState(localDate())
+  const data = useHomeData(dateKey)
+  const isToday = dateKey === localDate()
 
   const completion = useMemo(
     () =>
@@ -21,34 +23,54 @@ export function HomePage() {
         habits: data.habits,
         habitLogs: data.todayLogs,
         todos: [...data.todos, ...data.todosDoneToday],
-      }),
-    [data.habits, data.todayLogs, data.todos, data.todosDoneToday],
+      }, parseLocalDate(dateKey)),
+    [data.habits, data.todayLogs, data.todos, data.todosDoneToday, dateKey],
   )
 
-  const upcoming = useMemo(
-    () => upcomingOccasions(data.occasions, data.people, new Date(), { withinDays: 60, limit: 3 }),
+  const nextOccasion = useMemo(
+    () => upcomingOccasions(data.occasions, data.people, new Date(), { withinDays: 60, limit: 1 })[0] ?? null,
     [data.occasions, data.people],
   )
 
   return (
     <section className="home-page">
-      <GreetingBanner completion={completion} onOpen={() => nav('/tasks')} />
-
-      <div className="home-grid home-grid-2">
-        <HabitsCard
-          habits={data.habits}
-          completedIds={data.completedHabitIds}
-          loading={data.loading}
-          onToggle={data.toggleHabit}
-          onOpenAll={() => nav('/habit')}
-        />
-        <TodosCard todos={data.todos} loading={data.loading} onToggle={data.toggleTodo} onOpenAll={() => nav('/tasks')} />
-        <DailyCard entries={data.entries} loading={data.loading} onWrite={() => nav('/daily')} />
-        <ReadingCard media={data.media} loading={data.loading} onOpenLibrary={() => nav('/library')} />
+      <div className="segmented" role="tablist" aria-label="Kỳ báo cáo">
+        <button role="tab" aria-selected={tab === 'day'} className={tab === 'day' ? 'active' : ''} onClick={() => setTab('day')}>
+          Ngày
+        </button>
+        <button role="tab" aria-selected={tab === 'week'} className={tab === 'week' ? 'active' : ''} onClick={() => setTab('week')}>
+          Tuần
+        </button>
       </div>
 
-      <WeekProgressCard week={data.week} habits={data.habits} logs={data.weekLogs} todayPercent={completion.percent} />
-      <UpcomingCard items={upcoming} onOpenAll={() => nav('/people')} />
+      <DatePager dateKey={dateKey} week={data.week} mode={tab} onChange={setDateKey} />
+
+      {tab === 'day' ? (
+        <ReportDay
+          completion={completion}
+          habits={data.habits}
+          todayLogs={data.todayLogs}
+          todos={data.todos}
+          todosDoneToday={data.todosDoneToday}
+          entries={data.entries}
+          meals={data.meals}
+          sleep={data.sleep}
+          isToday={isToday}
+          nextOccasion={nextOccasion}
+          onOpen={nav}
+        />
+      ) : (
+        <ReportWeek
+          week={data.week}
+          habits={data.habits}
+          weekLogs={data.weekLogs}
+          weekEntries={data.weekEntries}
+          weekMeals={data.weekMeals}
+          weekTodosDone={data.weekTodosDone}
+          weekSleep={data.weekSleep}
+          onOpen={nav}
+        />
+      )}
     </section>
   )
 }

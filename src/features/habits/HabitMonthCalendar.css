@@ -1,0 +1,76 @@
+.habit-month-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  gap: 8px;
+}
+
+.habit-month-card {
+  padding: 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--bg-main);
+}
+
+.habit-month-card-good { border-left: 3px solid var(--emerald); }
+.habit-month-card-bad { border-left: 3px solid var(--rose); }
+
+.habit-month-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: .78rem;
+}
+
+.habit-month-total { font-size: .74rem; font-variant-numeric: tabular-nums; }
+.habit-month-total-good { color: var(--emerald); }
+.habit-month-total-bad { color: var(--rose); }
+
+.habit-month-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.habit-month-weekday {
+  padding-bottom: 2px;
+  color: var(--text-muted);
+  font-size: .56rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.habit-month-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 5px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: .58rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.habit-month-blank { background: none; }
+
+.habit-month-cell-good {
+  background: var(--emerald);
+  color: #fff;
+  font-weight: 800;
+}
+
+.habit-month-cell-bad {
+  background: var(--rose);
+  color: #fff;
+  font-weight: 800;
+}
+
+.habit-month-foot {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: .64rem;
+}

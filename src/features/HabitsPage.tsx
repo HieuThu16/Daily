@@ -1,13 +1,29 @@
 import { useMemo, useState, useEffect } from 'react'
-import { BarChart3, Calendar, Check, Flame, FolderCog, LayoutGrid, List, Pencil, Plus, Save } from 'lucide-react'
+import { Calendar, Check, ChevronLeft, ChevronRight, Flame, FolderCog, LayoutGrid, List, Minus, MoreVertical, Pencil, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import type { Habit, HabitCategory, HabitLog } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { HabitHistoryTable } from './habits/HabitHistoryTable'
+import { HabitMonthCalendar } from './habits/HabitMonthCalendar'
+import { isCurrentPeriod, monthDates, monthLabel, shiftAnchor, weekDates, weekLabel, type HistoryRange } from './habits/historyRange'
+import { ProgressRing } from './home/ProgressRing'
 
 type Tab = 'today' | 'categories' | 'history'
-type GroupView = 'tracking' | 'type' | 'routine'
+/** Bộ lọc dạng chip của tab "Hôm nay". */
+type Filter = 'ALL' | 'CHECK' | 'COUNT' | 'GOOD' | 'BAD' | 'MORNING' | 'AFTERNOON' | 'EVENING'
+
+const FILTER_CHIPS: Array<{ key: Filter; label: string }> = [
+  { key: 'ALL', label: 'Tất cả' },
+  { key: 'CHECK', label: 'Tích' },
+  { key: 'COUNT', label: 'Số liệu' },
+  { key: 'GOOD', label: 'Tốt' },
+  { key: 'BAD', label: 'Cần hạn chế' },
+  { key: 'MORNING', label: '🌅 Sáng' },
+  { key: 'AFTERNOON', label: '☀️ Trưa' },
+  { key: 'EVENING', label: '🌙 Tối' },
+]
 
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
 const now = new Date()
@@ -20,10 +36,12 @@ export function HabitsPage() {
   const categories = useQuery<HabitCategory>('habit_categories', 'name')
 
   const [logs, setLogs] = useState<HabitLog[]>([])
-  const [countDrafts, setCountDrafts] = useState<Record<string, string>>({})
   const [savingCountId, setSavingCountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('today')
-  const [groupView, setGroupView] = useState<GroupView>('tracking')
+  const [historyRange, setHistoryRange] = useState<HistoryRange>('week')
+  /** Ngày mốc của kỳ đang xem ở tab Lịch sử (đổi khi bấm ‹ ›). */
+  const [anchor, setAnchor] = useState(() => new Date())
+  const [filter, setFilter] = useState<Filter>('ALL')
   const [editing, setEditing] = useState<Habit | null>(null)
   const [addModal, setAddModal] = useState(false)
   const [manage, setManage] = useState(false)
@@ -37,15 +55,27 @@ export function HabitsPage() {
   const [newCategory, setNewCategory] = useState('')
   const [categoryName, setCategoryName] = useState('')
 
+  /** Ngày hiển thị ở tab Lịch sử: cả tuần (T2→CN) hoặc cả tháng đang chọn. */
+  const historyDates = useMemo(
+    () => (historyRange === 'week' ? weekDates(anchor) : monthDates(anchor)),
+    [historyRange, anchor],
+  )
+  const rangeTitle = historyRange === 'week' ? weekLabel(anchor) : monthLabel(anchor)
+  const atCurrentPeriod = isCurrentPeriod(anchor, historyRange)
+
+  /** Tải log phủ cả kỳ đang xem lẫn tháng hiện tại (tab "Hôm nay" cần ngày hôm nay). */
+  const fetchFrom = historyDates[0] < `${month}-01` ? historyDates[0] : `${month}-01`
+  const fetchTo = historyDates[historyDates.length - 1] > `${month}-31` ? historyDates[historyDates.length - 1] : `${month}-31`
+
   useEffect(() => {
     if (!supabase) return
     supabase
       .from('habit_logs')
       .select('habit_id,date,completed,value')
-      .gte('date', `${month}-01`)
-      .lte('date', `${month}-31`)
+      .gte('date', fetchFrom)
+      .lte('date', fetchTo)
       .then(({ data }) => setLogs((data ?? []) as HabitLog[]))
-  }, [habits.items.length])
+  }, [habits.items.length, fetchFrom, fetchTo])
 
   const completed = new Set(logs.filter((l) => l.date === localDate() && l.completed).map((l) => l.habit_id))
   const category = (h: Habit) => categories.items.find((c) => c.id === h.category_id)
@@ -66,6 +96,24 @@ export function HabitsPage() {
     SLOTS.map((s) => ({ ...s, habits: habits.items.filter((h) => (h.routine ?? 'MORNING') === s.key) }))
   , [habits.items])
 
+  /** Nhóm hiển thị của tab "Hôm nay", suy ra từ chip lọc đang chọn. */
+  const sections = useMemo(() => {
+    const check = { key: 'CHECK', title: 'Thói quen tích cực', color: 'var(--emerald)', habits: checkHabits }
+    const count = { key: 'COUNT', title: 'Theo dõi số liệu', color: 'var(--primary)', habits: countHabits }
+    const bySlot = (slotKey: string) => {
+      const slot = routineGroups.find((s) => s.key === slotKey)
+      return slot ? [{ key: slot.key, title: slot.label, color: slot.color, habits: slot.habits }] : []
+    }
+    const picked =
+      filter === 'CHECK' ? [check]
+      : filter === 'COUNT' ? [count]
+      : filter === 'GOOD' ? [{ key: 'GOOD', title: 'Thói quen tốt', color: 'var(--emerald)', habits: goodHabits }]
+      : filter === 'BAD' ? [{ key: 'BAD', title: 'Cần hạn chế', color: 'var(--rose)', habits: badHabits }]
+      : filter === 'ALL' ? [check, count]
+      : bySlot(filter)
+    return picked.filter((s) => s.habits.length > 0)
+  }, [filter, checkHabits, countHabits, goodHabits, badHabits, routineGroups])
+
   const groups = useMemo(() => {
     const result: Array<[HabitCategory | null, Habit[]]> = categories.items.map((c) => [c, habits.items.filter((h) => h.category_id === c.id)])
     result.push([null, habits.items.filter((h) => !h.category_id)])
@@ -83,28 +131,25 @@ export function HabitsPage() {
     }
   }
 
-  const countValue = (habitId: string) => countDrafts[habitId] ?? (todayValue(habitId) ? String(todayValue(habitId)) : '')
-
-  const updateCountDraft = (habitId: string, rawValue: string) => {
-    const normalized = rawValue.replace(/\D/g, '').replace(/^0+(?=\d)/, '')
-    setCountDrafts((drafts) => ({ ...drafts, [habitId]: normalized }))
-  }
-
-  const saveCount = async (h: Habit) => {
-    const value = Math.max(0, Number.parseInt(countValue(h.id), 10) || 0)
-    const completed = value > 0
+  /** Tăng/giảm số liệu của hôm nay rồi lưu ngay (không còn ô nhập + nút lưu rời). */
+  const stepCount = async (h: Habit, delta: number) => {
+    const value = Math.max(0, todayValue(h.id) + delta)
+    const isDone = value > 0
+    // Cập nhật lạc quan để nút bấm phản hồi tức thì.
+    setLogs((ls) => [
+      ...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())),
+      { habit_id: h.id, date: localDate(), completed: isDone, value },
+    ])
     setSavingCountId(h.id)
     const { data, error } = await supabase!
       .from('habit_logs')
-      .upsert({ habit_id: h.id, date: localDate(), completed, value }, { onConflict: 'habit_id,date' })
+      .upsert({ habit_id: h.id, date: localDate(), completed: isDone, value }, { onConflict: 'habit_id,date' })
       .select('habit_id,date,completed,value')
       .single()
     setSavingCountId(null)
 
     if (!error && data) {
       setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())), data as HabitLog])
-      setCountDrafts((drafts) => ({ ...drafts, [h.id]: value ? String(value) : '' }))
-      showSaveToast(true, 'số liệu thói quen')
     } else {
       showSaveToast(false, 'số liệu thói quen')
     }
@@ -204,20 +249,42 @@ export function HabitsPage() {
     habits.setItems((xs) => xs.map((h) => (h.category_id === c.id ? { ...h, category_id: null } : h)))
   }
 
-  const week = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(now.getDate() - 6 + i)
-    return localDate(d)
-  })
-
   const progressPercent = habits.items.length ? Math.round((completed.size / habits.items.length) * 100) : 0
+
+  // Hai vòng tròn: xanh cho thói quen tốt (càng đầy càng ngon),
+  // đỏ cho thói quen xấu (càng TRỐNG càng ngon — trống = hôm nay không lỡ cái nào).
+  const goodDone = goodHabits.filter((h) => completed.has(h.id)).length
+  const badDone = badHabits.filter((h) => completed.has(h.id)).length
+  const goodPercent = goodHabits.length ? Math.round((goodDone / goodHabits.length) * 100) : 0
+  const badPercent = badHabits.length ? Math.round((badDone / badHabits.length) * 100) : 0
+
+  const progressMessage =
+    badHabits.length > 0 && badDone === 0 && goodDone === goodHabits.length && goodHabits.length > 0
+      ? 'Hoàn hảo! Đủ thói quen tốt, không lỡ cái xấu nào 🎉'
+      : badHabits.length > 0 && badDone === 0
+        ? 'Chưa lỡ thói quen xấu nào, giữ vậy nhé 👏'
+        : badHabits.length > 0 && badDone === badHabits.length
+          ? 'Hôm nay lỡ hết thói quen xấu rồi, mai làm lại nhé'
+          : goodHabits.length > 0 && goodDone === goodHabits.length
+            ? 'Xong hết thói quen tốt, tuyệt vời!'
+            : 'Tiếp tục duy trì nhé'
   const todayValue = (habitId: string) => logs.find((l) => l.habit_id === habitId && l.date === localDate())?.value ?? 0
+
+  const openEditHabit = (h: Habit) => {
+    setEditing(h)
+    setName(h.name)
+    setCategoryId(h.category_id ?? '')
+    setHabitType(h.habit_type ?? 'GOOD')
+    setTrackingType(h.tracking_type ?? 'CHECK')
+    setRoutineSlot(h.routine ?? 'MORNING')
+  }
 
   const renderHabitItem = (h: Habit) => {
     const isDone = completed.has(h.id)
     const isBad = h.habit_type === 'BAD'
+    const isCount = h.tracking_type === 'COUNT'
     const cat = category(h)
-    
+
     const routine = h.routine || 'MORNING'
     const routineIcon = routine === 'MORNING' ? '🌅' : routine === 'AFTERNOON' ? '☀️' : '🌙'
     const routineColor = routine === 'MORNING' ? 'var(--amber)' : routine === 'AFTERNOON' ? '#f97316' : 'var(--purple)' // using hex for orange since it might not be in css
@@ -226,140 +293,71 @@ export function HabitsPage() {
     return (
       <div
         key={h.id}
-        className={'check-row ' + (isDone ? 'done' : '')}
-        onClick={h.tracking_type === 'CHECK' ? () => toggle(h) : undefined}
-        style={{
-          justifyContent: 'space-between',
-          background: isDone ? (isBad ? 'var(--rose-bg)' : 'var(--emerald-bg)') : 'var(--bg-main)',
-          borderRadius: 8,
-          padding: '6px 10px',
-          marginBottom: 0,
-          cursor: h.tracking_type === 'CHECK' ? 'pointer' : 'default',
-          border: isDone ? (isBad ? '1.5px solid var(--rose)' : '1px solid var(--emerald)') : '1px solid var(--card-border)',
-          transition: 'all 0.15s ease',
-        }}
+        className={'habit-item' + (isDone ? ' is-done' : '') + (isBad ? ' is-bad' : '') + (isCount ? '' : ' is-tappable')}
+        onClick={isCount ? undefined : () => toggle(h)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-          {/* Checkbox Icon */}
-          <button
-            className={'check-box ' + (isDone ? 'checked' : '')}
-            onClick={(e) => {
-              e.stopPropagation()
-              toggle(h)
-            }}
-            style={{
-              width: 22,
-              height: 22,
-              minWidth: 22,
-              borderRadius: 6,
-              padding: 0,
-              background: isDone ? (isBad ? 'var(--rose)' : 'var(--primary)') : 'transparent',
-              borderColor: isDone ? (isBad ? 'var(--rose)' : 'var(--primary)') : undefined,
-            }}
-          >
-            {isDone && <Check size={14} style={{ color: 'white' }} />}
-          </button>
+        <button
+          className={'habit-tick' + (isDone ? ' is-on' : '')}
+          aria-label={`Đánh dấu ${h.name}`}
+          aria-pressed={isDone}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggle(h)
+          }}
+        >
+          {isDone && <Check size={15} strokeWidth={3} />}
+        </button>
 
-          {/* Title & Category Tag */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
+        <div className="habit-item-body">
+          <div className="habit-item-title">{h.name}</div>
+          <div className="habit-item-tags">
+            {cat && (
+              <span className="habit-tag" style={{ color: cat.color, borderColor: 'var(--card-border)' }}>
+                {cat.name}
+              </span>
+            )}
+            <span
+              className="habit-tag"
               style={{
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                color: isDone ? (isBad ? 'var(--rose)' : 'var(--text-muted)') : 'var(--text-main)',
-                textDecoration: isDone ? 'line-through' : 'none',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                color: isBad ? 'var(--red)' : 'var(--emerald)',
+                background: isBad ? 'var(--rose-bg)' : 'transparent',
+                borderColor: isBad ? 'transparent' : 'var(--card-border)',
               }}
             >
-              {h.name}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-              {cat && (
-                <span style={{ fontSize: '0.64rem', fontWeight: 700, color: cat.color, background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4 }}>
-                  {cat.name}
-                </span>
-              )}
-              <span
-                style={{
-                  fontSize: '0.62rem',
-                  fontWeight: 700,
-                  color: isBad ? 'var(--rose)' : 'var(--emerald)',
-                  background: isBad ? 'var(--rose-bg)' : 'var(--emerald-bg)',
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                }}
-              >
-                {isBad ? '⚠️ Thói quen xấu' : '🌟 Thói quen tốt'}
-              </span>
-              <span
-                style={{
-                  fontSize: '0.62rem',
-                  fontWeight: 700,
-                  color: routineColor,
-                  background: routineBg,
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2
-                }}
-              >
-                {routineIcon} {routine === 'MORNING' ? 'Sáng' : routine === 'AFTERNOON' ? 'Trưa' : 'Tối'}
-              </span>
-            </div>
+              {isBad ? '⚠ Cần hạn chế' : '☀ Thói quen tốt'}
+            </span>
+            <span className="habit-tag" style={{ color: routineColor, background: routineBg, borderColor: 'transparent' }}>
+              {routineIcon} {routine === 'MORNING' ? 'Sáng' : routine === 'AFTERNOON' ? 'Trưa' : 'Tối'}
+            </span>
           </div>
         </div>
 
-        {/* COUNT Value Input & Edit Icon */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {h.tracking_type === 'COUNT' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <input
-                aria-label={`Giá trị hôm nay cho ${h.name}`}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={countValue(h.id)}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => updateCountDraft(h.id, e.target.value)}
-                placeholder="0"
-                style={{ width: 44, padding: '2px 4px', border: '1px solid var(--card-border)', borderRadius: 6, textAlign: 'center', fontSize: '0.76rem', background: 'var(--card-bg)' }}
-              />
-              <button
-                className="icon small"
-                aria-label={`Lưu số liệu cho ${h.name}`}
-                title="Lưu số liệu"
-                disabled={savingCountId === h.id}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  saveCount(h)
-                }}
-                style={{ padding: 3 }}
-              >
-                <Save size={13} />
-              </button>
-            </div>
-          )}
+        {isCount && (
+          <div className="habit-stepper">
+            <button
+              aria-label={`Giảm số liệu cho ${h.name}`}
+              disabled={savingCountId === h.id || todayValue(h.id) === 0}
+              onClick={() => stepCount(h, -1)}
+            >
+              <Minus size={14} />
+            </button>
+            <span aria-label={`Giá trị hôm nay cho ${h.name}`}>{todayValue(h.id)}</span>
+            <button aria-label={`Tăng số liệu cho ${h.name}`} disabled={savingCountId === h.id} onClick={() => stepCount(h, 1)}>
+              <Plus size={14} />
+            </button>
+          </div>
+        )}
 
-          <button
-            className="icon small"
-            aria-label="Edit habit"
-            onClick={(e) => {
-              e.stopPropagation()
-              setEditing(h)
-              setName(h.name)
-              setCategoryId(h.category_id ?? '')
-              setHabitType(h.habit_type ?? 'GOOD')
-              setTrackingType(h.tracking_type ?? 'CHECK')
-              setRoutineSlot(h.routine ?? 'MORNING')
-            }}
-            style={{ padding: 3 }}
-          >
-            <Pencil size={13} />
-          </button>
-        </div>
+        <button
+          className="habit-item-menu"
+          aria-label={`Sửa ${h.name}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            openEditHabit(h)
+          }}
+        >
+          <MoreVertical size={16} />
+        </button>
       </div>
     )
   }
@@ -374,156 +372,119 @@ export function HabitsPage() {
           </div>
           <h1 style={{ fontSize: '1.2rem', margin: 0 }}>Habits</h1>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="primary" onClick={() => { setName(''); setCategoryId(''); setHabitType('GOOD'); setTrackingType('CHECK'); setRoutineSlot('MORNING'); setAddModal(true) }} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4 }}>
-            <Plus size={14} /> Thêm
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            className="habit-add-btn"
+            aria-label="Thêm thói quen"
+            title="Thêm thói quen"
+            onClick={() => { setName(''); setCategoryId(''); setHabitType('GOOD'); setTrackingType('CHECK'); setRoutineSlot('MORNING'); setAddModal(true) }}
+          >
+            <Plus size={20} />
           </button>
-          <button className="icon" aria-label="Manage categories" onClick={() => setManage(true)} style={{ padding: 5 }}>
+          <button className="icon" aria-label="Manage categories" title="Quản lý thể loại" onClick={() => setManage(true)} style={{ padding: 5 }}>
             <FolderCog size={16} />
           </button>
         </div>
       </div>
 
       {/* Compact Sub Navigation Tabs */}
-      <div className="habit-sub-tabs" style={{ marginBottom: 8 }}>
-        <button className={activeTab === 'today' ? 'active' : ''} onClick={() => setActiveTab('today')} style={{ padding: '5px 4px', fontSize: '0.74rem' }}>
-          <List size={13} /> Hôm nay ({completed.size}/{habits.items.length})
+      <div className="habit-sub-tabs" style={{ marginBottom: 10 }}>
+        <button className={activeTab === 'today' ? 'active' : ''} onClick={() => setActiveTab('today')}>
+          <List size={14} /> Hôm nay {completed.size}/{habits.items.length}
         </button>
-        <button className={activeTab === 'categories' ? 'active' : ''} onClick={() => setActiveTab('categories')} style={{ padding: '5px 4px', fontSize: '0.74rem' }}>
-          <LayoutGrid size={13} /> Thể loại
+        <button className={activeTab === 'categories' ? 'active' : ''} onClick={() => setActiveTab('categories')}>
+          <LayoutGrid size={14} /> Thể loại
         </button>
-        <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')} style={{ padding: '5px 4px', fontSize: '0.74rem' }}>
-          <Calendar size={13} /> Lịch sử
+        <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>
+          <Calendar size={14} /> Lịch sử
         </button>
       </div>
 
       {/* Main View Area: TODAY TAB */}
       {activeTab === 'today' && (
-        <div className="card" style={{ padding: 10, margin: 0 }}>
+        <>
           {habits.items.length > 0 && (
-            <div className="habit-progress-pill" style={{ padding: '4px 10px', marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: '0.78rem', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{progressPercent}% hoàn thành</div>
-              <div className="habit-progress-bar-bg" style={{ height: 5 }}>
-                <div className="habit-progress-bar-fill" style={{ width: `${progressPercent}%` }} />
+            <div className="habit-progress-card">
+              <div className="habit-progress-rings">
+                {goodHabits.length > 0 && (
+                  <div className="habit-progress-ring">
+                    <ProgressRing percent={goodPercent} size={78} stroke={8} color="var(--emerald)">
+                      <strong style={{ color: 'var(--emerald)' }}>{goodDone}/{goodHabits.length}</strong>
+                    </ProgressRing>
+                    <span style={{ color: 'var(--emerald)' }}>Tốt · làm được</span>
+                  </div>
+                )}
+                {badHabits.length > 0 && (
+                  <div className="habit-progress-ring">
+                    <ProgressRing percent={badPercent} size={78} stroke={8} color="var(--red)">
+                      <strong style={{ color: badDone ? 'var(--red)' : 'var(--emerald)' }}>
+                        {badDone}/{badHabits.length}
+                      </strong>
+                    </ProgressRing>
+                    <span style={{ color: 'var(--red)' }}>Xấu · đã lỡ</span>
+                  </div>
+                )}
+              </div>
+              <div className="habit-progress-note">
+                <div className="habit-progress-headline">
+                  <strong>{completed.size}/{habits.items.length}</strong> hoàn thành
+                </div>
+                <p className="muted" style={{ margin: 0, fontSize: '0.86rem' }}>
+                  {progressMessage}
+                </p>
               </div>
             </div>
           )}
 
           {!habits.items.length ? (
-            <Empty icon={Flame} colorClass="icon-box-amber">
-              Chưa có thói quen nào. Bấm "+ Thêm" để tạo mới nhé!
-            </Empty>
+            <div className="card" style={{ padding: 14, margin: 0 }}>
+              <Empty icon={Flame} colorClass="icon-box-amber">
+                Chưa có thói quen nào. Bấm "+" để tạo mới nhé!
+              </Empty>
+            </div>
           ) : (
             <>
-              {/* View toggle */}
-              <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
-                <button
-                  onClick={() => setGroupView('tracking')}
-                  style={{
-                    flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
-                    border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
-                    borderColor: groupView === 'tracking' ? 'var(--cyan)' : 'var(--card-border)',
-                    background: groupView === 'tracking' ? 'rgba(6, 182, 212, 0.12)' : 'var(--bg-main)',
-                    color: groupView === 'tracking' ? 'var(--cyan)' : 'var(--text-muted)',
-                  }}
-                >
-                  ☑️ Tích / 🔢 Số liệu
-                </button>
-                <button
-                  onClick={() => setGroupView('type')}
-                  style={{
-                    flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
-                    border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
-                    borderColor: groupView === 'type' ? 'var(--emerald)' : 'var(--card-border)',
-                    background: groupView === 'type' ? 'var(--emerald-bg)' : 'var(--bg-main)',
-                    color: groupView === 'type' ? 'var(--emerald)' : 'var(--text-muted)',
-                  }}
-                >
-                  🌟 Tốt / ⚠️ Xấu
-                </button>
-                <button
-                  onClick={() => setGroupView('routine')}
-                  style={{
-                    flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
-                    border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
-                    borderColor: groupView === 'routine' ? 'var(--primary)' : 'var(--card-border)',
-                    background: groupView === 'routine' ? 'var(--primary-light)' : 'var(--bg-main)',
-                    color: groupView === 'routine' ? 'var(--primary)' : 'var(--text-muted)',
-                  }}
-                >
-                  🌅 Sáng / ☀️ Trưa / 🌙 Tối
-                </button>
+              {/* Hàng chip lọc: cuộn ngang trong khung, không đẩy cả trang */}
+              <div className="habit-filter-row">
+                {FILTER_CHIPS.map((chip) => (
+                  <button
+                    key={chip.key}
+                    className={'habit-filter-chip' + (filter === chip.key ? ' is-on' : '')}
+                    aria-pressed={filter === chip.key}
+                    onClick={() => setFilter(chip.key)}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
               </div>
 
-              <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 265px)', minHeight: 180, overflowY: 'auto' }}>
-                {/* ── BY TRACKING TYPE (Tích / Số liệu) ── */}
-                {groupView === 'tracking' && (
-                  <>
-                    {checkHabits.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--cyan)', marginBottom: 4 }}>
-                          ☑️ Thói quen Tích ({checkHabits.filter((h) => completed.has(h.id)).length}/{checkHabits.length})
-                        </div>
-                        <div style={{ display: 'grid', gap: 5 }}>{checkHabits.map(renderHabitItem)}</div>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {sections.length === 0 ? (
+                  <div className="card" style={{ padding: 14, margin: 0 }}>
+                    <p className="muted" style={{ margin: 0, fontSize: '0.84rem' }}>
+                      Không có thói quen nào khớp bộ lọc này.
+                    </p>
+                  </div>
+                ) : (
+                  sections.map((section) => (
+                    <div key={section.key} className="card habit-section">
+                      <div className="habit-section-head">
+                        <span className="habit-section-dot" style={{ background: section.color }}>
+                          <Check size={12} strokeWidth={3} />
+                        </span>
+                        <h3>{section.title}</h3>
+                        <span className="habit-section-count" style={{ color: section.color }}>
+                          {section.habits.filter((h) => completed.has(h.id)).length}/{section.habits.length}
+                        </span>
                       </div>
-                    )}
-                    {countHabits.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#f97316', marginBottom: 4 }}>
-                          🔢 Thói quen Số liệu ({countHabits.filter((h) => completed.has(h.id)).length}/{countHabits.length})
-                        </div>
-                        <div style={{ display: 'grid', gap: 5 }}>{countHabits.map(renderHabitItem)}</div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* ── BY TYPE (Tốt / Xấu) ── */}
-                {groupView === 'type' && (
-                  <>
-                    {goodHabits.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--emerald)', marginBottom: 4 }}>
-                          🌟 Thói quen tốt ({goodHabits.filter((h) => completed.has(h.id)).length}/{goodHabits.length})
-                        </div>
-                        <div style={{ display: 'grid', gap: 5 }}>{goodHabits.map(renderHabitItem)}</div>
-                      </div>
-                    )}
-                    {badHabits.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--rose)', marginBottom: 4 }}>
-                          ⚠️ Thói quen cần bỏ ({badHabits.filter((h) => completed.has(h.id)).length}/{badHabits.length})
-                        </div>
-                        <div style={{ display: 'grid', gap: 5 }}>{badHabits.map(renderHabitItem)}</div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* ── BY ROUTINE (Sáng / Trưa / Tối) ── */}
-                {groupView === 'routine' && (
-                  <>
-                    {routineGroups.map((slot) => slot.habits.length > 0 && (
-                      <div key={slot.key}>
-                        <div style={{
-                          fontSize: '0.76rem', fontWeight: 800, marginBottom: 4,
-                          color: slot.color,
-                          display: 'flex', alignItems: 'center', gap: 6,
-                        }}>
-                          <span>{slot.label}</span>
-                          <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: '0.68rem' }}>
-                            ({slot.habits.filter((h) => completed.has(h.id)).length}/{slot.habits.length})
-                          </span>
-                        </div>
-                        <div style={{ display: 'grid', gap: 5 }}>{slot.habits.map(renderHabitItem)}</div>
-                      </div>
-                    ))}
-                  </>
+                      <div className="habit-section-list">{section.habits.map(renderHabitItem)}</div>
+                    </div>
+                  ))
                 )}
               </div>
             </>
           )}
-        </div>
+        </>
       )}
 
       {/* CATEGORIES TAB */}
@@ -565,42 +526,32 @@ export function HabitsPage() {
       {/* HISTORY TAB: DIVIDED INTO 2 TABLES (Tích & Số liệu) */}
       {activeTab === 'history' && (
         <div style={{ display: 'grid', gap: 10 }}>
+          {/* Chọn kiểu xem + điều hướng tuần/tháng */}
+          <div className="habit-range-bar">
+            <div className="habit-range-toggle">
+              <button className={historyRange === 'week' ? 'active' : ''} onClick={() => setHistoryRange('week')}>Tuần</button>
+              <button className={historyRange === 'month' ? 'active' : ''} onClick={() => setHistoryRange('month')}>Tháng</button>
+            </div>
+            <div className="habit-range-nav">
+              <button className="icon" aria-label="Kỳ trước" onClick={() => setAnchor((a) => shiftAnchor(a, historyRange, -1))}>
+                <ChevronLeft size={16} />
+              </button>
+              <span className="habit-range-title">{rangeTitle}</span>
+              <button className="icon" aria-label="Kỳ sau" disabled={atCurrentPeriod} onClick={() => setAnchor((a) => shiftAnchor(a, historyRange, 1))}>
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
           {/* TABLE 1: THÓI QUEN TÍCH */}
           <div className="card" style={{ padding: 10, margin: 0 }}>
             <h3 style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: 6 }}>
               ☑️ Thói quen Tích ({checkHabits.length})
             </h3>
             {checkHabits.length ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
-                      {week.map((d) => (
-                        <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                          {d.slice(8)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {checkHabits.map((h) => (
-                      <tr key={h.id}>
-                        <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
-                        {week.map((d) => {
-                          const log = logs.find((l) => l.habit_id === h.id && l.date === d)
-                          const isDone = log?.completed
-                          return (
-                            <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                              {isDone ? <span style={{ color: h.habit_type === 'BAD' ? 'var(--rose)' : 'var(--emerald)', fontWeight: 800 }}>✓</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              historyRange === 'month'
+                ? <HabitMonthCalendar habits={checkHabits} logs={logs} dates={historyDates} mode="CHECK" />
+                : <HabitHistoryTable habits={checkHabits} logs={logs} dates={historyDates} mode="CHECK" />
             ) : (
               <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Tích.</p>
             )}
@@ -612,36 +563,9 @@ export function HabitsPage() {
               🔢 Thói quen Số liệu ({countHabits.length})
             </h3>
             {countHabits.length ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
-                      {week.map((d) => (
-                        <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                          {d.slice(8)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {countHabits.map((h) => (
-                      <tr key={h.id}>
-                        <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
-                        {week.map((d) => {
-                          const log = logs.find((l) => l.habit_id === h.id && l.date === d)
-                          const val = log?.value ?? (log?.completed ? '✓' : null)
-                          return (
-                            <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                              {val !== null ? <span style={{ color: '#f97316', fontWeight: 800 }}>{val}</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              historyRange === 'month'
+                ? <HabitMonthCalendar habits={countHabits} logs={logs} dates={historyDates} mode="COUNT" />
+                : <HabitHistoryTable habits={countHabits} logs={logs} dates={historyDates} mode="COUNT" />
             ) : (
               <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Số liệu.</p>
             )}

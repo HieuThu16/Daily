@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, Calendar, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
+import { BookOpen, Calendar, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate, shortDate, vietnameseDate } from './lib/date'
 import type { Tab } from './types'
+import { HeaderActionProvider, useHeaderActionSlot } from './features/HeaderAction'
 import { HomePage } from './features/home/HomePage'
 import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
@@ -61,6 +62,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const nav = useNavigate()
   const path = useLocation().pathname
   const [dark, setDark] = useState(false)
+  const headerAction = useHeaderActionSlot()
 
   // PWA Install Prompt
   const deferredPrompt = useRef<Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null)
@@ -115,6 +117,12 @@ function Shell({ children }: { children: React.ReactNode }) {
           <span className="header-date-short">{shortDate()}</span>
         </div>
         <div className="header-actions">
+          {headerAction && (
+            <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
+              <Plus size={20} />
+            </button>
+          )}
+
           {/* PWA Install Button */}
           {canInstall && !installed && (
             <button
@@ -190,6 +198,7 @@ function Protected() {
 
   return (
     <ToastProvider>
+      <HeaderActionProvider>
       <Routes>
         {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
         <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
@@ -212,6 +221,7 @@ function Protected() {
           }
         />
       </Routes>
+      </HeaderActionProvider>
     </ToastProvider>
   )
 }

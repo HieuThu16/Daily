@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Person, PersonOccasion } from '../types'
-import { ageOnNext, countdownLabel, daysUntil, nextOccurrence, occasionLabel, upcomingOccasions } from './occasions'
+import { lunarMonthLength, solarToLunar } from './lunar'
+import { ageOnNext, countdownLabel, daysUntil, nextOccurrence, occasionLabel, parseLocalDate, upcomingOccasions } from './occasions'
 
 const make = (over: Partial<PersonOccasion> = {}): PersonOccasion => ({
   id: 'o1',
@@ -107,5 +108,38 @@ describe('upcomingOccasions', () => {
   it('bỏ dịp nằm ngoài cửa sổ ngày', () => {
     const result = upcomingOccasions(list, people, new Date(2026, 7, 12), { withinDays: 10, limit: 5 })
     expect(result.map((r) => r.occasion.id)).toEqual(['near'])
+  })
+})
+
+describe('dịp theo âm lịch', () => {
+  // 15/08/2001 dương = 26/6 âm.
+  const lunarBirthday = make({ calendar: 'LUNAR' })
+
+  it('lặp theo ngày âm nên ngày dương đổi mỗi năm', () => {
+    const next = nextOccurrence(lunarBirthday, new Date(2026, 0, 1))
+    expect(next).not.toBeNull()
+    expect(solarToLunar(next!)).toMatchObject({ day: 26, month: 6, year: 2026 })
+    expect(next!.getTime()).not.toBe(new Date(2026, 7, 15).getTime())
+  })
+
+  it('nhảy sang năm âm kế tiếp khi đã qua', () => {
+    const thisYear = nextOccurrence(lunarBirthday, new Date(2026, 0, 1))!
+    const after = new Date(thisYear.getFullYear(), thisYear.getMonth(), thisYear.getDate() + 1)
+    const next = nextOccurrence(lunarBirthday, after)!
+    expect(solarToLunar(next).year).toBe(2027)
+  })
+
+  it('lùi ngày 30 âm về 29 khi năm đó là tháng thiếu', () => {
+    // 30/10 âm 2023 = 12/12/2023 dương; tháng 10 âm 2024 chỉ có 29 ngày.
+    const day30 = make({ occasion_date: '2023-12-12' , calendar: 'LUNAR' })
+    expect(solarToLunar(parseLocalDate('2023-12-12'))).toMatchObject({ day: 30, month: 10 })
+    const next = nextOccurrence(day30, new Date(2024, 0, 1))!
+    const lunar = solarToLunar(next)
+    expect(lunar.month).toBe(10)
+    expect(lunar.day).toBe(lunarMonthLength(10, lunar.year) === 29 ? 29 : 30)
+  })
+
+  it('tính tuổi theo năm âm', () => {
+    expect(ageOnNext(lunarBirthday, new Date(2026, 0, 1))).toBe(25)
   })
 })
