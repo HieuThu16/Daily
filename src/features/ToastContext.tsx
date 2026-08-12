@@ -26,9 +26,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
     const id = Date.now()
     setToast({ id, message, type })
+    // Cảnh báo lưu hỏng thường kèm câu lỗi dài, cần thời gian đọc lâu hơn
     setTimeout(() => {
       setToast((current) => (current?.id === id ? null : current))
-    }, 2500)
+    }, type === 'local' ? 6000 : 2500)
   }, [])
 
   const showSaveToast = useCallback((isSupabaseSaved: boolean, actionLabel: string = 'dữ liệu') => {
@@ -81,7 +82,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             gap: 6,
             backdropFilter: 'blur(12px)',
             animation: 'toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-            whiteSpace: 'nowrap',
+            maxWidth: 'min(92vw, 460px)',
+            textAlign: 'center',
             pointerEvents: 'none',
           }}
         >

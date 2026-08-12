@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
-import { AlertCircle, BarChart3, Calendar, Check, CheckSquare, Eye, Filter, Lightbulb, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertCircle, BarChart3, Check, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Clock, Eye, Filter, History, Lightbulb, Pencil, Plus, Timer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
-import type { Idea, TaskDifficulty, TaskPriority, Todo } from '../types'
+import { POSTPONE_PRESETS, formatDeadline, formatMinutes, isOverdue, postponeTo, timeLabel } from '../lib/deadline'
+import type { Idea, TaskDifficulty, TaskPostpone, TaskPriority, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { saveLocal } from '../lib/persistence'
@@ -12,59 +13,153 @@ type EditState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
 type ViewState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
 type AddModalState = { kind: 'todo' } | { kind: 'idea' } | null
 
-const DIFFICULTY_CONFIG: Record<TaskDifficulty, { label: string; color: string; bg: string; border: string }> = {
-  EASY: { label: 'Dễ', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)' },
-  NORMAL: { label: 'Bình thường', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.3)' },
-  HARD: { label: 'Khó', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.3)' },
+// Màu lấy từ token của app (var(--emerald) / --blue / --rose / --amber) qua class .task-chip-*,
+// nhờ vậy chip đổi màu theo dark mode thay vì giữ nguyên mã hex sáng như trước.
+const DIFFICULTY_CONFIG: Record<TaskDifficulty, { label: string; tone: string }> = {
+  EASY: { label: '🟢 Dễ', tone: 'emerald' },
+  NORMAL: { label: '🔵 Bình thường', tone: 'blue' },
+  HARD: { label: '🔴 Khó', tone: 'rose' },
 }
 
-const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; bg: string; border: string }> = {
-  NORMAL: { label: 'Bình thường', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.12)', border: 'rgba(107, 114, 128, 0.2)' },
-  URGENT: { label: '🔥 Gấp', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.4)' },
+const PRIORITY_CONFIG: Record<TaskPriority, { label: string; tone: string }> = {
+  NORMAL: { label: 'Bình thường', tone: '' },
+  URGENT: { label: '🔥 Gấp', tone: 'amber' },
+}
+
+const DIFFICULTY_OPTIONS = ['EASY', 'NORMAL', 'HARD'] as const
+const PRIORITY_OPTIONS = ['NORMAL', 'URGENT'] as const
+
+/** Dời ngày 'YYYY-MM-DD' đi n ngày, giữ nguyên múi giờ địa phương. */
+const shiftDate = (date: string, days: number) => {
+  const [y, m, d] = date.split('-').map(Number)
+  return localDate(new Date(y, m - 1, d + days))
+}
+
+export function Chip({ tone, title, children }: { tone?: string; title?: string; children: React.ReactNode }) {
+  return (
+    <span className={'task-chip' + (tone ? ` task-chip-${tone}` : '')} title={title}>
+      {children}
+    </span>
+  )
+}
+
+/**
+ * Hàng nút chọn một giá trị (độ khó / ưu tiên) — dùng chung cho cả modal Thêm và Sửa.
+ * Config truyền vào chứ không gộp, vì độ khó và ưu tiên dùng chung khóa 'NORMAL'.
+ */
+function ChoiceRow<T extends string>({
+  options,
+  config,
+  value,
+  onChange,
+}: {
+  options: readonly T[]
+  config: Record<T, { label: string; tone: string }>
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="task-choice-row">
+      {options.map((o) => {
+        const cfg = config[o]
+        return (
+          <button
+            key={o}
+            type="button"
+            aria-pressed={value === o}
+            className={'task-choice' + (value === o ? ` is-on task-chip-${cfg.tone || 'blue'}` : '')}
+            onClick={() => onChange(o)}
+          >
+            {cfg.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export function DifficultyBadge({ difficulty }: { difficulty?: TaskDifficulty }) {
-  const diff = difficulty ?? 'EASY'
-  const cfg = DIFFICULTY_CONFIG[diff]
-  return (
-    <span
-      style={{
-        fontSize: '0.68rem',
-        padding: '1px 6px',
-        borderRadius: 6,
-        fontWeight: 600,
-        color: cfg.color,
-        background: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        lineHeight: 1.2,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {cfg.label}
-    </span>
-  )
+  const cfg = DIFFICULTY_CONFIG[difficulty ?? 'EASY']
+  return <Chip tone={cfg.tone}>{cfg.label}</Chip>
 }
 
 export function PriorityBadge({ priority, showNormal = false }: { priority?: TaskPriority; showNormal?: boolean }) {
   const prio = priority ?? 'NORMAL'
   if (prio === 'NORMAL' && !showNormal) return null
   const cfg = PRIORITY_CONFIG[prio]
+  return <Chip tone={cfg.tone}>{cfg.label}</Chip>
+}
+
+/**
+ * Thẻ công việc 2 tầng: tầng 1 là checkbox + tiêu đề + nút thao tác,
+ * tầng 2 là các chip (giờ hạn, độ khó, ưu tiên, trì hoãn) và tự ẩn khi không có chip nào.
+ */
+function TaskCard({
+  todo,
+  now,
+  onToggle,
+  onPostpone,
+  onView,
+  onEdit,
+}: {
+  todo: Todo
+  now: Date
+  onToggle: (t: Todo) => void
+  onPostpone: (t: Todo) => void
+  onView: (t: Todo) => void
+  onEdit: (t: Todo) => void
+}) {
+  const overdue = isOverdue(todo, now)
+  const time = timeLabel(todo.due_time)
+  const postponeCount = todo.postpone_count ?? 0
+  const difficulty = todo.difficulty ?? 'EASY'
+  const urgent = todo.priority === 'URGENT'
+
+  // Task dễ + không gấp + không hạn giờ + chưa hoãn thì tầng 2 rỗng, thẻ gọn lại một dòng
+  const hasMeta = Boolean(time) || postponeCount > 0 || urgent || difficulty !== 'EASY'
+
+  const classes = ['task-card']
+  if (todo.completed) classes.push('is-done')
+  else if (overdue) classes.push('is-overdue')
+  else if (urgent) classes.push('is-urgent')
+
   return (
-    <span
-      style={{
-        fontSize: '0.68rem',
-        padding: '1px 6px',
-        borderRadius: 6,
-        fontWeight: 700,
-        color: cfg.color,
-        background: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        lineHeight: 1.2,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {cfg.label}
-    </span>
+    <div className={classes.join(' ')}>
+      <div className="task-card-main">
+        <button className="task-toggle" onClick={() => onToggle(todo)}>
+          <span className="task-check">{todo.completed && <Check size={15} strokeWidth={3} />}</span>
+          <span className="task-title">{todo.title}</span>
+        </button>
+        <div className="task-actions">
+          <button className="icon small" aria-label="Postpone task" title="Trì hoãn" onClick={() => onPostpone(todo)}>
+            <Timer size={15} />
+          </button>
+          <button className="icon small" aria-label="View task details" title="Chi tiết" onClick={() => onView(todo)}>
+            <Eye size={15} />
+          </button>
+          <button className="icon small" aria-label="Edit task" title="Sửa" onClick={() => onEdit(todo)}>
+            <Pencil size={14} />
+          </button>
+        </div>
+      </div>
+
+      {hasMeta && (
+        <div className="task-meta">
+          {time && (
+            <Chip tone={overdue ? 'rose' : undefined} title={overdue ? 'Đã quá giờ hạn chót' : 'Giờ hạn chót'}>
+              <Clock size={11} /> {time}
+            </Chip>
+          )}
+          {difficulty !== 'EASY' && <DifficultyBadge difficulty={difficulty} />}
+          <PriorityBadge priority={todo.priority} />
+          {postponeCount > 0 && (
+            <Chip tone="amber" title={`Đã trì hoãn ${postponeCount} lần · tổng ${formatMinutes(todo.postpone_minutes ?? 0)}`}>
+              ⏳×{postponeCount}
+            </Chip>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -81,11 +176,16 @@ export function TasksPage() {
   const [filterDifficulty, setFilterDifficulty] = useState<'ALL' | TaskDifficulty>('ALL')
   const [filterPriority, setFilterPriority] = useState<'ALL' | TaskPriority>('ALL')
   const [sortBy, setSortBy] = useState<'DEFAULT' | 'PRIORITY' | 'DIFFICULTY'>('DEFAULT')
+  const [showFilters, setShowFilters] = useState(false)
+  const [showDone, setShowDone] = useState(false)
+
+  const filtersActive = filterDifficulty !== 'ALL' || filterPriority !== 'ALL' || sortBy !== 'DEFAULT'
 
   // Form & Modal states
   const [addModal, setAddModal] = useState<AddModalState>(null)
   const [newTitle, setNewTitle] = useState('')
   const [newDueDate, setNewDueDate] = useState(localDate())
+  const [newDueTime, setNewDueTime] = useState('')
   const [newDifficulty, setNewDifficulty] = useState<TaskDifficulty>('EASY')
   const [newPriority, setNewPriority] = useState<TaskPriority>('NORMAL')
   const [newIdeaContent, setNewIdeaContent] = useState('')
@@ -96,17 +196,48 @@ export function TasksPage() {
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [editDueDate, setEditDueDate] = useState(localDate())
+  const [editDueTime, setEditDueTime] = useState('')
   const [editDifficulty, setEditDifficulty] = useState<TaskDifficulty>('EASY')
   const [editPriority, setEditPriority] = useState<TaskPriority>('NORMAL')
+
+  // Postpone states
+  const [postponeTarget, setPostponeTarget] = useState<Todo | null>(null)
+  const [postponePreset, setPostponePreset] = useState(POSTPONE_PRESETS[1].minutes)
+  const [postponeCustom, setPostponeCustom] = useState('')
+  const [postponeReason, setPostponeReason] = useState('')
+  const [postponeBusy, setPostponeBusy] = useState(false)
+
+  // Postpone history of the task shown in the detail modal
+  const [history, setHistory] = useState<TaskPostpone[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Ticking clock so overdue highlighting stays accurate without a reload
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Open Add Modal
   const openAddModal = (kind: 'todo' | 'idea') => {
     setNewTitle('')
     setNewDueDate(selectedDate)
+    setNewDueTime('')
     setNewDifficulty('EASY')
     setNewPriority('NORMAL')
     setNewIdeaContent('')
     setAddModal({ kind })
+  }
+
+  /**
+   * Supabase từ chối ghi (thiếu cột do chưa chạy migration, RLS, mất mạng…).
+   * Phải nói rõ lý do: báo chung chung "Đã lưu Local" từng che mất lỗi thiếu cột suốt thời gian dài.
+   */
+  const reportWriteError = (error: { message?: string } | null, key: string, value: unknown) => {
+    console.error('[tasks] Supabase write failed:', error)
+    const savedLocally = saveLocal(key, value)
+    const reason = error?.message?.trim() || 'không rõ nguyên nhân'
+    showToast(savedLocally ? `⚠️ Supabase từ chối: ${reason} — đã lưu tạm Local` : `⚠️ Lưu thất bại: ${reason}`, 'local')
   }
 
   // Create Todo
@@ -117,6 +248,7 @@ export function TasksPage() {
       title,
       completed: false,
       due_date: newDueDate,
+      due_time: newDueTime || null,
       difficulty: newDifficulty,
       priority: newPriority,
     }
@@ -126,14 +258,18 @@ export function TasksPage() {
       title,
       completed: false,
       due_date: newDueDate,
+      due_time: newDueTime || null,
       difficulty: newDifficulty,
       priority: newPriority,
+      postpone_count: 0,
+      postpone_minutes: 0,
       created_at: new Date().toISOString(),
     }
 
     todos.setItems((prev) => [tempTodo, ...prev])
     setAddModal(null)
     setNewTitle('')
+    setNewDueTime('')
     setNewDifficulty('EASY')
     setNewPriority('NORMAL')
     showToast('➕ Đã thêm công việc mới!')
@@ -143,8 +279,7 @@ export function TasksPage() {
       todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (data as Todo) : item)))
       showToast('Đã lưu Supabase')
     } else {
-      saveLocal(`todo:${tempTodo.id}`, tempTodo)
-      showToast('Đã lưu Local')
+      reportWriteError(error, `todo:${tempTodo.id}`, tempTodo)
     }
   }
 
@@ -182,12 +317,10 @@ export function TasksPage() {
     todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
     const { error } = await supabase!.from('todos').update(updateData).eq('id', t.id)
     if (error) {
-      saveLocal(`todo:${t.id}`, { ...t, ...updateData })
-      showToast('Đã lưu Local')
+      reportWriteError(error, `todo:${t.id}`, { ...t, ...updateData })
     } else {
-      showToast('Đã lưu Supabase')
+      showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
     }
-    showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
   }
 
   // Open Edit Modal
@@ -199,6 +332,7 @@ export function TasksPage() {
     } else {
       const itemDate = e.item.due_date ?? (e.item.created_at ? e.item.created_at.slice(0, 10) : localDate())
       setEditDueDate(itemDate)
+      setEditDueTime(timeLabel(e.item.due_time))
       setEditDifficulty(e.item.difficulty ?? 'EASY')
       setEditPriority(e.item.priority ?? 'NORMAL')
     }
@@ -211,17 +345,18 @@ export function TasksPage() {
       const updateData = {
         title: editTitle.trim(),
         due_date: editDueDate,
+        due_time: editDueTime || null,
         difficulty: editDifficulty,
         priority: editPriority,
       }
       todos.setItems((prev) => prev.map((i) => (i.id === edit.item.id ? { ...i, ...updateData } : i)))
       const { error } = await supabase!.from('todos').update(updateData).eq('id', edit.item.id)
       if (error) {
-        saveLocal(`todo:${edit.item.id}`, { ...edit.item, ...updateData })
-        showToast('Đã lưu Local')
-      } else {
-        showToast('Đã lưu Supabase')
+        reportWriteError(error, `todo:${edit.item.id}`, { ...edit.item, ...updateData })
+        setEdit(null)
+        return
       }
+      showToast('Đã lưu Supabase')
     } else {
       const updateData = { title: editTitle.trim(), content: editContent }
       ideas.setItems((prev) => prev.map((i) => (i.id === edit.item.id ? { ...i, ...updateData } : i)))
@@ -245,6 +380,90 @@ export function TasksPage() {
     showToast('🗑️ Đã xóa mục thành công', 'delete')
   }
 
+  const openView = (item: Todo) => setViewDetail({ kind: 'todo', item })
+  const openEditTodo = (item: Todo) => openEdit({ kind: 'todo', item })
+
+  // Open Postpone Modal
+  const openPostpone = (t: Todo) => {
+    setNow(new Date()) // refresh the clock so the "hạn mới" preview matches what will be saved
+    setPostponePreset(POSTPONE_PRESETS[1].minutes)
+    setPostponeCustom('')
+    setPostponeReason('')
+    setPostponeTarget(t)
+  }
+
+  // Minutes currently chosen in the postpone modal (custom input wins when filled)
+  const postponeMinutes = useMemo(() => {
+    const custom = Number(postponeCustom.trim())
+    if (postponeCustom.trim() && Number.isFinite(custom) && custom > 0) return Math.round(custom)
+    return postponeCustom.trim() ? 0 : postponePreset
+  }, [postponeCustom, postponePreset])
+
+  // Apply postpone: push the deadline, bump the counters, log one history row
+  const applyPostpone = async () => {
+    if (!postponeTarget || postponeMinutes <= 0) return
+    const t = postponeTarget
+    const next = postponeTo(t, postponeMinutes, new Date())
+    const reason = postponeReason.trim()
+    const updateData = {
+      due_date: next.due_date,
+      due_time: next.due_time,
+      postpone_count: (t.postpone_count ?? 0) + 1,
+      postpone_minutes: (t.postpone_minutes ?? 0) + postponeMinutes,
+    }
+
+    setPostponeBusy(true)
+    todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
+    setPostponeTarget(null)
+    showToast(`⏳ Đã trì hoãn ${formatMinutes(postponeMinutes)} → hạn mới ${formatDeadline({ ...t, ...next })}`)
+
+    const { error } = await supabase!.from('todos').update(updateData).eq('id', t.id)
+    if (error) {
+      reportWriteError(error, `todo:${t.id}`, { ...t, ...updateData })
+    } else {
+      const log = {
+        todo_id: t.id,
+        minutes: postponeMinutes,
+        reason: reason || null,
+        prev_due_date: t.due_date ?? null,
+        prev_due_time: t.due_time ?? null,
+        new_due_date: next.due_date,
+        new_due_time: next.due_time,
+      }
+      const { data, error: logError } = await supabase!.from('task_postpones').insert(log).select().single()
+      if (logError) {
+        reportWriteError(logError, `task_postpone:${t.id}:${new Date().toISOString()}`, log)
+      } else {
+        if (data) setHistory((prev) => (viewDetail?.item.id === t.id ? [data as TaskPostpone, ...prev] : prev))
+        showToast('Đã lưu Supabase')
+      }
+    }
+    setPostponeBusy(false)
+  }
+
+  // Load postpone history whenever a task detail modal opens
+  useEffect(() => {
+    if (!viewDetail || viewDetail.kind !== 'todo' || !supabase) {
+      setHistory([])
+      return
+    }
+    let cancelled = false
+    setHistoryLoading(true)
+    supabase
+      .from('task_postpones')
+      .select('*')
+      .eq('todo_id', viewDetail.item.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return
+        setHistory((data ?? []) as TaskPostpone[])
+        setHistoryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [viewDetail])
+
   // Helper for filtering & sorting todos list
   const processTodosList = (items: Todo[]) => {
     let result = items.filter((t) => {
@@ -265,13 +484,17 @@ export function TasksPage() {
   }
 
   // Filter Tasks by Selected Date
-  const currentSelectedDateTodos = useMemo(() => {
+  const dayTodos = useMemo(() => {
     const filtered = todos.items.filter((t) => {
       const tDate = t.due_date ?? (t.created_at ? t.created_at.slice(0, 10) : localDate())
       return tDate === selectedDate && t.title.toLowerCase().includes(search.toLowerCase())
     })
     return processTodosList(filtered)
   }, [todos.items, selectedDate, search, filterDifficulty, filterPriority, sortBy])
+
+  // Việc đã xong tách khỏi việc còn phải làm để không lấn chỗ trong danh sách
+  const pendingTodos = useMemo(() => dayTodos.filter((t) => !t.completed), [dayTodos])
+  const doneTodos = useMemo(() => dayTodos.filter((t) => t.completed), [dayTodos])
 
   // Filter Overdue / Pending Tasks from Previous Days
   const overduePreviousTodos = useMemo(() => {
@@ -299,6 +522,14 @@ export function TasksPage() {
     const urgentCount = todos.items.filter((t) => t.priority === 'URGENT').length
     const normalPrioCount = todos.items.filter((t) => (t.priority ?? 'NORMAL') === 'NORMAL').length
     const percent = totalTodos ? Math.round((completedTodos / totalTodos) * 100) : 0
+
+    const postponedTodos = todos.items.filter((t) => (t.postpone_count ?? 0) > 0)
+    const postponeCount = todos.items.reduce((sum, t) => sum + (t.postpone_count ?? 0), 0)
+    const postponeMinutesTotal = todos.items.reduce((sum, t) => sum + (t.postpone_minutes ?? 0), 0)
+    const topPostponed = [...postponedTodos]
+      .sort((a, b) => (b.postpone_minutes ?? 0) - (a.postpone_minutes ?? 0) || (b.postpone_count ?? 0) - (a.postpone_count ?? 0))
+      .slice(0, 5)
+
     return {
       totalTodos,
       completedTodos,
@@ -310,6 +541,10 @@ export function TasksPage() {
       urgentCount,
       normalPrioCount,
       percent,
+      postponeCount,
+      postponeMinutesTotal,
+      postponedTaskCount: postponedTodos.length,
+      topPostponed,
     }
   }, [todos.items, overduePreviousTodos.length, ideas.items.length])
 
@@ -324,12 +559,16 @@ export function TasksPage() {
     }
   }
 
+  // Always read the freshest copy so the detail modal reflects a postpone made from inside it
+  const detailTodo =
+    viewDetail?.kind === 'todo' ? todos.items.find((i) => i.id === viewDetail.item.id) ?? (viewDetail.item as Todo) : null
+
   return (
     <section style={{ maxWidth: 800, margin: '0 auto' }}>
       {/* 100% Width Full Responsive Sub Tabs Bar */}
       <div className="habit-sub-tabs">
         <button className={activeTab === 'tasks' ? 'active' : ''} onClick={() => setActiveTab('tasks')}>
-          <CheckSquare size={14} /> Tasks ({currentSelectedDateTodos.length + overduePreviousTodos.length})
+          <CheckSquare size={14} /> Tasks ({dayTodos.length + overduePreviousTodos.length})
         </button>
         <button className={activeTab === 'ideas' ? 'active' : ''} onClick={() => setActiveTab('ideas')}>
           <Lightbulb size={14} /> Ideas ({ideas.items.length})
@@ -347,61 +586,65 @@ export function TasksPage() {
 
       {/* TAB 1: TASKS */}
       {activeTab === 'tasks' && (
-        <div className="card" style={{ padding: 10, margin: 0 }}>
-          {/* Header Row: Date Selector + Filter Input */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Calendar size={13} style={{ color: 'var(--primary)' }} />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.76rem', background: 'var(--bg-main)', color: 'var(--text-main)' }}
-              />
-            </div>
-            <input className="mini-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm công việc…" style={{ padding: '3px 8px', fontSize: '0.76rem', width: 110 }} />
-          </div>
-
-          {/* FILTER & SORT TOOLBAR */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 8, padding: '4px 8px', background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--card-border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              <Filter size={12} /> Lọc & Sắp xếp:
+        <div className="card" style={{ padding: 12, margin: 0 }}>
+          {/* Ngày · tiến độ · tìm kiếm · lọc */}
+          <div className="task-toolbar">
+            <div className="task-date-nav">
+              <button aria-label="Ngày trước" onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}>
+                <ChevronLeft size={16} />
+              </button>
+              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} aria-label="Ngày đang xem" />
+              <button aria-label="Ngày sau" onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}>
+                <ChevronRight size={16} />
+              </button>
             </div>
 
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value as any)}
-              style={{ fontSize: '0.74rem', padding: '2px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)', cursor: 'pointer' }}
-            >
-              <option value="ALL">🚩 Ưu tiên: Tất cả</option>
-              <option value="URGENT">🔥 Gấp</option>
-              <option value="NORMAL">Bình thường</option>
-            </select>
+            {dayTodos.length > 0 && (
+              <span className="task-progress-pill" title="Đã hoàn thành trong ngày">
+                <Check size={12} strokeWidth={3} />
+                {doneTodos.length}/{dayTodos.length}
+              </span>
+            )}
 
-            <select
-              value={filterDifficulty}
-              onChange={(e) => setFilterDifficulty(e.target.value as any)}
-              style={{ fontSize: '0.74rem', padding: '2px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)', cursor: 'pointer' }}
-            >
-              <option value="ALL">🎯 Độ khó: Tất cả</option>
-              <option value="EASY">🟢 Dễ</option>
-              <option value="NORMAL">🔵 Bình thường</option>
-              <option value="HARD">🔴 Khó</option>
-            </select>
+            <input className="mini-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm công việc…" />
 
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              style={{ fontSize: '0.74rem', padding: '2px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)', cursor: 'pointer', marginLeft: 'auto' }}
+            <button
+              className={'task-tool-btn' + (showFilters ? ' on' : '')}
+              aria-label="Lọc và sắp xếp"
+              aria-expanded={showFilters}
+              title="Lọc & sắp xếp"
+              onClick={() => setShowFilters((v) => !v)}
             >
-              <option value="DEFAULT">⇅ Sắp xếp: Mặc định</option>
-              <option value="PRIORITY">⇅ Theo ưu tiên (Gấp trước)</option>
-              <option value="DIFFICULTY">⇅ Theo độ khó (Khó trước)</option>
-            </select>
+              <Filter size={16} />
+              {filtersActive && <span className="task-tool-dot" />}
+            </button>
           </div>
 
-          {/* Quick Add Row & Open Modal Button */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          {showFilters && (
+            <div className="task-filter-panel">
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value as any)} aria-label="Lọc theo ưu tiên">
+                <option value="ALL">🚩 Ưu tiên: Tất cả</option>
+                <option value="URGENT">🔥 Gấp</option>
+                <option value="NORMAL">Bình thường</option>
+              </select>
+
+              <select value={filterDifficulty} onChange={(e) => setFilterDifficulty(e.target.value as any)} aria-label="Lọc theo độ khó">
+                <option value="ALL">🎯 Độ khó: Tất cả</option>
+                <option value="EASY">🟢 Dễ</option>
+                <option value="NORMAL">🔵 Bình thường</option>
+                <option value="HARD">🔴 Khó</option>
+              </select>
+
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} aria-label="Sắp xếp">
+                <option value="DEFAULT">⇅ Sắp xếp: Mặc định</option>
+                <option value="PRIORITY">⇅ Theo ưu tiên (Gấp trước)</option>
+                <option value="DIFFICULTY">⇅ Theo độ khó (Khó trước)</option>
+              </select>
+            </div>
+          )}
+
+          {/* Thêm nhanh */}
+          <div className="task-quick-add">
             <input
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
@@ -413,73 +656,76 @@ export function TasksPage() {
                 }
               }}
               placeholder="Nhập công việc..."
-              style={{ flex: 1, minWidth: 0, fontSize: '0.84rem', padding: '6px 10px', borderRadius: 10, border: '1px solid var(--card-border)' }}
+              aria-label="Nhập công việc"
             />
-            <button className="primary" onClick={() => (newTitle.trim() ? saveNewTodo() : openAddModal('todo'))} style={{ padding: '6px 12px', fontSize: '0.8rem', gap: 4, flexShrink: 0 }}>
-              <Plus size={14} /> Thêm
+            <button aria-label="Thêm công việc" onClick={() => (newTitle.trim() ? saveNewTodo() : openAddModal('todo'))}>
+              <Plus size={22} />
             </button>
           </div>
 
-          {/* SINGLE CONTAINED SCROLLABLE TASK LIST CONTAINER */}
-          <div style={{ maxHeight: 'calc(100vh - 310px)', minHeight: '320px', overflowY: 'auto', display: 'grid', gap: 6 }}>
-            {/* OVERDUE PENDING TASKS SECTION */}
-            {overduePreviousTodos.length > 0 && (
-              <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber)', borderRadius: 10, padding: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, color: 'var(--amber)', fontWeight: 700, fontSize: '0.76rem' }}>
-                  <AlertCircle size={13} />
-                  <span>Tồn đọng ngày trước ({overduePreviousTodos.length})</span>
-                </div>
-                <div style={{ display: 'grid', gap: 4 }}>
-                  {overduePreviousTodos.map((t) => (
-                    <div key={t.id} className="check-row" style={{ justifyContent: 'space-between', background: 'var(--card-bg)', borderRadius: 8, padding: '4px 6px', marginBottom: 0 }}>
-                      <button className="habit-check" onClick={() => flipTodo(t)}>
-                        <span className="checkbox">{t.completed && <Check size={13} />}</span>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{t.title}</span>
-                      </button>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <DifficultyBadge difficulty={t.difficulty} />
-                        <PriorityBadge priority={t.priority} />
-                        <button className="icon small" aria-label="View task details" onClick={() => setViewDetail({ kind: 'todo', item: t })} style={{ padding: 2 }}>
-                          <Eye size={13} />
-                        </button>
-                        <button className="icon small" aria-label="Edit task" onClick={() => openEdit({ kind: 'todo', item: t })} style={{ padding: 2 }}>
-                          <Pencil size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* CURRENT SELECTED DATE TASKS SECTION */}
-            {todos.loading ? (
-              <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải công việc…</p>
-            ) : currentSelectedDateTodos.length ? (
-              currentSelectedDateTodos.map((t) => (
-                <div key={t.id} className={'check-row ' + (t.completed ? 'checked' : '')} style={{ justifyContent: 'space-between', background: 'var(--bg-main)', borderRadius: 8, padding: '6px 8px', marginBottom: 0 }}>
-                  <button className="habit-check" onClick={() => flipTodo(t)}>
-                    <span className="checkbox">{t.completed && <Check size={13} />}</span>
-                    <span style={{ fontSize: '0.84rem' }}>{t.title}</span>
-                  </button>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <DifficultyBadge difficulty={t.difficulty} />
-                    <PriorityBadge priority={t.priority} />
-                    <button className="icon small" aria-label="View task details" onClick={() => setViewDetail({ kind: 'todo', item: t })} style={{ padding: 3 }}>
-                      <Eye size={14} />
-                    </button>
-                    <button className="icon small" aria-label="Edit task" onClick={() => openEdit({ kind: 'todo', item: t })} style={{ padding: 3 }}>
-                      <Pencil size={13} />
-                    </button>
+          {todos.loading ? (
+            <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải công việc…</p>
+          ) : (
+            <div className="task-groups">
+              {/* Tồn đọng ngày trước */}
+              {overduePreviousTodos.length > 0 && (
+                <section className="task-group-overdue">
+                  <div className="task-group-head">
+                    <h3>
+                      <AlertCircle size={14} /> Tồn đọng ngày trước
+                    </h3>
+                    <span className="task-group-count">{overduePreviousTodos.length}</span>
                   </div>
-                </div>
-              ))
-            ) : overduePreviousTodos.length === 0 ? (
-              <Empty icon={CheckSquare} colorClass="icon-box-purple">
-                Chưa có công việc nào khớp với điều kiện tìm kiếm/lọc.
-              </Empty>
-            ) : null}
-          </div>
+                  <div className="task-list">
+                    {overduePreviousTodos.map((t) => (
+                      <TaskCard key={t.id} todo={t} now={now} onToggle={flipTodo} onPostpone={openPostpone} onView={openView} onEdit={openEditTodo} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Việc của ngày đang chọn, chưa xong */}
+              {pendingTodos.length > 0 && (
+                <section>
+                  <div className="task-group-head">
+                    <h3>{selectedDate === localDate() ? 'Hôm nay' : 'Cần làm'}</h3>
+                    <span className="task-group-count">{pendingTodos.length}</span>
+                    {doneTodos.length > 0 && <span className="task-group-note">{doneTodos.length} việc đã xong</span>}
+                  </div>
+                  <div className="task-list">
+                    {pendingTodos.map((t) => (
+                      <TaskCard key={t.id} todo={t} now={now} onToggle={flipTodo} onPostpone={openPostpone} onView={openView} onEdit={openEditTodo} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Đã xong — gập sẵn để không đẩy việc còn lại xuống dưới */}
+              {doneTodos.length > 0 && (
+                <section>
+                  <button className="task-group-head" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)}>
+                    <h3>
+                      {showDone ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Đã xong
+                    </h3>
+                    <span className="task-group-count">{doneTodos.length}</span>
+                  </button>
+                  {showDone && (
+                    <div className="task-list">
+                      {doneTodos.map((t) => (
+                        <TaskCard key={t.id} todo={t} now={now} onToggle={flipTodo} onPostpone={openPostpone} onView={openView} onEdit={openEditTodo} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {overduePreviousTodos.length === 0 && dayTodos.length === 0 && (
+                <Empty icon={CheckSquare} colorClass="icon-box-purple">
+                  Chưa có công việc nào khớp với điều kiện tìm kiếm/lọc.
+                </Empty>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -555,6 +801,47 @@ export function TasksPage() {
               <div className="stat-val" style={{ color: 'var(--purple)', fontSize: '1.4rem' }}>{stats.totalIdeas}</div>
               <div className="stat-lbl">Tổng ý tưởng</div>
             </div>
+            <div className="stat-card" style={{ padding: 8 }}>
+              <div className="stat-val" style={{ color: '#f59e0b', fontSize: '1.4rem' }}>{stats.postponeCount}</div>
+              <div className="stat-lbl">Số lần trì hoãn</div>
+            </div>
+            <div className="stat-card" style={{ padding: 8 }}>
+              <div className="stat-val" style={{ color: '#f59e0b', fontSize: '1.4rem' }}>{formatMinutes(stats.postponeMinutesTotal)}</div>
+              <div className="stat-lbl">Tổng thời gian trì hoãn</div>
+            </div>
+          </div>
+
+          {/* POSTPONE BREAKDOWN */}
+          <div className="card" style={{ padding: 10, margin: '0 0 10px' }}>
+            <h2 style={{ fontSize: '0.84rem', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Timer size={14} style={{ color: '#f59e0b' }} /> Thống kê trì hoãn
+            </h2>
+            <div style={{ display: 'grid', gap: 6, fontSize: '0.8rem', marginBottom: stats.topPostponed.length ? 10 : 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Công việc từng bị trì hoãn</span>
+                <strong>{stats.postponedTaskCount} / {stats.totalTodos}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Trung bình mỗi lần trì hoãn</span>
+                <strong>{formatMinutes(stats.postponeCount ? Math.round(stats.postponeMinutesTotal / stats.postponeCount) : 0)}</strong>
+              </div>
+            </div>
+
+            {stats.topPostponed.length > 0 && (
+              <>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6 }}>Bị trì hoãn nhiều nhất</div>
+                <div style={{ display: 'grid', gap: 4 }}>
+                  {stats.topPostponed.map((t) => (
+                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', background: 'var(--bg-main)', borderRadius: 8, padding: '5px 8px', fontSize: '0.8rem' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                      <strong style={{ color: '#f59e0b', whiteSpace: 'nowrap' }}>
+                        {t.postpone_count} lần · {formatMinutes(t.postpone_minutes ?? 0)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* BREAKDOWN BY DIFFICULTY & PRIORITY */}
@@ -615,60 +902,27 @@ export function TasksPage() {
           {addModal.kind === 'todo' && (
             <>
               <label>
-                Hạn hoàn thành (Ngày)
-                <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
+                Hạn hoàn thành
+                <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                  <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+                  <input type="time" value={newDueTime} onChange={(e) => setNewDueTime(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+                  {newDueTime && (
+                    <button type="button" onClick={() => setNewDueTime('')} title="Bỏ giờ, để cả ngày" style={{ padding: '6px 8px', fontSize: '0.74rem', borderRadius: 8, border: '1px solid var(--card-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
+                      Cả ngày
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Bỏ trống giờ = hạn tính đến cuối ngày.</span>
               </label>
 
               <label>
                 Độ khó
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                  {(['EASY', 'NORMAL', 'HARD'] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setNewDifficulty(d)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 8px',
-                        fontSize: '0.78rem',
-                        fontWeight: newDifficulty === d ? 700 : 500,
-                        borderRadius: 8,
-                        border: `1px solid ${newDifficulty === d ? DIFFICULTY_CONFIG[d].color : 'var(--card-border)'}`,
-                        background: newDifficulty === d ? DIFFICULTY_CONFIG[d].bg : 'transparent',
-                        color: newDifficulty === d ? DIFFICULTY_CONFIG[d].color : 'var(--text-main)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {DIFFICULTY_CONFIG[d].label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceRow options={DIFFICULTY_OPTIONS} config={DIFFICULTY_CONFIG} value={newDifficulty} onChange={setNewDifficulty} />
               </label>
 
               <label>
                 Mức độ ưu tiên
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                  {(['NORMAL', 'URGENT'] as const).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setNewPriority(p)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 8px',
-                        fontSize: '0.78rem',
-                        fontWeight: newPriority === p ? 700 : 500,
-                        borderRadius: 8,
-                        border: `1px solid ${newPriority === p ? PRIORITY_CONFIG[p].color : 'var(--card-border)'}`,
-                        background: newPriority === p ? PRIORITY_CONFIG[p].bg : 'transparent',
-                        color: newPriority === p ? PRIORITY_CONFIG[p].color : 'var(--text-main)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {PRIORITY_CONFIG[p].label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceRow options={PRIORITY_OPTIONS} config={PRIORITY_CONFIG} value={newPriority} onChange={setNewPriority} />
               </label>
             </>
           )}
@@ -710,30 +964,79 @@ export function TasksPage() {
                 <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatDate(viewDetail.item.created_at)}</span>
               </div>
 
-              {viewDetail.kind === 'todo' && (
+              {detailTodo && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>⏰ Hạn hoàn thành:</span>
+                    <span style={{ fontWeight: 700, color: isOverdue(detailTodo, now) ? '#ef4444' : 'var(--text-main)' }}>
+                      {formatDeadline(detailTodo)}
+                      {isOverdue(detailTodo, now) && ' (quá hạn)'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>🎯 Độ khó:</span>
-                    <DifficultyBadge difficulty={viewDetail.item.difficulty} />
+                    <DifficultyBadge difficulty={detailTodo.difficulty} />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>🚩 Mức độ ưu tiên:</span>
-                    <PriorityBadge priority={viewDetail.item.priority} showNormal={true} />
+                    <PriorityBadge priority={detailTodo.priority} showNormal={true} />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>✅ Thời gian hoàn thành:</span>
-                    <span style={{ fontWeight: 700, color: viewDetail.item.completed ? 'var(--emerald)' : 'var(--amber)' }}>
-                      {viewDetail.item.completed ? formatDate(viewDetail.item.completed_at) : 'Chưa tích hoàn thành'}
+                    <span style={{ fontWeight: 700, color: detailTodo.completed ? 'var(--emerald)' : 'var(--amber)' }}>
+                      {detailTodo.completed ? formatDate(detailTodo.completed_at) : 'Chưa tích hoàn thành'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>⏳ Đã trì hoãn:</span>
+                    <span style={{ fontWeight: 700, color: (detailTodo.postpone_count ?? 0) > 0 ? '#f59e0b' : 'var(--text-main)' }}>
+                      {detailTodo.postpone_count ?? 0} lần · {formatMinutes(detailTodo.postpone_minutes ?? 0)}
                     </span>
                   </div>
                 </>
               )}
             </div>
+
+            {/* POSTPONE HISTORY OF THIS TASK */}
+            {detailTodo && (
+              <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6 }}>
+                  <History size={13} /> Lịch sử trì hoãn
+                </div>
+                {historyLoading ? (
+                  <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Đang tải lịch sử…</p>
+                ) : history.length ? (
+                  <div style={{ display: 'grid', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+                    {history.map((h) => (
+                      <div key={h.id} style={{ background: 'var(--bg-main)', borderRadius: 8, padding: '5px 8px', fontSize: '0.78rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ color: 'var(--text-muted)' }}>{formatDate(h.created_at)}</span>
+                          <strong style={{ color: '#f59e0b', whiteSpace: 'nowrap' }}>+{formatMinutes(h.minutes)}</strong>
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 2 }}>
+                          {formatDeadline({ due_date: h.prev_due_date, due_time: h.prev_due_time })} → {formatDeadline({ due_date: h.new_due_date, due_time: h.new_due_time })}
+                        </div>
+                        {h.reason && <div style={{ marginTop: 2 }}>💬 {h.reason}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa trì hoãn lần nào. Giữ vững phong độ nhé!</p>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="modal-actions" style={{ justifyContent: 'flex-end' }}>
+          <div className="modal-actions" style={{ justifyContent: detailTodo ? 'space-between' : 'flex-end' }}>
+            {detailTodo && (
+              <button onClick={() => openPostpone(detailTodo)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px', fontSize: '0.82rem', fontWeight: 600, borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', cursor: 'pointer' }}>
+                <Timer size={14} /> Trì hoãn
+              </button>
+            )}
             <button className="primary" onClick={() => setViewDetail(null)}>
               Đóng
             </button>
@@ -752,60 +1055,27 @@ export function TasksPage() {
           {edit.kind === 'todo' && (
             <>
               <label>
-                Hạn hoàn thành (Ngày)
-                <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                Hạn hoàn thành
+                <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                  <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+                  <input type="time" value={editDueTime} onChange={(e) => setEditDueTime(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+                  {editDueTime && (
+                    <button type="button" onClick={() => setEditDueTime('')} title="Bỏ giờ, để cả ngày" style={{ padding: '6px 8px', fontSize: '0.74rem', borderRadius: 8, border: '1px solid var(--card-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
+                      Cả ngày
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Bỏ trống giờ = hạn tính đến cuối ngày.</span>
               </label>
 
               <label>
                 Độ khó
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                  {(['EASY', 'NORMAL', 'HARD'] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setEditDifficulty(d)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 8px',
-                        fontSize: '0.78rem',
-                        fontWeight: editDifficulty === d ? 700 : 500,
-                        borderRadius: 8,
-                        border: `1px solid ${editDifficulty === d ? DIFFICULTY_CONFIG[d].color : 'var(--card-border)'}`,
-                        background: editDifficulty === d ? DIFFICULTY_CONFIG[d].bg : 'transparent',
-                        color: editDifficulty === d ? DIFFICULTY_CONFIG[d].color : 'var(--text-main)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {DIFFICULTY_CONFIG[d].label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceRow options={DIFFICULTY_OPTIONS} config={DIFFICULTY_CONFIG} value={editDifficulty} onChange={setEditDifficulty} />
               </label>
 
               <label>
                 Mức độ ưu tiên
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                  {(['NORMAL', 'URGENT'] as const).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setEditPriority(p)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 8px',
-                        fontSize: '0.78rem',
-                        fontWeight: editPriority === p ? 700 : 500,
-                        borderRadius: 8,
-                        border: `1px solid ${editPriority === p ? PRIORITY_CONFIG[p].color : 'var(--card-border)'}`,
-                        background: editPriority === p ? PRIORITY_CONFIG[p].bg : 'transparent',
-                        color: editPriority === p ? PRIORITY_CONFIG[p].color : 'var(--text-main)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {PRIORITY_CONFIG[p].label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceRow options={PRIORITY_OPTIONS} config={PRIORITY_CONFIG} value={editPriority} onChange={setEditPriority} />
               </label>
             </>
           )}
@@ -821,6 +1091,92 @@ export function TasksPage() {
             <DeleteButton onDelete={remove} />
             <button className="primary" onClick={saveEdit}>
               Lưu thay đổi
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* POSTPONE MODAL */}
+      {postponeTarget && (
+        <Modal title="Trì hoãn công việc" onClose={() => setPostponeTarget(null)}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Công việc</div>
+              <div style={{ fontSize: '0.98rem', fontWeight: 700, marginTop: 2 }}>{postponeTarget.title}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                Hạn hiện tại: <strong style={{ color: isOverdue(postponeTarget, now) ? '#ef4444' : 'var(--text-main)' }}>{formatDeadline(postponeTarget)}</strong>
+                {isOverdue(postponeTarget, now) && ' — đã quá hạn, sẽ tính thêm từ bây giờ'}
+              </div>
+            </div>
+
+            <label>
+              Trì hoãn thêm
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {POSTPONE_PRESETS.map((p) => {
+                  const active = !postponeCustom.trim() && postponePreset === p.minutes
+                  return (
+                    <button
+                      key={p.minutes}
+                      type="button"
+                      onClick={() => {
+                        setPostponeCustom('')
+                        setPostponePreset(p.minutes)
+                      }}
+                      style={{
+                        flex: '1 1 30%',
+                        padding: '7px 8px',
+                        fontSize: '0.78rem',
+                        fontWeight: active ? 700 : 500,
+                        borderRadius: 8,
+                        border: `1px solid ${active ? '#f59e0b' : 'var(--card-border)'}`,
+                        background: active ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                        color: active ? '#f59e0b' : 'var(--text-main)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </label>
+
+            <label>
+              Hoặc nhập số phút tùy chỉnh
+              <input
+                type="number"
+                min={1}
+                value={postponeCustom}
+                onChange={(e) => setPostponeCustom(e.target.value)}
+                placeholder="VD: 90"
+              />
+            </label>
+
+            <label>
+              Lý do trì hoãn (tùy chọn)
+              <input value={postponeReason} onChange={(e) => setPostponeReason(e.target.value)} placeholder="VD: Bận họp đột xuất…" />
+            </label>
+
+            <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 8, padding: '8px 10px', fontSize: '0.82rem' }}>
+              {postponeMinutes > 0 ? (
+                <>
+                  Cộng thêm <strong style={{ color: '#f59e0b' }}>{formatMinutes(postponeMinutes)}</strong> → hạn mới:{' '}
+                  <strong>{formatDeadline({ ...postponeTarget, ...postponeTo(postponeTarget, postponeMinutes, now) })}</strong>
+                </>
+              ) : (
+                <span style={{ color: 'var(--text-muted)' }}>Nhập số phút lớn hơn 0 để xem hạn mới.</span>
+              )}
+            </div>
+
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              Sau lần này: {(postponeTarget.postpone_count ?? 0) + 1} lần trì hoãn · tổng{' '}
+              {formatMinutes((postponeTarget.postpone_minutes ?? 0) + Math.max(postponeMinutes, 0))}
+            </div>
+          </div>
+
+          <div className="modal-actions" style={{ justifyContent: 'flex-end' }}>
+            <button className="primary" onClick={applyPostpone} disabled={postponeMinutes <= 0 || postponeBusy}>
+              {postponeBusy ? 'Đang lưu…' : 'Xác nhận trì hoãn'}
             </button>
           </div>
         </Modal>

@@ -42,7 +42,11 @@ describe('HabitHistoryTable', () => {
     ]
     render(<HabitHistoryTable habits={countHabits} logs={countLogs} dates={dates} mode="COUNT" />)
 
-    expect(screen.getByText('10')).toHaveClass('habit-history-value-good')
-    expect(screen.getByText('3')).toHaveClass('habit-history-value-bad')
+    // Cột "Tổng" cũng hiện đúng con số đó, nên phải tìm trong ô ngày của từng dòng.
+    const goodRow = screen.getByRole('row', { name: /Đọc sách.*Tốt/ })
+    const badRow = screen.getByRole('row', { name: /TikTok.*Xấu/ })
+    expect(within(goodRow).getByText('10', { selector: '.habit-history-value-good' })).toBeInTheDocument()
+    expect(within(badRow).getByText('3', { selector: '.habit-history-value-bad' })).toBeInTheDocument()
+    expect(within(goodRow).getByText('10', { selector: '.habit-history-total' })).toBeInTheDocument()
   })
 })

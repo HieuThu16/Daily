@@ -13,17 +13,23 @@ CREATE TABLE IF NOT EXISTS public.music_genres (
 ALTER TABLE public.music_genres ENABLE ROW LEVEL SECURITY;
 
 -- RLS policy: authenticated users can see all non-deleted genres
-CREATE POLICY "Music genres: auth read"
-  ON public.music_genres FOR SELECT
-  USING (auth.role() = 'authenticated' AND deleted_at IS NULL);
+do $$ begin
+  CREATE POLICY "Music genres: auth read"
+    ON public.music_genres FOR SELECT
+    USING (auth.role() = 'authenticated' AND deleted_at IS NULL);
+exception when duplicate_object then null; end $$;
 
-CREATE POLICY "Music genres: auth insert"
-  ON public.music_genres FOR INSERT
-  WITH CHECK (auth.role() = 'authenticated');
+do $$ begin
+  CREATE POLICY "Music genres: auth insert"
+    ON public.music_genres FOR INSERT
+    WITH CHECK (auth.role() = 'authenticated');
+exception when duplicate_object then null; end $$;
 
-CREATE POLICY "Music genres: auth update"
-  ON public.music_genres FOR UPDATE
-  USING (auth.role() = 'authenticated');
+do $$ begin
+  CREATE POLICY "Music genres: auth update"
+    ON public.music_genres FOR UPDATE
+    USING (auth.role() = 'authenticated');
+exception when duplicate_object then null; end $$;
 
 -- 2. Add music_genre column to media_items (nullable text)
 ALTER TABLE public.media_items
