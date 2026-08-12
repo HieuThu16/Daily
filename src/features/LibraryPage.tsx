@@ -322,6 +322,8 @@ export function LibraryPage() {
             artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
             author: kind === 'BOOK' ? extraVal.trim() || null : null,
             genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+            youtube_url: youtubeUrlVal.trim() || null,
+            audio_url: audioUrlVal.trim() || null,
             log_date: logDate,
             log_time: logTime,
           })
@@ -345,6 +347,8 @@ export function LibraryPage() {
             artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
             author: kind === 'BOOK' ? extraVal.trim() || null : null,
             genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+            youtube_url: youtubeUrlVal.trim() || null,
+            audio_url: audioUrlVal.trim() || null,
           }
           setItems((prev) => [tempMedia, ...prev])
           showSaveToast(false, 'mục thư viện')
