@@ -10,6 +10,7 @@ import { useToast } from './ToastContext'
 import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './library/LibraryAudioView'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
+import { BookGrid } from './library/BookGrid'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 
 const categories = [
@@ -855,6 +856,7 @@ export function LibraryPage() {
         onCoverChange={(mediaItemId, coverUrl) => {
           setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
         }}
+        onStatusChange={(item, status) => patchStatusOrFavorite(item.id, { status })}
       />
     )
   }
@@ -1043,7 +1045,17 @@ export function LibraryPage() {
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải thư viện…</p>
           ) : filteredOverviewItems.length ? (
             <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
-              {filteredOverviewItems.map(renderMediaRow)}
+              {selectedType === 'BOOK' ? (
+                <BookGrid
+                  items={filteredOverviewItems}
+                  onOpen={(item) => setSelectedBookItemId(item.id)}
+                  onToggleFavorite={(item) =>
+                    patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })
+                  }
+                />
+              ) : (
+                filteredOverviewItems.map(renderMediaRow)
+              )}
             </div>
           ) : (
             <Empty icon={BookOpen} colorClass="icon-box-purple">
@@ -1068,7 +1080,17 @@ export function LibraryPage() {
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải yêu thích…</p>
           ) : favoriteItems.length ? (
             <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
-              {favoriteItems.map(renderMediaRow)}
+              {selectedType === 'BOOK' ? (
+                <BookGrid
+                  items={favoriteItems}
+                  onOpen={(item) => setSelectedBookItemId(item.id)}
+                  onToggleFavorite={(item) =>
+                    patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })
+                  }
+                />
+              ) : (
+                favoriteItems.map(renderMediaRow)
+              )}
             </div>
           ) : (
             <Empty icon={Heart} colorClass="icon-box-rose">

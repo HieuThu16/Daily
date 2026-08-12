@@ -166,4 +166,36 @@ describe('LibraryPage book navigation', () => {
       'https://example.com/bia.jpg?v=1',
     )
   })
+
+  it('mục Books hiện lưới bìa thay cho danh sách dòng', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    // Tab "Tất cả" mặc định: sách vẫn là thẻ dạng dòng.
+    expect(document.querySelector('.book-grid')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Books' }))
+
+    expect(document.querySelector('.book-grid')).toBeInTheDocument()
+    expect(document.querySelector('.library-media-card')).not.toBeInTheDocument()
+  })
+
+  it('bấm ô bìa trong lưới mở màn chi tiết', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Books' }))
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+
+    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+  })
 })
