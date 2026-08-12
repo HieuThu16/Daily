@@ -2595,10 +2595,13 @@ input, select, textarea, button {
   /* Các hàng công cụ/nút xuống dòng thay vì tràn. */
   .toolbar,
   .inline-form,
-  .entry-actions,
-  .header-actions {
+  .entry-actions {
     flex-wrap: wrap;
   }
+
+  /* Nhóm nút trên header luôn nằm một hàng: xuống dòng là tràn khỏi khung header. */
+  .header-actions { flex-wrap: nowrap; gap: 4px; }
+  .header-date { margin-right: 4px; }
 
   /* Bảng lịch sử thói quen: cuộn trong khung, không kéo cả trang. */
   .history {
@@ -3122,9 +3125,10 @@ input, select, textarea, button {
 .people-empty p { margin: 0; font-size: 0.86rem; color: var(--text-muted); }
 
 .person-form { display: grid; gap: 12px; }
-.person-form .field { display: grid; gap: 5px; }
-.person-form .field > span { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
-.person-form input, .person-form select {
+.people-page .field { display: grid; gap: 5px; margin-bottom: 12px; }
+.people-page .field > span { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+.person-form .field { margin-bottom: 0; }
+.people-page .field input, .person-form input, .person-form select {
   width: 100%;
   padding: 10px 11px;
   border: 1px solid var(--line);
@@ -3136,8 +3140,8 @@ input, select, textarea, button {
 .person-form .check input, .dual-date .check input { width: auto; }
 .person-form label.check { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--text-muted); }
 
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
-.modal-actions button {
+.person-form .modal-actions { justify-content: flex-end; gap: 8px; margin-top: 6px; padding-top: 14px; }
+.person-form .modal-actions button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -3150,8 +3154,8 @@ input, select, textarea, button {
   font-weight: 600;
   cursor: pointer;
 }
-.modal-actions button.primary { border-color: transparent; }
-.modal-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.person-form .modal-actions button.primary { border-color: transparent; }
+.person-form .modal-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Người: bố cục theo bản thiết kế ──────────────────────────────────────── */
 
