@@ -5,6 +5,7 @@ import { localDate } from '../lib/date'
 import type { BookAuthor, BookFormat, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './library/LibraryAudioView'
 
 const categories = [
   { id: 'BOOK', label: 'Books', icon: BookOpen, colorClass: 'icon-box-purple', color: 'var(--purple)', bg: 'var(--purple-bg)', labels: ['Sẽ đọc', 'Đang đọc', 'Đã đọc'] },
@@ -91,6 +92,7 @@ export function LibraryPage() {
 
   // Modal State for Add & Edit
   const [activeModal, setActiveModal] = useState<{ kind: Kind; item?: Media } | null>(null)
+  const [selectedAudioItemId, setSelectedAudioItemId] = useState<string | null>(null)
 
   // Dedicated Manager Modal States
   const [manageAuthorsModal, setManageAuthorsModal] = useState(false)
@@ -754,41 +756,12 @@ export function LibraryPage() {
                 )}
               </div>
 
-              {/* TRÌNH PHÁT AUDIO PLAYER CHO BÀI NHẠC NẾU CÓ AUDIO_URL HOẶC YOUTUBE_URL */}
-              {(isMusic || item.type === 'YOUTUBE') && (item.audio_url || item.youtube_url) && (
-                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {item.audio_url ? (
-                    <audio
-                      controls
-                      src={item.audio_url}
-                      style={{ width: '100%', height: 36, borderRadius: 6 }}
-                      preload="metadata"
-                    />
-                  ) : item.youtube_url ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <a
-                        href={item.youtube_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', background: 'rgba(239,68,68,0.1)', padding: '3px 8px', borderRadius: 6 }}
-                      >
-                        <Youtube size={13} /> Mở Youtube
-                      </a>
-                      <button
-                        onClick={() => openEdit(item)}
-                        style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--cyan)', background: 'var(--cyan-bg)', border: 0, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                      >
-                        <RefreshCw size={11} /> Bật MP3 Phát Nền
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              )}
             </div>
           </div>
 
           {/* Right Column: Controls always stay 100% inside card bounds */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            <LibraryAudioAction item={item} onListen={(audioItem) => setSelectedAudioItemId(audioItem.id)} onAddMp3={openEdit} />
             <select
               value={item.status}
               onChange={(e) => patchStatusOrFavorite(item.id, { status: e.target.value as Media['status'] })}
@@ -863,6 +836,21 @@ export function LibraryPage() {
     )
   }
 
+  const selectedAudioItem = items.find((item) => item.id === selectedAudioItemId) ?? null
+
+  if (selectedAudioItem) {
+    return (
+      <LibraryAudioDetail
+        item={selectedAudioItem}
+        onBack={() => setSelectedAudioItemId(null)}
+        onEdit={(item) => {
+          setSelectedAudioItemId(null)
+          openEdit(item)
+        }}
+      />
+    )
+  }
+
   return (
     <section style={{ maxWidth: 800, margin: '0 auto' }}>
       {/* TITLE BADGE CENTER / INLINE: Shows Active Tab Name Next To Category */}
@@ -872,37 +860,15 @@ export function LibraryPage() {
         </span>
       </div>
 
-      {/* ROW 1: 5 ICON CATEGORIES IN 1 ROW */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 8 }}>
-        <button
-          className={'daily-icon-btn ' + (selectedType === 'ALL' ? 'active' : '')}
-          onClick={() => setSelectedType('ALL')}
-          title="Tất cả thể loại"
-          style={{ padding: '4px 0', borderRadius: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-        >
-          <div className="icon-box icon-box-sm icon-box-blue" style={{ width: 26, height: 26 }}>
-            <Layers size={14} />
-          </div>
-        </button>
-
-        {categories.map((cat) => {
-          const Icon = cat.icon
-          const isSelected = selectedType === cat.id
-          return (
-            <button
-              key={cat.id}
-              className={'daily-icon-btn ' + (isSelected ? 'active' : '')}
-              onClick={() => setSelectedType(cat.id)}
-              title={cat.label}
-              style={{ padding: '4px 0', borderRadius: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-            >
-              <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 26, height: 26 }}>
-                <Icon size={14} />
-              </div>
-            </button>
-          )
-        })}
-      </div>
+      {/* ROW 1: ALL 6 ICON CATEGORIES IN 1 ROW */}
+      <LibraryCategoryBar
+        selectedType={selectedType}
+        categories={[
+          { id: 'ALL', label: 'Tất cả thể loại', icon: Layers, color: 'var(--primary)', bg: 'var(--primary-light)' },
+          ...categories,
+        ]}
+        onSelect={(id) => setSelectedType(id as 'ALL' | Kind)}
+      />
 
       {/* ROW 2: SUB-TABS INCLUDING "+ THÊM" BUTTON INSIDE 100% RESPONSIVE BAR */}
       <div className="habit-sub-tabs" style={{ marginBottom: 8 }}>
