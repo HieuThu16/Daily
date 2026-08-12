@@ -32,8 +32,24 @@ export type Todo = {
   created_at: string
   completed_at?: string | null
   due_date?: string | null
+  /** Giờ hạn chót 'HH:MM'. Null/rỗng = cả ngày. */
+  due_time?: string | null
   difficulty?: TaskDifficulty
   priority?: TaskPriority
+  postpone_count?: number
+  postpone_minutes?: number
+}
+
+export type TaskPostpone = {
+  id: string
+  todo_id: string
+  minutes: number
+  reason?: string | null
+  prev_due_date?: string | null
+  prev_due_time?: string | null
+  new_due_date?: string | null
+  new_due_time?: string | null
+  created_at: string
 }
 export type Idea = { id: string; title: string; content: string; created_at: string }
 export type BookFormat = 'READ' | 'LISTEN'
@@ -72,6 +88,34 @@ export type BookReadingLog = {
   note?: string | null
   created_at?: string
 }
+export type BookSourceFormat = 'PDF' | 'EPUB'
+
+/** Một cuốn sách đã nhập từ file PDF/EPUB, gắn 1:1 với một media_items type BOOK. */
+export type BookDocument = {
+  id: string
+  media_item_id: string
+  source_format: BookSourceFormat
+  source_filename: string | null
+  total_chars: number
+  page_count: number | null
+  est_pages: number
+  chapter_count: number
+  last_chapter_idx: number
+  last_scroll_ratio: number
+  last_char_offset: number
+  percent: number
+  last_read_at?: string | null
+}
+
+/** Mục lục: chương không kèm nội dung, để mở sách không phải tải cả cuốn. */
+export type BookChapterMeta = {
+  id: string
+  idx: number
+  title: string
+  char_count: number
+  char_offset: number
+}
+
 export type MovieGenre = { id: string; name: string }
 export type MovieActor = { id: string; name: string }
 export type BookAuthor = { id: string; name: string }
