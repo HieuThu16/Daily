@@ -36,7 +36,6 @@ function getItemExtraMeta(item: Media) {
   if (item.type === 'YOUTUBE') return { label: '📺 Kênh: ', value: item.channel ?? parseDescPrefix(item.description, 'Kênh:') }
   if (item.type === 'MUSIC') return { label: '🎵 Ca sĩ: ', value: item.artist ?? parseDescPrefix(item.description, 'Ca sĩ:') }
   if (item.type === 'BOOK') return { label: '📖 Tác giả: ', value: item.author ?? parseDescPrefix(item.description, 'Tác giả:') }
-  if (item.type === 'MANGA') return { label: '📚 Tác giả: ', value: item.author ?? parseDescPrefix(item.description, 'Tác giả:') }
   if (item.type === 'MOVIE') return { label: '🎬 Thể loại: ', value: item.genre ?? parseDescPrefix(item.description, 'Thể loại:') }
   return { label: '', value: '' }
 }
@@ -1219,35 +1218,37 @@ export function LibraryPage() {
                 </div>
               )}
 
-              {/* Author */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Tác giả</span>
-                  <button
-                    type="button"
-                    className="icon small"
-                    aria-label="Manage authors"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setManageAuthorsModal(true)
-                    }}
-                    style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
-                  >
-                    <FolderCog size={13} /> Quản lý tác giả
-                  </button>
+              {/* Author (Chỉ dành cho Sách) */}
+              {activeModal.kind === 'BOOK' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Tác giả sách</span>
+                    <button
+                      type="button"
+                      className="icon small"
+                      aria-label="Manage authors"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setManageAuthorsModal(true)
+                      }}
+                      style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
+                    >
+                      <FolderCog size={13} /> Quản lý tác giả
+                    </button>
+                  </div>
+                  <input
+                    list="book-authors-list"
+                    value={extraVal}
+                    onChange={(e) => setExtraVal(e.target.value)}
+                    placeholder="Chọn hoặc nhập tên tác giả mới…"
+                  />
+                  <datalist id="book-authors-list">
+                    {authors.map((a) => (
+                      <option key={a} value={a} />
+                    ))}
+                  </datalist>
                 </div>
-                <input
-                  list="book-authors-list"
-                  value={extraVal}
-                  onChange={(e) => setExtraVal(e.target.value)}
-                  placeholder="Chọn hoặc nhập tên tác giả mới…"
-                />
-                <datalist id="book-authors-list">
-                  {authors.map((a) => (
-                    <option key={a} value={a} />
-                  ))}
-                </datalist>
-              </div>
+              )}
 
               {/* Chapter & Start Date & End Date */}
               <div style={{ background: 'var(--bg-main)', padding: 10, borderRadius: 10, border: '1px solid var(--card-border)', display: 'grid', gap: 8 }}>
