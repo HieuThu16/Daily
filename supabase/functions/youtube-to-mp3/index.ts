@@ -7,11 +7,12 @@ serve(async (req) => {
     const { youtubeUrl } = await req.json()
     const id = String(youtubeUrl ?? '').match(/(?:youtu\.be\/|youtube\.com\/(?:shorts\/|embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]
     if (!id) throw new Error('Invalid YouTube URL')
-    const endpoint = Deno.env.get('CONVERTER_API_URL'); const key = Deno.env.get('CONVERTER_API_KEY')
-    if (!endpoint || !key) throw new Error('Converter API is not configured')
-    const converted = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ url: youtubeUrl, videoId: id, format: 'mp3' }) })
+    const key = Deno.env.get('CONVERTER_API_KEY')
+    const endpoint = Deno.env.get('CONVERTER_API_URL') ?? 'https://youtube-mp36.p.rapidapi.com/dl'
+    if (!key) throw new Error('Converter API key is not configured')
+    const converted = await fetch(`${endpoint}?id=${encodeURIComponent(id)}`, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com' } })
     if (!converted.ok) throw new Error(`Converter returned ${converted.status}`)
-    const result = await converted.json(); const downloadUrl = result.downloadUrl ?? result.url
+    const result = await converted.json(); const downloadUrl = result.link ?? result.downloadUrl ?? result.url
     if (!downloadUrl) throw new Error('Converter response has no download URL')
     const file = await (await fetch(downloadUrl)).arrayBuffer()
     const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
