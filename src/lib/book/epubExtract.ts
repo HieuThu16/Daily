@@ -221,6 +221,8 @@ export async function extractEpub(file: File, onProgress: ProgressCallback): Pro
     sourceFormat: 'EPUB',
     sourceFilename: file.name,
     pageCount: null,
+    // TODO(Task 4): thay bằng ảnh bìa lấy từ manifest EPUB.
+    cover: null,
     chapters,
   }
 }
