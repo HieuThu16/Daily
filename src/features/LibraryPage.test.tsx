@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LibraryPage } from './LibraryPage'
 
@@ -44,7 +45,12 @@ afterEach(cleanup)
 describe('LibraryPage audio navigation', () => {
   it('keeps players out of the list and opens one focused player', async () => {
     const user = userEvent.setup()
-    render(<LibraryPage />)
+    // LibraryPage dùng useNavigate cho nút Đọc sách nên cần một Router bao ngoài.
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
 
     expect(screen.getByRole('group', { name: 'Thể loại thư viện' }).querySelectorAll('button')).toHaveLength(6)
     expect(document.querySelectorAll('audio')).toHaveLength(0)

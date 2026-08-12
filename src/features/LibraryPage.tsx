@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react'
-import { BarChart3, BookMarked, BookOpen, Calendar, Clock, Download, Film, FolderCog, Heart, History, Layers, Music, Pencil, Play, Plus, RefreshCw, Tv, Volume2, Youtube } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { BarChart3, BookMarked, BookOpen, Calendar, Clock, Download, FileUp, Film, FolderCog, Heart, History, Layers, Music, Pencil, Play, Plus, RefreshCw, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
+import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
 import type { BookAuthor, BookFormat, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './library/LibraryAudioView'
+import { BookImportModal } from './library/BookImportModal'
 
 const categories = [
   { id: 'BOOK', label: 'Books', icon: BookOpen, colorClass: 'icon-box-purple', color: 'var(--purple)', bg: 'var(--purple-bg)', labels: ['Sẽ đọc', 'Đang đọc', 'Đã đọc'] },
@@ -93,6 +96,15 @@ export function LibraryPage() {
   // Modal State for Add & Edit
   const [activeModal, setActiveModal] = useState<{ kind: Kind; item?: Media } | null>(null)
   const [selectedAudioItemId, setSelectedAudioItemId] = useState<string | null>(null)
+
+  // Sách đã nhập nội dung từ PDF/EPUB — quyết định thẻ nào hiện nút Đọc.
+  const nav = useNavigate()
+  const [importOpen, setImportOpen] = useState(false)
+  const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    void loadImportedMediaItemIds().then(setImportedIds)
+  }, [])
 
   // Dedicated Manager Modal States
   const [manageAuthorsModal, setManageAuthorsModal] = useState(false)
@@ -532,40 +544,26 @@ export function LibraryPage() {
     if (!bookLogModal) return
     const item = bookLogModal.item
     const fmt = item.book_format ?? 'READ'
-    const logData = {
+    // Ghi theo ngày: có dòng thì update, chưa có thì insert. Không dùng upsert vì bảng
+    // không có unique constraint trên (media_item_id, log_date) nên upsert luôn lỗi và
+    // nhánh insert dự phòng tạo dòng trùng.
+    const saved = await saveReadingLogEntry({
       media_item_id: item.id,
       log_date: logProgressDate,
       page: fmt === 'READ' ? (parseInt(logPage) || null) : null,
       listen_hours: fmt === 'LISTEN' ? (parseInt(logListenHours) || 0) : 0,
       listen_minutes: fmt === 'LISTEN' ? (parseInt(logListenMinutes) || 0) : 0,
       note: logNote.trim() || null,
-    }
+    })
 
-    // Upsert by date (overwrite same-day entry)
-    const { data, error } = await supabase!
-      .from('book_reading_logs')
-      .upsert(logData, { onConflict: 'media_item_id,log_date' })
-      .select()
-      .single()
-
-    if (!error && data) {
+    if (saved) {
       bookReadingLogsQuery.setItems((prev) => [
         ...prev.filter((l) => !(l.media_item_id === item.id && l.log_date === logProgressDate)),
-        data as BookReadingLog,
+        saved,
       ])
       showToast('📖 Đã ghi lại tiến độ!')
     } else {
-      // fallback insert
-      const { data: d2 } = await supabase!.from('book_reading_logs').insert(logData).select().single()
-      if (d2) {
-        bookReadingLogsQuery.setItems((prev) => [
-          ...prev.filter((l) => !(l.media_item_id === item.id && l.log_date === logProgressDate)),
-          d2 as BookReadingLog,
-        ])
-        showToast('📖 Đã ghi lại tiến độ!')
-      } else {
-        showToast('❌ Không thể lưu tiến độ, thử lại sau', 'delete')
-      }
+      showToast('❌ Không thể lưu tiến độ, thử lại sau', 'delete')
     }
 
     setBookLogModal(null)
@@ -775,38 +773,54 @@ export function LibraryPage() {
           </div>
         </div>
 
-        {/* Book Progress Row: only for BOOK in IN_PROGRESS or COMPLETED */}
-        {isBook && (item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
+        {/* Book Row: nút Đọc cho sách đã nhập, nút ghi tiến độ cho sách đang/đã đọc */}
+        {isBook && (importedIds.has(item.id) || item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
           <div style={{ display: 'flex', gap: 4, paddingLeft: 28 }}>
-            <button
-              onClick={() => {
-                setBookLogModal({ item })
-                setLogProgressDate(localDate())
-                setLogPage(latestLog?.page?.toString() ?? '')
-                setLogListenHours(latestLog?.listen_hours?.toString() ?? '0')
-                setLogListenMinutes(latestLog?.listen_minutes?.toString() ?? '0')
-                setLogNote('')
-              }}
-              style={{
-                fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid',
-                borderColor: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
-                background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
-                color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
-              }}
-            >
-              {fmt === 'READ' ? '📄 Ghi trang' : '⏱ Ghi giờ'}
-            </button>
-            <button
-              onClick={() => setBookHistoryModal({ item })}
-              style={{
-                fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--card-border)',
-                background: 'var(--card-bg)', color: 'var(--text-muted)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
-              }}
-            >
-              <History size={10} /> Lịch sử ({bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length})
-            </button>
+            {importedIds.has(item.id) && (
+              <button
+                onClick={() => nav(`/read/${item.id}`)}
+                style={{
+                  fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                  border: '1px solid var(--primary)', background: 'var(--primary)', color: 'white',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+                }}
+              >
+                <BookOpen size={10} /> Đọc
+              </button>
+            )}
+            {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
+              <>
+                <button
+                  onClick={() => {
+                    setBookLogModal({ item })
+                    setLogProgressDate(localDate())
+                    setLogPage(latestLog?.page?.toString() ?? '')
+                    setLogListenHours(latestLog?.listen_hours?.toString() ?? '0')
+                    setLogListenMinutes(latestLog?.listen_minutes?.toString() ?? '0')
+                    setLogNote('')
+                  }}
+                  style={{
+                    fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid',
+                    borderColor: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
+                    background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
+                    color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+                  }}
+                >
+                  {fmt === 'READ' ? '📄 Ghi trang' : '⏱ Ghi giờ'}
+                </button>
+                <button
+                  onClick={() => setBookHistoryModal({ item })}
+                  style={{
+                    fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--card-border)',
+                    background: 'var(--card-bg)', color: 'var(--text-muted)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+                  }}
+                >
+                  <History size={10} /> Lịch sử ({bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length})
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -858,6 +872,15 @@ export function LibraryPage() {
         <button className={subView === 'stats' ? 'active' : ''} onClick={() => setSubView('stats')} style={{ padding: '5px 4px', fontSize: '0.74rem' }}>
           <BarChart3 size={12} /> Thống kê
         </button>
+        {(selectedType === 'ALL' || selectedType === 'BOOK') && (
+          <button
+            onClick={() => setImportOpen(true)}
+            title="Nhập sách từ file PDF hoặc EPUB"
+            style={{ background: 'var(--purple)', color: 'white', fontWeight: 700, padding: '5px 4px', fontSize: '0.74rem', gap: 2 }}
+          >
+            <FileUp size={13} /> Nhập sách
+          </button>
+        )}
         <button
           onClick={() => openAdd(selectedType === 'ALL' ? 'BOOK' : selectedType)}
           style={{ background: 'var(--primary)', color: 'white', fontWeight: 700, padding: '5px 4px', fontSize: '0.74rem', gap: 2 }}
@@ -1720,6 +1743,20 @@ export function LibraryPage() {
             ))}
           </div>
         </Modal>
+      )}
+
+      {importOpen && (
+        <BookImportModal
+          attachableBooks={items.filter((item) => item.type === 'BOOK' && !importedIds.has(item.id))}
+          onClose={() => setImportOpen(false)}
+          onImported={(mediaItemId, createdItem) => {
+            if (createdItem) setItems((prev) => [createdItem, ...prev])
+            setImportedIds((prev) => new Set(prev).add(mediaItemId))
+            setImportOpen(false)
+            showToast('📚 Đã nhập sách vào thư viện!')
+            nav(`/read/${mediaItemId}`)
+          }}
+        />
       )}
     </section>
   )
