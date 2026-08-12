@@ -110,7 +110,7 @@ type RawBook = {
 }
 
 type ExtractProgress = {
-  phase: 'reading' | 'extracting' | 'cleaning' | 'splitting'
+  phase: 'reading' | 'extracting' | 'splitting'
   current: number
   total: number
 }
@@ -231,9 +231,12 @@ Sau khi có toàn bộ dòng của mọi trang, `cleanText` xử lý:
    hoặc số La Mã đứng một mình.
 5. **Gạch nối cuối dòng**: dòng kết thúc bằng `-` hoặc `­` và dòng kế tiếp bắt đầu
    bằng chữ thường thì nối liền, bỏ dấu gạch.
-6. **Gộp đoạn**: dòng không kết thúc bằng dấu kết câu (`.!?…:;"”'’)`) và dòng kế tiếp
-   không bắt đầu bằng chữ hoa hay ký hiệu đầu mục thì nối bằng một dấu cách. Ngược lại
-   là ngắt đoạn.
+6. **Gộp đoạn**: dòng không kết thúc bằng dấu kết câu (`.!?…:;"”'’)`) thì nối với dòng
+   kế tiếp bằng một dấu cách. Ngắt đoạn khi câu đã kết thúc, gặp dòng trống, hoặc dòng
+   kế tiếp là đầu mục (`-`, `•`, `1.`). Cố tình **không** ngắt chỉ vì dòng sau viết hoa:
+   tiếng Việt đầy danh từ riêng giữa câu ("Hà Nội", "New York") nên quy tắc đó cắt sai
+   rất nhiều. Dòng tiêu đề không bị dính vào đoạn sau vì việc chia chương chạy **trước**
+   bước gộp đoạn và chèn một dòng trống ngay sau mỗi tiêu đề.
 7. **Chuẩn hoá**: `normalize('NFC')` (bắt buộc với dấu tiếng Việt), thay ligature
    `ﬁ ﬂ ﬀ`, đổi dấu nháy cong về thẳng nếu lẫn lộn, xoá ký tự điều khiển, gộp từ 3 dòng
    trống trở lên thành 2.
