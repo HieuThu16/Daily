@@ -21,6 +21,7 @@ type BookDetailViewProps = {
   onBack: () => void
   onEdit: (item: Media) => void
   onCoverChange: (mediaItemId: string, coverUrl: string | null) => void
+  onStatusChange: (item: Media, status: Media['status']) => void
 }
 
 type Status = 'loading' | 'ready' | 'no-document'
@@ -58,7 +59,7 @@ function formatMoment(value: string | null | undefined): string | null {
   }).format(date)
 }
 
-export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDetailViewProps) {
+export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusChange }: BookDetailViewProps) {
   const nav = useNavigate()
   const headingRef = useRef<HTMLHeadingElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -72,7 +73,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDeta
   const [coverError, setCoverError] = useState('')
 
   const listen = item.book_format === 'LISTEN'
-  const statusLabel = STATUS_LABEL[item.status][listen ? 1 : 0]
 
   useEffect(() => {
     headingRef.current?.focus()
@@ -171,8 +171,21 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDeta
             <p>{item.author || 'Chưa cập nhật tác giả'}</p>
             <div className="library-book-badges">
               <span>{listen ? '🎧 Nghe' : '📖 Đọc'}</span>
-              <span>{statusLabel}</span>
               {item.is_favorite && <span>♥ Yêu thích</span>}
+              {/* Ô bìa trong lưới không còn dropdown trạng thái, nên nó nằm ở đây — không thì
+                  muốn đánh dấu đã đọc phải mở thêm modal Sửa. */}
+              <select
+                className="library-book-status"
+                aria-label="Trạng thái"
+                value={item.status}
+                onChange={(event) => onStatusChange(item, event.target.value as Media['status'])}
+              >
+                {(['PLANNED', 'IN_PROGRESS', 'COMPLETED'] as const).map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABEL[status][listen ? 1 : 0]}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="library-book-cover-actions">
