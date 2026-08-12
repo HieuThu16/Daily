@@ -76,6 +76,7 @@ export type Media = {
   status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
   is_favorite: boolean
   book_format?: BookFormat | null
+  cover_url?: string | null
 }
 
 export type BookReadingLog = {
@@ -128,6 +129,19 @@ export type Entry = { id: string; content: string; entry_date: string; created_a
 export type Person = { id: string; name: string; avatar_url?: string | null; notes?: string | null; created_at?: string }
 export type PersonInterest = { id: string; person_id: string; label: string; created_at?: string }
 export type PersonDailyLog = { id: string; person_id: string; log_date: string; content: string; updated_at?: string; created_at?: string }
+
+export type OccasionKind = 'BIRTHDAY' | 'ANNIVERSARY'
+
+/** Dịp đáng nhớ. `person_id` null = dịp không gắn với ai. */
+export type PersonOccasion = {
+  id: string
+  person_id: string | null
+  kind: OccasionKind
+  title: string
+  occasion_date: string
+  is_yearly: boolean
+  created_at?: string
+}
 
 export type PlayTogetherAccount = {
   id: string
