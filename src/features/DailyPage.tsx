@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { BarChart3, Frown, Heart, NotebookPen, Pencil, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
-import type { DailyType, Entry } from '../types'
+import type { DailyType, Entry, Person } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 
@@ -47,6 +47,7 @@ function groupByDate(entries: Entry[]): Map<string, Entry[]> {
 export function DailyPage() {
   const { showToast } = useToast()
   const { items, setItems, loading } = useQuery<Entry>('daily_entries')
+  const peopleQuery = useQuery<Person>('people', 'name')
 
   const [pageTab, setPageTab] = useState<PageTab>('write')
 
@@ -59,6 +60,8 @@ export function DailyPage() {
   const [saveSuccess, setSaveSuccess] = useState('')
   const [editing, setEditing] = useState<Entry | null>(null)
   const [editText, setEditText] = useState('')
+  const mentionQuery = content.match(/@([^\s@]*)$/)?.[1]?.toLowerCase() ?? ''
+  const mentionPeople = peopleQuery.items.filter((p) => p.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
 
   // Stats tab state
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('week')
@@ -76,6 +79,10 @@ export function DailyPage() {
     const { data, error } = await supabase!.from('daily_entries').insert(payload).select()
     if (!error && data) {
       setItems((prev) => [...(data as Entry[]), ...prev])
+      if (supabase) {
+        const mentioned = peopleQuery.items.filter((person) => lines.some((line) => line.includes(`@${person.name}`)))
+        await Promise.all(mentioned.map((person) => supabase!.from('person_daily_logs').upsert({ person_id: person.id, log_date: date, content: lines.join('\n') }, { onConflict: 'user_id,person_id,log_date' })))
+      }
       setContent('')
       showToast(`✅ Đã lưu ${lines.length} bài nhật ký mới!`)
       setSaveSuccess(`Đã lưu ${lines.length} nội dung lúc ${currentTimeString} ✨`)
@@ -204,6 +211,11 @@ export function DailyPage() {
               rows={3}
               style={{ width: '100%', border: '1px solid var(--card-border)', borderRadius: 12, padding: 10, fontSize: '0.9rem', resize: 'vertical', outline: 'none', background: 'var(--card-bg)', color: 'var(--text-main)', lineHeight: 1.5, marginBottom: 8 }}
             />
+            {content.includes('@') && mentionPeople.length > 0 && (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                {mentionPeople.map((person) => <button key={person.id} type="button" className="eyebrow" onClick={() => setContent((value) => value.replace(/@[^\s@]*$/, `@${person.name} `))}>@{person.name}</button>)}
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
               <button className="primary" onClick={saveEntries} disabled={busy} style={{ padding: '6px 16px', fontSize: '0.84rem' }}>
                 <Save size={15} />

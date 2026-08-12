@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon } from 'lucide-react'
+import { BookOpen, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -11,12 +11,14 @@ import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
 import { PlayTogetherPage } from './features/PlayTogetherPage'
 import { NutritionPage } from './features/NutritionPage'
+import { PeoplePage } from './features/PeoplePage'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
   { id: 'playtogether', label: 'Game', icon: Gamepad2, colorClass: 'icon-box-cyan' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
@@ -188,6 +190,7 @@ function Protected() {
           <Route path="/habit" element={<HabitsPage />} />
           <Route path="/daily" element={<DailyPage />} />
           <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/people" element={<PeoplePage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/playtogether" element={<PlayTogetherPage />} />
           <Route path="/nutrition" element={<NutritionPage />} />

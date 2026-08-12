@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'library' | 'playtogether' | 'nutrition'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'people' | 'library' | 'playtogether' | 'nutrition'
 
 export type NutritionLog = {
   id: string
@@ -81,6 +81,9 @@ export type MusicGenre = { id: string; name: string }
 
 export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
 export type Entry = { id: string; content: string; entry_date: string; created_at: string; entry_type: DailyType }
+export type Person = { id: string; name: string; avatar_url?: string | null; notes?: string | null; created_at?: string }
+export type PersonInterest = { id: string; person_id: string; label: string; created_at?: string }
+export type PersonDailyLog = { id: string; person_id: string; log_date: string; content: string; updated_at?: string; created_at?: string }
 
 export type PlayTogetherAccount = {
   id: string

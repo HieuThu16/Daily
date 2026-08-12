@@ -5,6 +5,7 @@ import { localDate } from '../lib/date'
 import type { Idea, TaskDifficulty, TaskPriority, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { saveLocal } from '../lib/persistence'
 
 type Tab = 'tasks' | 'ideas' | 'stats'
 type EditState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
@@ -140,9 +141,10 @@ export function TasksPage() {
     const { data, error } = await supabase!.from('todos').insert(payload).select().single()
     if (!error && data) {
       todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (data as Todo) : item)))
+      showToast('Đã lưu Supabase')
     } else {
-      const fallback = await supabase!.from('todos').insert({ title, completed: false, difficulty: newDifficulty, priority: newPriority }).select().single()
-      if (fallback.data) todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (fallback.data as Todo) : item)))
+      saveLocal(`todo:${tempTodo.id}`, tempTodo)
+      showToast('Đã lưu Local')
     }
   }
 
@@ -180,7 +182,10 @@ export function TasksPage() {
     todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
     const { error } = await supabase!.from('todos').update(updateData).eq('id', t.id)
     if (error) {
-      await supabase!.from('todos').update({ completed: next }).eq('id', t.id)
+      saveLocal(`todo:${t.id}`, { ...t, ...updateData })
+      showToast('Đã lưu Local')
+    } else {
+      showToast('Đã lưu Supabase')
     }
     showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
   }
@@ -212,7 +217,10 @@ export function TasksPage() {
       todos.setItems((prev) => prev.map((i) => (i.id === edit.item.id ? { ...i, ...updateData } : i)))
       const { error } = await supabase!.from('todos').update(updateData).eq('id', edit.item.id)
       if (error) {
-        await supabase!.from('todos').update({ title: editTitle.trim() }).eq('id', edit.item.id)
+        saveLocal(`todo:${edit.item.id}`, { ...edit.item, ...updateData })
+        showToast('Đã lưu Local')
+      } else {
+        showToast('Đã lưu Supabase')
       }
     } else {
       const updateData = { title: editTitle.trim(), content: editContent }

@@ -233,6 +233,20 @@ export function LibraryPage() {
 
     const vId = videoIdMatch[1]
     setIsConverting(true)
+    if (supabase) {
+      const { data, error } = await supabase.functions.invoke('youtube-to-mp3', { body: { youtubeUrl: targetUrl } })
+      if (!error && data?.audioUrl) {
+        setAudioLoadError(false)
+        setAudioUrlVal(data.audioUrl)
+        showToast('Đã lưu MP3 vào Supabase Storage', 'success')
+        setIsConverting(false)
+        return
+      }
+      setAudioUrlVal('')
+      showToast('Không chuyển đổi được MP3. Kiểm tra cấu hình converter API.', 'delete')
+      setIsConverting(false)
+      return
+    }
     showToast('🔄 Đang kết nối API lấy file MP3 chất lượng cao...', 'info')
 
     // Danh sách các Piped Instances đáng tin cậy
