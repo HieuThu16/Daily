@@ -50,6 +50,17 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
     }
   }, [coverPreview])
 
+  // Bóc tách một file lớn mất vài chục giây. Người dùng đóng modal giữa chừng thì promise
+  // vẫn chạy nốt và vẫn tạo object URL, nhưng setState lúc đó là no-op nên URL không vào
+  // state và cleanup ở trên không bao giờ thu hồi nó — rò tới khi tải lại cả trang.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
   const totalChars = chapters.reduce((sum, chapter) => sum + chapter.content.length, 0)
   const percent = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
 
@@ -61,6 +72,7 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
       // Nạp động: pdfjs và jszip chỉ tải về khi người dùng thực sự nhập sách.
       const { extractBook } = await import('../../lib/book')
       const result = await extractBook(file, setProgress)
+      if (!mounted.current) return
       setBook(result)
       setCoverPreview(result.cover ? URL.createObjectURL(result.cover) : null)
       setChapters(result.chapters)
@@ -68,6 +80,7 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
       setAuthor(result.author ?? '')
       setStage('preview')
     } catch (caught) {
+      if (!mounted.current) return
       setError(caught instanceof Error ? caught.message : 'Không xử lý được file này.')
       setStage('pick')
     }

@@ -688,24 +688,28 @@ export function LibraryPage() {
         key={item.id}
         className="check-row library-media-card"
       >
-        <div
-          className="library-media-main"
-          {...(isBook
-            ? {
-                role: 'button',
-                tabIndex: 0,
-                'aria-label': `Xem chi tiết ${item.name}`,
-                onClick: () => setSelectedBookItemId(item.id),
-                onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') return
-                  event.preventDefault()
-                  setSelectedBookItemId(item.id)
-                },
-              }
-            : {})}
-        >
-          {/* Left Column: Icon + Wrappable Title + Badges */}
-          <div className="library-media-identity">
+        <div className="library-media-main">
+          {/* Left Column: Icon + Wrappable Title + Badges.
+              Vùng bấm mở chi tiết đặt ở đúng khối này chứ không bọc cả hàng: bọc cả hàng
+              thì role="button" sẽ chứa <select> và hai <button> bên phải, vừa sai ARIA
+              (phần tử tương tác lồng nhau) vừa khiến VoiceOver trên iOS gộp cả hàng thành
+              một điểm dừng, không vuốt tới được các nút đó. */}
+          <div
+            className="library-media-identity"
+            {...(isBook
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  'aria-label': `Xem chi tiết ${item.name}`,
+                  onClick: () => setSelectedBookItemId(item.id),
+                  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    setSelectedBookItemId(item.id)
+                  },
+                }
+              : {})}
+          >
             <div className="icon-box library-media-icon" style={{ background: cat.bg, color: cat.color }}>
               {isBook ? <BookCover url={item.cover_url} alt={`Bìa ${item.name}`} size="thumb" /> : <Icon size={19} />}
             </div>
@@ -746,14 +750,9 @@ export function LibraryPage() {
             </div>
           </div>
 
-          {/* Right Column: Controls always stay 100% inside card bounds.
-              Chặn cả click lẫn keydown: thẻ sách bọc ngoài có onKeyDown gọi preventDefault,
-              không chặn thì Enter/Space trên các nút này bị nuốt mất và chỉ mở màn chi tiết. */}
-          <div
-            className="library-media-actions"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
+          {/* Right Column: Controls always stay 100% inside card bounds. Cột này nằm ngoài
+              vùng bấm mở chi tiết nên không cần chặn sự kiện lan lên. */}
+          <div className="library-media-actions">
             <LibraryAudioAction item={item} onListen={(audioItem) => setSelectedAudioItemId(audioItem.id)} onAddMp3={openEdit} />
             <select
               className="library-status-select"
