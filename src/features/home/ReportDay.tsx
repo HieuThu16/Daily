@@ -1,9 +1,9 @@
-import { CheckSquare, Flame, NotebookPen, Salad } from 'lucide-react'
+import { CheckSquare, Flame, Moon, NotebookPen, Salad } from 'lucide-react'
 import type { CompletionSummary } from '../../lib/homeProgress'
-import { formatMoney, mealBreakdown, totalSpend } from '../../lib/report'
+import { formatMoney, mealBreakdown, sleepSummary, totalSpend } from '../../lib/report'
 import type { UpcomingOccasion } from '../../lib/occasions'
 import { countdownLabel } from '../../lib/occasions'
-import type { Entry, Habit, HabitLog, NutritionLog, Todo } from '../../types'
+import type { Entry, Habit, HabitLog, NutritionLog, SleepLog, Todo } from '../../types'
 import { ProgressRing } from './ProgressRing'
 
 type Props = {
@@ -14,6 +14,8 @@ type Props = {
   todosDoneToday: Todo[]
   entries: Entry[]
   meals: NutritionLog[]
+  sleep: SleepLog[]
+  isToday: boolean
   nextOccasion: UpcomingOccasion | null
   onOpen: (tab: string) => void
 }
@@ -67,6 +69,8 @@ export function ReportDay({
   todosDoneToday,
   entries,
   meals,
+  sleep,
+  isToday,
   nextOccasion,
   onOpen,
 }: Props) {
@@ -74,13 +78,14 @@ export function ReportDay({
   const todoTotal = todos.length + todosDoneToday.length
   const spend = totalSpend(meals)
   const byMeal = mealBreakdown(meals)
+  const rest = sleepSummary(sleep)
 
   return (
     <div className="report">
       <div className="report-hero">
         <ProgressRing percent={completion.percent} size={92} />
         <div>
-          <h2>{completion.percent}% hôm nay</h2>
+          <h2>{completion.percent}% {isToday ? 'hôm nay' : 'ngày này'}</h2>
           <p>
             {completion.total === 0
               ? 'Chưa có thói quen hay việc nào để theo dõi.'
@@ -115,7 +120,7 @@ export function ReportDay({
           icon={NotebookPen}
           label="Nhật ký"
           value={entries.length ? `${entries.length} mục` : 'Chưa ghi'}
-          hint={entries.length ? 'Đã ghi hôm nay' : 'Hôm nay chưa viết gì'}
+          hint={entries.length ? 'Đã ghi trong ngày' : 'Ngày này chưa viết gì'}
           onClick={() => onOpen('/daily')}
         />
         <Tile
@@ -123,10 +128,19 @@ export function ReportDay({
           icon={Salad}
           label="Ăn uống"
           value={formatMoney(spend)}
-          hint={meals.length ? `${meals.length} món hôm nay` : 'Chưa ghi bữa nào'}
+          hint={meals.length ? `${meals.length} món trong ngày` : 'Chưa ghi bữa nào'}
           onClick={() => onOpen('/nutrition')}
         />
       </div>
+
+      <button className="report-sleep" onClick={() => onOpen('/nutrition')}>
+        <span className="icon-box icon-box-sm" style={{ background: 'var(--purple-bg)', color: 'var(--purple)' }}>
+          <Moon size={15} />
+        </span>
+        <span className="report-sleep-label">Giấc ngủ</span>
+        <strong>{rest.text}</strong>
+        <span className="report-sleep-range">{rest.range ?? 'Chưa ghi'}</span>
+      </button>
 
       <div className="report-meals">
         {byMeal.map((meal) => (

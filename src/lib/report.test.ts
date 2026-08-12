@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { Entry, Habit, HabitLog, NutritionLog, Todo } from '../types'
+import type { Entry, Habit, HabitLog, NutritionLog, SleepLog, Todo } from '../types'
 import { weekDays } from './homeProgress'
 import {
   daysWithEntries,
+  formatDuration,
   formatMoney,
   habitRanking,
   mealBreakdown,
+  sleepSummary,
   todosDoneInWeek,
   totalSpend,
+  weeklySleepAverage,
   weeklyHabitPercent,
   weeklySpend,
 } from './report'
@@ -123,5 +126,38 @@ describe('todosDoneInWeek', () => {
 describe('totalSpend', () => {
   it('cộng dồn giá', () => {
     expect(totalSpend([meal('LUNCH', 1_000, wed.key), meal('EVENING', 2_000, wed.key)])).toBe(3_000)
+  })
+})
+
+describe('giấc ngủ', () => {
+  const sleep = (start: string, end: string, minutes: number, log_date: string): SleepLog => ({
+    id: crypto.randomUUID(),
+    sleep_start: start,
+    sleep_end: end,
+    duration_minutes: minutes,
+    log_date,
+  })
+
+  it('rút gọn thời lượng', () => {
+    expect(formatDuration(0)).toBe('—')
+    expect(formatDuration(45)).toBe('45p')
+    expect(formatDuration(450)).toBe('7h30')
+    expect(formatDuration(480)).toBe('8h')
+  })
+
+  it('cộng tổng giờ ngủ và lấy khung giờ của giấc dài nhất', () => {
+    const result = sleepSummary([sleep('23:00', '06:30', 450, wed.key), sleep('13:00', '13:30', 30, wed.key)])
+    expect(result.minutes).toBe(480)
+    expect(result.text).toBe('8h')
+    expect(result.range).toBe('23:00 → 06:30')
+  })
+
+  it('không có giấc nào thì không có khung giờ', () => {
+    expect(sleepSummary([])).toMatchObject({ minutes: 0, text: '—', range: null })
+  })
+
+  it('trung bình tuần chỉ chia cho số đêm đã ghi', () => {
+    const logs = [sleep('23:00', '07:00', 480, mon.key), sleep('00:00', '06:00', 360, tue.key)]
+    expect(weeklySleepAverage(logs, week)).toEqual({ minutes: 420, nights: 2 })
   })
 })

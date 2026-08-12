@@ -3579,3 +3579,66 @@ button.primary.block:disabled { opacity: 0.5; cursor: not-allowed; }
   .report-hero { padding: 11px 14px; }
   .week-bar-track { height: 74px; }
 }
+
+/* ── Home: thanh chọn ngày và ô giấc ngủ ─────────────────────────────────── */
+
+.date-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 4px 6px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--card-bg);
+}
+.date-pager .icon { flex-shrink: 0; }
+.date-pager-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+}
+.date-pager-label strong { font-size: 0.88rem; font-weight: 700; white-space: nowrap; }
+/* Ô date phủ lên nhãn để bấm vào chữ là mở lịch, nhưng không chiếm chỗ. */
+.date-pager-label input[type='date'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.date-pager-today {
+  flex-shrink: 0;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.report-sleep {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+  cursor: pointer;
+  text-align: left;
+}
+.report-sleep-label { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
+.report-sleep strong { margin-left: auto; font-size: 1.05rem; font-weight: 800; }
+.report-sleep-range { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+
+.report-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }

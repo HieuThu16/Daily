@@ -2,16 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { weekDays } from '../../lib/homeProgress'
-import type { Entry, Habit, HabitLog, Media, NutritionLog, Person, PersonOccasion, Todo } from '../../types'
-import { useToast } from '../ToastContext'
+import { parseLocalDate } from '../../lib/occasions'
+import type { Entry, Habit, HabitLog, Media, NutritionLog, Person, PersonOccasion, SleepLog, Todo } from '../../types'
 
 /**
  * Nạp toàn bộ dữ liệu trang Home trong một lượt.
  * Bảng nào chưa có trong database (ví dụ person_occasions khi chưa chạy migration)
  * sẽ trả data null và được coi như danh sách rỗng, không làm hỏng cả trang.
  */
-export function useHomeData() {
-  const { showToast } = useToast()
+export function useHomeData(dateKey: string = localDate()) {
   const [habits, setHabits] = useState<Habit[]>([])
   const [todayLogs, setTodayLogs] = useState<HabitLog[]>([])
   const [weekLogs, setWeekLogs] = useState<HabitLog[]>([])
@@ -20,6 +19,8 @@ export function useHomeData() {
   const [entries, setEntries] = useState<Entry[]>([])
   const [weekEntries, setWeekEntries] = useState<Entry[]>([])
   const [meals, setMeals] = useState<NutritionLog[]>([])
+  const [sleep, setSleep] = useState<SleepLog[]>([])
+  const [weekSleep, setWeekSleep] = useState<SleepLog[]>([])
   const [weekMeals, setWeekMeals] = useState<NutritionLog[]>([])
   const [weekTodosDone, setWeekTodosDone] = useState<Todo[]>([])
   const [media, setMedia] = useState<Media[]>([])
@@ -27,7 +28,7 @@ export function useHomeData() {
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
 
-  const week = useMemo(() => weekDays(), [])
+  const week = useMemo(() => weekDays(parseLocalDate(dateKey)), [dateKey])
 
   useEffect(() => {
     ;(async () => {
@@ -36,14 +37,16 @@ export function useHomeData() {
         return
       }
       setLoading(true)
-      const today = localDate()
+      const today = dateKey
+      const after = new Date(parseLocalDate(dateKey).getTime() + 86_400_000)
+      const tomorrow = `${after.getFullYear()}-${String(after.getMonth() + 1).padStart(2, '0')}-${String(after.getDate()).padStart(2, '0')}`
 
-      const [h, tl, wl, t, td, e, m, o, p, we, nt, nw, wt] = await Promise.all([
+      const [h, tl, wl, t, td, e, m, o, p, we, nt, nw, wt, sl, sw] = await Promise.all([
         supabase.from('habits').select('*').eq('is_active', true).is('deleted_at', null),
         supabase.from('habit_logs').select('*').eq('date', today),
         supabase.from('habit_logs').select('*').gte('date', week[0].key).lte('date', week[6].key),
         supabase.from('todos').select('*').eq('completed', false).is('deleted_at', null).order('created_at'),
-        supabase.from('todos').select('*').eq('completed', true).gte('completed_at', today).is('deleted_at', null),
+        supabase.from('todos').select('*').eq('completed', true).gte('completed_at', today).lt('completed_at', tomorrow).is('deleted_at', null),
         supabase.from('daily_entries').select('*').eq('entry_date', today).is('deleted_at', null),
         supabase.from('media_items').select('*').eq('status', 'IN_PROGRESS').is('deleted_at', null).limit(5),
         supabase.from('person_occasions').select('*').is('deleted_at', null),
@@ -52,6 +55,8 @@ export function useHomeData() {
         supabase.from('nutrition_logs').select('*').eq('log_date', today),
         supabase.from('nutrition_logs').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key),
         supabase.from('todos').select('*').eq('completed', true).gte('completed_at', week[0].key).is('deleted_at', null),
+        supabase.from('sleep_logs').select('*').eq('log_date', today).is('deleted_at', null),
+        supabase.from('sleep_logs').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key).is('deleted_at', null),
       ])
 
       setHabits((h.data ?? []) as Habit[])
@@ -67,38 +72,11 @@ export function useHomeData() {
       setMeals((nt.data ?? []) as NutritionLog[])
       setWeekMeals((nw.data ?? []) as NutritionLog[])
       setWeekTodosDone((wt.data ?? []) as Todo[])
+      setSleep((sl.data ?? []) as SleepLog[])
+      setWeekSleep((sw.data ?? []) as SleepLog[])
       setLoading(false)
     })()
-  }, [week])
-
-  const completedHabitIds = useMemo(
-    () => new Set(todayLogs.filter((l) => l.completed).map((l) => l.habit_id)),
-    [todayLogs],
-  )
-
-  const toggleHabit = async (habit: Habit) => {
-    const done = !completedHabitIds.has(habit.id)
-    const day = localDate()
-    const next = { habit_id: habit.id, date: day, completed: done }
-    setTodayLogs((prev) => [...prev.filter((l) => l.habit_id !== habit.id), next])
-    setWeekLogs((prev) => [...prev.filter((l) => !(l.habit_id === habit.id && l.date === day)), next])
-    await supabase?.from('habit_logs').upsert(next, { onConflict: 'habit_id,date' })
-    showToast(
-      done
-        ? habit.habit_type === 'BAD'
-          ? '⚠️ Đã đánh dấu thói quen xấu!'
-          : '✅ Đã hoàn thành thói quen!'
-        : '🔄 Đã bỏ tích thói quen',
-    )
-  }
-
-  const toggleTodo = async (todo: Todo) => {
-    const completedAt = new Date().toISOString()
-    setTodos((prev) => prev.filter((t) => t.id !== todo.id))
-    setTodosDoneToday((prev) => [...prev, { ...todo, completed: true, completed_at: completedAt }])
-    await supabase?.from('todos').update({ completed: true, completed_at: completedAt }).eq('id', todo.id)
-    showToast('✅ Đã hoàn thành công việc!')
-  }
+  }, [week, dateKey])
 
   return {
     habits,
@@ -110,14 +88,13 @@ export function useHomeData() {
     weekEntries,
     meals,
     weekMeals,
+    sleep,
+    weekSleep,
     weekTodosDone,
     media,
     occasions,
     people,
     week,
     loading,
-    completedHabitIds,
-    toggleHabit,
-    toggleTodo,
   }
 }

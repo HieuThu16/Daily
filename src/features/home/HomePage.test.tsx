@@ -20,6 +20,7 @@ const rows: Record<string, unknown[]> = {
   todos: [{ id: 't1', title: 'Học tiếng Anh', completed: false, created_at: '2026-08-12T07:00:00', priority: 'URGENT' }],
   daily_entries: [{ id: 'e1', content: 'Gặp chú trên đường đi', entry_date: '2026-08-12', created_at: '2026-08-12T08:30:00', entry_type: 'FEELING' }],
   media_items: [{ id: 'm1', name: 'Người đua diều', type: 'BOOK', status: 'IN_PROGRESS', is_favorite: false, description: null }],
+  sleep_logs: [{ id: 's1', sleep_start: '23:00', sleep_end: '06:30', duration_minutes: 450, log_date: '2026-08-12' }],
   nutrition_logs: [
     { id: 'n1', meal_slot: 'LUNCH', food_name: 'Cơm gà', price: 35000, log_date: '2026-08-12' },
     { id: 'n2', meal_slot: 'EVENING', food_name: 'Phở', price: 50000, log_date: '2026-08-12' },
@@ -33,7 +34,7 @@ vi.mock('../../lib/supabase', () => ({
     from: (table: string) => {
       const result = { data: rows[table] ?? [], error: null }
       const query: Record<string, unknown> = {}
-      for (const method of ['select', 'eq', 'is', 'order', 'gte', 'lte', 'limit', 'update', 'upsert']) {
+      for (const method of ['select', 'eq', 'is', 'order', 'gte', 'gt', 'lte', 'lt', 'limit', 'update', 'upsert']) {
         query[method] = vi.fn(() => query)
       }
       query.then = (resolve: (value: typeof result) => void) => Promise.resolve(result).then(resolve)
@@ -79,9 +80,25 @@ describe('HomePage', () => {
     expect(await screen.findByText(/Sinh nhật Linh/)).toBeInTheDocument()
   })
 
+  it('hiện tổng giờ ngủ trong ngày', async () => {
+    renderHome()
+    expect(await screen.findByText('Giấc ngủ')).toBeInTheDocument()
+    expect(screen.getByText('7h30')).toBeInTheDocument()
+    expect(screen.getByText('23:00 → 06:30')).toBeInTheDocument()
+  })
+
+  it('đổi sang ngày khác và quay lại hôm nay được', async () => {
+    renderHome()
+    expect(await screen.findByText('Hôm nay')).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Ngày trước'))
+    expect(screen.queryByText(/% hôm nay/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Hôm nay' }))
+    expect(await screen.findByText(/% hôm nay/)).toBeInTheDocument()
+  })
+
   it('chuyển sang báo cáo tuần với biểu đồ bảy ngày', async () => {
     renderHome()
-    await userEvent.click(await screen.findByRole('tab', { name: 'Tuần này' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Tuần' }))
     expect(screen.getByText('Hoàn thành thói quen trong tuần')).toBeInTheDocument()
     for (const label of ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']) {
       expect(screen.getByText(label)).toBeInTheDocument()

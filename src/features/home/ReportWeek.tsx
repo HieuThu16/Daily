@@ -1,14 +1,16 @@
-import { CheckSquare, NotebookPen, Wallet } from 'lucide-react'
+import { CheckSquare, Moon, NotebookPen, Wallet } from 'lucide-react'
 import type { WeekDay } from '../../lib/homeProgress'
 import {
   daysWithEntries,
+  formatDuration,
   formatMoney,
   habitRanking,
   todosDoneInWeek,
   weeklyHabitPercent,
+  weeklySleepAverage,
   weeklySpend,
 } from '../../lib/report'
-import type { Entry, Habit, HabitLog, NutritionLog, Todo } from '../../types'
+import type { Entry, Habit, HabitLog, NutritionLog, SleepLog, Todo } from '../../types'
 
 type Props = {
   week: WeekDay[]
@@ -17,14 +19,16 @@ type Props = {
   weekEntries: Entry[]
   weekMeals: NutritionLog[]
   weekTodosDone: Todo[]
+  weekSleep: SleepLog[]
   onOpen: (tab: string) => void
 }
 
-export function ReportWeek({ week, habits, weekLogs, weekEntries, weekMeals, weekTodosDone, onOpen }: Props) {
+export function ReportWeek({ week, habits, weekLogs, weekEntries, weekMeals, weekTodosDone, weekSleep, onOpen }: Props) {
   const percents = weeklyHabitPercent(habits, weekLogs, week)
   const spend = weeklySpend(weekMeals, week)
   const written = daysWithEntries(weekEntries, week)
   const ranked = habitRanking(habits, weekLogs, week)
+  const rest = weeklySleepAverage(weekSleep, week)
   const best = ranked[0]
   const worst = ranked.length > 1 ? ranked[ranked.length - 1] : null
 
@@ -47,7 +51,7 @@ export function ReportWeek({ week, habits, weekLogs, weekEntries, weekMeals, wee
         </div>
       </div>
 
-      <div className="report-grid three">
+      <div className="report-grid four">
         <button className="report-tile" onClick={() => onOpen('/nutrition')}>
           <span className="report-tile-head">
             <span className="icon-box icon-box-sm" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan)' }}>
@@ -82,6 +86,17 @@ export function ReportWeek({ week, habits, weekLogs, weekEntries, weekMeals, wee
           </span>
           <strong>{todosDoneInWeek(weekTodosDone, week)}</strong>
           <span className="report-tile-hint">trong tuần này</span>
+        </button>
+
+        <button className="report-tile" onClick={() => onOpen('/nutrition')}>
+          <span className="report-tile-head">
+            <span className="icon-box icon-box-sm" style={{ background: 'var(--purple-bg)', color: 'var(--purple)' }}>
+              <Moon size={15} />
+            </span>
+            Ngủ
+          </span>
+          <strong>{formatDuration(rest.minutes)}</strong>
+          <span className="report-tile-hint">{rest.nights ? `TB ${rest.nights} đêm` : 'Chưa ghi đêm nào'}</span>
         </button>
       </div>
 

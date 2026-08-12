@@ -9,6 +9,16 @@ export type NutritionLog = {
   created_at?: string
 }
 
+/** Một giấc ngủ đã ghi; giờ lưu dạng 'HH:MM'. */
+export type SleepLog = {
+  id: string
+  sleep_start: string
+  sleep_end: string
+  duration_minutes: number
+  log_date: string
+  created_at?: string
+}
+
 export type Habit = {
   id: string
   name: string

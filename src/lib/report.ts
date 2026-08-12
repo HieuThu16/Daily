@@ -1,4 +1,4 @@
-import type { Entry, Habit, HabitLog, NutritionLog, Todo } from '../types'
+import type { Entry, Habit, HabitLog, NutritionLog, SleepLog, Todo } from '../types'
 import type { WeekDay } from './homeProgress'
 
 export const MEAL_SLOTS = [
@@ -94,4 +94,38 @@ export function weeklyHabitPercent(habits: Habit[], logs: HabitLog[], week: Week
 export function todosDoneInWeek(todos: Todo[], week: WeekDay[]): number {
   const keys = new Set(week.map((day) => day.key))
   return todos.filter((todo) => todo.completed && keys.has((todo.completed_at ?? '').slice(0, 10))).length
+}
+
+export type SleepSummary = { minutes: number; text: string; range: string | null }
+
+/** "7h30" — 0 phút thì trả về "—" để ô số liệu không trống trơn. */
+export function formatDuration(minutes: number): string {
+  if (minutes <= 0) return '—'
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (!hours) return `${rest}p`
+  return rest ? `${hours}h${String(rest).padStart(2, '0')}` : `${hours}h`
+}
+
+/** Tổng thời gian ngủ của một ngày, kèm khung giờ của giấc dài nhất. */
+export function sleepSummary(logs: SleepLog[]): SleepSummary {
+  const minutes = logs.reduce((sum, log) => sum + (log.duration_minutes ?? 0), 0)
+  const longest = logs.reduce<SleepLog | null>(
+    (best, log) => (!best || log.duration_minutes > best.duration_minutes ? log : best),
+    null,
+  )
+  return {
+    minutes,
+    text: formatDuration(minutes),
+    range: longest ? `${longest.sleep_start} → ${longest.sleep_end}` : null,
+  }
+}
+
+/** Trung bình mỗi đêm trong tuần, chỉ chia cho những đêm đã ghi. */
+export function weeklySleepAverage(logs: SleepLog[], week: WeekDay[]): { minutes: number; nights: number } {
+  const keys = new Set(week.map((day) => day.key))
+  const inWeek = logs.filter((log) => keys.has(log.log_date))
+  const nights = new Set(inWeek.map((log) => log.log_date)).size
+  const total = inWeek.reduce((sum, log) => sum + (log.duration_minutes ?? 0), 0)
+  return { minutes: nights ? Math.round(total / nights) : 0, nights }
 }
