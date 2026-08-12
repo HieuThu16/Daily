@@ -151,19 +151,22 @@ exception when duplicate_object then null; end $$;
 -- SECTION C: TODOS & IDEAS
 -- ===========================================================================
 
--- migration: 20260811000000 + 040000 + 053000 + 060000 + 20260812000000
+-- migration: 20260811000000 + 040000 + 053000 + 060000 + 20260812000000 + 20260814000000
 create table if not exists public.todos (
-  id           uuid    primary key default gen_random_uuid(),
-  user_id      uuid    not null default auth.uid() references auth.users(id),
-  title        text    not null check (length(trim(title)) > 0),
-  completed    boolean not null default false,
-  due_date     date    default current_date,
-  difficulty   text    not null default 'EASY' check (difficulty in ('EASY','NORMAL','HARD')),
-  priority     text    not null default 'NORMAL' check (priority in ('NORMAL','URGENT')),
-  completed_at timestamptz,
-  created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now(),
-  deleted_at   timestamptz
+  id               uuid    primary key default gen_random_uuid(),
+  user_id          uuid    not null default auth.uid() references auth.users(id),
+  title            text    not null check (length(trim(title)) > 0),
+  completed        boolean not null default false,
+  due_date         date    default current_date,
+  due_time         text,   -- 'HH:MM' giờ hạn chót; null = cả ngày
+  difficulty       text    not null default 'EASY' check (difficulty in ('EASY','NORMAL','HARD')),
+  priority         text    not null default 'NORMAL' check (priority in ('NORMAL','URGENT')),
+  postpone_count   integer not null default 0,
+  postpone_minutes integer not null default 0,
+  completed_at     timestamptz,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  deleted_at       timestamptz
 );
 
 create index if not exists todos_user_idx on public.todos(user_id) where deleted_at is null;
@@ -181,8 +184,35 @@ exception when duplicate_object then null; end $$;
 -- Alter table & Backfill for existing installations
 alter table public.todos add column if not exists difficulty text not null default 'EASY' check (difficulty in ('EASY','NORMAL','HARD'));
 alter table public.todos add column if not exists priority text not null default 'NORMAL' check (priority in ('NORMAL','URGENT'));
+alter table public.todos add column if not exists due_time text;
+alter table public.todos add column if not exists postpone_count integer not null default 0;
+alter table public.todos add column if not exists postpone_minutes integer not null default 0;
 update public.todos set difficulty = 'EASY' where difficulty is null;
 update public.todos set priority = 'NORMAL' where priority is null;
+
+
+-- migration: 20260814000000 — lịch sử từng lần trì hoãn công việc
+create table if not exists public.task_postpones (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users(id),
+  todo_id       uuid not null references public.todos(id) on delete cascade,
+  minutes       integer not null check (minutes > 0),
+  reason        text,
+  prev_due_date date,
+  prev_due_time text,
+  new_due_date  date,
+  new_due_time  text,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists task_postpones_todo_idx on public.task_postpones(todo_id);
+create index if not exists task_postpones_user_created_idx on public.task_postpones(user_id, created_at desc);
+
+alter table public.task_postpones enable row level security;
+do $$ begin
+  create policy "own task postpones" on public.task_postpones
+    for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+exception when duplicate_object then null; end $$;
 
 
 -- migration: 20260811000000
@@ -432,6 +462,60 @@ alter table public.sleep_logs enable row level security;
 do $$ begin
   create policy "Public sleep_logs access" on public.sleep_logs
     for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+
+-- migration: 20260813020000_book_documents
+-- Sách nhập từ PDF/EPUB. Hai bảng này cố tình KHÔNG có deleted_at: nội dung là dẫn
+-- xuất từ file gốc, luôn nhập lại được, và soft-delete sẽ khiến unique(media_item_id)
+-- chặn lần nhập lại kế tiếp.
+create table if not exists public.book_documents (
+  id                uuid        primary key default gen_random_uuid(),
+  user_id           uuid        not null default auth.uid() references auth.users(id),
+  media_item_id     uuid        not null unique references public.media_items(id) on delete cascade,
+  source_format     text        not null check (source_format in ('PDF', 'EPUB')),
+  source_filename   text,
+  total_chars       integer     not null default 0,
+  page_count        integer,    -- số trang thật của PDF, null với EPUB
+  est_pages         integer     not null default 1,
+  chapter_count     integer     not null default 0,
+  -- tiến độ đọc (gộp vào đây vì quan hệ với media_items là 1:1)
+  last_chapter_idx  integer     not null default 0,
+  last_scroll_ratio real        not null default 0 check (last_scroll_ratio >= 0 and last_scroll_ratio <= 1),
+  last_char_offset  integer     not null default 0,
+  percent           real        not null default 0 check (percent >= 0 and percent <= 100),
+  last_read_at      timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+create table if not exists public.book_chapters (
+  id           uuid        primary key default gen_random_uuid(),
+  user_id      uuid        not null default auth.uid() references auth.users(id),
+  document_id  uuid        not null references public.book_documents(id) on delete cascade,
+  idx          integer     not null,   -- thứ tự chương, đếm từ 0
+  title        text        not null,
+  content      text        not null,   -- văn bản thuần, đoạn cách nhau bằng \n\n
+  char_count   integer     not null default 0,
+  char_offset  integer     not null default 0,  -- tổng ký tự của các chương trước
+  created_at   timestamptz not null default now(),
+  unique (document_id, idx)
+);
+
+create index if not exists book_documents_user_idx on public.book_documents(user_id);
+create index if not exists book_chapters_document_idx on public.book_chapters(document_id, idx);
+
+alter table public.book_documents enable row level security;
+alter table public.book_chapters  enable row level security;
+
+do $$ begin
+  create policy "own book documents" on public.book_documents
+    for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "own book chapters" on public.book_chapters
+    for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 exception when duplicate_object then null; end $$;
 
 
