@@ -11,7 +11,7 @@ import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
 import { PlayTogetherPage } from './features/PlayTogetherPage'
 import { NutritionPage } from './features/NutritionPage'
-import { PeoplePage } from './features/PeoplePage'
+import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
