@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { blobToCover } from '../../lib/book/cover'
 import {
   CHARS_PER_PAGE,
@@ -22,6 +22,9 @@ type BookDetailViewProps = {
   onEdit: (item: Media) => void
   onCoverChange: (mediaItemId: string, coverUrl: string | null) => void
   onStatusChange: (item: Media, status: Media['status']) => void
+  onLogProgress: (item: Media) => void
+  onShowHistory: (item: Media) => void
+  logCount: number
 }
 
 type Status = 'loading' | 'ready' | 'no-document'
@@ -59,7 +62,7 @@ function formatMoment(value: string | null | undefined): string | null {
   }).format(date)
 }
 
-export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusChange }: BookDetailViewProps) {
+export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusChange, onLogProgress, onShowHistory, logCount }: BookDetailViewProps) {
   const nav = useNavigate()
   const headingRef = useRef<HTMLHeadingElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -239,6 +242,19 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
             <Pencil size={14} />
             Chỉnh sửa
           </button>
+          {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
+            <>
+              <button type="button" onClick={() => onLogProgress(item)}>
+                {listen ? <Clock size={14} /> : <FileText size={14} />}
+                {listen ? 'Ghi giờ' : 'Ghi trang'}
+              </button>
+              <button type="button" onClick={() => onShowHistory(item)}>
+                <History size={14} />
+                Lịch sử
+                <span className="library-book-count">{logCount}</span>
+              </button>
+            </>
+          )}
         </div>
 
         <div className="library-book-section">

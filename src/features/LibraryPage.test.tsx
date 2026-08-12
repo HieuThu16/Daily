@@ -43,7 +43,12 @@ vi.mock('./shared', () => ({
     reload: vi.fn(),
   }),
   Empty: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Modal: ({ title, children }: { title?: React.ReactNode; children: React.ReactNode }) => (
+    <div>
+      {title}
+      {children}
+    </div>
+  ),
   DeleteButton: () => <button type="button">Xóa</button>,
 }))
 
@@ -197,5 +202,22 @@ describe('LibraryPage book navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
 
     expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+  })
+
+  it('ghi trang từ màn chi tiết đóng màn đó và mở modal', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Books' }))
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+    await user.click(await screen.findByRole('button', { name: /Ghi trang/ }))
+
+    // Màn chi tiết phải đóng, nếu không modal sẽ không được mount và không hiện gì.
+    expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Ghi trang đọc/)).toBeInTheDocument()
   })
 })

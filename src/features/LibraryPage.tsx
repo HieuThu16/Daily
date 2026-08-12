@@ -593,6 +593,22 @@ export function LibraryPage() {
     showToast('🗑️ Đã xóa bản ghi tiến độ', 'delete')
   }
 
+  /** Mở modal ghi tiến độ, gieo sẵn giá trị từ lần ghi gần nhất của sách. */
+  const openBookLog = (item: Media) => {
+    const latest = bookReadingLogsQuery.items
+      .filter((log) => log.media_item_id === item.id)
+      .sort((a, b) => b.log_date.localeCompare(a.log_date))[0]
+    setBookLogModal({ item })
+    setLogProgressDate(localDate())
+    setLogPage(latest?.page?.toString() ?? '')
+    setLogListenHours(latest?.listen_hours?.toString() ?? '0')
+    setLogListenMinutes(latest?.listen_minutes?.toString() ?? '0')
+    setLogNote('')
+  }
+
+  const bookLogCount = (mediaItemId: string) =>
+    bookReadingLogsQuery.items.filter((log) => log.media_item_id === mediaItemId).length
+
   const deleteItem = async () => {
     if (!activeModal?.item) return
     const id = activeModal.item.id
@@ -801,14 +817,7 @@ export function LibraryPage() {
               <>
                 <button
                   className="library-book-btn"
-                  onClick={() => {
-                    setBookLogModal({ item })
-                    setLogProgressDate(localDate())
-                    setLogPage(latestLog?.page?.toString() ?? '')
-                    setLogListenHours(latestLog?.listen_hours?.toString() ?? '0')
-                    setLogListenMinutes(latestLog?.listen_minutes?.toString() ?? '0')
-                    setLogNote('')
-                  }}
+                  onClick={() => openBookLog(item)}
                 >
                   {fmt === 'READ' ? <FileText size={13} /> : <Clock size={13} />}
                   {fmt === 'READ' ? 'Ghi trang' : 'Ghi giờ'}
@@ -816,7 +825,7 @@ export function LibraryPage() {
                 <button className="library-book-btn" onClick={() => setBookHistoryModal({ item })}>
                   <History size={13} /> Lịch sử
                   <span className="library-book-count">
-                    {bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length}
+                    {bookLogCount(item.id)}
                   </span>
                 </button>
               </>
@@ -857,6 +866,15 @@ export function LibraryPage() {
           setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
         }}
         onStatusChange={(item, status) => patchStatusOrFavorite(item.id, { status })}
+        onLogProgress={(item) => {
+          setSelectedBookItemId(null)
+          openBookLog(item)
+        }}
+        onShowHistory={(item) => {
+          setSelectedBookItemId(null)
+          setBookHistoryModal({ item })
+        }}
+        logCount={bookLogCount(selectedBookItem.id)}
       />
     )
   }

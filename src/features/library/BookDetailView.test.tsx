@@ -50,6 +50,9 @@ const document_: BookDocument = {
   last_read_at: '2026-08-12T14:30:00.000Z',
 }
 
+/** Props ghi tiến độ/lịch sử dùng chung cho các test không quan tâm tới chúng. */
+const logProps = { onLogProgress: vi.fn(), onShowHistory: vi.fn(), logCount: 0 }
+
 const chapters: BookChapterMeta[] = [
   { id: 'c0', idx: 0, title: 'Lời nói đầu', char_count: 20_000, char_offset: 0 },
   { id: 'c1', idx: 1, title: 'Chương 1 · Nếu muốn lấy mật', char_count: 180_000, char_offset: 20_000 },
@@ -68,7 +71,7 @@ afterEach(() => {
 
 describe('BookDetailView với sách đã nhập file', () => {
   it('hiện thông tin sách và mục lục đầy đủ', async () => {
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
     expect(screen.getByText('Dale Carnegie')).toBeInTheDocument()
@@ -82,7 +85,7 @@ describe('BookDetailView với sách đã nhập file', () => {
   })
 
   it('đánh dấu chương đang đọc', async () => {
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     const current = await screen.findByRole('button', { name: /Nếu muốn lấy mật/ })
     expect(current).toHaveAttribute('aria-current', 'true')
@@ -90,7 +93,7 @@ describe('BookDetailView với sách đã nhập file', () => {
 
   it('bấm một chương thì mở màn đọc đúng chương đó', async () => {
     const user = userEvent.setup()
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     await user.click(await screen.findByRole('button', { name: /Bí mật lớn nhất/ }))
 
@@ -99,7 +102,7 @@ describe('BookDetailView với sách đã nhập file', () => {
 
   it('nút Đọc tiếp mở màn đọc ở vị trí đã lưu', async () => {
     const user = userEvent.setup()
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     await user.click(await screen.findByRole('button', { name: /Đọc tiếp/ }))
 
@@ -109,7 +112,7 @@ describe('BookDetailView với sách đã nhập file', () => {
   it('quay lại thư viện', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
-    render(<BookDetailView item={item} onBack={onBack} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={onBack} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     await user.click(screen.getByRole('button', { name: 'Quay lại thư viện' }))
 
@@ -121,7 +124,7 @@ describe('BookDetailView với sách chưa nhập file', () => {
   it('hiện empty state và ẩn nút Đọc tiếp', async () => {
     vi.mocked(loadBookDocument).mockResolvedValue(null)
 
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     expect(await screen.findByText(/Chưa nhập file cho sách này/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Đọc tiếp/ })).not.toBeInTheDocument()
@@ -142,7 +145,7 @@ describe('BookDetailView đổi ảnh bìa', () => {
     vi.mocked(blobToCover).mockResolvedValue(jpeg)
     vi.mocked(uploadCover).mockResolvedValue('https://example.com/bia.jpg?v=2')
 
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} {...logProps} />)
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
 
     pickFile(new File(['anh'], 'bia.png', { type: 'image/png' }))
@@ -156,7 +159,7 @@ describe('BookDetailView đổi ảnh bìa', () => {
     const onCoverChange = vi.fn()
     vi.mocked(blobToCover).mockResolvedValue(null)
 
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} {...logProps} />)
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
 
     pickFile(new File(['van ban'], 'ghi-chu.txt', { type: 'text/plain' }))
@@ -169,7 +172,7 @@ describe('BookDetailView đổi ảnh bìa', () => {
   it('chặn ảnh lớn hơn 15MB trước khi giải mã', async () => {
     const onCoverChange = vi.fn()
 
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} {...logProps} />)
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
 
     const huge = new File(['x'], 'to.png', { type: 'image/png' })
@@ -187,7 +190,7 @@ describe('BookDetailView đổi ảnh bìa', () => {
     vi.mocked(blobToCover).mockResolvedValue(null)
     vi.mocked(removeCover).mockResolvedValue(undefined)
 
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={onCoverChange} onStatusChange={vi.fn()} {...logProps} />)
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
 
     await user.click(screen.getByRole('button', { name: 'Xoá ảnh bìa' }))
@@ -202,7 +205,7 @@ describe('BookDetailView khi tải lỗi', () => {
     const user = userEvent.setup()
     vi.mocked(loadChapterList).mockRejectedValueOnce(new Error('Mất kết nối mạng.'))
 
-    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     expect(await screen.findByText(/Không tải được thông tin sách/)).toBeInTheDocument()
     expect(screen.queryByText(/Chưa nhập file cho sách này/)).not.toBeInTheDocument()
@@ -217,7 +220,7 @@ describe('BookDetailView khi tải lỗi', () => {
 describe('BookDetailView không rò rỉ dữ liệu giữa các sách', () => {
   it('sách sau tải lỗi không còn hiện dữ liệu của sách trước', async () => {
     const { rerender } = render(
-      <BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />,
+      <BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />,
     )
 
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
@@ -226,7 +229,7 @@ describe('BookDetailView không rò rỉ dữ liệu giữa các sách', () => {
     const otherItem: Media = { ...item, id: 'book-2', name: 'Sách khác' }
     vi.mocked(loadBookDocument).mockRejectedValueOnce(new Error('Mất kết nối mạng.'))
 
-    rerender(<BookDetailView item={otherItem} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} />)
+    rerender(<BookDetailView item={otherItem} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     await screen.findByText(/Không tải được thông tin sách/)
     expect(screen.queryByText('Đọc lần cuối')).not.toBeInTheDocument()
@@ -245,6 +248,7 @@ describe('BookDetailView đổi trạng thái', () => {
         onEdit={vi.fn()}
         onCoverChange={vi.fn()}
         onStatusChange={onStatusChange}
+        {...logProps}
       />,
     )
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
@@ -262,10 +266,77 @@ describe('BookDetailView đổi trạng thái', () => {
         onEdit={vi.fn()}
         onCoverChange={vi.fn()}
         onStatusChange={vi.fn()}
+        {...logProps}
       />,
     )
     await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
 
     expect(screen.getByRole('option', { name: 'Đang nghe' })).toBeInTheDocument()
+  })
+})
+
+describe('BookDetailView ghi tiến độ', () => {
+  it('mở ghi trang và xem lịch sử', async () => {
+    const user = userEvent.setup()
+    const onLogProgress = vi.fn()
+    const onShowHistory = vi.fn()
+
+    render(
+      <BookDetailView
+        item={item}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onCoverChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onLogProgress={onLogProgress}
+        onShowHistory={onShowHistory}
+        logCount={3}
+      />,
+    )
+    await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
+
+    await user.click(screen.getByRole('button', { name: /Ghi trang/ }))
+    expect(onLogProgress).toHaveBeenCalledWith(item)
+
+    await user.click(screen.getByRole('button', { name: /Lịch sử/ }))
+    expect(onShowHistory).toHaveBeenCalledWith(item)
+    expect(screen.getByRole('button', { name: /Lịch sử/ })).toHaveTextContent('3')
+  })
+
+  it('sách định dạng LISTEN hiện Ghi giờ', async () => {
+    render(
+      <BookDetailView
+        item={{ ...item, book_format: 'LISTEN' }}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onCoverChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onLogProgress={vi.fn()}
+        onShowHistory={vi.fn()}
+        logCount={0}
+      />,
+    )
+    await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
+
+    expect(screen.getByRole('button', { name: /Ghi giờ/ })).toBeInTheDocument()
+  })
+
+  it('sách chưa bắt đầu không hiện nút ghi tiến độ', async () => {
+    render(
+      <BookDetailView
+        item={{ ...item, status: 'PLANNED' }}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onCoverChange={vi.fn()}
+        onStatusChange={vi.fn()}
+        onLogProgress={vi.fn()}
+        onShowHistory={vi.fn()}
+        logCount={0}
+      />,
+    )
+    await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
+
+    expect(screen.queryByRole('button', { name: /Ghi trang/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Lịch sử/ })).not.toBeInTheDocument()
   })
 })
