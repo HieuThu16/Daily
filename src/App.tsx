@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
+import { BookOpen, Calendar, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { localDate } from './lib/date'
+import { localDate, shortDate, vietnameseDate } from './lib/date'
 import type { Tab } from './types'
-import { HomePage } from './features/HomePage'
+import { HomePage } from './features/home/HomePage'
 import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
@@ -108,6 +108,11 @@ function Shell({ children }: { children: React.ReactNode }) {
             <ActiveIcon size={20} />
           </div>
           <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
+        </div>
+        <div className="header-date">
+          <Calendar size={14} />
+          <span className="header-date-full">{vietnameseDate()}</span>
+          <span className="header-date-short">{shortDate()}</span>
         </div>
         <div className="header-actions">
           {/* PWA Install Button */}
