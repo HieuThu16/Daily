@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CheckSquare, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon } from 'lucide-react'
+import { BookOpen, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Salad, Sparkles, SunMoon } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -59,6 +59,37 @@ function Shell({ children }: { children: React.ReactNode }) {
   const path = useLocation().pathname
   const [dark, setDark] = useState(false)
 
+  // PWA Install Prompt
+  const deferredPrompt = useRef<Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null)
+  const [canInstall, setCanInstall] = useState(false)
+  const [installed, setInstalled] = useState(false)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      deferredPrompt.current = e as typeof deferredPrompt.current
+      setCanInstall(true)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    window.addEventListener('appinstalled', () => {
+      setInstalled(true)
+      setCanInstall(false)
+      deferredPrompt.current = null
+    })
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstallPWA = async () => {
+    if (!deferredPrompt.current) return
+    await deferredPrompt.current.prompt()
+    const { outcome } = await deferredPrompt.current.userChoice
+    if (outcome === 'accepted') {
+      setInstalled(true)
+      setCanInstall(false)
+    }
+    deferredPrompt.current = null
+  }
+
   const activeTabItem = navigation.find((n) => path === '/' + n.id) ?? navigation[0]
   const ActiveIcon = activeTabItem.icon
 
@@ -76,6 +107,30 @@ function Shell({ children }: { children: React.ReactNode }) {
           <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
         </div>
         <div className="header-actions">
+          {/* PWA Install Button */}
+          {canInstall && !installed && (
+            <button
+              aria-label="Cài đặt ứng dụng"
+              className="icon"
+              onClick={handleInstallPWA}
+              title="Cài đặt ứng dụng về máy"
+              style={{
+                color: 'var(--primary)',
+                background: 'var(--primary-light)',
+                borderRadius: 10,
+                padding: '5px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                border: '1px solid var(--primary)',
+              }}
+            >
+              <Download size={15} />
+              <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
+            </button>
+          )}
           <button aria-label="Toggle theme" className="icon" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
             <SunMoon size={20} />
           </button>

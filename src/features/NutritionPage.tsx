@@ -15,6 +15,7 @@ interface NutritionLog {
   food_name: string
   price: number
   log_date: string
+  log_time?: string
   created_at: string
 }
 
@@ -131,6 +132,11 @@ export function NutritionPage() {
   const [activeMeal, setActiveMeal] = useState<MealSlot>('MORNING')
   const [foodName, setFoodName] = useState('')
   const [foodPrice, setFoodPrice] = useState('')
+  const [foodLogDate, setFoodLogDate] = useState(currentDate)
+  const [foodLogTime, setFoodLogTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
 
   // Sleep state
   const [sleepLogs, setSleepLogs] = useState<SleepLog[]>([])
@@ -164,20 +170,45 @@ export function NutritionPage() {
     } finally { setFoodLoading(false) }
   }
 
+  function parsePriceInput(val: string): number {
+    if (!val) return 0
+    let clean = val.toLowerCase().trim()
+    if (clean.endsWith('k')) {
+      const num = parseFloat(clean.replace('k', ''))
+      return isNaN(num) ? 0 : Math.round(num * 1000)
+    }
+    if (clean.endsWith('kđ') || clean.endsWith('kd')) {
+      const num = parseFloat(clean.replace(/kđ|kd/, ''))
+      return isNaN(num) ? 0 : Math.round(num * 1000)
+    }
+    const num = parseInt(clean.replace(/\D/g, ''), 10)
+    return isNaN(num) ? 0 : num
+  }
+
   async function addFood() {
-    if (!foodName.trim()) { showToast('Nhập tên món đã'); return }
-    const price = parseInt(foodPrice.replace(/\D/g, ''), 10) || 0
-    const payload = { meal_slot: activeMeal, food_name: foodName.trim(), price, log_date: currentDate }
+    if (!foodName.trim()) { showToast('⚠️ Nhập tên mục/đồ ăn!'); return }
+    const price = parsePriceInput(foodPrice)
+    const payload = {
+      meal_slot: activeMeal,
+      food_name: foodName.trim(),
+      price,
+      log_date: foodLogDate || currentDate,
+      log_time: foodLogTime
+    }
     try {
       const { data, error } = await supabase!.from('nutrition_logs').insert(payload).select().single()
       if (error) throw error
-      setLogs(p => [...p, data])
-      showToast('✅ Đã thêm món!')
+      if (foodLogDate === currentDate) {
+        setLogs(p => [...p, data])
+      }
+      showToast(`✅ Đã thêm ${foodName.trim()} (${fmt(price)})!`)
     } catch {
       const fb = { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() } as NutritionLog
-      const next = [...logs, fb]
-      setLogs(next)
-      localStorage.setItem(`nutrition_${currentDate}`, JSON.stringify(next))
+      if (foodLogDate === currentDate) {
+        const next = [...logs, fb]
+        setLogs(next)
+        localStorage.setItem(`nutrition_${currentDate}`, JSON.stringify(next))
+      }
       showToast('📴 Đã lưu offline')
     }
     setFoodName(''); setFoodPrice(''); setFoodModal(false)
@@ -400,9 +431,14 @@ export function NutritionPage() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {items.map(log => (
-                        <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', borderRadius: 8, background: m.bg, fontSize: '0.8rem' }}>
-                          <span style={{ fontWeight: 500, flex: 1, wordBreak: 'break-word' }}>{log.food_name}</span>
-                          <span style={{ fontWeight: 600, color: m.color, marginLeft: 8, whiteSpace: 'nowrap' }}>{fmt(log.price)}</span>
+                        <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: 8, background: m.bg, fontSize: '0.8rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, wordBreak: 'break-word', color: 'var(--text-main)' }}>{log.food_name}</span>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              📅 {log.log_date} {log.log_time ? `⏰ ${log.log_time}` : log.created_at ? `⏰ ${log.created_at.slice(11, 16)}` : ''}
+                            </span>
+                          </div>
+                          <span style={{ fontWeight: 800, color: m.color, marginLeft: 8, whiteSpace: 'nowrap', fontSize: '0.86rem' }}>{fmt(log.price)}</span>
                           <button onClick={() => deleteFood(log.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 0 8px', color: '#ef4444', display: 'flex' }}><Trash2 size={13} /></button>
                         </div>
                       ))}
@@ -613,10 +649,10 @@ export function NutritionPage() {
       {/* ══════════════════ MODALS ══════════════════════════════════════════ */}
 
       {foodModal && (
-        <Modal onClose={() => setFoodModal(false)} title="Thêm món ăn">
+        <Modal onClose={() => setFoodModal(false)} title="Thêm mục chi tiêu / đồ ăn">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <label>
-              Bữa ăn
+              Khung giờ / Danh mục
               <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
                 {MEALS.map(m => (
                   <button key={m.slot} type="button" onClick={() => setActiveMeal(m.slot)}
@@ -627,14 +663,24 @@ export function NutritionPage() {
               </div>
             </label>
             <label>
-              Tên món
-              <input autoFocus type="text" value={foodName} onChange={e => setFoodName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addFood()} placeholder="Ví dụ: Phở bò" />
+              Tên mục / Đồ ăn
+              <input autoFocus type="text" value={foodName} onChange={e => setFoodName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addFood()} placeholder="Ví dụ: Xăng xe, Cơm tấm, Sữa tươi, Phở..." />
             </label>
             <label>
-              Giá (VNĐ)
-              <input type="number" value={foodPrice} onChange={e => setFoodPrice(e.target.value)} onKeyDown={e => e.key === 'Enter' && addFood()} placeholder="35000" />
+              Giá tiền (Có thể nhập: 50k, 30k, 150000...)
+              <input type="text" value={foodPrice} onChange={e => setFoodPrice(e.target.value)} onKeyDown={e => e.key === 'Enter' && addFood()} placeholder="Ví dụ: 50k hoặc 30k" />
             </label>
-            <button className="primary" onClick={addFood} style={{ marginTop: 4 }}>Lưu món ăn</button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label>
+                📅 Ngày
+                <input type="date" value={foodLogDate} onChange={e => setFoodLogDate(e.target.value)} />
+              </label>
+              <label>
+                ⏰ Giờ
+                <input type="time" value={foodLogTime} onChange={e => setFoodLogTime(e.target.value)} />
+              </label>
+            </div>
+            <button className="primary" onClick={addFood} style={{ marginTop: 4 }}>Lưu chi tiêu / món ăn</button>
           </div>
         </Modal>
       )}

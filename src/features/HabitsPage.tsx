@@ -7,7 +7,7 @@ import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 
 type Tab = 'today' | 'categories' | 'history'
-type GroupView = 'type' | 'routine'
+type GroupView = 'tracking' | 'type' | 'routine'
 
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
 const now = new Date()
@@ -23,7 +23,7 @@ export function HabitsPage() {
   const [countDrafts, setCountDrafts] = useState<Record<string, string>>({})
   const [savingCountId, setSavingCountId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('today')
-  const [groupView, setGroupView] = useState<GroupView>('type')
+  const [groupView, setGroupView] = useState<GroupView>('tracking')
   const [editing, setEditing] = useState<Habit | null>(null)
   const [addModal, setAddModal] = useState(false)
   const [manage, setManage] = useState(false)
@@ -49,6 +49,9 @@ export function HabitsPage() {
 
   const completed = new Set(logs.filter((l) => l.date === localDate() && l.completed).map((l) => l.habit_id))
   const category = (h: Habit) => categories.items.find((c) => c.id === h.category_id)
+
+  const checkHabits = useMemo(() => habits.items.filter((h) => (h.tracking_type ?? 'CHECK') === 'CHECK'), [habits.items])
+  const countHabits = useMemo(() => habits.items.filter((h) => h.tracking_type === 'COUNT'), [habits.items])
 
   const goodHabits = useMemo(() => habits.items.filter((h) => h.habit_type !== 'BAD'), [habits.items])
   const badHabits  = useMemo(() => habits.items.filter((h) => h.habit_type === 'BAD'),  [habits.items])
@@ -415,6 +418,18 @@ export function HabitsPage() {
               {/* View toggle */}
               <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
                 <button
+                  onClick={() => setGroupView('tracking')}
+                  style={{
+                    flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
+                    border: '1.5px solid', cursor: 'pointer', transition: 'all 0.15s',
+                    borderColor: groupView === 'tracking' ? 'var(--cyan)' : 'var(--card-border)',
+                    background: groupView === 'tracking' ? 'rgba(6, 182, 212, 0.12)' : 'var(--bg-main)',
+                    color: groupView === 'tracking' ? 'var(--cyan)' : 'var(--text-muted)',
+                  }}
+                >
+                  ☑️ Tích / 🔢 Số liệu
+                </button>
+                <button
                   onClick={() => setGroupView('type')}
                   style={{
                     flex: 1, padding: '5px 0', borderRadius: 8, fontSize: '0.74rem', fontWeight: 700,
@@ -441,6 +456,28 @@ export function HabitsPage() {
               </div>
 
               <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 265px)', minHeight: 180, overflowY: 'auto' }}>
+                {/* ── BY TRACKING TYPE (Tích / Số liệu) ── */}
+                {groupView === 'tracking' && (
+                  <>
+                    {checkHabits.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--cyan)', marginBottom: 4 }}>
+                          ☑️ Thói quen Tích ({checkHabits.filter((h) => completed.has(h.id)).length}/{checkHabits.length})
+                        </div>
+                        <div style={{ display: 'grid', gap: 5 }}>{checkHabits.map(renderHabitItem)}</div>
+                      </div>
+                    )}
+                    {countHabits.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#f97316', marginBottom: 4 }}>
+                          🔢 Thói quen Số liệu ({countHabits.filter((h) => completed.has(h.id)).length}/{countHabits.length})
+                        </div>
+                        <div style={{ display: 'grid', gap: 5 }}>{countHabits.map(renderHabitItem)}</div>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* ── BY TYPE (Tốt / Xấu) ── */}
                 {groupView === 'type' && (
                   <>
@@ -525,38 +562,89 @@ export function HabitsPage() {
         </div>
       )}
 
-      {/* HISTORY TAB */}
+      {/* HISTORY TAB: DIVIDED INTO 2 TABLES (Tích & Số liệu) */}
       {activeTab === 'history' && (
-        <div className="card" style={{ padding: 10, margin: 0 }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
-                  {week.map((d) => (
-                    <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                      {d.slice(8)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {habits.items.map((h) => (
-                  <tr key={h.id}>
-                    <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
-                    {week.map((d) => {
-                      const log = logs.find((l) => l.habit_id === h.id && l.date === d)
-                      const isDone = log?.completed
-                      return (
-                        <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
-                          {isDone ? <span style={{ color: h.habit_type === 'BAD' ? 'var(--rose)' : 'var(--emerald)', fontWeight: 800 }}>✓</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div style={{ display: 'grid', gap: 10 }}>
+          {/* TABLE 1: THÓI QUEN TÍCH */}
+          <div className="card" style={{ padding: 10, margin: 0 }}>
+            <h3 style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              ☑️ Thói quen Tích ({checkHabits.length})
+            </h3>
+            {checkHabits.length ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
+                      {week.map((d) => (
+                        <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
+                          {d.slice(8)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {checkHabits.map((h) => (
+                      <tr key={h.id}>
+                        <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
+                        {week.map((d) => {
+                          const log = logs.find((l) => l.habit_id === h.id && l.date === d)
+                          const isDone = log?.completed
+                          return (
+                            <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
+                              {isDone ? <span style={{ color: h.habit_type === 'BAD' ? 'var(--rose)' : 'var(--emerald)', fontWeight: 800 }}>✓</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Tích.</p>
+            )}
+          </div>
+
+          {/* TABLE 2: THÓI QUEN SỐ LIỆU */}
+          <div className="card" style={{ padding: 10, margin: 0 }}>
+            <h3 style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: '#f97316', display: 'flex', alignItems: 'center', gap: 6 }}>
+              🔢 Thói quen Số liệu ({countHabits.length})
+            </h3>
+            {countHabits.length ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid var(--card-border)' }}>Thói quen</th>
+                      {week.map((d) => (
+                        <th key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
+                          {d.slice(8)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {countHabits.map((h) => (
+                      <tr key={h.id}>
+                        <td style={{ padding: '4px 6px', fontWeight: 600, borderBottom: '1px solid var(--card-border)' }}>{h.name}</td>
+                        {week.map((d) => {
+                          const log = logs.find((l) => l.habit_id === h.id && l.date === d)
+                          const val = log?.value ?? (log?.completed ? '✓' : null)
+                          return (
+                            <td key={d} style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid var(--card-border)' }}>
+                              {val !== null ? <span style={{ color: '#f97316', fontWeight: 800 }}>{val}</span> : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Số liệu.</p>
+            )}
           </div>
         </div>
       )}

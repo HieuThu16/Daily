@@ -22,6 +22,9 @@ export type Habit = {
 
 export type HabitCategory = { id: string; name: string; color: string }
 export type HabitLog = { habit_id: string; date: string; completed: boolean; value?: number }
+export type TaskDifficulty = 'EASY' | 'NORMAL' | 'HARD'
+export type TaskPriority = 'NORMAL' | 'URGENT'
+
 export type Todo = {
   id: string
   title: string
@@ -29,11 +32,15 @@ export type Todo = {
   created_at: string
   completed_at?: string | null
   due_date?: string | null
+  difficulty?: TaskDifficulty
+  priority?: TaskPriority
 }
 export type Idea = { id: string; title: string; content: string; created_at: string }
+export type BookFormat = 'READ' | 'LISTEN'
+
 export type Media = {
   id: string
-  type: 'BOOK' | 'MOVIE' | 'YOUTUBE' | 'MUSIC'
+  type: 'BOOK' | 'MOVIE' | 'YOUTUBE' | 'MUSIC' | 'MANGA'
   name: string
   description: string | null
   channel?: string | null
@@ -41,17 +48,36 @@ export type Media = {
   author?: string | null
   actor?: string | null
   genre?: string | null
+  music_genre?: string | null
+  youtube_url?: string | null
+  audio_url?: string | null
+  current_chapter?: number | null
+  start_date?: string | null
+  end_date?: string | null
   log_date?: string | null
   log_time?: string | null
   created_at?: string | null
   status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
   is_favorite: boolean
+  book_format?: BookFormat | null
+}
+
+export type BookReadingLog = {
+  id: string
+  media_item_id: string
+  log_date: string
+  page?: number | null
+  listen_hours: number
+  listen_minutes: number
+  note?: string | null
+  created_at?: string
 }
 export type MovieGenre = { id: string; name: string }
 export type MovieActor = { id: string; name: string }
 export type BookAuthor = { id: string; name: string }
 export type YouTubeChannel = { id: string; name: string }
 export type MusicArtist = { id: string; name: string }
+export type MusicGenre = { id: string; name: string }
 
 export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
 export type Entry = { id: string; content: string; entry_date: string; created_at: string; entry_type: DailyType }

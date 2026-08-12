@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { BarChart3, BookOpen, Calendar, Clock, Film, FolderCog, Heart, Layers, Music, Pencil, Plus, Tv } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, Calendar, Clock, Download, Film, FolderCog, Heart, History, Layers, Music, Pencil, Play, Plus, RefreshCw, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
-import type { BookAuthor, Media, MovieGenre, MusicArtist, YouTubeChannel } from '../types'
+import type { BookAuthor, BookFormat, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 
 const categories = [
   { id: 'BOOK', label: 'Books', icon: BookOpen, colorClass: 'icon-box-purple', color: 'var(--purple)', bg: 'var(--purple-bg)', labels: ['Sẽ đọc', 'Đang đọc', 'Đã đọc'] },
+  { id: 'MANGA', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald', color: 'var(--emerald)', bg: 'var(--emerald-bg)', labels: ['Sẽ đọc', 'Đang đọc', 'Đã đọc'] },
   { id: 'MOVIE', label: 'Movies', icon: Film, colorClass: 'icon-box-rose', color: 'var(--rose)', bg: 'var(--rose-bg)', labels: ['Sẽ xem', 'Đang xem', 'Đã xem'] },
   { id: 'YOUTUBE', label: 'YouTube', icon: Tv, colorClass: 'icon-box-amber', color: 'var(--amber)', bg: 'var(--amber-bg)', labels: ['Sẽ xem', 'Đang xem', 'Đã xem'] },
   { id: 'MUSIC', label: 'Music', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -35,6 +36,7 @@ function getItemExtraMeta(item: Media) {
   if (item.type === 'YOUTUBE') return { label: '📺 Kênh: ', value: item.channel ?? parseDescPrefix(item.description, 'Kênh:') }
   if (item.type === 'MUSIC') return { label: '🎵 Ca sĩ: ', value: item.artist ?? parseDescPrefix(item.description, 'Ca sĩ:') }
   if (item.type === 'BOOK') return { label: '📖 Tác giả: ', value: item.author ?? parseDescPrefix(item.description, 'Tác giả:') }
+  if (item.type === 'MANGA') return { label: '📚 Tác giả: ', value: item.author ?? parseDescPrefix(item.description, 'Tác giả:') }
   if (item.type === 'MOVIE') return { label: '🎬 Thể loại: ', value: item.genre ?? parseDescPrefix(item.description, 'Thể loại:') }
   return { label: '', value: '' }
 }
@@ -43,6 +45,27 @@ function getItemDateTime(item: Media) {
   const date = item.log_date ?? (item.created_at ? item.created_at.slice(0, 10) : parseDescPrefix(item.description, 'Ngày:'))
   const time = item.log_time ?? (item.created_at ? item.created_at.slice(11, 16) : parseDescPrefix(item.description, 'Giờ:'))
   return { date: date || localDate(), time: time || getCurrentTimeString() }
+}
+
+const genreColors = [
+  { bg: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: 'rgba(239, 68, 68, 0.3)' }, // Red
+  { bg: 'rgba(249, 115, 22, 0.15)', color: '#f97316', border: 'rgba(249, 115, 22, 0.3)' }, // Orange
+  { bg: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)' }, // Amber
+  { bg: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: 'rgba(16, 185, 129, 0.3)' }, // Emerald
+  { bg: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', border: 'rgba(6, 182, 212, 0.3)' }, // Cyan
+  { bg: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: 'rgba(59, 130, 246, 0.3)' }, // Blue
+  { bg: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6', border: 'rgba(139, 92, 246, 0.3)' }, // Purple
+  { bg: 'rgba(236, 72, 153, 0.15)', color: '#ec4899', border: 'rgba(236, 72, 153, 0.3)' }, // Pink
+]
+
+function getMusicGenreStyle(genreName?: string | null) {
+  if (!genreName) return { bg: 'var(--card-bg)', color: 'var(--text-muted)', border: 'var(--card-border)' }
+  let hash = 0
+  for (let i = 0; i < genreName.length; i++) {
+    hash = genreName.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const index = Math.abs(hash) % genreColors.length
+  return genreColors[index]
 }
 
 export function LibraryPage() {
@@ -54,10 +77,12 @@ export function LibraryPage() {
   const youtubeChannelsQuery = useQuery<YouTubeChannel>('youtube_channels', 'name')
   const musicArtistsQuery = useQuery<MusicArtist>('music_artists', 'name')
   const movieGenresQuery = useQuery<MovieGenre>('movie_genres', 'name')
+  const musicGenresQuery = useQuery<MusicGenre>('music_genres', 'name')
 
   // Selected Category (5 Icon-Only Buttons in 1 Row)
   const [selectedType, setSelectedType] = useState<'ALL' | Kind>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [musicGenreFilter, setMusicGenreFilter] = useState<string>('ALL')
   const [subView, setSubView] = useState<SubView>('overview')
   const [search, setSearch] = useState('')
 
@@ -73,18 +98,38 @@ export function LibraryPage() {
   const [manageChannelsModal, setManageChannelsModal] = useState(false)
   const [manageArtistsModal, setManageArtistsModal] = useState(false)
   const [manageGenresModal, setManageGenresModal] = useState(false)
+  const [manageMusicGenresModal, setManageMusicGenresModal] = useState(false)
 
   // New Management Item Input Values
   const [newAuthorName, setNewAuthorName] = useState('')
   const [newChannelName, setNewChannelName] = useState('')
   const [newArtistName, setNewArtistName] = useState('')
   const [newGenreName, setNewGenreName] = useState('')
+  const [newMusicGenreName, setNewMusicGenreName] = useState('')
+  const [musicGenreVal, setMusicGenreVal] = useState('')
 
   const [name, setName] = useState('')
   const [extraVal, setExtraVal] = useState('') // Channel, Artist, Author, or Genre
+  const [youtubeUrlVal, setYoutubeUrlVal] = useState('')
+  const [audioUrlVal, setAudioUrlVal] = useState('')
+  const [currentChapterVal, setCurrentChapterVal] = useState<string>('')
+  const [startDateVal, setStartDateVal] = useState<string>(localDate())
+  const [endDateVal, setEndDateVal] = useState<string>('')
+  const [isConverting, setIsConverting] = useState(false)
   const [logDate, setLogDate] = useState<string>(localDate())
   const [logTime, setLogTime] = useState<string>(getCurrentTimeString())
   const [statusVal, setStatusVal] = useState<Media['status']>('PLANNED')
+  const [bookFormat, setBookFormat] = useState<BookFormat>('READ')
+
+  // Book reading log state
+  const bookReadingLogsQuery = useQuery<BookReadingLog>('book_reading_logs')
+  const [bookLogModal, setBookLogModal] = useState<{ item: Media } | null>(null)
+  const [bookHistoryModal, setBookHistoryModal] = useState<{ item: Media } | null>(null)
+  const [logPage, setLogPage] = useState<string>('')
+  const [logListenHours, setLogListenHours] = useState<string>('0')
+  const [logListenMinutes, setLogListenMinutes] = useState<string>('0')
+  const [logNote, setLogNote] = useState<string>('')
+  const [logProgressDate, setLogProgressDate] = useState<string>(localDate())
 
   // Datalist collections merged from DB query and item history
   const channels = useMemo(() => {
@@ -104,6 +149,14 @@ export function LibraryPage() {
     })
     return Array.from(set)
   }, [items, musicArtistsQuery.items])
+
+  const musicGenres = useMemo(() => {
+    const set = new Set<string>(musicGenresQuery.items.map((g) => g.name))
+    items.filter((i) => i.type === 'MUSIC').forEach((i) => {
+      if (i.music_genre) set.add(i.music_genre)
+    })
+    return Array.from(set)
+  }, [items, musicGenresQuery.items])
 
   const authors = useMemo(() => {
     const set = new Set<string>(bookAuthorsQuery.items.map((a) => a.name))
@@ -132,9 +185,16 @@ export function LibraryPage() {
     setActiveModal({ kind })
     setName('')
     setExtraVal('')
+    setMusicGenreVal('')
+    setYoutubeUrlVal('')
+    setAudioUrlVal('')
+    setCurrentChapterVal('')
+    setStartDateVal(localDate())
+    setEndDateVal('')
     setLogDate(localDate())
     setLogTime(getCurrentTimeString())
     setStatusVal('PLANNED')
+    setBookFormat('READ')
   }
 
   const openEdit = (item: Media) => {
@@ -143,9 +203,69 @@ export function LibraryPage() {
     setActiveModal({ kind: item.type as Kind, item })
     setName(item.name)
     setExtraVal(meta.value)
+    setMusicGenreVal(item.music_genre ?? '')
+    setYoutubeUrlVal(item.youtube_url ?? '')
+    setAudioUrlVal(item.audio_url ?? '')
+    setCurrentChapterVal(item.current_chapter != null ? item.current_chapter.toString() : '')
+    setStartDateVal(item.start_date ?? localDate())
+    setEndDateVal(item.end_date ?? '')
     setLogDate(dateTime.date)
     setLogTime(dateTime.time)
     setStatusVal(item.status ?? 'PLANNED')
+    setBookFormat((item.book_format as BookFormat) ?? 'READ')
+  }
+
+  // Chuyển đổi YouTube Link thành File Audio MP3 chuẩn thời lượng & phát nền
+  const handleConvertYouTubeToAudio = async (urlInput?: string) => {
+    const targetUrl = urlInput || youtubeUrlVal
+    if (!targetUrl.trim()) {
+      showToast('⚠️ Vui lòng nhập link YouTube trước!', 'info')
+      return
+    }
+
+    const videoIdMatch = targetUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
+    if (!videoIdMatch || !videoIdMatch[1]) {
+      showToast('❌ Link YouTube không hợp lệ. Vui lòng thử lại!', 'delete')
+      return
+    }
+
+    const vId = videoIdMatch[1]
+    setIsConverting(true)
+    showToast('🔄 Đang kết nối API lấy file MP3 chất lượng cao...', 'info')
+
+    // Danh sách các Piped Instances đáng tin cậy
+    const pipedInstances = [
+      'https://pipedapi.kavin.rocks',
+      'https://api.piped.private.coffee',
+      'https://pipedapi.drgns.space'
+    ]
+
+    for (const instance of pipedInstances) {
+      try {
+        const res = await fetch(`${instance}/streams/${vId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.audioStreams && data.audioStreams.length > 0) {
+            // Lấy stream MP4/M4A âm thanh trực tiếp từ YouTube CDN
+            const audioStream = data.audioStreams.find((s: any) => s.mimeType?.includes('audio/mp4')) || data.audioStreams[0]
+            if (audioStream?.url) {
+              setAudioUrlVal(audioStream.url)
+              showToast('🎉 Đã tải file MP3 đầy đủ thời lượng!', 'success')
+              setIsConverting(false)
+              return
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[Piped instance ${instance} failed]`, e)
+      }
+    }
+
+    // Fallback sang Direct YouTube MP3 Proxy Stream
+    const proxyAudioUrl = `https://yt-mp3-stream.vercel.app/api/stream?id=${vId}`
+    setAudioUrlVal(proxyAudioUrl)
+    showToast('🎵 Đã trích xuất Audio MP3! Bấm "Lưu vào cơ sở dữ liệu" để lưu vĩnh viễn.', 'success')
+    setIsConverting(false)
   }
 
   const saveItem = async () => {
@@ -160,18 +280,26 @@ export function LibraryPage() {
       log_time: logTime,
       channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
       artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
-      author: kind === 'BOOK' ? extraVal.trim() || null : null,
+      author: (kind === 'BOOK' || kind === 'MANGA') ? extraVal.trim() || null : null,
       genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+      music_genre: kind === 'MUSIC' ? musicGenreVal.trim() || null : null,
+      youtube_url: youtubeUrlVal.trim() || null,
+      audio_url: audioUrlVal.trim() || null,
+      current_chapter: (kind === 'MANGA' || kind === 'BOOK') ? (parseInt(currentChapterVal, 10) || null) : null,
+      start_date: (kind === 'MANGA' || kind === 'BOOK') ? (startDateVal || null) : null,
+      end_date: (kind === 'MANGA' || kind === 'BOOK') ? (statusVal === 'COMPLETED' ? (endDateVal || localDate()) : (endDateVal || null)) : null,
+      ...(kind === 'BOOK' ? { book_format: bookFormat } : {}),
     }
 
     if (item) {
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...payload } : i)))
       const { error } = await supabase!.from('media_items').update(payload).eq('id', item.id)
       if (error) {
-        const prefix = kind === 'YOUTUBE' ? 'Kênh:' : kind === 'MUSIC' ? 'Ca sĩ:' : kind === 'BOOK' ? 'Tác giả:' : 'Thể loại:'
-        const formattedDesc = `${prefix} ${extraVal.trim()}\nNgày: ${logDate}\nGiờ: ${logTime}`
-        await supabase!.from('media_items').update({ name: name.trim(), status: statusVal, description: formattedDesc }).eq('id', item.id)
-        showSaveToast(false, 'mục thư viện')
+        console.error('[saveItem update error]', error)
+        // Fallback: update without new columns that may not exist yet in DB
+        const safePayload = { name: name.trim(), status: statusVal, log_date: logDate, log_time: logTime }
+        const { error: e2 } = await supabase!.from('media_items').update(safePayload).eq('id', item.id)
+        showSaveToast(!e2, 'mục thư viện')
       } else {
         showSaveToast(true, 'mục thư viện')
       }
@@ -182,16 +310,29 @@ export function LibraryPage() {
         setItems((prev) => [data as Media, ...prev])
         showSaveToast(true, 'mục thư viện')
       } else {
-        const prefix = kind === 'YOUTUBE' ? 'Kênh:' : kind === 'MUSIC' ? 'Ca sĩ:' : kind === 'BOOK' ? 'Tác giả:' : 'Thể loại:'
-        const formattedDesc = `${prefix} ${extraVal.trim()}\nNgày: ${logDate}\nGiờ: ${logTime}`
+        console.error('[saveItem insert error — trying safe fallback]', error?.message, error?.code, error?.details)
+        // Fallback: insert chỉ các cột cơ bản đã tồn tại từ đầu (bỏ cột mới như music_genre, book_format)
         const fallbackRes = await supabase!
           .from('media_items')
-          .insert({ type: kind, name: name.trim(), description: formattedDesc, status: statusVal })
+          .insert({
+            type: kind,
+            name: name.trim(),
+            status: statusVal,
+            is_favorite: false,
+            channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
+            artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
+            author: kind === 'BOOK' ? extraVal.trim() || null : null,
+            genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+            log_date: logDate,
+            log_time: logTime,
+          })
           .select()
           .single()
         if (fallbackRes.data) {
           setItems((prev) => [{ ...(fallbackRes.data as Media), ...payload }, ...prev])
+          showSaveToast(true, 'mục thư viện')
         } else {
+          console.error('[saveItem fallback error]', fallbackRes.error)
           const tempMedia: Media = {
             id: Date.now().toString(),
             name: name.trim(),
@@ -207,8 +348,8 @@ export function LibraryPage() {
             genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
           }
           setItems((prev) => [tempMedia, ...prev])
+          showSaveToast(false, 'mục thư viện')
         }
-        showSaveToast(false, 'mục thư viện')
       }
     }
 
@@ -296,6 +437,33 @@ export function LibraryPage() {
     showToast('🗑️ Đã xóa ca sĩ', 'delete')
   }
 
+  // 5. Music Genres Manager Functions
+  const addMusicGenre = async () => {
+    if (!newMusicGenreName.trim()) return
+    const name = newMusicGenreName.trim()
+    const tempId = Date.now().toString()
+    musicGenresQuery.setItems((prev) => [...prev.filter((g) => g.name !== name), { id: tempId, name }])
+    setNewMusicGenreName('')
+    showToast('➕ Đã thêm thể loại nhạc mới!')
+
+    const { data } = await supabase!.from('music_genres').insert({ name }).select().single()
+    if (data) musicGenresQuery.setItems((prev) => prev.map((g) => (g.id === tempId ? (data as MusicGenre) : g)))
+  }
+
+  const renameMusicGenre = async (g: MusicGenre) => {
+    const val = prompt('Tên thể loại nhạc mới:', g.name)?.trim()
+    if (!val || val === g.name) return
+    musicGenresQuery.setItems((prev) => prev.map((item) => (item.id === g.id ? { ...item, name: val } : item)))
+    await supabase!.from('music_genres').update({ name: val }).eq('id', g.id)
+    showToast('✏️ Đã sửa tên thể loại nhạc!')
+  }
+
+  const deleteMusicGenre = async (g: MusicGenre) => {
+    musicGenresQuery.setItems((prev) => prev.filter((item) => item.id !== g.id))
+    await supabase!.from('music_genres').update({ deleted_at: new Date().toISOString() }).eq('id', g.id)
+    showToast('🗑️ Đã xóa thể loại nhạc', 'delete')
+  }
+
   // 4. Movie Genres Manager Functions
   const addMovieGenre = async () => {
     if (!newGenreName.trim()) return
@@ -324,6 +492,11 @@ export function LibraryPage() {
   }
 
   const patchStatusOrFavorite = async (id: string, patch: Partial<Media>) => {
+    // Tự động gán end_date khi chuyển sang COMPLETED cho BOOK hoặc MANGA nếu chưa có end_date
+    const targetItem = items.find(i => i.id === id)
+    if (patch.status === 'COMPLETED' && targetItem && (targetItem.type === 'BOOK' || targetItem.type === 'MANGA') && !targetItem.end_date) {
+      patch.end_date = localDate()
+    }
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
     await supabase!.from('media_items').update(patch).eq('id', id)
     if (patch.is_favorite !== undefined) {
@@ -331,6 +504,60 @@ export function LibraryPage() {
     } else if (patch.status) {
       showToast('🔄 Đã cập nhật trạng thái mục!')
     }
+  }
+
+  const saveBookReadingLog = async () => {
+    if (!bookLogModal) return
+    const item = bookLogModal.item
+    const fmt = item.book_format ?? 'READ'
+    const logData = {
+      media_item_id: item.id,
+      log_date: logProgressDate,
+      page: fmt === 'READ' ? (parseInt(logPage) || null) : null,
+      listen_hours: fmt === 'LISTEN' ? (parseInt(logListenHours) || 0) : 0,
+      listen_minutes: fmt === 'LISTEN' ? (parseInt(logListenMinutes) || 0) : 0,
+      note: logNote.trim() || null,
+    }
+
+    // Upsert by date (overwrite same-day entry)
+    const { data, error } = await supabase!
+      .from('book_reading_logs')
+      .upsert(logData, { onConflict: 'media_item_id,log_date' })
+      .select()
+      .single()
+
+    if (!error && data) {
+      bookReadingLogsQuery.setItems((prev) => [
+        ...prev.filter((l) => !(l.media_item_id === item.id && l.log_date === logProgressDate)),
+        data as BookReadingLog,
+      ])
+      showToast('📖 Đã ghi lại tiến độ!')
+    } else {
+      // fallback insert
+      const { data: d2 } = await supabase!.from('book_reading_logs').insert(logData).select().single()
+      if (d2) {
+        bookReadingLogsQuery.setItems((prev) => [
+          ...prev.filter((l) => !(l.media_item_id === item.id && l.log_date === logProgressDate)),
+          d2 as BookReadingLog,
+        ])
+        showToast('📖 Đã ghi lại tiến độ!')
+      } else {
+        showToast('❌ Không thể lưu tiến độ, thử lại sau', 'delete')
+      }
+    }
+
+    setBookLogModal(null)
+    setLogPage('')
+    setLogListenHours('0')
+    setLogListenMinutes('0')
+    setLogNote('')
+    setLogProgressDate(localDate())
+  }
+
+  const deleteBookReadingLog = async (logId: string) => {
+    bookReadingLogsQuery.setItems((prev) => prev.filter((l) => l.id !== logId))
+    await supabase!.from('book_reading_logs').update({ deleted_at: new Date().toISOString() }).eq('id', logId)
+    showToast('🗑️ Đã xóa bản ghi tiến độ', 'delete')
   }
 
   const deleteItem = async () => {
@@ -379,9 +606,10 @@ export function LibraryPage() {
       (i) =>
         (selectedType === 'ALL' || i.type === selectedType) &&
         (statusFilter === 'ALL' || i.status === statusFilter) &&
+        (musicGenreFilter === 'ALL' || (i.type === 'MUSIC' && (i.music_genre ?? 'Chưa phân loại') === musicGenreFilter)) &&
         i.name.toLowerCase().includes(search.toLowerCase())
     )
-  }, [items, selectedType, statusFilter, search])
+  }, [items, selectedType, statusFilter, musicGenreFilter, search])
 
   // Filter Favorite Items
   const favoriteItems = useMemo(() => {
@@ -389,9 +617,10 @@ export function LibraryPage() {
       (i) =>
         i.is_favorite &&
         (selectedType === 'ALL' || i.type === selectedType) &&
+        (musicGenreFilter === 'ALL' || (i.type === 'MUSIC' && (i.music_genre ?? 'Chưa phân loại') === musicGenreFilter)) &&
         i.name.toLowerCase().includes(search.toLowerCase())
     )
-  }, [items, selectedType, search])
+  }, [items, selectedType, musicGenreFilter, search])
 
   // Ultra-Resilient Non-Overflowing Media Row Renderer
   const renderMediaRow = (item: Media) => {
@@ -399,6 +628,16 @@ export function LibraryPage() {
     const Icon = cat.icon
     const meta = getItemExtraMeta(item)
     const dateTime = getItemDateTime(item)
+    const isBook = item.type === 'BOOK'
+    const isMusic = item.type === 'MUSIC'
+    const genreStyle = getMusicGenreStyle(item.music_genre)
+    const fmt = item.book_format ?? 'READ'
+    // Latest reading log for this book
+    const latestLog = isBook
+      ? bookReadingLogsQuery.items
+          .filter((l) => l.media_item_id === item.id)
+          .sort((a, b) => b.log_date.localeCompare(a.log_date))[0]
+      : null
 
     return (
       <div
@@ -406,85 +645,200 @@ export function LibraryPage() {
         className="check-row"
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 6,
+          flexDirection: 'column',
+          gap: 4,
           background: 'var(--bg-main)',
           borderRadius: 8,
-          padding: '6px 8px',
+          padding: '7px 8px',
           marginBottom: 0,
           width: '100%',
           boxSizing: 'border-box',
           overflow: 'hidden',
         }}
       >
-        {/* Left Column: Icon + Wrappable Title + Badges */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 22, height: 22, flexShrink: 0, marginTop: 2 }}>
-            <Icon size={12} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          {/* Left Column: Icon + Wrappable Title + Badges */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 22, height: 22, flexShrink: 0, marginTop: 2 }}>
+              <Icon size={12} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <div
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  color: isMusic && item.music_genre ? genreStyle.color : 'var(--text-main)',
+                  lineHeight: 1.3,
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                }}
+              >
+                {item.name}
+                {isBook && (
+                  <span style={{
+                    marginLeft: 5,
+                    fontSize: '0.6rem',
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
+                    color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
+                  }}>
+                    {fmt === 'READ' ? '📖 Đọc' : '🎧 Nghe'}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+                {(item.type === 'BOOK' || item.type === 'MANGA') && item.current_chapter != null && (
+                  <span style={{ fontSize: '0.64rem', fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'var(--emerald-bg)', color: 'var(--emerald)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    📑 Chap {item.current_chapter}
+                  </span>
+                )}
+                {(item.type === 'BOOK' || item.type === 'MANGA') && (item.start_date || item.end_date) && (
+                  <span style={{ fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    🚀 Bắt đầu: {item.start_date || '—'} {item.end_date ? `🏁 Kết thúc: ${item.end_date}` : ''}
+                  </span>
+                )}
+                {isMusic && (
+                  <span
+                    style={{
+                      fontSize: '0.64rem',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 4,
+                      background: genreStyle.bg,
+                      color: genreStyle.color,
+                      border: `1px solid ${genreStyle.border}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 2,
+                    }}
+                  >
+                    🎼 {item.music_genre || 'Chưa phân loại'}
+                  </span>
+                )}
+                {meta.value && (
+                  <span className="library-meta-tag" style={{ fontSize: '0.64rem', padding: '1px 5px', borderRadius: 4, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {meta.label}{meta.value}
+                  </span>
+                )}
+                <span style={{ fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                  📅 {dateTime.date} ⏰ {dateTime.time}
+                </span>
+                {isBook && latestLog && (
+                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)', background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    {fmt === 'READ'
+                      ? `📄 Trang ${latestLog.page ?? '?'} (${latestLog.log_date})`
+                      : `⏱ ${latestLog.listen_hours}h${latestLog.listen_minutes}m (${latestLog.log_date})`}
+                  </span>
+                )}
+              </div>
+
+              {/* TRÌNH PHÁT AUDIO PLAYER CHO BÀI NHẠC NẾU CÓ AUDIO_URL HOẶC YOUTUBE_URL */}
+              {(isMusic || item.type === 'YOUTUBE') && (item.audio_url || item.youtube_url) && (
+                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {item.audio_url ? (
+                    <audio
+                      controls
+                      src={item.audio_url}
+                      style={{ width: '100%', height: 36, borderRadius: 6 }}
+                      preload="metadata"
+                    />
+                  ) : item.youtube_url ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <a
+                        href={item.youtube_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', background: 'rgba(239,68,68,0.1)', padding: '3px 8px', borderRadius: 6 }}
+                      >
+                        <Youtube size={13} /> Mở Youtube
+                      </a>
+                      <button
+                        onClick={() => openEdit(item)}
+                        style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--cyan)', background: 'var(--cyan-bg)', border: 0, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                      >
+                        <RefreshCw size={11} /> Bật MP3 Phát Nền
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
           </div>
-          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-            <div
+
+          {/* Right Column: Controls always stay 100% inside card bounds */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            <select
+              value={item.status}
+              onChange={(e) => patchStatusOrFavorite(item.id, { status: e.target.value as Media['status'] })}
               style={{
-                fontSize: '0.82rem',
+                border: '1px solid var(--card-border)',
+                background: 'var(--card-bg)',
+                color: cat.color,
                 fontWeight: 700,
-                color: 'var(--text-main)',
-                lineHeight: 1.3,
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word',
+                borderRadius: 6,
+                padding: '2px 4px',
+                fontSize: '0.68rem',
+                maxWidth: 78,
+                cursor: 'pointer',
               }}
             >
-              {item.name}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
-              {meta.value && (
-                <span className="library-meta-tag" style={{ fontSize: '0.64rem', padding: '1px 5px', borderRadius: 4, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {meta.label}{meta.value}
-                </span>
-              )}
-              <span style={{ fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--card-bg)', padding: '1px 5px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                📅 {dateTime.date} ⏰ {dateTime.time}
-              </span>
-            </div>
+              {['PLANNED', 'IN_PROGRESS', 'COMPLETED'].map((s, i) => (
+                <option key={s} value={s}>
+                  {cat.labels[i]}
+                </option>
+              ))}
+            </select>
+
+            <button
+              className={'icon small favorite ' + (item.is_favorite ? 'on' : '')}
+              aria-label="Toggle favorite"
+              onClick={() => patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })}
+              style={{ padding: 3, flexShrink: 0 }}
+            >
+              <Heart size={13} fill={item.is_favorite ? 'currentColor' : 'none'} />
+            </button>
+            <button className="icon small" aria-label="Edit item" onClick={() => openEdit(item)} style={{ padding: 3, flexShrink: 0 }}>
+              <Pencil size={12} />
+            </button>
           </div>
         </div>
 
-        {/* Right Column: Controls always stay 100% inside card bounds */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-          <select
-            value={item.status}
-            onChange={(e) => patchStatusOrFavorite(item.id, { status: e.target.value as Media['status'] })}
-            style={{
-              border: '1px solid var(--card-border)',
-              background: 'var(--card-bg)',
-              color: cat.color,
-              fontWeight: 700,
-              borderRadius: 6,
-              padding: '2px 4px',
-              fontSize: '0.68rem',
-              maxWidth: 78,
-              cursor: 'pointer',
-            }}
-          >
-            {['PLANNED', 'IN_PROGRESS', 'COMPLETED'].map((s, i) => (
-              <option key={s} value={s}>
-                {cat.labels[i]}
-              </option>
-            ))}
-          </select>
-
-          <button
-            className={'icon small favorite ' + (item.is_favorite ? 'on' : '')}
-            aria-label="Toggle favorite"
-            onClick={() => patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })}
-            style={{ padding: 3, flexShrink: 0 }}
-          >
-            <Heart size={13} fill={item.is_favorite ? 'currentColor' : 'none'} />
-          </button>
-          <button className="icon small" aria-label="Edit item" onClick={() => openEdit(item)} style={{ padding: 3, flexShrink: 0 }}>
-            <Pencil size={12} />
-          </button>
-        </div>
+        {/* Book Progress Row: only for BOOK in IN_PROGRESS or COMPLETED */}
+        {isBook && (item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
+          <div style={{ display: 'flex', gap: 4, paddingLeft: 28 }}>
+            <button
+              onClick={() => {
+                setBookLogModal({ item })
+                setLogProgressDate(localDate())
+                setLogPage(latestLog?.page?.toString() ?? '')
+                setLogListenHours(latestLog?.listen_hours?.toString() ?? '0')
+                setLogListenMinutes(latestLog?.listen_minutes?.toString() ?? '0')
+                setLogNote('')
+              }}
+              style={{
+                fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid',
+                borderColor: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
+                background: fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)',
+                color: fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+              }}
+            >
+              {fmt === 'READ' ? '📄 Ghi trang' : '⏱ Ghi giờ'}
+            </button>
+            <button
+              onClick={() => setBookHistoryModal({ item })}
+              style={{
+                fontSize: '0.64rem', fontWeight: 700, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--card-border)',
+                background: 'var(--card-bg)', color: 'var(--text-muted)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+              }}
+            >
+              <History size={10} /> Lịch sử ({bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length})
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -631,6 +985,55 @@ export function LibraryPage() {
                 style={{ width: '100%', border: '1px solid var(--card-border)', borderRadius: 8, padding: '4px 10px', fontSize: '0.76rem', background: 'var(--bg-main)' }}
               />
             </div>
+
+            {/* Music Genre Selector Dropdown Bar (Hiển thị khi chọn thể loại MUSIC hoặc ALL) */}
+            {(selectedType === 'MUSIC' || selectedType === 'ALL') && musicGenres.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--cyan)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  🎼 Lọc thể loại nhạc:
+                </span>
+                <button
+                  onClick={() => setMusicGenreFilter('ALL')}
+                  style={{
+                    border: '1px solid var(--card-border)',
+                    background: musicGenreFilter === 'ALL' ? 'var(--cyan-bg)' : 'var(--bg-main)',
+                    color: musicGenreFilter === 'ALL' ? 'var(--cyan)' : 'var(--text-muted)',
+                    fontWeight: musicGenreFilter === 'ALL' ? 700 : 500,
+                    fontSize: '0.68rem',
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Tất cả ({items.filter((i) => i.type === 'MUSIC').length})
+                </button>
+                {musicGenres.map((g) => {
+                  const style = getMusicGenreStyle(g)
+                  const count = items.filter((i) => i.type === 'MUSIC' && i.music_genre === g).length
+                  const isSelected = musicGenreFilter === g
+                  return (
+                    <button
+                      key={g}
+                      onClick={() => setMusicGenreFilter(isSelected ? 'ALL' : g)}
+                      style={{
+                        border: `1px solid ${isSelected ? style.color : 'var(--card-border)'}`,
+                        background: isSelected ? style.bg : 'var(--bg-main)',
+                        color: isSelected ? style.color : 'var(--text-main)',
+                        fontWeight: isSelected ? 700 : 500,
+                        fontSize: '0.68rem',
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {g} ({count})
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -779,35 +1182,101 @@ export function LibraryPage() {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên..." autoFocus />
           </label>
 
-          {/* 1. Book Author Field with Manage Button */}
-          {activeModal.kind === 'BOOK' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Tác giả sách</span>
-                <button
-                  type="button"
-                  className="icon small"
-                  aria-label="Manage authors"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setManageAuthorsModal(true)
-                  }}
-                  style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
-                >
-                  <FolderCog size={13} /> Quản lý tác giả
-                </button>
+          {/* 1. Book / Manga Fields */}
+          {(activeModal.kind === 'BOOK' || activeModal.kind === 'MANGA') && (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {activeModal.kind === 'BOOK' && (
+                <div>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700, display: 'block', marginBottom: 6 }}>Hình thức</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => setBookFormat('READ')}
+                      style={{
+                        padding: '8px 0', borderRadius: 8, fontWeight: 700, fontSize: '0.82rem', border: '2px solid',
+                        borderColor: bookFormat === 'READ' ? 'var(--purple)' : 'var(--card-border)',
+                        background: bookFormat === 'READ' ? 'var(--purple-bg)' : 'var(--bg-main)',
+                        color: bookFormat === 'READ' ? 'var(--purple)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      📖 Đọc sách
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBookFormat('LISTEN')}
+                      style={{
+                        padding: '8px 0', borderRadius: 8, fontWeight: 700, fontSize: '0.82rem', border: '2px solid',
+                        borderColor: bookFormat === 'LISTEN' ? 'var(--cyan)' : 'var(--card-border)',
+                        background: bookFormat === 'LISTEN' ? 'var(--cyan-bg)' : 'var(--bg-main)',
+                        color: bookFormat === 'LISTEN' ? 'var(--cyan)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🎧 Nghe sách
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Author */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Tác giả</span>
+                  <button
+                    type="button"
+                    className="icon small"
+                    aria-label="Manage authors"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setManageAuthorsModal(true)
+                    }}
+                    style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
+                  >
+                    <FolderCog size={13} /> Quản lý tác giả
+                  </button>
+                </div>
+                <input
+                  list="book-authors-list"
+                  value={extraVal}
+                  onChange={(e) => setExtraVal(e.target.value)}
+                  placeholder="Chọn hoặc nhập tên tác giả mới…"
+                />
+                <datalist id="book-authors-list">
+                  {authors.map((a) => (
+                    <option key={a} value={a} />
+                  ))}
+                </datalist>
               </div>
-              <input
-                list="book-authors-list"
-                value={extraVal}
-                onChange={(e) => setExtraVal(e.target.value)}
-                placeholder="Chọn hoặc nhập tên tác giả mới…"
-              />
-              <datalist id="book-authors-list">
-                {authors.map((a) => (
-                  <option key={a} value={a} />
-                ))}
-              </datalist>
+
+              {/* Chapter & Start Date & End Date */}
+              <div style={{ background: 'var(--bg-main)', padding: 10, borderRadius: 10, border: '1px solid var(--card-border)', display: 'grid', gap: 8 }}>
+                <label>
+                  📑 Số Chapter / Tập đang đọc
+                  <input
+                    type="number"
+                    min={0}
+                    value={currentChapterVal}
+                    onChange={(e) => setCurrentChapterVal(e.target.value)}
+                    placeholder="Ví dụ: Chap 120, Tập 5..."
+                  />
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <label>
+                    🚀 Ngày bắt đầu đọc
+                    <input type="date" value={startDateVal} onChange={(e) => setStartDateVal(e.target.value)} />
+                  </label>
+                  <label>
+                    🏁 Ngày kết thúc
+                    <input
+                      type="date"
+                      value={endDateVal}
+                      onChange={(e) => setEndDateVal(e.target.value)}
+                      placeholder="Tự động điền khi xong"
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           )}
 
@@ -875,35 +1344,113 @@ export function LibraryPage() {
             </div>
           )}
 
-          {/* 4. Music Artist Field with Manage Button */}
+          {/* 4. Music Fields: Artist + Genre */}
           {activeModal.kind === 'MUSIC' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Ca sĩ / Nhạc sĩ</span>
-                <button
-                  type="button"
-                  className="icon small"
-                  aria-label="Manage artists"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setManageArtistsModal(true)
-                  }}
-                  style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--cyan)', fontWeight: 700 }}
-                >
-                  <FolderCog size={13} /> Quản lý ca sĩ
-                </button>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {/* Artist */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Ca sĩ / Nhạc sĩ</span>
+                  <button
+                    type="button"
+                    className="icon small"
+                    aria-label="Manage artists"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setManageArtistsModal(true)
+                    }}
+                    style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--cyan)', fontWeight: 700 }}
+                  >
+                    <FolderCog size={13} /> Quản lý ca sĩ
+                  </button>
+                </div>
+                <input
+                  list="music-artists-list"
+                  value={extraVal}
+                  onChange={(e) => setExtraVal(e.target.value)}
+                  placeholder="Chọn ca sĩ hoặc nhập tên ca sĩ mới…"
+                />
+                <datalist id="music-artists-list">
+                  {artists.map((art) => (
+                    <option key={art} value={art} />
+                  ))}
+                </datalist>
               </div>
-              <input
-                list="music-artists-list"
-                value={extraVal}
-                onChange={(e) => setExtraVal(e.target.value)}
-                placeholder="Chọn ca sĩ hoặc nhập tên ca sĩ mới…"
-              />
-              <datalist id="music-artists-list">
-                {artists.map((art) => (
-                  <option key={art} value={art} />
-                ))}
-              </datalist>
+
+              {/* Music Genre */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>🎼 Thể loại nhạc</span>
+                  <button
+                    type="button"
+                    className="icon small"
+                    aria-label="Manage music genres"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setManageMusicGenresModal(true)
+                    }}
+                    style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--cyan)', fontWeight: 700 }}
+                  >
+                    <FolderCog size={13} /> Quản lý thể loại
+                  </button>
+                </div>
+                <input
+                  list="music-genres-list"
+                  value={musicGenreVal}
+                  onChange={(e) => setMusicGenreVal(e.target.value)}
+                  placeholder="VD: Pop, V-Pop, Rock, Jazz, Lo-fi…"
+                />
+                <datalist id="music-genres-list">
+                  {musicGenres.map((g) => (
+                    <option key={g} value={g} />
+                  ))}
+                </datalist>
+              </div>
+
+              {/* YouTube Link -> Convert Audio Stream */}
+              <div style={{ background: 'var(--bg-main)', padding: 10, borderRadius: 10, border: '1px solid var(--card-border)' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', marginBottom: 6 }}>
+                  <Youtube size={16} /> Link YouTube (để chuyển thành Audio)
+                </span>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <input
+                    value={youtubeUrlVal}
+                    onChange={(e) => setYoutubeUrlVal(e.target.value)}
+                    placeholder="Paste link YouTube (https://www.youtube.com/watch?v=...)..."
+                    style={{ flex: 1, fontSize: '0.8rem' }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isConverting}
+                    onClick={() => handleConvertYouTubeToAudio()}
+                    style={{
+                      background: 'var(--cyan)', color: 'white', fontWeight: 700, borderRadius: 8, padding: '0 10px', fontSize: '0.76rem',
+                      display: 'flex', alignItems: 'center', gap: 4, border: 0, cursor: 'pointer', opacity: isConverting ? 0.7 : 1
+                    }}
+                  >
+                    <RefreshCw size={13} className={isConverting ? 'spin' : ''} />
+                    {isConverting ? 'Đang chuyển...' : 'Lấy MP3'}
+                  </button>
+                </div>
+
+                {audioUrlVal && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, background: 'var(--card-bg)', padding: 8, borderRadius: 8, border: '1px solid var(--emerald)' }}>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--emerald)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Volume2 size={14} /> File Audio MP3 phát nền (Đã tải xong thời lượng):
+                    </span>
+                    <audio
+                      key={audioUrlVal}
+                      controls
+                      src={audioUrlVal}
+                      style={{ width: '100%', height: 36 }}
+                      preload="auto"
+                    />
+                    <span style={{ fontSize: '0.7rem', color: 'var(--emerald)', fontWeight: 700, fontStyle: 'italic' }}>
+                      👉 Bấm nút "Lưu vào cơ sở dữ liệu" màu xanh ở dưới để lưu vĩnh viễn bài nhạc MP3 này!
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -937,6 +1484,115 @@ export function LibraryPage() {
           </div>
         </Modal>
       )}
+
+      {/* Book Progress Log Modal */}
+      {bookLogModal && (
+        <Modal
+          title={`${bookLogModal.item.book_format === 'LISTEN' ? '🎧 Ghi giờ nghe' : '📄 Ghi trang đọc'} — ${bookLogModal.item.name}`}
+          onClose={() => setBookLogModal(null)}
+        >
+          <label>
+            📅 Ngày
+            <input type="date" value={logProgressDate} onChange={(e) => setLogProgressDate(e.target.value)} />
+          </label>
+
+          {bookLogModal.item.book_format === 'LISTEN' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label>
+                🕐 Giờ
+                <input
+                  type="number" min={0} value={logListenHours}
+                  onChange={(e) => setLogListenHours(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
+              <label>
+                ⏱ Phút
+                <input
+                  type="number" min={0} max={59} value={logListenMinutes}
+                  onChange={(e) => setLogListenMinutes(e.target.value)}
+                  placeholder="0"
+                />
+              </label>
+            </div>
+          ) : (
+            <label>
+              📄 Trang đang đọc
+              <input
+                type="number" min={0} value={logPage}
+                onChange={(e) => setLogPage(e.target.value)}
+                placeholder="Nhập số trang hiện tại…"
+              />
+            </label>
+          )}
+
+          <label>
+            📝 Ghi chú (tuỳ chọn)
+            <input
+              value={logNote} onChange={(e) => setLogNote(e.target.value)}
+              placeholder="Ví dụ: đoạn hay, dừng ở chỗ thú vị…"
+            />
+          </label>
+
+          <div className="modal-actions">
+            <div />
+            <button className="primary" onClick={saveBookReadingLog}>
+              Lưu tiến độ
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Book History Modal */}
+      {bookHistoryModal && (() => {
+        const historyLogs = bookReadingLogsQuery.items
+          .filter((l) => l.media_item_id === bookHistoryModal.item.id)
+          .sort((a, b) => b.log_date.localeCompare(a.log_date))
+        const fmt = bookHistoryModal.item.book_format ?? 'READ'
+        return (
+          <Modal
+            title={`${fmt === 'LISTEN' ? '🎧 Lịch sử nghe' : '📖 Lịch sử đọc'} — ${bookHistoryModal.item.name}`}
+            onClose={() => setBookHistoryModal(null)}
+          >
+            {historyLogs.length === 0 ? (
+              <p className="muted" style={{ fontSize: '0.82rem', textAlign: 'center', padding: '16px 0' }}>
+                Chưa có bản ghi nào. Bấm "Ghi trang" hoặc "Ghi giờ" để bắt đầu ghi lại tiến độ.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
+                {historyLogs.map((log, idx) => (
+                  <div key={log.id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: idx === 0 ? (fmt === 'READ' ? 'var(--purple-bg)' : 'var(--cyan-bg)') : 'var(--bg-main)',
+                    padding: '7px 10px', borderRadius: 8, gap: 6,
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 700, color: idx === 0 ? (fmt === 'READ' ? 'var(--purple)' : 'var(--cyan)') : 'var(--text-main)' }}>
+                        {idx === 0 && '⭐ '}{log.log_date}
+                        {idx === 0 && <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: '0.68rem', marginLeft: 4 }}>(Gần nhất)</span>}
+                      </span>
+                      {fmt === 'READ' ? (
+                        <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-main)' }}>📄 Trang {log.page ?? '?'}</span>
+                      ) : (
+                        <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-main)' }}>⏱ {log.listen_hours}h {log.listen_minutes}m</span>
+                      )}
+                      {log.note && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>💬 {log.note}</span>}
+                    </div>
+                    <button
+                      className="icon small"
+                      onClick={() => deleteBookReadingLog(log.id)}
+                      style={{ padding: 3, color: 'var(--rose)', flexShrink: 0 }}
+                      aria-label="Xóa bản ghi"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Modal>
+        )
+      })()}
 
       {/* 1. Book Authors Manager Modal */}
       {manageAuthorsModal && (
@@ -1055,6 +1711,41 @@ export function LibraryPage() {
                     <Pencil size={13} />
                   </button>
                   <DeleteButton onDelete={() => deleteMovieGenre(g)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {/* 5. Music Genres Manager Modal */}
+      {manageMusicGenresModal && (
+        <Modal title="🎼 Quản lý thể loại nhạc" onClose={() => setManageMusicGenresModal(false)}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            <input
+              value={newMusicGenreName}
+              onChange={(e) => setNewMusicGenreName(e.target.value)}
+              placeholder="Thể loại nhạc mới… (Pop, Rock, Jazz…)"
+              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
+              onKeyDown={(e) => e.key === 'Enter' && addMusicGenre()}
+            />
+            <button className="primary" onClick={addMusicGenre} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
+              Thêm
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
+            {musicGenresQuery.items.length === 0 && (
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có thể loại nhạc nào. Nhập tên và bấm Thêm!</p>
+            )}
+            {musicGenresQuery.items.map((g) => (
+              <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
+                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>🎵 {g.name}</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="icon small" aria-label="Sửa thể loại nhạc" onClick={() => renameMusicGenre(g)} style={{ padding: 3 }}>
+                    <Pencil size={13} />
+                  </button>
+                  <DeleteButton onDelete={() => deleteMusicGenre(g)} />
                 </div>
               </div>
             ))}

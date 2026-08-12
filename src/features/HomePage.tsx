@@ -201,9 +201,16 @@ export function HomePage() {
               <p className="muted" style={{ fontSize: '0.78rem' }}>Đang tải…</p>
             ) : todos.length ? (
               todos.map((t) => (
-                <div key={t.id} className="check-row" onClick={() => toggleTodo(t)} style={{ padding: '5px 8px', borderRadius: 8, margin: 0, cursor: 'pointer' }}>
-                  <span className="checkbox" style={{ width: 18, height: 18, borderRadius: 5 }} />
-                  <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>{t.title}</span>
+                <div key={t.id} className="check-row" onClick={() => toggleTodo(t)} style={{ padding: '5px 8px', borderRadius: 8, margin: 0, cursor: 'pointer', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                    <span className="checkbox" style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.82rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                  </div>
+                  {t.priority === 'URGENT' && (
+                    <span style={{ fontSize: '0.66rem', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', padding: '1px 5px', borderRadius: 5, fontWeight: 700, flexShrink: 0 }}>
+                      🔥 Gấp
+                    </span>
+                  )}
                 </div>
               ))
             ) : (

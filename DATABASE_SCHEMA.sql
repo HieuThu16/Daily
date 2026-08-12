@@ -151,13 +151,15 @@ exception when duplicate_object then null; end $$;
 -- SECTION C: TODOS & IDEAS
 -- ===========================================================================
 
--- migration: 20260811000000 + 040000 + 053000 + 060000
+-- migration: 20260811000000 + 040000 + 053000 + 060000 + 20260812000000
 create table if not exists public.todos (
   id           uuid    primary key default gen_random_uuid(),
   user_id      uuid    not null default auth.uid() references auth.users(id),
   title        text    not null check (length(trim(title)) > 0),
   completed    boolean not null default false,
   due_date     date    default current_date,
+  difficulty   text    not null default 'EASY' check (difficulty in ('EASY','NORMAL','HARD')),
+  priority     text    not null default 'NORMAL' check (priority in ('NORMAL','URGENT')),
   completed_at timestamptz,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
@@ -175,6 +177,12 @@ do $$ begin
   create trigger todos_updated before update on public.todos
     for each row execute function public.set_updated_at();
 exception when duplicate_object then null; end $$;
+
+-- Alter table & Backfill for existing installations
+alter table public.todos add column if not exists difficulty text not null default 'EASY' check (difficulty in ('EASY','NORMAL','HARD'));
+alter table public.todos add column if not exists priority text not null default 'NORMAL' check (priority in ('NORMAL','URGENT'));
+update public.todos set difficulty = 'EASY' where difficulty is null;
+update public.todos set priority = 'NORMAL' where priority is null;
 
 
 -- migration: 20260811000000
@@ -224,10 +232,43 @@ create table if not exists public.media_items (
   -- watch/read log
   log_date       text,
   log_time       text,
+  -- book-specific: format READ or LISTEN
+  book_format    text        check (book_format in ('READ', 'LISTEN')),
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   deleted_at     timestamptz
 );
+
+-- migration: 20260812100000_book_reading_logs
+-- Book reading/listening progress log (one row per day per book)
+create table if not exists public.book_reading_logs (
+  id             uuid        primary key default gen_random_uuid(),
+  media_item_id  uuid        not null references public.media_items(id) on delete cascade,
+  user_id        uuid        not null default auth.uid() references auth.users(id),
+  log_date       date        not null default current_date,
+  page           integer     check (page is null or page >= 0),
+  listen_hours   integer     not null default 0 check (listen_hours >= 0),
+  listen_minutes integer     not null default 0 check (listen_minutes >= 0 and listen_minutes < 60),
+  note           text,
+  created_at     timestamptz not null default now(),
+  deleted_at     timestamptz
+);
+
+create index if not exists book_reading_logs_item_date_idx
+  on public.book_reading_logs(media_item_id, log_date) where deleted_at is null;
+create index if not exists book_reading_logs_user_idx
+  on public.book_reading_logs(user_id) where deleted_at is null;
+
+alter table public.book_reading_logs enable row level security;
+do $$ begin
+  create policy "own book reading logs" on public.book_reading_logs
+    for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+exception when duplicate_object then null; end $$;
+
+-- Backfill: existing BOOK items default to READ format
+alter table public.media_items
+  add column if not exists book_format text check (book_format in ('READ', 'LISTEN'));
+update public.media_items set book_format = 'READ' where type = 'BOOK' and book_format is null;
 
 create index if not exists media_items_user_type_status_idx
   on public.media_items(user_id, type, status) where deleted_at is null;
