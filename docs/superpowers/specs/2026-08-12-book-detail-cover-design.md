@@ -302,8 +302,7 @@ setActiveIdx(Math.min(startIdx, Math.max(0, list.length - 1)))
 ```
 
 Khi có `?chapter=`, bỏ qua `last_scroll_ratio` (đặt `pendingRatio.current = 0`) — người
-dùng chủ động chọn chương thì phải vào đầu chương, không phải giữa chương cũ. Toast
-*"Tiếp tục từ…"* cũng không hiện trong trường hợp này.
+dùng chủ động chọn chương thì phải vào đầu chương, không phải giữa chương cũ.
 
 ## Thay đổi ở LibraryPage
 
