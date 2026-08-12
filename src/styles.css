@@ -2603,6 +2603,28 @@ input, select, textarea, button {
   .header-actions { flex-wrap: nowrap; gap: 4px; }
   .header-date { margin-right: 4px; }
 
+  /* Ô lưới của Home: 1fr vẫn nở theo min-content của thẻ, nên một hàng dài
+     bên trong thẻ đủ sức kéo cả thẻ rộng hơn màn hình. minmax(0,1fr) chặn việc đó. */
+  .home-grid,
+  .home-grid-2,
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-grid > *,
+  .home-grid-2 > *,
+  .split > *,
+  .card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Tiêu đề thẻ dài thì cắt bằng "…", không đẩy badge đếm ra ngoài. */
+  .home-section-head { min-width: 0; }
+  .home-section-head h3 { min-width: 0; overflow: hidden; }
+  .home-section-head h3 span,
+  .home-section-head h3 > *:not(svg) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* Bảng lịch sử thói quen: cuộn trong khung, không kéo cả trang. */
   .history {
     overflow-x: auto;
