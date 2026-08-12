@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { loadLocal, saveLocal, type SaveSource } from '../../lib/persistence'
 import type { OccasionKind, Person, PersonOccasion } from '../../types'
 
 const PEOPLE_KEY = 'daily_people_local'
@@ -13,7 +14,7 @@ export type NewOccasion = {
   is_yearly: boolean
 }
 
-export type DataSource = 'Local' | 'Supabase'
+export type DataSource = SaveSource
 
 /** Nạp người và dịp, có nhánh dự phòng localStorage khi chưa cấu hình Supabase. */
 export function usePeopleData() {
@@ -24,10 +25,10 @@ export function usePeopleData() {
 
   useEffect(() => {
     ;(async () => {
-      const savedPeople = localStorage.getItem(PEOPLE_KEY)
-      if (savedPeople) setPeople(JSON.parse(savedPeople) as Person[])
-      const savedOccasions = localStorage.getItem(OCCASIONS_KEY)
-      if (savedOccasions) setOccasions(JSON.parse(savedOccasions) as PersonOccasion[])
+      const savedPeople = loadLocal<Person[]>(PEOPLE_KEY, [])
+      if (savedPeople.length) setPeople(savedPeople)
+      const savedOccasions = loadLocal<PersonOccasion[]>(OCCASIONS_KEY, [])
+      if (savedOccasions.length) setOccasions(savedOccasions)
 
       if (supabase) {
         const [p, o] = await Promise.all([
@@ -46,12 +47,12 @@ export function usePeopleData() {
 
   const persistPeople = (next: Person[]) => {
     setPeople(next)
-    localStorage.setItem(PEOPLE_KEY, JSON.stringify(next))
+    saveLocal(PEOPLE_KEY, next)
   }
 
   const persistOccasions = (next: PersonOccasion[]) => {
     setOccasions(next)
-    localStorage.setItem(OCCASIONS_KEY, JSON.stringify(next))
+    saveLocal(OCCASIONS_KEY, next)
   }
 
   /** Trả về nguồn đã lưu để trang hiện toast tương ứng. */

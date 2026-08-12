@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronRight, Plus, UserRound } from 'lucide-react'
 import { nextOccurrence } from '../../lib/occasions'
+import { saveSourceLabel } from '../../lib/persistence'
 import type { Person } from '../../types'
 import { Empty } from '../shared'
 import { useToast } from '../ToastContext'
@@ -23,14 +24,14 @@ export function PeoplePage() {
 
   const handleAddOccasion = async (input: NewOccasion) => {
     const savedTo = await addOccasion(input)
-    showToast(`Đã lưu ${savedTo}`)
+    showToast(saveSourceLabel(savedTo))
   }
 
   const handleAddPerson = async () => {
     if (!name.trim()) return
     const savedTo = await addPerson(name)
     setName('')
-    showToast(`Đã lưu ${savedTo}`)
+    showToast(saveSourceLabel(savedTo))
   }
 
   const birthdayOf = (personId: string) => {
