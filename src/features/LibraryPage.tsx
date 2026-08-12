@@ -130,6 +130,7 @@ export function LibraryPage() {
   const [extraVal, setExtraVal] = useState('') // Channel, Artist, Author, or Genre
   const [youtubeUrlVal, setYoutubeUrlVal] = useState('')
   const [audioUrlVal, setAudioUrlVal] = useState('')
+  const [coverUrlVal, setCoverUrlVal] = useState('')
   const [audioLoadError, setAudioLoadError] = useState(false)
   const [currentChapterVal, setCurrentChapterVal] = useState<string>('')
   const [startDateVal, setStartDateVal] = useState<string>(localDate())
@@ -207,6 +208,7 @@ export function LibraryPage() {
     setMusicGenreVal('')
     setYoutubeUrlVal('')
     setAudioUrlVal('')
+    setCoverUrlVal('')
     setAudioLoadError(false)
     setCurrentChapterVal('')
     setStartDateVal(localDate())
@@ -226,6 +228,7 @@ export function LibraryPage() {
     setMusicGenreVal(item.music_genre ?? '')
     setYoutubeUrlVal(item.youtube_url ?? '')
     setAudioUrlVal(item.audio_url ?? '')
+    setCoverUrlVal(item.cover_url ?? '')
     setAudioLoadError(false)
     setCurrentChapterVal(item.current_chapter != null ? item.current_chapter.toString() : '')
     setStartDateVal(item.start_date ?? localDate())
@@ -320,6 +323,7 @@ export function LibraryPage() {
       music_genre: kind === 'MUSIC' ? musicGenreVal.trim() || null : null,
       youtube_url: youtubeUrlVal.trim() || null,
       audio_url: audioUrlVal.trim() || null,
+      cover_url: coverUrlVal.trim() || null,
       current_chapter: (kind === 'MANGA' || kind === 'BOOK') ? (parseInt(currentChapterVal, 10) || null) : null,
       start_date: (kind === 'MANGA' || kind === 'BOOK') ? (startDateVal || null) : null,
       end_date: (kind === 'MANGA' || kind === 'BOOK') ? (statusVal === 'COMPLETED' ? (endDateVal || localDate()) : (endDateVal || null)) : null,
@@ -1139,6 +1143,25 @@ export function LibraryPage() {
             Tên mục
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên..." autoFocus />
           </label>
+
+          <label>
+            Link ảnh bìa
+            <input
+              value={coverUrlVal}
+              onChange={(e) => setCoverUrlVal(e.target.value)}
+              placeholder="Dán link ảnh bìa (tuỳ chọn)…"
+            />
+          </label>
+          {coverUrlVal.trim() && (
+            <img
+              src={coverUrlVal.trim()}
+              alt="Xem trước ảnh bìa"
+              style={{ width: 64, height: 92, objectFit: 'cover', borderRadius: 8, marginBottom: 10 }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+              }}
+            />
+          )}
 
           {/* 1. Book / Manga Fields */}
           {(activeModal.kind === 'BOOK' || activeModal.kind === 'MANGA') && (
