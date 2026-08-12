@@ -2,7 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { cleanBookLines, linesToContent } from './cleanText'
 import { splitIntoChapters } from './chapters'
-import { canvasToJpeg, COVER_MAX_WIDTH } from './cover'
+import { canvasToJpeg, COVER_MAX_HEIGHT, COVER_MAX_WIDTH } from './cover'
 import { BookImportError } from './types'
 import type { ProgressCallback, RawBook, RawChapter, TextLine } from './types'
 
@@ -123,7 +123,7 @@ async function renderCover(doc: PdfDocument): Promise<Blob | null> {
   try {
     const page = await doc.getPage(1)
     const base = page.getViewport({ scale: 1 })
-    const scale = Math.min(1, COVER_MAX_WIDTH / base.width)
+    const scale = Math.min(1, COVER_MAX_WIDTH / base.width, COVER_MAX_HEIGHT / base.height)
     const viewport = page.getViewport({ scale })
 
     const canvas = document.createElement('canvas')

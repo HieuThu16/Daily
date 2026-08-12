@@ -1,5 +1,8 @@
 /** Chiều rộng tối đa của ảnh bìa đã chuẩn hoá. Đủ nét cho ô 120px ở màn chi tiết. */
 export const COVER_MAX_WIDTH = 600
+/** Chiều cao tối đa. 900 = 600 × 3/2, đúng tỉ lệ bìa sách thường gặp, nên ca bình thường
+ *  không bao giờ chạm trần này — nó chỉ chặn trang quá cao bất thường. */
+export const COVER_MAX_HEIGHT = 900
 export const COVER_QUALITY = 0.8
 
 /**
