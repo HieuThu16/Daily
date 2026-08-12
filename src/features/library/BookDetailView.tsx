@@ -101,6 +101,9 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDeta
       } catch (caught) {
         if (cancelled) return
         // Phân biệt với sách thật sự chưa nhập file bằng dòng lỗi và nút Thử lại.
+        // Xoá dữ liệu cũ để không lộ thông tin của sách trước đó (item.id đổi mà component không remount).
+        setDocument(null)
+        setChapters([])
         setLoadError(caught instanceof Error ? caught.message : 'Không tải được thông tin sách.')
         setStatus('no-document')
       }
@@ -122,12 +125,16 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDeta
     setCoverBusy(true)
     try {
       const cover = await blobToCover(file)
-      if (!cover) throw new Error('File này không phải ảnh hợp lệ.')
+      if (!cover) {
+        setCoverError('File này không phải ảnh hợp lệ.')
+        return
+      }
       const url = await uploadCover(item.id, cover)
       await saveCoverUrl(item.id, url)
       onCoverChange(item.id, url)
-    } catch (caught) {
-      setCoverError(caught instanceof Error ? caught.message : 'Không lưu được ảnh bìa, thử lại sau.')
+    } catch {
+      // Lỗi từ Supabase là chuỗi tiếng Anh và có thể lộ tên policy RLS, không hiện thẳng.
+      setCoverError('Không lưu được ảnh bìa, thử lại sau.')
     } finally {
       setCoverBusy(false)
     }
@@ -269,7 +276,7 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDeta
                 <dd>{item.current_chapter}</dd>
               </div>
             )}
-            {document_?.last_read_at && (
+            {status === 'ready' && document_?.last_read_at && (
               <div>
                 <dt>Đọc lần cuối</dt>
                 <dd>{formatMoment(document_.last_read_at)}</dd>
@@ -285,14 +292,16 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange }: BookDeta
 
           {status === 'no-document' && (
             <div className="library-book-empty">
-              <p>Chưa nhập file cho sách này. Dùng nút Nhập sách ở Library để đọc ngay trong app.</p>
-              {loadError && (
+              {loadError ? (
                 <>
+                  <p>Không tải được thông tin sách. Kiểm tra kết nối rồi thử lại.</p>
                   <p className="library-book-error" role="alert">{loadError}</p>
                   <button type="button" onClick={() => setReloadKey((key) => key + 1)}>
                     Thử lại
                   </button>
                 </>
+              ) : (
+                <p>Chưa nhập file cho sách này. Dùng nút Nhập sách ở Library để đọc ngay trong app.</p>
               )}
             </div>
           )}

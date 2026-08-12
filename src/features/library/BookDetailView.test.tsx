@@ -196,3 +196,39 @@ describe('BookDetailView đổi ảnh bìa', () => {
     expect(removeCover).toHaveBeenCalledWith('book-1')
   })
 })
+
+describe('BookDetailView khi tải lỗi', () => {
+  it('hiện lỗi tải riêng biệt với sách chưa nhập, và Thử lại nạp lại được', async () => {
+    const user = userEvent.setup()
+    vi.mocked(loadChapterList).mockRejectedValueOnce(new Error('Mất kết nối mạng.'))
+
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} />)
+
+    expect(await screen.findByText(/Không tải được thông tin sách/)).toBeInTheDocument()
+    expect(screen.queryByText(/Chưa nhập file cho sách này/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Thử lại' }))
+
+    // loadChapterList đã hết lượt reject-một-lần, lần gọi lại dùng mock mặc định (thành công).
+    expect(await screen.findByRole('button', { name: /Bí mật lớn nhất/ })).toBeInTheDocument()
+  })
+})
+
+describe('BookDetailView không rò rỉ dữ liệu giữa các sách', () => {
+  it('sách sau tải lỗi không còn hiện dữ liệu của sách trước', async () => {
+    const { rerender } = render(
+      <BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} />,
+    )
+
+    await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })
+    expect(screen.getByText('Đọc lần cuối')).toBeInTheDocument()
+
+    const otherItem: Media = { ...item, id: 'book-2', name: 'Sách khác' }
+    vi.mocked(loadBookDocument).mockRejectedValueOnce(new Error('Mất kết nối mạng.'))
+
+    rerender(<BookDetailView item={otherItem} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} />)
+
+    await screen.findByText(/Không tải được thông tin sách/)
+    expect(screen.queryByText('Đọc lần cuối')).not.toBeInTheDocument()
+  })
+})
