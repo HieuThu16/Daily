@@ -3030,3 +3030,58 @@ input, select, textarea, button {
   color: var(--primary);
   font-weight: 700;
 }
+
+/* ── Ngày dương/âm, SĐT, ảnh nhật ký ─────────────────────────────────────── */
+
+.dual-date { display: grid; gap: 6px; }
+.dual-date-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
+.dual-date-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.dual-date-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dual-date-toggle button.active { background: var(--primary); color: #fff; }
+.dual-date-lunar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.dual-date-lunar label.check { grid-column: 1 / -1; }
+.dual-date-hint { margin: 0; font-size: 0.76rem; color: var(--text-muted); }
+
+.lunar-chip {
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.person-form { display: grid; gap: 8px; }
+.person-form input[type='text'], .person-form input[type='tel'], .person-form input:not([type]) { width: 100%; }
+.person-form label.check { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-muted); }
+.person-phone { display: inline-flex; align-items: center; gap: 5px; color: var(--primary); text-decoration: none; font-weight: 600; }
+
+.log-photos { display: grid; gap: 8px; margin-top: 10px; }
+.log-photos > button {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.log-photos > button:disabled { opacity: 0.55; cursor: not-allowed; }
+.log-photos-note { font-size: 0.74rem; color: var(--text-muted); }
+.log-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.log-photo-grid button { border: 0; padding: 0; background: transparent; cursor: pointer; }
+.log-photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }

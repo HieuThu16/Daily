@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal, type SaveSource } from '../../lib/persistence'
-import type { OccasionKind, Person, PersonOccasion } from '../../types'
+import type { OccasionCalendar, OccasionKind, Person, PersonOccasion } from '../../types'
 
 const PEOPLE_KEY = 'daily_people_local'
 const OCCASIONS_KEY = 'daily_occasions_local'
@@ -12,6 +12,15 @@ export type NewOccasion = {
   title: string
   occasion_date: string
   is_yearly: boolean
+  calendar?: OccasionCalendar
+}
+
+/** Thông tin nhập ở form thêm người; sinh nhật lưu thành một dịp BIRTHDAY. */
+export type NewPerson = {
+  name: string
+  phone?: string
+  birthday?: string
+  birthdayCalendar?: OccasionCalendar
 }
 
 export type DataSource = SaveSource
@@ -56,26 +65,41 @@ export function usePeopleData() {
   }
 
   /** Trả về nguồn đã lưu để trang hiện toast tương ứng. */
-  const addPerson = async (rawName: string): Promise<DataSource> => {
-    const name = rawName.trim()
+  const addPerson = async (input: NewPerson | string): Promise<DataSource> => {
+    const raw = typeof input === 'string' ? { name: input } : input
+    const name = raw.name.trim()
     if (!name) return source
-    const local: Person = { id: crypto.randomUUID(), name }
+    const phone = raw.phone?.trim() || null
+    const local: Person = { id: crypto.randomUUID(), name, phone }
+
+    const withBirthday = async (personId: string, savedTo: DataSource) => {
+      if (!raw.birthday) return savedTo
+      await addOccasion({
+        person_id: personId,
+        kind: 'BIRTHDAY',
+        title: '',
+        occasion_date: raw.birthday,
+        is_yearly: true,
+        calendar: raw.birthdayCalendar ?? 'SOLAR',
+      })
+      return savedTo
+    }
 
     if (!supabase) {
       persistPeople([local, ...people])
       setSource('Local')
-      return 'Local'
+      return withBirthday(local.id, 'Local')
     }
 
-    const { data, error } = await supabase.from('people').insert({ name }).select().single()
+    const { data, error } = await supabase.from('people').insert({ name, phone }).select().single()
     if (error || !data) {
       persistPeople([local, ...people])
       setSource('Local')
-      return 'Local'
+      return withBirthday(local.id, 'Local')
     }
     setPeople((prev) => [data as Person, ...prev])
     setSource('Supabase')
-    return 'Supabase'
+    return withBirthday((data as Person).id, 'Supabase')
   }
 
   const addOccasion = async (input: NewOccasion): Promise<DataSource> => {

@@ -126,11 +126,31 @@ export type MusicGenre = { id: string; name: string }
 
 export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
 export type Entry = { id: string; content: string; entry_date: string; created_at: string; entry_type: DailyType }
-export type Person = { id: string; name: string; avatar_url?: string | null; notes?: string | null; created_at?: string }
+export type Person = {
+  id: string
+  name: string
+  avatar_url?: string | null
+  phone?: string | null
+  notes?: string | null
+  created_at?: string
+}
+
+/** Ảnh đính kèm nhật ký của một người trong một ngày. */
+export type PersonDailyPhoto = {
+  id: string
+  person_id: string
+  log_date: string
+  url: string
+  storage_path?: string | null
+  created_at?: string
+}
 export type PersonInterest = { id: string; person_id: string; label: string; created_at?: string }
 export type PersonDailyLog = { id: string; person_id: string; log_date: string; content: string; updated_at?: string; created_at?: string }
 
 export type OccasionKind = 'BIRTHDAY' | 'ANNIVERSARY'
+
+/** Lịch dùng để lặp lại dịp hằng năm. */
+export type OccasionCalendar = 'SOLAR' | 'LUNAR'
 
 /** Dịp đáng nhớ. `person_id` null = dịp không gắn với ai. */
 export type PersonOccasion = {
@@ -140,6 +160,8 @@ export type PersonOccasion = {
   title: string
   occasion_date: string
   is_yearly: boolean
+  /** Mặc định 'SOLAR'. 'LUNAR' = lặp theo ngày âm của `occasion_date`. */
+  calendar?: OccasionCalendar
   created_at?: string
 }
 

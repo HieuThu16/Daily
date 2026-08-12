@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Heart, Plus, Save, X } from 'lucide-react'
+import { ArrowLeft, Heart, Phone, Plus, Save, X } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { supabase } from '../../lib/supabase'
-import { ageOnNext, nextOccurrence } from '../../lib/occasions'
+import { ageOnNext, isLunar, lunarLabel, nextOccurrence } from '../../lib/occasions'
 import type { Person, PersonDailyLog, PersonInterest, PersonOccasion } from '../../types'
 import { useToast } from '../ToastContext'
 import { avatarStyle, initials } from './avatar'
+import { DailyLogPhotos } from './DailyLogPhotos'
 import { OccasionsSection } from './OccasionsSection'
 import type { NewOccasion } from './usePeopleData'
 
@@ -93,7 +94,15 @@ export function PersonDetail({ person, occasions, people, onBack, onAddOccasion,
           {nextBirthday && (
             <div className="person-meta">
               🎂 Sinh nhật {nextBirthday.getDate()}/{nextBirthday.getMonth() + 1}
+              {birthday && isLunar(birthday) ? ` (${lunarLabel(birthday)})` : ''}
               {age ? ` · ${age} tuổi` : ''}
+            </div>
+          )}
+          {person.phone && (
+            <div className="person-meta">
+              <a href={`tel:${person.phone.replace(/\s+/g, '')}`} className="person-phone">
+                <Phone size={13} /> {person.phone}
+              </a>
             </div>
           )}
         </div>
@@ -154,6 +163,8 @@ export function PersonDetail({ person, occasions, people, onBack, onAddOccasion,
         <button className="primary" onClick={saveLog} style={{ marginTop: 8 }}>
           <Save size={14} /> Lưu
         </button>
+
+        <DailyLogPhotos personId={person.id} date={date} />
       </div>
     </section>
   )

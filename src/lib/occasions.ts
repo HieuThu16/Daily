@@ -1,4 +1,5 @@
 import type { Person, PersonOccasion } from '../types'
+import { formatLunar, lunarMonthLength, lunarToSolar, solarToLunar } from './lunar'
 
 /** 'YYYY-MM-DD' → Date lúc 00:00 giờ địa phương (tránh lệch múi giờ của new Date(chuỗi)). */
 export function parseLocalDate(value: string): Date {
@@ -11,12 +12,23 @@ export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
+export function isLunar(occasion: PersonOccasion): boolean {
+  return occasion.calendar === 'LUNAR'
+}
+
+/** Ngày âm gốc của dịp, để hiển thị "29/6 âm". */
+export function lunarLabel(occasion: PersonOccasion): string {
+  return formatLunar(solarToLunar(parseLocalDate(occasion.occasion_date)))
+}
+
 /** Lần tới của dịp. Dịp một lần đã qua trả về null. */
 export function nextOccurrence(occasion: PersonOccasion, today = new Date()): Date | null {
   const base = parseLocalDate(occasion.occasion_date)
   const from = startOfDay(today)
 
   if (!occasion.is_yearly) return base.getTime() >= from.getTime() ? base : null
+
+  if (isLunar(occasion)) return nextLunarOccurrence(base, from)
 
   const build = (year: number) => {
     const candidate = new Date(year, base.getMonth(), base.getDate())
@@ -27,6 +39,25 @@ export function nextOccurrence(occasion: PersonOccasion, today = new Date()): Da
 
   const thisYear = build(from.getFullYear())
   return thisYear.getTime() >= from.getTime() ? thisYear : build(from.getFullYear() + 1)
+}
+
+/**
+ * Lần tới của dịp lặp theo âm lịch: giữ nguyên ngày/tháng âm của ngày gốc,
+ * dựng lại ở năm âm hiện tại rồi năm sau. Tháng nhuận luôn quy về tháng thường
+ * (năm nào cũng có), ngày 30 rơi vào tháng thiếu thì lùi về 29.
+ */
+function nextLunarOccurrence(base: Date, from: Date): Date {
+  const baseLunar = solarToLunar(base)
+  const fromLunarYear = solarToLunar(from).year
+
+  const build = (lunarYear: number) => {
+    const day = Math.min(baseLunar.day, lunarMonthLength(baseLunar.month, lunarYear))
+    return lunarToSolar(day, baseLunar.month, lunarYear)
+  }
+
+  const thisYear = build(fromLunarYear)
+  if (thisYear.getTime() >= from.getTime()) return thisYear
+  return build(fromLunarYear + 1)
 }
 
 /** Số ngày nguyên còn lại, làm tròn để không lệch vì giờ mùa hè. */
@@ -40,7 +71,10 @@ export function ageOnNext(occasion: PersonOccasion, today = new Date()): number 
   if (occasion.kind !== 'BIRTHDAY' || !occasion.is_yearly) return null
   const next = nextOccurrence(occasion, today)
   if (!next) return null
-  const age = next.getFullYear() - parseLocalDate(occasion.occasion_date).getFullYear()
+  const base = parseLocalDate(occasion.occasion_date)
+  const age = isLunar(occasion)
+    ? solarToLunar(next).year - solarToLunar(base).year
+    : next.getFullYear() - base.getFullYear()
   return age > 0 ? age : null
 }
 

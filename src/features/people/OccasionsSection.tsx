@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Cake, Heart, Plus, Trash2, X } from 'lucide-react'
 import { localDate, shortDate } from '../../lib/date'
-import { countdownLabel, upcomingOccasions } from '../../lib/occasions'
-import type { OccasionKind, Person, PersonOccasion } from '../../types'
+import { countdownLabel, isLunar, lunarLabel, upcomingOccasions } from '../../lib/occasions'
+import type { OccasionCalendar, OccasionKind, Person, PersonOccasion } from '../../types'
+import { DualCalendarDate } from './DualCalendarDate'
 import type { NewOccasion } from './usePeopleData'
 
 type Props = {
@@ -31,6 +32,7 @@ export function OccasionsSection({
   const [date, setDate] = useState(localDate())
   const [target, setTarget] = useState(personId ?? '')
   const [yearly, setYearly] = useState(true)
+  const [calendar, setCalendar] = useState<OccasionCalendar>('SOLAR')
 
   const scoped = personId ? occasions.filter((o) => o.person_id === personId) : occasions
   const items = upcomingOccasions(scoped, people, new Date(), { withinDays, limit: 50 })
@@ -43,11 +45,13 @@ export function OccasionsSection({
       title: label,
       occasion_date: date,
       is_yearly: yearly,
+      calendar,
     })
     setLabel('')
     setDate(localDate())
     setKind('BIRTHDAY')
     setYearly(true)
+    setCalendar('SOLAR')
     if (!personId) setTarget('')
     setOpen(false)
   }
@@ -84,6 +88,7 @@ export function OccasionsSection({
                 <Icon size={14} />
               </div>
               <span className="occasion-name">{name}</span>
+              {isLunar(occasion) && <span className="lunar-chip">{lunarLabel(occasion)}</span>}
               <span className={'countdown-badge' + (days <= 7 ? ' soon' : '')}>{countdownLabel(days)}</span>
               <time style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{shortDate(next)}</time>
               <button
@@ -102,13 +107,18 @@ export function OccasionsSection({
 
       {open && (
         <div className="occasion-form">
-          <div className="row">
-            <select value={kind} onChange={(e) => setKind(e.target.value as OccasionKind)} aria-label="Loại dịp">
-              <option value="BIRTHDAY">🎂 Sinh nhật</option>
-              <option value="ANNIVERSARY">💜 Kỉ niệm</option>
-            </select>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Ngày diễn ra" />
-          </div>
+          <select value={kind} onChange={(e) => setKind(e.target.value as OccasionKind)} aria-label="Loại dịp">
+            <option value="BIRTHDAY">🎂 Sinh nhật</option>
+            <option value="ANNIVERSARY">💜 Kỉ niệm</option>
+          </select>
+
+          <DualCalendarDate
+            value={date}
+            onChange={setDate}
+            calendar={calendar}
+            onCalendarChange={setCalendar}
+            label="Ngày diễn ra"
+          />
 
           {!personId && (
             <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Gắn với người">
