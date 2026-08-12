@@ -746,8 +746,14 @@ export function LibraryPage() {
             </div>
           </div>
 
-          {/* Right Column: Controls always stay 100% inside card bounds */}
-          <div className="library-media-actions" onClick={(event) => event.stopPropagation()}>
+          {/* Right Column: Controls always stay 100% inside card bounds.
+              Chặn cả click lẫn keydown: thẻ sách bọc ngoài có onKeyDown gọi preventDefault,
+              không chặn thì Enter/Space trên các nút này bị nuốt mất và chỉ mở màn chi tiết. */}
+          <div
+            className="library-media-actions"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
             <LibraryAudioAction item={item} onListen={(audioItem) => setSelectedAudioItemId(audioItem.id)} onAddMp3={openEdit} />
             <select
               className="library-status-select"

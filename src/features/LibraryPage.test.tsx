@@ -125,6 +125,22 @@ describe('LibraryPage book navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
   })
 
+  // Thẻ sách gọi preventDefault trong onKeyDown của nó. Không chặn keydown ở hàng nút thì
+  // Enter trên nút Sửa bị nuốt mất: nút không chạy, mà lại mở màn chi tiết.
+  it('nhấn Enter trên nút Chỉnh sửa không mở màn chi tiết', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    screen.getAllByRole('button', { name: 'Edit item' })[1].focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
+  })
+
   it('bấm nút Chỉnh sửa trên thẻ không mở màn chi tiết', async () => {
     const user = userEvent.setup()
     render(
