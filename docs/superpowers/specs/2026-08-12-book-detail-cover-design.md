@@ -71,15 +71,15 @@ src/features/library/
 src/features/
   LibraryPage.tsx       SỬA  State + nhánh render + vùng bấm trên thẻ  (+ LibraryPage.test.tsx)
 
-src/types/index.ts      SỬA  Media thêm cover_url
 src/styles.css          SỬA  .library-book-detail*, .book-cover*
 DATABASE_SCHEMA.sql     SỬA  cover_url + bucket book-covers
-supabase/migrations/20260814010000_book_covers.sql   MỚI
+src/types/index.ts      —    Media.cover_url đã có sẵn từ luồng Home/People
+supabase/migrations/20260816000000_book_covers_storage.sql   MỚI
 ```
 
 ## Cơ sở dữ liệu và lưu trữ
 
-Migration mới: `supabase/migrations/20260814010000_book_covers.sql`.
+Migration mới: `supabase/migrations/20260816000000_book_covers_storage.sql`.
 
 ```sql
 alter table public.media_items add column if not exists cover_url text;
@@ -87,6 +87,11 @@ alter table public.media_items add column if not exists cover_url text;
 insert into storage.buckets (id, name, public)
 values ('book-covers', 'book-covers', true) on conflict (id) do nothing;
 ```
+
+**Cột `cover_url` đã tồn tại.** Luồng redesign Home/People chạy song song đã thêm nó ở
+`20260815000000_person_occasions_media_cover.sql` (dùng cho thẻ "Đang đọc" ở Home) và
+khai báo trong `src/types/index.ts`. Dòng `add column if not exists` ở trên chỉ để
+migration tự đứng độc lập được; trên database hiện tại nó là no-op.
 
 Cộng 4 policy trên `storage.objects`, mỗi cái bọc trong khối
 `do $$ begin ... exception when duplicate_object then null; end $$;` đúng như migration
@@ -101,7 +106,6 @@ Ba policy ghi là bắt buộc vì trình duyệt của người dùng upload tr
 Cập nhật kèm theo:
 
 - `DATABASE_SCHEMA.sql`: thêm `cover_url` vào khối `media_items` và ghi chú bucket mới.
-- `src/types/index.ts`: `Media` thêm `cover_url?: string | null`.
 
 ### Quy ước file trong bucket
 

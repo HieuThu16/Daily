@@ -25,19 +25,26 @@
 ## Task 1: Migration, bucket và kiểu dữ liệu
 
 **Files:**
-- Create: `supabase/migrations/20260814010000_book_covers.sql`
-- Modify: `src/types/index.ts:57-79`
+- Create: `supabase/migrations/20260816000000_book_covers_storage.sql`
 - Modify: `DATABASE_SCHEMA.sql:247-270`
 
-Không có test tự động cho SQL — repo chưa có hạ tầng test migration. Kiểm chứng bằng bước 4.
+> **Đã có sẵn, đừng làm lại.** Luồng redesign Home/People chạy song song đã thêm cột
+> `media_items.cover_url` trong `supabase/migrations/20260815000000_person_occasions_media_cover.sql`
+> và trường `cover_url?: string | null` ở `src/types/index.ts:79`. Task này chỉ còn phần
+> bucket Storage và cập nhật tài liệu schema. Migration vẫn giữ dòng
+> `add column if not exists` để tự đứng độc lập được, nhưng nó sẽ là no-op.
+
+Không có test tự động cho SQL — repo chưa có hạ tầng test migration. Kiểm chứng bằng bước 3.
 
 - [ ] **Step 1: Viết migration**
 
-Tạo `supabase/migrations/20260814010000_book_covers.sql`:
+Tạo `supabase/migrations/20260816000000_book_covers_storage.sql`:
 
 ```sql
--- migration: 20260814010000_book_covers
--- Ảnh bìa cho media items, và bucket chứa file ảnh do trình duyệt upload trực tiếp.
+-- migration: 20260816000000_book_covers_storage
+-- Bucket chứa ảnh bìa sách do trình duyệt upload trực tiếp.
+-- Cột media_items.cover_url đã được thêm ở 20260815000000; dòng dưới chỉ để migration
+-- này chạy được độc lập trên một database chưa có nó.
 
 alter table public.media_items add column if not exists cover_url text;
 
@@ -76,24 +83,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 ```
 
-- [ ] **Step 2: Thêm `cover_url` vào type `Media`**
-
-Trong `src/types/index.ts`, thêm một dòng vào cuối type `Media`, ngay sau `book_format`:
-
-```ts
-  book_format?: BookFormat | null
-  cover_url?: string | null
-}
-```
-
-- [ ] **Step 3: Cập nhật `DATABASE_SCHEMA.sql`**
+- [ ] **Step 2: Cập nhật `DATABASE_SCHEMA.sql`**
 
 Trong khối `create table ... public.media_items`, thêm dòng sau `book_format`:
 
 ```sql
   -- book-specific: format READ or LISTEN
   book_format    text        check (book_format in ('READ', 'LISTEN')),
-  -- migration: 20260814010000_book_covers — URL ảnh bìa trong bucket book-covers
+  -- migration: 20260815000000_person_occasions_media_cover — URL ảnh bìa,
+  -- file nằm trong bucket book-covers (20260816000000_book_covers_storage)
   cover_url      text,
   created_at     timestamptz not null default now(),
 ```
@@ -106,16 +104,16 @@ Rồi thêm ghi chú vào cuối file, cạnh chỗ đang mô tả bucket `media
 -- giới hạn theo (storage.foldername(name))[1] = auth.uid()::text.
 ```
 
-- [ ] **Step 4: Kiểm chứng TypeScript vẫn build**
+- [ ] **Step 3: Kiểm chứng TypeScript vẫn build**
 
 Run: `npm run build`
 Expected: build thành công, không có lỗi type.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20260814010000_book_covers.sql src/types/index.ts DATABASE_SCHEMA.sql
-git commit -m "feat: add cover_url column and book-covers storage bucket"
+git add supabase/migrations/20260816000000_book_covers_storage.sql DATABASE_SCHEMA.sql
+git commit -m "feat: add book-covers storage bucket"
 ```
 
 ---
@@ -2130,7 +2128,9 @@ Expected: PASS. Nếu script không tồn tại thì bỏ qua bước này.
 
 - [ ] **Step 4: Áp migration lên Supabase**
 
-Chạy migration `supabase/migrations/20260814010000_book_covers.sql` trên project Supabase đang dùng (qua Supabase CLI hoặc dán vào SQL Editor). Không làm bước này thì mọi thao tác ảnh bìa sẽ lỗi vì thiếu cột và bucket.
+Chạy migration `supabase/migrations/20260816000000_book_covers_storage.sql` trên project Supabase đang dùng (qua Supabase CLI hoặc dán vào SQL Editor). Không làm bước này thì mọi thao tác ảnh bìa sẽ lỗi vì thiếu bucket.
+
+Nếu migration `20260815000000_person_occasions_media_cover.sql` của luồng Home/People chưa chạy thì chạy nó trước — đó là chỗ thêm cột `cover_url`.
 
 Xác nhận: bảng `media_items` có cột `cover_url`, và bucket `book-covers` xuất hiện ở mục Storage với trạng thái public.
 
@@ -2166,8 +2166,9 @@ git commit -m "fix: address issues found during book detail verification"
 
 | Mục spec | Task |
 |---|---|
-| `cover_url` trên `media_items`, bucket `book-covers`, 4 policy | 1 |
-| `DATABASE_SCHEMA.sql` và `src/types/index.ts` | 1 |
+| Bucket `book-covers` + 4 policy | 1 |
+| `DATABASE_SCHEMA.sql` | 1 |
+| `cover_url` trên `media_items` và `src/types/index.ts` | đã có sẵn từ luồng Home/People |
 | `cover.ts` — `canvasToJpeg`, `blobToCover`, 600px / JPEG 0.8 | 2 |
 | `RawBook.cover` | 3 |
 | PDF render trang 1, lỗi trả null | 3 |
