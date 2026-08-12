@@ -181,7 +181,10 @@ const COVER_BUCKET = 'book-covers'
 const coverPath = (userId: string, mediaItemId: string) => `${userId}/${mediaItemId}.jpg`
 
 async function currentUserId(): Promise<string> {
-  const { data } = await client().auth.getUser()
+  const { data, error } = await client().auth.getUser()
+  // Phân biệt mất mạng với thật sự chưa đăng nhập: gộp cả hai thành "Chưa đăng nhập"
+  // sẽ bảo người dùng đi đăng nhập lại trong khi vấn đề chỉ là kết nối.
+  if (error) throw new Error('Không kiểm tra được tài khoản, kiểm tra lại kết nối mạng.')
   const userId = data.user?.id
   if (!userId) throw new Error('Chưa đăng nhập.')
   return userId
@@ -210,10 +213,16 @@ export async function saveCoverUrl(mediaItemId: string, url: string | null): Pro
   if (error) throw new Error(error.message)
 }
 
-/** Xoá file trong bucket rồi xoá URL trong DB. */
+/**
+ * Xoá file trong bucket rồi mới xoá URL trong DB.
+ * Xoá file lỗi thì ném luôn, **không** xoá `cover_url`: bucket là public nên bỏ qua lỗi
+ * ở đây sẽ để lại một file ảnh ai cũng tải được ở đường dẫn đoán ra được, mà DB thì không
+ * còn dấu vết nào để dọn. Giữ hai bên khớp nhau và để người dùng thử lại.
+ */
 export async function removeCover(mediaItemId: string): Promise<void> {
   const db = client()
   const path = coverPath(await currentUserId(), mediaItemId)
-  await db.storage.from(COVER_BUCKET).remove([path])
+  const { error } = await db.storage.from(COVER_BUCKET).remove([path])
+  if (error) throw new Error(error.message)
   await saveCoverUrl(mediaItemId, null)
 }
