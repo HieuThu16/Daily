@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { blobToCover, COVER_MAX_WIDTH, COVER_QUALITY } from './cover'
+import { blobToCover, canvasToJpeg, COVER_MAX_WIDTH, COVER_QUALITY } from './cover'
 
 // jsdom không có canvas thật lẫn createImageBitmap, nên test stub cả hai và khẳng định
 // trên tham số được truyền vào thay vì trên nội dung ảnh.
@@ -98,5 +98,56 @@ describe('blobToCover', () => {
 
     expect(cover).toBeNull()
     expect(toBlobCalls).toHaveLength(0)
+  })
+
+  it('reset canvas về 0x0 sau khi xuất JPEG để giải phóng bộ nhớ', async () => {
+    stubBitmap(800, 1200)
+
+    // Stub toBlob mặc định đọc this.width/this.height TRƯỚC khi callback (nơi reset xảy ra)
+    // chạy, nên không thể quan sát việc reset. Bắt lại tham chiếu canvas ở đây rồi kiểm tra
+    // kích thước của chính tham chiếu đó sau khi promise đã resolve.
+    let capturedCanvas: HTMLCanvasElement | undefined
+    const stubbedToBlob = HTMLCanvasElement.prototype.toBlob
+    HTMLCanvasElement.prototype.toBlob = function (
+      this: HTMLCanvasElement,
+      callback: BlobCallback,
+      type?: string,
+      quality?: number,
+    ) {
+      capturedCanvas = this
+      stubbedToBlob.call(this, callback, type, quality)
+    } as never
+
+    await blobToCover(new Blob(['src'], { type: 'image/png' }))
+
+    expect(capturedCanvas).toBeDefined()
+    expect(capturedCanvas?.width).toBe(0)
+    expect(capturedCanvas?.height).toBe(0)
+  })
+
+  it('trả null và vẫn giải phóng bitmap khi không lấy được context 2D', async () => {
+    stubBitmap(800, 1200)
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never
+
+    const cover = await blobToCover(new Blob(['src'], { type: 'image/png' }))
+
+    expect(cover).toBeNull()
+    expect(toBlobCalls).toHaveLength(0)
+    expect(bitmapClosed).toBe(true)
+  })
+})
+
+describe('canvasToJpeg', () => {
+  it('xuất JPEG với chất lượng COVER_QUALITY, độc lập với đường thu nhỏ ảnh', async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 300
+    canvas.height = 400
+
+    const jpeg = await canvasToJpeg(canvas)
+
+    expect(jpeg?.type).toBe('image/jpeg')
+    expect(toBlobCalls).toHaveLength(1)
+    expect(toBlobCalls[0].type).toBe('image/jpeg')
+    expect(toBlobCalls[0].quality).toBe(COVER_QUALITY)
   })
 })
