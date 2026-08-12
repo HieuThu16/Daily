@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Heart, Phone, Plus, Save, X } from 'lucide-react'
+import { ArrowLeft, Heart, Plus, Save, X } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { supabase } from '../../lib/supabase'
 import { ageOnNext, isLunar, lunarLabel, nextOccurrence } from '../../lib/occasions'
@@ -96,13 +96,6 @@ export function PersonDetail({ person, occasions, people, onBack, onAddOccasion,
               🎂 Sinh nhật {nextBirthday.getDate()}/{nextBirthday.getMonth() + 1}
               {birthday && isLunar(birthday) ? ` (${lunarLabel(birthday)})` : ''}
               {age ? ` · ${age} tuổi` : ''}
-            </div>
-          )}
-          {person.phone && (
-            <div className="person-meta">
-              <a href={`tel:${person.phone.replace(/\s+/g, '')}`} className="person-phone">
-                <Phone size={13} /> {person.phone}
-              </a>
             </div>
           )}
         </div>

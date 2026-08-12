@@ -18,7 +18,6 @@ export type NewOccasion = {
 /** Thông tin nhập ở form thêm người; sinh nhật lưu thành một dịp BIRTHDAY. */
 export type NewPerson = {
   name: string
-  phone?: string
   birthday?: string
   birthdayCalendar?: OccasionCalendar
 }
@@ -69,8 +68,7 @@ export function usePeopleData() {
     const raw = typeof input === 'string' ? { name: input } : input
     const name = raw.name.trim()
     if (!name) return source
-    const phone = raw.phone?.trim() || null
-    const local: Person = { id: crypto.randomUUID(), name, phone }
+    const local: Person = { id: crypto.randomUUID(), name }
 
     const withBirthday = async (personId: string, savedTo: DataSource) => {
       if (!raw.birthday) return savedTo
@@ -91,7 +89,7 @@ export function usePeopleData() {
       return withBirthday(local.id, 'Local')
     }
 
-    const { data, error } = await supabase.from('people').insert({ name, phone }).select().single()
+    const { data, error } = await supabase.from('people').insert({ name }).select().single()
     if (error || !data) {
       persistPeople([local, ...people])
       setSource('Local')

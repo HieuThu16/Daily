@@ -1,28 +1,43 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight, Plus, UserRound } from 'lucide-react'
-import { isLunar, nextOccurrence } from '../../lib/occasions'
+import { Cake, ChevronRight, Plus, Search, UserRound } from 'lucide-react'
 import { localDate } from '../../lib/date'
+import { countdownLabel, daysUntil, isLunar, nextOccurrence } from '../../lib/occasions'
 import { saveSourceLabel } from '../../lib/persistence'
-import type { Person } from '../../types'
-import { Empty } from '../shared'
+import type { OccasionCalendar, Person, PersonOccasion } from '../../types'
+import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import { avatarStyle, initials } from './avatar'
+import { DualCalendarDate } from './DualCalendarDate'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
-import { DualCalendarDate } from './DualCalendarDate'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
-import type { OccasionCalendar } from '../../types'
+
+/** Sinh nhật sắp tới của một người, để hiện trên thẻ. */
+function birthdayInfo(occasions: PersonOccasion[], personId: string) {
+  const found = occasions.find((o) => o.person_id === personId && o.kind === 'BIRTHDAY')
+  if (!found) return null
+  const next = nextOccurrence(found)
+  if (!next) return null
+  const days = daysUntil(next)
+  return {
+    text: `${next.getDate()}/${next.getMonth() + 1}${isLunar(found) ? ' âm' : ''}`,
+    days,
+    soon: days <= 7,
+  }
+}
 
 export function PeoplePage() {
   const { showToast } = useToast()
   const { people, occasions, loading, addPerson, addOccasion, removeOccasion } = usePeopleData()
   const [selected, setSelected] = useState<Person | null>(null)
+  const [search, setSearch] = useState('')
+
+  const [formOpen, setFormOpen] = useState(false)
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+  const [withBirthday, setWithBirthday] = useState(false)
   const [birthday, setBirthday] = useState(localDate())
   const [birthdayCalendar, setBirthdayCalendar] = useState<OccasionCalendar>('SOLAR')
-  const [withBirthday, setWithBirthday] = useState(false)
-  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const filtered = useMemo(
     () => people.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase())),
@@ -34,28 +49,25 @@ export function PeoplePage() {
     showToast(saveSourceLabel(savedTo))
   }
 
+  const closeForm = () => {
+    setFormOpen(false)
+    setName('')
+    setWithBirthday(false)
+    setBirthday(localDate())
+    setBirthdayCalendar('SOLAR')
+  }
+
   const handleAddPerson = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || saving) return
+    setSaving(true)
     const savedTo = await addPerson({
       name,
-      phone,
       birthday: withBirthday ? birthday : undefined,
       birthdayCalendar,
     })
-    setName('')
-    setPhone('')
-    setBirthday(localDate())
-    setBirthdayCalendar('SOLAR')
-    setWithBirthday(false)
+    setSaving(false)
+    closeForm()
     showToast(saveSourceLabel(savedTo))
-  }
-
-  const birthdayOf = (personId: string) => {
-    const found = occasions.find((o) => o.person_id === personId && o.kind === 'BIRTHDAY')
-    if (!found) return null
-    const next = nextOccurrence(found)
-    if (!next) return null
-    return `${next.getDate()}/${next.getMonth() + 1}${isLunar(found) ? ' (âm)' : ''}`
   }
 
   if (selected) {
@@ -73,57 +85,29 @@ export function PeoplePage() {
 
   return (
     <section className="people-page">
-      <div className="card home-section-card">
-        <div className="home-section-head">
-          <h3>
-            <UserRound size={17} color="var(--cyan)" /> Người
-          </h3>
-          <span className="home-card-count">{people.length}</span>
+      <header className="people-head">
+        <div className="people-head-title">
+          <div className="icon-box" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan)' }}>
+            <UserRound size={18} />
+          </div>
+          <div>
+            <h2>Người</h2>
+            <p>{people.length} người thân quen</p>
+          </div>
         </div>
+        <button className="primary people-add" onClick={() => setFormOpen(true)}>
+          <Plus size={16} /> Thêm
+        </button>
+      </header>
 
+      <div className="people-search">
+        <Search size={15} />
         <input
-          className="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Tìm theo tên…"
           aria-label="Tìm theo tên"
-          style={{ width: '100%', marginBottom: 8 }}
         />
-
-        <div className="person-form">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Tên người…"
-            aria-label="Tên người mới"
-          />
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="Số điện thoại (không bắt buộc)"
-            aria-label="Số điện thoại"
-          />
-
-          <label className="check">
-            <input type="checkbox" checked={withBirthday} onChange={(e) => setWithBirthday(e.target.checked)} />
-            Thêm sinh nhật
-          </label>
-
-          {withBirthday && (
-            <DualCalendarDate
-              value={birthday}
-              onChange={setBirthday}
-              calendar={birthdayCalendar}
-              onCalendarChange={setBirthdayCalendar}
-              label="Ngày sinh"
-            />
-          )}
-
-          <button className="primary" onClick={handleAddPerson}>
-            <Plus size={14} /> Thêm
-          </button>
-        </div>
       </div>
 
       <OccasionsSection
@@ -133,35 +117,90 @@ export function PeoplePage() {
         onRemove={removeOccasion}
       />
 
-      <div style={{ marginTop: 12 }}>
-        {loading && people.length === 0 ? (
-          <p className="home-card-empty">Đang tải…</p>
-        ) : filtered.length === 0 ? (
-          <Empty icon={UserRound}>{people.length === 0 ? 'Chưa có người nào.' : 'Không tìm thấy ai.'}</Empty>
-        ) : (
-          <div className="person-grid">
-            {filtered.map((person) => {
-              const birthday = birthdayOf(person.id)
-              return (
-                <button key={person.id} className="person-tile" onClick={() => setSelected(person)}>
-                  {person.avatar_url ? (
-                    <img className="person-avatar" src={person.avatar_url} alt={person.name} />
-                  ) : (
-                    <div className="person-avatar" style={avatarStyle(person.name)}>
-                      {initials(person.name)}
-                    </div>
-                  )}
-                  <div className="person-body">
-                    <strong>{person.name}</strong>
-                    {birthday && <div className="person-meta">🎂 {birthday}</div>}
-                  </div>
-                  <ChevronRight size={16} color="var(--text-muted)" />
-                </button>
-              )
-            })}
+      {loading && people.length === 0 ? (
+        <p className="home-card-empty">Đang tải…</p>
+      ) : filtered.length === 0 ? (
+        <div className="people-empty">
+          <div className="icon-box" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan)' }}>
+            <UserRound size={22} />
           </div>
-        )}
-      </div>
+          <p>{people.length === 0 ? 'Chưa có ai ở đây cả.' : 'Không tìm thấy ai khớp tên này.'}</p>
+          {people.length === 0 && (
+            <button className="primary" onClick={() => setFormOpen(true)}>
+              <Plus size={15} /> Thêm người đầu tiên
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="person-grid">
+          {filtered.map((person) => {
+            const bd = birthdayInfo(occasions, person.id)
+            return (
+              <button key={person.id} className="person-tile" onClick={() => setSelected(person)}>
+                {person.avatar_url ? (
+                  <img className="person-avatar" src={person.avatar_url} alt={person.name} />
+                ) : (
+                  <div className="person-avatar" style={avatarStyle(person.name)}>
+                    {initials(person.name)}
+                  </div>
+                )}
+                <div className="person-body">
+                  <strong>{person.name}</strong>
+                  {bd ? (
+                    <span className="person-meta">
+                      <Cake size={12} /> {bd.text}
+                      <span className={'countdown-badge' + (bd.soon ? ' soon' : '')}>{countdownLabel(bd.days)}</span>
+                    </span>
+                  ) : (
+                    <span className="person-meta muted">Chưa có sinh nhật</span>
+                  )}
+                </div>
+                <ChevronRight size={16} color="var(--text-muted)" />
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {formOpen && (
+        <Modal title="Thêm người" onClose={closeForm}>
+          <div className="person-form">
+            <label className="field">
+              <span>Tên</span>
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !withBirthday && handleAddPerson()}
+                placeholder="VD: Linh"
+                aria-label="Tên người mới"
+              />
+            </label>
+
+            <label className="check">
+              <input type="checkbox" checked={withBirthday} onChange={(e) => setWithBirthday(e.target.checked)} />
+              Thêm sinh nhật
+            </label>
+
+            {withBirthday && (
+              <DualCalendarDate
+                value={birthday}
+                onChange={setBirthday}
+                calendar={birthdayCalendar}
+                onCalendarChange={setBirthdayCalendar}
+                label="Ngày sinh"
+              />
+            )}
+
+            <div className="modal-actions">
+              <button onClick={closeForm}>Huỷ</button>
+              <button className="primary" onClick={handleAddPerson} disabled={!name.trim() || saving}>
+                <Plus size={15} /> {saving ? 'Đang lưu…' : 'Thêm'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Cake, Heart, Plus, Trash2, X } from 'lucide-react'
+import { Cake, Heart, Plus, Trash2 } from 'lucide-react'
 import { localDate, shortDate } from '../../lib/date'
 import { countdownLabel, isLunar, lunarLabel, upcomingOccasions } from '../../lib/occasions'
 import type { OccasionCalendar, OccasionKind, Person, PersonOccasion } from '../../types'
+import { Modal } from '../shared'
 import { DualCalendarDate } from './DualCalendarDate'
 import type { NewOccasion } from './usePeopleData'
 
@@ -62,14 +63,8 @@ export function OccasionsSection({
         <h3>
           <Cake size={17} color="var(--rose)" /> {title}
         </h3>
-        <button
-          type="button"
-          className="icon"
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? 'Đóng form thêm dịp' : 'Thêm dịp'}
-          style={{ color: 'var(--primary)' }}
-        >
-          {open ? <X size={18} /> : <Plus size={18} />}
+        <button type="button" className="icon" onClick={() => setOpen(true)} aria-label="Thêm dịp" style={{ color: 'var(--primary)' }}>
+          <Plus size={18} />
         </button>
       </div>
 
@@ -106,48 +101,65 @@ export function OccasionsSection({
       )}
 
       {open && (
-        <div className="occasion-form">
-          <select value={kind} onChange={(e) => setKind(e.target.value as OccasionKind)} aria-label="Loại dịp">
-            <option value="BIRTHDAY">🎂 Sinh nhật</option>
-            <option value="ANNIVERSARY">💜 Kỉ niệm</option>
-          </select>
+        <Modal title="Thêm dịp" onClose={() => setOpen(false)}>
+          <div className="person-form">
+            <label className="field">
+              <span>Loại dịp</span>
+              <select value={kind} onChange={(e) => setKind(e.target.value as OccasionKind)} aria-label="Loại dịp">
+                <option value="BIRTHDAY">🎂 Sinh nhật</option>
+                <option value="ANNIVERSARY">💜 Kỉ niệm</option>
+              </select>
+            </label>
 
-          <DualCalendarDate
-            value={date}
-            onChange={setDate}
-            calendar={calendar}
-            onCalendarChange={setCalendar}
-            label="Ngày diễn ra"
-          />
+            <DualCalendarDate
+              value={date}
+              onChange={setDate}
+              calendar={calendar}
+              onCalendarChange={setCalendar}
+              label="Ngày diễn ra"
+            />
 
-          {!personId && (
-            <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Gắn với người">
-              <option value="">Không gắn ai</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
+            {!personId && (
+              <label className="field">
+                <span>Gắn với người</span>
+                <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Gắn với người">
+                  <option value="">Không gắn ai</option>
+                  {people.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Tên dịp (để trống sẽ tự đặt)"
-            aria-label="Tên dịp"
-          />
+            <label className="field">
+              <span>Tên dịp</span>
+              <input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Để trống sẽ tự đặt tên"
+                aria-label="Tên dịp"
+              />
+            </label>
 
-          <label className="check">
-            <input type="checkbox" checked={yearly} onChange={(e) => setYearly(e.target.checked)} />
-            Lặp lại hằng năm
-          </label>
+            <label className="check">
+              <input type="checkbox" checked={yearly} onChange={(e) => setYearly(e.target.checked)} />
+              Lặp lại hằng năm
+            </label>
 
-          <button type="button" className="primary" onClick={submit}>
-            <Plus size={14} /> Thêm dịp
-          </button>
-        </div>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setOpen(false)}>
+                Huỷ
+              </button>
+              <button type="button" className="primary" onClick={submit}>
+                <Plus size={14} /> Thêm dịp
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
+
     </div>
   )
 }

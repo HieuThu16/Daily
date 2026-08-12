@@ -530,9 +530,6 @@ do $$ begin
     check (calendar in ('SOLAR', 'LUNAR'));
 exception when duplicate_object then null; end $$;
 
--- Số điện thoại của người.
-alter table public.people add column if not exists phone text;
-
 -- Ảnh đính kèm nhật ký, khoá theo (person_id, log_date) nên thêm được cả khi chưa có chữ.
 create table if not exists public.person_daily_photos (
   id uuid primary key default gen_random_uuid(),

@@ -2497,18 +2497,6 @@ button.task-group-head:hover h3 {
 }
 .occasion-row:first-child { border-top: 0; }
 .occasion-row .occasion-name { flex: 1; min-width: 0; font-size: 0.86rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.occasion-form { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--card-border); }
-.occasion-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.occasion-form input, .occasion-form select {
-  width: 100%;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  font-size: 0.84rem;
-}
-.occasion-form label.check { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-muted); }
 
 /* ===========================================================
    Small-screen hardening (điện thoại nhỏ ~360px)
@@ -3061,9 +3049,7 @@ input, select, textarea, button {
 }
 
 .person-form { display: grid; gap: 8px; }
-.person-form input[type='text'], .person-form input[type='tel'], .person-form input:not([type]) { width: 100%; }
 .person-form label.check { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-muted); }
-.person-phone { display: inline-flex; align-items: center; gap: 5px; color: var(--primary); text-decoration: none; font-weight: 600; }
 
 .log-photos { display: grid; gap: 8px; margin-top: 10px; }
 .log-photos > button {
@@ -3085,3 +3071,98 @@ input, select, textarea, button {
 .log-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
 .log-photo-grid button { border: 0; padding: 0; background: transparent; cursor: pointer; }
 .log-photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
+
+/* ── Người: đầu trang, tìm kiếm, thẻ người, form trong modal ─────────────── */
+
+.people-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.people-head-title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.people-head-title h2 { margin: 0; font-size: 1.22rem; line-height: 1.2; }
+.people-head-title p { margin: 2px 0 0; font-size: 0.76rem; color: var(--text-muted); }
+.people-add { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; }
+
+.people-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+}
+.people-search:focus-within { border-color: var(--primary); }
+.people-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 11px 0;
+  font-size: 0.86rem;
+}
+.people-search input:focus { outline: none; }
+
+.person-grid { margin-top: 12px; }
+
+.person-tile { transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease; }
+.person-tile .person-body strong { margin-bottom: 3px; }
+.person-tile .person-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.person-tile .person-meta.muted { opacity: 0.7; font-style: italic; }
+
+.people-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 30px 18px;
+  margin-top: 12px;
+  border: 1px dashed var(--card-border);
+  border-radius: 18px;
+  text-align: center;
+}
+.people-empty p { margin: 0; font-size: 0.86rem; color: var(--text-muted); }
+
+.person-form { display: grid; gap: 12px; }
+.person-form .field { display: grid; gap: 5px; }
+.person-form .field > span { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+.person-form input, .person-form select {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.88rem;
+}
+.person-form .check input, .dual-date .check input { width: auto; }
+.person-form label.check { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--text-muted); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+.modal-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-actions button.primary { border-color: transparent; }
+.modal-actions button:disabled { opacity: 0.5; cursor: not-allowed; }

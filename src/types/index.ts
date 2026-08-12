@@ -130,7 +130,6 @@ export type Person = {
   id: string
   name: string
   avatar_url?: string | null
-  phone?: string | null
   notes?: string | null
   created_at?: string
 }
