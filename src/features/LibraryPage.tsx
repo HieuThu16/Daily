@@ -1744,7 +1744,7 @@ export function LibraryPage() {
         <BookImportModal
           attachableBooks={items.filter((item) => item.type === 'BOOK' && !importedIds.has(item.id))}
           onClose={() => setImportOpen(false)}
-          onImported={(mediaItemId, createdItem) => {
+          onImported={({ mediaItemId, createdItem }) => {
             if (createdItem) setItems((prev) => [createdItem, ...prev])
             setImportedIds((prev) => new Set(prev).add(mediaItemId))
             setImportOpen(false)

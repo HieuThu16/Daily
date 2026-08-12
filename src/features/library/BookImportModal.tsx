@@ -1,20 +1,28 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BookOpen, FileUp, Loader2 } from 'lucide-react'
 import { Modal } from '../shared'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
-import { saveBook } from '../../lib/book/repository'
+import { saveBook, saveCoverUrl, uploadCover } from '../../lib/book/repository'
 import type { Media } from '../../types'
 import type { ExtractProgress, RawBook, RawChapter } from '../../lib/book/types'
 import { BookChapterEditor } from './BookChapterEditor'
 
 type Stage = 'pick' | 'working' | 'preview' | 'saving'
 
+/** Kết quả một lần nhập sách, gói thành object để không phải nhớ thứ tự bốn tham số. */
+export type ImportResult = {
+  mediaItemId: string
+  createdItem: Media | null
+  coverUrl: string | null
+  coverFailed: boolean
+}
+
 type Props = {
   /** Sách BOOK đã có trong thư viện nhưng chưa nhập nội dung. */
   attachableBooks: Media[]
   onClose: () => void
-  onImported: (mediaItemId: string, createdItem: Media | null) => void
+  onImported: (result: ImportResult) => void
 }
 
 const PHASE_LABEL: Record<ExtractProgress['phase'], string> = {
@@ -33,6 +41,14 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [target, setTarget] = useState('NEW')
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
+
+  // Object URL của bìa phải được thu hồi, nếu không mỗi lần chọn file lại rò một blob.
+  useEffect(() => {
+    return () => {
+      if (coverPreview) URL.revokeObjectURL(coverPreview)
+    }
+  }, [coverPreview])
 
   const totalChars = chapters.reduce((sum, chapter) => sum + chapter.content.length, 0)
   const percent = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
@@ -46,6 +62,7 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
       const { extractBook } = await import('../../lib/book')
       const result = await extractBook(file, setProgress)
       setBook(result)
+      setCoverPreview(result.cover ? URL.createObjectURL(result.cover) : null)
       setChapters(result.chapters)
       setTitle(result.title)
       setAuthor(result.author ?? '')
@@ -86,7 +103,27 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
       }
 
       await saveBook(mediaItemId, { ...book, title: title.trim() || book.title, chapters })
-      onImported(mediaItemId, createdItem)
+
+      // Bìa lưu sau cùng và lỗi ở đây không huỷ lần nhập: sách đã vào thư viện rồi,
+      // người dùng đổi bìa tay ở màn chi tiết được.
+      let coverUrl: string | null = null
+      let coverFailed = false
+      if (book.cover) {
+        try {
+          coverUrl = await uploadCover(mediaItemId, book.cover)
+          await saveCoverUrl(mediaItemId, coverUrl)
+        } catch {
+          coverUrl = null
+          coverFailed = true
+        }
+      }
+
+      onImported({
+        mediaItemId,
+        createdItem: createdItem ? { ...createdItem, cover_url: coverUrl } : null,
+        coverUrl,
+        coverFailed,
+      })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không lưu được sách.')
       setStage('preview')
@@ -136,6 +173,16 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
 
         {(stage === 'preview' || stage === 'saving') && book && (
           <>
+            <div className="book-import-cover">
+              {coverPreview ? (
+                <img src={coverPreview} alt="Ảnh bìa lấy từ file" />
+              ) : (
+                <div className="book-import-cover-empty">
+                  <p>Không tìm thấy ảnh bìa trong file</p>
+                  <p>Đổi được ở màn chi tiết sách</p>
+                </div>
+              )}
+            </div>
             <label className="book-import-field">
               <span>Tên sách</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} />
