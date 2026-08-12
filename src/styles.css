@@ -1128,6 +1128,158 @@ header {
   }
 }
 
+.library-audio-action {
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.library-audio-action-listen {
+  background: var(--cyan-bg);
+  color: var(--cyan);
+}
+
+.library-audio-action-add {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.library-audio-detail {
+  max-width: 640px;
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+}
+
+.library-audio-back {
+  width: fit-content;
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.library-audio-detail-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--card-shadow);
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.library-audio-cover {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--cyan);
+  background: var(--cyan-bg);
+}
+
+.library-audio-heading {
+  text-align: center;
+}
+
+.library-audio-heading > span {
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.library-audio-heading h2 {
+  margin: 4px 0;
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.library-audio-heading p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.library-audio-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+}
+
+.library-audio-meta span {
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--text-muted);
+  background: var(--bg-main);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.library-audio-player-panel {
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--bg-main);
+}
+
+.library-audio-player-panel audio {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.library-audio-player-panel p {
+  margin: 8px 0 0;
+  color: var(--rose);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.library-audio-detail-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.library-audio-detail-actions a,
+.library-audio-detail-actions button {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .daily-line-row {
   display: flex;
   align-items: center;

@@ -1,7 +1,11 @@
 import { Layers, BookOpen, BookMarked, Film, Tv, Music } from 'lucide-react'
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
-import { LibraryCategoryBar } from './LibraryAudioView'
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Media } from '../../types'
+import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './LibraryAudioView'
+
+afterEach(cleanup)
 
 const categories = [
   { id: 'ALL', label: 'Tất cả thể loại', icon: Layers, color: 'blue', bg: 'lightblue' },
@@ -12,6 +16,28 @@ const categories = [
   { id: 'MUSIC', label: 'Âm nhạc', icon: Music, color: 'cyan', bg: 'azure' },
 ]
 
+const withAudio: Media = {
+  id: 'music-1',
+  type: 'MUSIC',
+  name: 'Hẹn một mai',
+  description: null,
+  status: 'COMPLETED',
+  is_favorite: true,
+  artist: 'Bùi Anh Tuấn',
+  music_genre: 'Ballad',
+  log_date: '2026-08-12',
+  log_time: '10:04',
+  audio_url: 'https://example.com/hen-mot-mai.mp3',
+  youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+}
+
+const withoutAudio: Media = {
+  ...withAudio,
+  id: 'music-2',
+  name: 'Chưa có MP3',
+  audio_url: null,
+}
+
 describe('LibraryCategoryBar', () => {
   it('keeps all six category controls in one category bar', () => {
     render(<LibraryCategoryBar selectedType="ALL" categories={categories} onSelect={vi.fn()} />)
@@ -19,5 +45,45 @@ describe('LibraryCategoryBar', () => {
     expect(screen.getByRole('group', { name: 'Thể loại thư viện' })).toHaveClass('library-category-bar')
     expect(screen.getAllByRole('button')).toHaveLength(6)
     expect(screen.getByRole('button', { name: 'Tất cả thể loại' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('LibraryAudioAction', () => {
+  it('opens listening for an item with stored audio', async () => {
+    const user = userEvent.setup()
+    const onListen = vi.fn()
+    render(<LibraryAudioAction item={withAudio} onListen={onListen} onAddMp3={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Nghe Hẹn một mai' }))
+
+    expect(onListen).toHaveBeenCalledWith(withAudio)
+  })
+
+  it('opens editing for an item without stored audio', async () => {
+    const user = userEvent.setup()
+    const onAddMp3 = vi.fn()
+    render(<LibraryAudioAction item={withoutAudio} onListen={vi.fn()} onAddMp3={onAddMp3} />)
+
+    await user.click(screen.getByRole('button', { name: 'Thêm MP3 cho Chưa có MP3' }))
+
+    expect(onAddMp3).toHaveBeenCalledWith(withoutAudio)
+  })
+})
+
+describe('LibraryAudioDetail', () => {
+  it('shows one focused player and returns to the library', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    render(<LibraryAudioDetail item={withAudio} onBack={onBack} onEdit={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Hẹn một mai' })).toBeInTheDocument()
+    expect(screen.getByText('Bùi Anh Tuấn')).toBeInTheDocument()
+    expect(screen.getByText('Ballad')).toBeInTheDocument()
+    expect(document.querySelectorAll('audio')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Mở trên YouTube' })).toHaveAttribute('href', withAudio.youtube_url)
+
+    await user.click(screen.getByRole('button', { name: 'Quay lại thư viện' }))
+
+    expect(onBack).toHaveBeenCalledOnce()
   })
 })
