@@ -4,8 +4,15 @@ import { BookOpen } from 'lucide-react'
 type BookCoverProps = {
   url: string | null | undefined
   alt: string
-  /** `thumb` cho thẻ trong danh sách, `large` cho ô bìa ở màn chi tiết. */
-  size: 'thumb' | 'large'
+  /** `thumb` cho thẻ dạng dòng, `grid` cho ô trong lưới sách, `large` cho màn chi tiết. */
+  size: 'thumb' | 'grid' | 'large'
+}
+
+/** Cỡ icon của placeholder theo từng ô. Ô càng lớn thì icon càng lớn cho cân. */
+const PLACEHOLDER_ICON: Record<BookCoverProps['size'], number> = {
+  thumb: 19,
+  grid: 28,
+  large: 34,
 }
 
 export function BookCover({ url, alt, size }: BookCoverProps) {
@@ -19,7 +26,7 @@ export function BookCover({ url, alt, size }: BookCoverProps) {
   if (!url || failed) {
     return (
       <span className={`book-cover-placeholder book-cover-${size}`} aria-hidden="true">
-        <BookOpen size={size === 'large' ? 34 : 19} />
+        <BookOpen size={PLACEHOLDER_ICON[size]} />
       </span>
     )
   }

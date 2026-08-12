@@ -38,4 +38,14 @@ describe('BookCover', () => {
 
     expect(screen.getByRole('img', { name: 'Bìa' })).toHaveAttribute('src', 'https://example.com/moi.jpg?v=2')
   })
+
+  it('dùng được cỡ grid cho ô bìa trong lưới', () => {
+    const { container, rerender } = render(
+      <BookCover url="https://example.com/bia.jpg" alt="Bìa" size="grid" />,
+    )
+    expect(screen.getByRole('img', { name: 'Bìa' })).toHaveClass('book-cover-grid')
+
+    rerender(<BookCover url={null} alt="Bìa" size="grid" />)
+    expect(container.querySelector('.book-cover-placeholder')).toHaveClass('book-cover-grid')
+  })
 })
