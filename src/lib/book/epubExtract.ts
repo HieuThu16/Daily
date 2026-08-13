@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { cleanBookLines, linesToContent, normalizeUnicode } from './cleanText'
 import { splitIntoChapters } from './chapters'
+import { blobToCover } from './cover'
 import { BookImportError } from './types'
 import type { ProgressCallback, RawBook, RawChapter, TextLine } from './types'
 
@@ -22,10 +23,23 @@ function parseXml(source: string, mimeType: DOMParserSupportedType): Document {
   return doc
 }
 
+/**
+ * `decodeURIComponent` ném URIError khi gặp `%` không phải escape hợp lệ, ví dụ tên file
+ * "50%off-cover.jpg". Tên như vậy có thật trong EPUB, nên coi chuỗi là literal thay vì
+ * làm hỏng cả lần nhập sách.
+ */
+function safeDecodePath(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 /** Gộp đường dẫn tương đối bên trong file EPUB (luôn dùng `/`, không phải đường dẫn hệ thống). */
 function resolvePath(basePath: string, relative: string): string {
   const stack = basePath.split('/').slice(0, -1)
-  for (const segment of decodeURIComponent(relative).split('/')) {
+  for (const segment of safeDecodePath(relative).split('/')) {
     if (!segment || segment === '.') continue
     if (segment === '..') stack.pop()
     else stack.push(segment)
@@ -134,6 +148,83 @@ function firstHeadingTitle(lines: TextLine[]): string | null {
   return heading?.text ?? null
 }
 
+const COVER_ENTRY_PATTERN = /(^|\/)cover\.(jpe?g|png|webp)$/i
+
+/**
+ * Tìm ảnh bìa trong EPUB theo bốn cách, dừng ở cách đầu tiên ra kết quả.
+ * Trả blob JPEG đã chuẩn hoá, hoặc null nếu file không có ảnh bìa nào.
+ */
+async function findCover(zip: JSZip, opfPath: string, opf: Document): Promise<Blob | null> {
+  // Bọc toàn bộ hàm: bất kỳ bước dựng danh sách ứng viên nào lỗi cũng không được làm hỏng
+  // cả lần nhập sách — giống cam kết trong docstring và giống renderCover ở pdfExtract.ts.
+  try {
+    const manifestItems = Array.from(opf.querySelectorAll('manifest > item'))
+    const hrefById = new Map<string, string>()
+    for (const item of manifestItems) {
+      const id = item.getAttribute('id')
+      const href = item.getAttribute('href')
+      if (id && href) hrefById.set(id, href)
+    }
+
+    const candidates: string[] = []
+
+    // 1. <meta name="cover" content="ID"> — cách phổ biến nhất, EPUB 2 lẫn EPUB 3.
+    const metaCoverId = opf.querySelector('metadata > meta[name="cover"]')?.getAttribute('content')
+    const metaHref = metaCoverId ? hrefById.get(metaCoverId) : undefined
+    if (metaHref) candidates.push(resolvePath(opfPath, stripFragment(metaHref)))
+
+    // 2. properties="cover-image" — cách chuẩn của EPUB 3.
+    const propertyItem = manifestItems.find((item) =>
+      (item.getAttribute('properties') ?? '').split(/\s+/).includes('cover-image'),
+    )
+    const propertyHref = propertyItem?.getAttribute('href')
+    if (propertyHref) candidates.push(resolvePath(opfPath, stripFragment(propertyHref)))
+
+    // 3. Ảnh đầu tiên trong file spine đầu tiên — nhiều EPUB đặt bìa như một trang thường.
+    const firstSpineHref = (() => {
+      const itemref = opf.querySelector('spine > itemref')
+      const idref = itemref?.getAttribute('idref')
+      return idref ? hrefById.get(idref) : undefined
+    })()
+    if (firstSpineHref) {
+      const firstSpinePath = resolvePath(opfPath, stripFragment(firstSpineHref))
+      const source = await readText(zip, firstSpinePath)
+      if (source) {
+        let firstDoc: Document | null = null
+        try {
+          firstDoc = parseXml(source, 'application/xhtml+xml')
+        } catch {
+          firstDoc = new DOMParser().parseFromString(source, 'text/html')
+        }
+        const rawHref =
+          firstDoc.querySelector('img[src]')?.getAttribute('src') ??
+          firstDoc.querySelector('image')?.getAttribute('xlink:href') ??
+          firstDoc.querySelector('image')?.getAttribute('href')
+        if (rawHref) candidates.push(resolvePath(firstSpinePath, stripFragment(rawHref)))
+      }
+    }
+
+    // 4. Bất kỳ file nào tên cover.<ext> trong zip.
+    const looseEntry = Object.keys(zip.files).find((path) => COVER_ENTRY_PATTERN.test(path))
+    if (looseEntry) candidates.push(looseEntry)
+
+    for (const path of candidates) {
+      const entry = zip.file(path)
+      if (!entry) continue
+      try {
+        const cover = await blobToCover(await entry.async('blob'))
+        if (cover) return cover
+      } catch {
+        // Thử ứng viên kế tiếp.
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
 export async function extractEpub(file: File, onProgress: ProgressCallback): Promise<RawBook> {
   onProgress({ phase: 'reading', current: 0, total: 1 })
 
@@ -168,6 +259,8 @@ export async function extractEpub(file: File, onProgress: ProgressCallback): Pro
     if (href) spinePaths.push(resolvePath(opfPath, href))
   }
   if (spinePaths.length === 0) throw invalidEpub()
+
+  const cover = await findCover(zip, opfPath, opf)
 
   const toc = await readToc(zip, opfPath, opf)
 
@@ -221,6 +314,7 @@ export async function extractEpub(file: File, onProgress: ProgressCallback): Pro
     sourceFormat: 'EPUB',
     sourceFilename: file.name,
     pageCount: null,
+    cover,
     chapters,
   }
 }

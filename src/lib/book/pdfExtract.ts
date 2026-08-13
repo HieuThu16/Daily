@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { cleanBookLines, linesToContent } from './cleanText'
 import { splitIntoChapters } from './chapters'
+import { canvasToJpeg, COVER_MAX_HEIGHT, COVER_MAX_WIDTH } from './cover'
 import { BookImportError } from './types'
 import type { ProgressCallback, RawBook, RawChapter, TextLine } from './types'
 
@@ -114,6 +115,31 @@ function totalChars(chapters: RawChapter[]): number {
   return chapters.reduce((sum, chapter) => sum + chapter.content.length, 0)
 }
 
+/**
+ * Trang 1 của một cuốn sách PDF gần như luôn là bìa hoặc trang tên sách, nên render nó
+ * là đủ. Lỗi ở đây trả null chứ không ném: thiếu bìa không được làm hỏng lần nhập sách.
+ */
+async function renderCover(doc: PdfDocument): Promise<Blob | null> {
+  try {
+    const page = await doc.getPage(1)
+    const base = page.getViewport({ scale: 1 })
+    const scale = Math.min(1, COVER_MAX_WIDTH / base.width, COVER_MAX_HEIGHT / base.height)
+    const viewport = page.getViewport({ scale })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(viewport.width)
+    canvas.height = Math.round(viewport.height)
+
+    const canvasContext = canvas.getContext('2d')
+    if (!canvasContext) return null
+
+    await page.render({ canvasContext, viewport }).promise
+    return await canvasToJpeg(canvas)
+  } catch {
+    return null
+  }
+}
+
 export async function extractPdf(file: File, onProgress: ProgressCallback): Promise<RawBook> {
   onProgress({ phase: 'reading', current: 0, total: 1 })
   const data = new Uint8Array(await file.arrayBuffer())
@@ -152,6 +178,10 @@ export async function extractPdf(file: File, onProgress: ProgressCallback): Prom
   }
 
   onProgress({ phase: 'splitting', current: pageCount, total: pageCount })
+
+  // Render bìa sau khi đã qua bước phát hiện bản scan, để file scan không tốn công render.
+  const cover = await renderCover(doc)
+
   const lines = cleanBookLines(rawLines, pageCount)
 
   let chapters = (await chaptersFromOutline(doc, lines)) ?? splitIntoChapters(lines)
@@ -170,6 +200,7 @@ export async function extractPdf(file: File, onProgress: ProgressCallback): Prom
     sourceFormat: 'PDF',
     sourceFilename: file.name,
     pageCount,
+    cover,
     chapters,
   }
 }

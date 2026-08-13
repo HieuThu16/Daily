@@ -175,3 +175,54 @@ export async function reportPagesRead(mediaItemId: string, page: number): Promis
 
   await db.from('book_reading_logs').insert({ media_item_id: mediaItemId, log_date: today, page })
 }
+
+const COVER_BUCKET = 'book-covers'
+
+const coverPath = (userId: string, mediaItemId: string) => `${userId}/${mediaItemId}.jpg`
+
+async function currentUserId(): Promise<string> {
+  const { data, error } = await client().auth.getUser()
+  // Phân biệt mất mạng với thật sự chưa đăng nhập: gộp cả hai thành "Chưa đăng nhập"
+  // sẽ bảo người dùng đi đăng nhập lại trong khi vấn đề chỉ là kết nối.
+  if (error) throw new Error('Không kiểm tra được tài khoản, kiểm tra lại kết nối mạng.')
+  const userId = data.user?.id
+  if (!userId) throw new Error('Chưa đăng nhập.')
+  return userId
+}
+
+/**
+ * Upload ảnh bìa, trả public URL kèm cache-buster.
+ * Đường dẫn file cố định theo media item nên không có `?v=` thì đổi bìa xong trình duyệt
+ * vẫn hiện ảnh cũ.
+ */
+export async function uploadCover(mediaItemId: string, blob: Blob): Promise<string> {
+  const db = client()
+  const path = coverPath(await currentUserId(), mediaItemId)
+
+  const { error } = await db.storage
+    .from(COVER_BUCKET)
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+  if (error) throw new Error(error.message)
+
+  const { data } = db.storage.from(COVER_BUCKET).getPublicUrl(path)
+  return `${data.publicUrl}?v=${Date.now()}`
+}
+
+export async function saveCoverUrl(mediaItemId: string, url: string | null): Promise<void> {
+  const { error } = await client().from('media_items').update({ cover_url: url }).eq('id', mediaItemId)
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Xoá file trong bucket rồi mới xoá URL trong DB.
+ * Xoá file lỗi thì ném luôn, **không** xoá `cover_url`: bucket là public nên bỏ qua lỗi
+ * ở đây sẽ để lại một file ảnh ai cũng tải được ở đường dẫn đoán ra được, mà DB thì không
+ * còn dấu vết nào để dọn. Giữ hai bên khớp nhau và để người dùng thử lại.
+ */
+export async function removeCover(mediaItemId: string): Promise<void> {
+  const db = client()
+  const path = coverPath(await currentUserId(), mediaItemId)
+  const { error } = await db.storage.from(COVER_BUCKET).remove([path])
+  if (error) throw new Error(error.message)
+  await saveCoverUrl(mediaItemId, null)
+}

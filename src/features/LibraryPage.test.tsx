@@ -27,6 +27,17 @@ const { mediaItems } = vi.hoisted(() => ({
       audio_url: 'https://example.com/hen-mot-mai.mp3',
       youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     },
+    {
+      id: 'book-1',
+      type: 'BOOK',
+      name: 'Đắc Nhân Tâm',
+      description: null,
+      status: 'IN_PROGRESS',
+      is_favorite: false,
+      author: 'Dale Carnegie',
+      book_format: 'READ',
+      cover_url: 'https://example.com/bia.jpg?v=1',
+    },
   ],
 }))
 
@@ -39,12 +50,31 @@ vi.mock('./shared', () => ({
     reload: vi.fn(),
   }),
   Empty: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Modal: ({ title, children }: { title?: React.ReactNode; children: React.ReactNode }) => (
+    <div>
+      {title}
+      {children}
+    </div>
+  ),
   DeleteButton: () => <button type="button">Xóa</button>,
 }))
 
 vi.mock('./ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), showSaveToast: vi.fn() }),
+}))
+
+// Phải khai đủ mọi export mà LibraryPage dùng trực tiếp (loadImportedMediaItemIds,
+// saveReadingLogEntry) lẫn gián tiếp qua BookImportModal (saveBook) và BookDetailView.
+vi.mock('../lib/book/repository', () => ({
+  CHARS_PER_PAGE: 1800,
+  loadImportedMediaItemIds: vi.fn(async () => new Set<string>()),
+  saveReadingLogEntry: vi.fn(async () => null),
+  saveBook: vi.fn(),
+  loadBookDocument: vi.fn(async () => null),
+  loadChapterList: vi.fn(async () => []),
+  uploadCover: vi.fn(),
+  saveCoverUrl: vi.fn(),
+  removeCover: vi.fn(),
 }))
 
 afterEach(cleanup)
@@ -123,5 +153,79 @@ describe('LibraryPage add form', () => {
     await user.click(screen.getByRole('button', { name: /Xem mẫu/ }))
 
     expect(screen.getByAltText('Xem mẫu ảnh bìa')).toHaveAttribute('src', 'https://example.com/bia.jpg')
+  })
+})
+
+describe('LibraryPage book navigation', () => {
+  const renderLibrary = () => {
+    render(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+    return userEvent.setup()
+  }
+
+  /** Tab "Tất cả" là bảng tổng quan từng thư viện, phải vào Sách mới thấy đầu sách. */
+  const openBooks = async () => {
+    const user = renderLibrary()
+    await user.click(screen.getByRole('button', { name: 'Sách' }))
+    return user
+  }
+
+  it('thư viện Sách hiện lưới bìa thay cho danh sách dòng', async () => {
+    await openBooks()
+
+    expect(document.querySelector('.book-grid')).toBeInTheDocument()
+    expect(document.querySelector('.library-media-card')).not.toBeInTheDocument()
+  })
+
+  it('bấm ô bìa trong lưới mở màn chi tiết', async () => {
+    const user = await openBooks()
+
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+
+    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quay lại thư viện' })).toBeInTheDocument()
+  })
+
+  it('mở màn chi tiết bằng phím Enter', async () => {
+    const user = await openBooks()
+
+    screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }).focus()
+    await user.keyboard('{Enter}')
+
+    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+  })
+
+  // Ảnh trong lưới để alt rỗng có chủ đích: tên sách đã nằm trong aria-label của
+  // nút bao ngoài, thêm alt nữa thì screen reader đọc hai lần. Nên kiểm src trực tiếp.
+  it('hiện ảnh bìa trong lưới', async () => {
+    await openBooks()
+
+    expect(document.querySelector('.book-grid-cover img')).toHaveAttribute(
+      'src',
+      'https://example.com/bia.jpg?v=1',
+    )
+  })
+
+  it('ghi trang từ màn chi tiết đóng màn đó và mở modal', async () => {
+    const user = await openBooks()
+
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+    await user.click(await screen.findByRole('button', { name: /Ghi trang/ }))
+
+    // Màn chi tiết phải đóng, nếu không modal sẽ không được mount và không hiện gì.
+    expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Ghi trang đọc/)).toBeInTheDocument()
+  })
+
+  it('quay lại thư viện từ màn chi tiết', async () => {
+    const user = await openBooks()
+
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+    await user.click(await screen.findByRole('button', { name: 'Quay lại thư viện' }))
+
+    expect(document.querySelector('.book-grid')).toBeInTheDocument()
   })
 })

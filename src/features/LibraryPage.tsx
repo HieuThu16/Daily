@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clock, Download, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, Play, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -13,7 +13,10 @@ import { AudioQueuePicker, AudioQueuePlayer } from './library/AudioQueue'
 import { MarqueeText } from './library/MarqueeText'
 import { RowMenu } from './library/RowMenu'
 import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId } from '../lib/youtubeMeta'
-import { BookImportModal } from './library/BookImportModal'
+import { BookCover } from './library/BookCover'
+import { BookDetailView } from './library/BookDetailView'
+import { BookGrid } from './library/BookGrid'
+import { BookImportModal, type ImportResult } from './library/BookImportModal'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -176,6 +179,7 @@ export function LibraryPage() {
   const nav = useNavigate()
   const [importOpen, setImportOpen] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
+  const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
 
   useEffect(() => {
     void loadImportedMediaItemIds().then(setImportedIds)
@@ -737,6 +741,22 @@ export function LibraryPage() {
     showToast('🗑️ Đã xóa bản ghi tiến độ', 'delete')
   }
 
+  /** Mở modal ghi tiến độ, gieo sẵn giá trị từ lần ghi gần nhất của sách. */
+  const openBookLog = (item: Media) => {
+    const latest = bookReadingLogsQuery.items
+      .filter((log) => log.media_item_id === item.id)
+      .sort((a, b) => b.log_date.localeCompare(a.log_date))[0]
+    setBookLogModal({ item })
+    setLogProgressDate(localDate())
+    setLogPage(latest?.page?.toString() ?? '')
+    setLogListenHours(latest?.listen_hours?.toString() ?? '0')
+    setLogListenMinutes(latest?.listen_minutes?.toString() ?? '0')
+    setLogNote('')
+  }
+
+  const bookLogCount = (mediaItemId: string) =>
+    bookReadingLogsQuery.items.filter((log) => log.media_item_id === mediaItemId).length
+
   const removeMediaItem = async (id: string) => {
     await supabase!.from('media_items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     setItems((prev) => prev.filter((i) => i.id !== id))
@@ -870,10 +890,29 @@ export function LibraryPage() {
         className="check-row library-media-card"
       >
         <div className="library-media-main">
-          {/* Cột trái: tên (chạy nếu dài) + dòng meta */}
-          <div className="library-media-identity">
+          {/* Cột trái: ô bìa + tên (chạy nếu dài) + dòng meta.
+              Vùng bấm mở chi tiết đặt ở đúng khối này chứ không bọc cả hàng: bọc cả hàng
+              thì role="button" sẽ chứa các nút bên phải, vừa sai ARIA (phần tử tương tác
+              lồng nhau) vừa khiến VoiceOver trên iOS gộp cả hàng thành một điểm dừng,
+              không vuốt tới được các nút đó. */}
+          <div
+            className={'library-media-identity' + (isBook ? ' is-openable' : '')}
+            {...(isBook
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  'aria-label': `Xem chi tiết ${item.name}`,
+                  onClick: () => setSelectedBookItemId(item.id),
+                  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    setSelectedBookItemId(item.id)
+                  },
+                }
+              : {})}
+          >
             <div className="library-media-art" style={artTone(item.id)}>
-              <Icon size={19} />
+              {isBook ? <BookCover url={item.cover_url} alt={`Bìa ${item.name}`} size="thumb" /> : <Icon size={19} />}
             </div>
             <div className="library-media-copy">
               <MarqueeText
@@ -909,7 +948,8 @@ export function LibraryPage() {
             </div>
           </div>
 
-          {/* Right Column: Controls always stay 100% inside card bounds */}
+          {/* Right Column: Controls always stay 100% inside card bounds. Cột này nằm ngoài
+              vùng bấm mở chi tiết nên không cần chặn sự kiện lan lên. */}
           <div className="library-media-actions">
             <LibraryAudioAction item={item} onListen={(audioItem) => setSelectedAudioItemId(audioItem.id)} onAddMp3={openEdit} />
             {/* Trạng thái nằm sau một mũi tên để nhường chỗ cho tên bài; màu của
@@ -967,14 +1007,7 @@ export function LibraryPage() {
               <>
                 <button
                   className="library-book-btn"
-                  onClick={() => {
-                    setBookLogModal({ item })
-                    setLogProgressDate(localDate())
-                    setLogPage(latestLog?.page?.toString() ?? '')
-                    setLogListenHours(latestLog?.listen_hours?.toString() ?? '0')
-                    setLogListenMinutes(latestLog?.listen_minutes?.toString() ?? '0')
-                    setLogNote('')
-                  }}
+                  onClick={() => openBookLog(item)}
                 >
                   {fmt === 'READ' ? <FileText size={13} /> : <Clock size={13} />}
                   {fmt === 'READ' ? 'Ghi trang' : 'Ghi giờ'}
@@ -982,7 +1015,7 @@ export function LibraryPage() {
                 <button className="library-book-btn" onClick={() => setBookHistoryModal({ item })}>
                   <History size={13} /> Lịch sử
                   <span className="library-book-count">
-                    {bookReadingLogsQuery.items.filter((l) => l.media_item_id === item.id).length}
+                    {bookLogCount(item.id)}
                   </span>
                 </button>
               </>
@@ -1013,6 +1046,34 @@ export function LibraryPage() {
           setSelectedAudioItemId(null)
           openEdit(item)
         }}
+      />
+    )
+  }
+
+  const selectedBookItem = items.find((item) => item.id === selectedBookItemId) ?? null
+
+  if (selectedBookItem) {
+    return (
+      <BookDetailView
+        item={selectedBookItem}
+        onBack={() => setSelectedBookItemId(null)}
+        onEdit={(item) => {
+          setSelectedBookItemId(null)
+          openEdit(item)
+        }}
+        onCoverChange={(mediaItemId, coverUrl) => {
+          setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
+        }}
+        onStatusChange={(item, status) => patchStatusOrFavorite(item.id, { status })}
+        onLogProgress={(item) => {
+          setSelectedBookItemId(null)
+          openBookLog(item)
+        }}
+        onShowHistory={(item) => {
+          setSelectedBookItemId(null)
+          setBookHistoryModal({ item })
+        }}
+        logCount={bookLogCount(selectedBookItem.id)}
       />
     )
   }
@@ -1204,7 +1265,17 @@ export function LibraryPage() {
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải thư viện…</p>
           ) : filteredOverviewItems.length ? (
             <div className="library-media-list">
-              {filteredOverviewItems.map(renderMediaRow)}
+              {selectedType === 'BOOK' ? (
+                <BookGrid
+                  items={filteredOverviewItems}
+                  onOpen={(item) => setSelectedBookItemId(item.id)}
+                  onToggleFavorite={(item) =>
+                    patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })
+                  }
+                />
+              ) : (
+                filteredOverviewItems.map(renderMediaRow)
+              )}
             </div>
           ) : (
             <Empty icon={BookOpen} colorClass="icon-box-purple">
@@ -1229,7 +1300,17 @@ export function LibraryPage() {
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải yêu thích…</p>
           ) : favoriteItems.length ? (
             <div className="library-media-list">
-              {favoriteItems.map(renderMediaRow)}
+              {selectedType === 'BOOK' ? (
+                <BookGrid
+                  items={favoriteItems}
+                  onOpen={(item) => setSelectedBookItemId(item.id)}
+                  onToggleFavorite={(item) =>
+                    patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })
+                  }
+                />
+              ) : (
+                favoriteItems.map(renderMediaRow)
+              )}
             </div>
           ) : (
             <Empty icon={Heart} colorClass="icon-box-rose">
@@ -2031,11 +2112,16 @@ export function LibraryPage() {
         <BookImportModal
           attachableBooks={items.filter((item) => item.type === 'BOOK' && !importedIds.has(item.id))}
           onClose={() => setImportOpen(false)}
-          onImported={(mediaItemId, createdItem) => {
+          onImported={({ mediaItemId, createdItem, coverUrl, coverFailed }: ImportResult) => {
             if (createdItem) setItems((prev) => [createdItem, ...prev])
+            else if (coverUrl) {
+              setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
+            }
             setImportedIds((prev) => new Set(prev).add(mediaItemId))
             setImportOpen(false)
-            showToast('📚 Đã nhập sách vào thư viện!')
+            showToast(
+              coverFailed ? '📚 Đã nhập sách nhưng chưa lưu được ảnh bìa' : '📚 Đã nhập sách vào thư viện!',
+            )
             nav(`/read/${mediaItemId}`)
           }}
         />

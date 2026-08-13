@@ -264,6 +264,9 @@ create table if not exists public.media_items (
   log_time       text,
   -- book-specific: format READ or LISTEN
   book_format    text        check (book_format in ('READ', 'LISTEN')),
+  -- migration: 20260815000000_person_occasions_media_cover — URL ảnh bìa,
+  -- file nằm trong bucket book-covers (20260818000000_book_covers_storage)
+  cover_url      text,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   deleted_at     timestamptz
@@ -518,6 +521,10 @@ do $$ begin
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 exception when duplicate_object then null; end $$;
 
+
+-- Storage bucket book-covers (public): ảnh bìa sách, đường dẫn <user_id>/<media_item_id>.jpg.
+-- Trình duyệt upload trực tiếp nên bucket này có đủ policy insert/update/delete
+-- giới hạn theo (storage.foldername(name))[1] = auth.uid()::text.
 
 -- =============================================================================
 -- END OF SCHEMA — Daily App

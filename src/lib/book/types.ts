@@ -24,6 +24,8 @@ export type RawBook = {
   sourceFilename: string
   /** Số trang thật, chỉ PDF mới có. */
   pageCount: number | null
+  /** Ảnh bìa JPEG đã chuẩn hoá, null nếu không lấy được từ file. */
+  cover: Blob | null
   chapters: RawChapter[]
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, List, Type } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal } from '../../lib/persistence'
@@ -24,6 +24,8 @@ const COMPLETED_RATIO = 0.98
 
 export function BookReaderPage() {
   const { mediaItemId = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const requestedChapter = searchParams.get('chapter')
   const nav = useNavigate()
   const scroller = useRef<HTMLDivElement>(null)
   const pendingRatio = useRef<number | null>(null)
@@ -84,9 +86,16 @@ export function BookReaderPage() {
         setBookDocument(doc)
         setChapters(list)
         setBookName(media?.name ?? 'Đang đọc')
-        setActiveIdx(Math.min(doc.last_chapter_idx, Math.max(0, list.length - 1)))
+        // Mục lục ở màn chi tiết truyền ?chapter=. Người dùng chủ động chọn chương thì
+        // phải vào đầu chương, không phải cuộn tới vị trí đã lưu của chương trước đó.
+        // Loại cả chuỗi rỗng: `Number('')` ra 0, sẽ nhảy nhầm về chương đầu.
+        const parsed = Number(requestedChapter)
+        const jumping =
+          requestedChapter !== null && requestedChapter !== '' && Number.isInteger(parsed) && parsed >= 0
+        const startIdx = jumping ? parsed : doc.last_chapter_idx
+        setActiveIdx(Math.min(startIdx, Math.max(0, list.length - 1)))
         setPercent(doc.percent)
-        pendingRatio.current = doc.last_scroll_ratio
+        pendingRatio.current = jumping ? 0 : doc.last_scroll_ratio
         setStatus('ready')
 
         if (media?.status === 'PLANNED') {
@@ -101,7 +110,7 @@ export function BookReaderPage() {
     return () => {
       cancelled = true
     }
-  }, [mediaItemId])
+  }, [mediaItemId, requestedChapter])
 
   const fetchChapter = useCallback(
     async (idx: number) => {
