@@ -13,6 +13,7 @@ import { AudioQueuePicker, AudioQueuePlayer } from './library/AudioQueue'
 import { MarqueeText } from './library/MarqueeText'
 import { RowMenu } from './library/RowMenu'
 import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId } from '../lib/youtubeMeta'
+import { normalizeStorageUrl } from '../lib/storageUrl'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
 import { BookGrid } from './library/BookGrid'
@@ -479,7 +480,9 @@ export function LibraryPage() {
       music_genre: kind === 'MUSIC' ? musicGenreVal.trim() || null : null,
       youtube_url: youtubeUrlVal.trim() || null,
       audio_url: audioUrlVal.trim() || null,
-      cover_url: coverUrlVal.trim() || null,
+      // Chuẩn hoá ngay lúc lưu: link copy từ bảng điều khiển Supabase thiếu đoạn
+      // /public/ nên thẻ <img> luôn nhận 400.
+      cover_url: normalizeStorageUrl(coverUrlVal) || null,
       current_chapter: (kind === 'MANGA' || kind === 'BOOK') ? (parseInt(currentChapterVal, 10) || null) : null,
       start_date: (kind === 'MANGA' || kind === 'BOOK') ? (startDateVal || null) : null,
       end_date: (kind === 'MANGA' || kind === 'BOOK') ? (statusVal === 'COMPLETED' ? (endDateVal || localDate()) : (endDateVal || null)) : null,
