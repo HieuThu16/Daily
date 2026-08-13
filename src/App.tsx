@@ -5,6 +5,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate, shortDate, vietnameseDate } from './lib/date'
 import type { Tab } from './types'
 import { HeaderActionProvider, useHeaderActionSlot } from './features/HeaderAction'
+import { AsideProvider, useAsideRef } from './features/AsideSlot'
 import { HomePage } from './features/home/HomePage'
 import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
@@ -63,6 +64,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const path = useLocation().pathname
   const [dark, setDark] = useState(false)
   const headerAction = useHeaderActionSlot()
+  const asideRef = useAsideRef()
 
   // PWA Install Prompt
   const deferredPrompt = useRef<Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null)
@@ -104,6 +106,45 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
+      {/* Điều hướng dọc của desktop. Trên điện thoại CSS ẩn đi, thanh tab dưới
+          đáy vẫn là thứ điều hướng duy nhất. */}
+      <aside className="side-nav">
+        <div className="side-nav-brand">
+          <div className="brand-icon">
+            <Sparkles size={18} />
+          </div>
+          <span>Daily</span>
+        </div>
+
+        <nav className="side-nav-list">
+          {navigation.map(({ id, label, icon: Icon, colorClass }) => {
+            const isActive = path === '/' + id
+            return (
+              <button key={id} className={isActive ? 'active' : ''} onClick={() => nav('/' + id)} aria-current={isActive ? 'page' : undefined}>
+                <div className={`nav-icon-wrapper ${colorClass}`}>
+                  <Icon size={17} />
+                </div>
+                <span>{label}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="side-nav-foot">
+          {canInstall && !installed && (
+            <button className="side-nav-mini" onClick={handleInstallPWA} title="Cài đặt ứng dụng về máy">
+              <Download size={16} /> <span>Cài đặt</span>
+            </button>
+          )}
+          <button className="side-nav-mini" onClick={() => setDark(!dark)} title="Đổi giao diện sáng/tối">
+            <SunMoon size={16} /> <span>{dark ? 'Sáng' : 'Tối'}</span>
+          </button>
+          <button className="side-nav-mini is-danger" onClick={() => supabase?.auth.signOut()} title="Đăng xuất">
+            <LogOut size={16} /> <span>Thoát</span>
+          </button>
+        </div>
+      </aside>
+
       <header>
         <div className="brand">
           <div className={`brand-icon ${activeTabItem.colorClass}`}>
@@ -147,10 +188,10 @@ function Shell({ children }: { children: React.ReactNode }) {
               <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
             </button>
           )}
-          <button aria-label="Toggle theme" className="icon" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
+          <button aria-label="Toggle theme" className="icon header-only" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
             <SunMoon size={20} />
           </button>
-          <button aria-label="Sign out" className="icon danger" onClick={() => supabase?.auth.signOut()}>
+          <button aria-label="Sign out" className="icon danger header-only" onClick={() => supabase?.auth.signOut()}>
             <LogOut size={20} />
           </button>
         </div>
@@ -167,7 +208,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
 
-      <main className="content">{children}</main>
+      <main className={`content page-${activeTabItem.id}`}>{children}</main>
+
+      {/* Cột phụ desktop. Luôn dựng, CSS quyết định có hiện hay không. */}
+      <aside className="side-rail" ref={asideRef} />
     </div>
   )
 }
@@ -199,6 +243,7 @@ function Protected() {
   return (
     <ToastProvider>
       <HeaderActionProvider>
+      <AsideProvider>
       <Routes>
         {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
         <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
@@ -221,6 +266,7 @@ function Protected() {
           }
         />
       </Routes>
+      </AsideProvider>
       </HeaderActionProvider>
     </ToastProvider>
   )

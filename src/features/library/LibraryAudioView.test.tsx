@@ -76,6 +76,14 @@ describe('LibraryAudioAction', () => {
 
     expect(onAddMp3).toHaveBeenCalledWith(withoutAudio)
   })
+
+  it('mục không nghe được vẫn chiếm một ô để lưới nút khỏi lệch dòng', () => {
+    const book: Media = { ...withAudio, id: 'book-1', type: 'BOOK', name: 'Một cuốn sách' }
+    const { container } = render(<LibraryAudioAction item={book} onListen={vi.fn()} onAddMp3={vi.fn()} />)
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(container.querySelector('.library-audio-slot')).toBeInTheDocument()
+  })
 })
 
 describe('LibraryAudioDetail', () => {

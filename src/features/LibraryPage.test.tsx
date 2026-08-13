@@ -3,6 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LibraryPage } from './LibraryPage'
+import { HeaderActionProvider, useHeaderActionSlot } from './HeaderAction'
+
+/** Dựng lại ô hành động của header chung để bấm được nút "+" mà trang đăng ký. */
+function HeaderActionSlot() {
+  const action = useHeaderActionSlot()
+  return action ? <button onClick={action.onClick}>{action.label}</button> : null
+}
 
 const { mediaItems } = vi.hoisted(() => ({
   mediaItems: [
@@ -57,6 +64,10 @@ describe('LibraryPage audio navigation', () => {
     expect(screen.queryByText(/2026-08-12/)).not.toBeInTheDocument()
     expect(screen.queryByText(/10:04/)).not.toBeInTheDocument()
 
+    // Ở "Tất cả", Tổng thể là bảng thống kê từng thư viện; bấm thẻ Nhạc mới ra danh sách.
+    expect(screen.queryByRole('button', { name: 'Nghe Hẹn một mai' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Mở thư viện Nhạc, 1 mục/ }))
+
     await user.click(screen.getByRole('button', { name: 'Nghe Hẹn một mai' }))
 
     expect(screen.getByRole('heading', { name: 'Hẹn một mai' })).toBeInTheDocument()
@@ -68,5 +79,49 @@ describe('LibraryPage audio navigation', () => {
 
     expect(document.querySelectorAll('audio')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Nghe Hẹn một mai' })).toBeInTheDocument()
+  })
+})
+
+describe('LibraryPage add form', () => {
+  const openAddFor = async (categoryLabel: string) => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <HeaderActionProvider>
+          <HeaderActionSlot />
+          <LibraryPage />
+        </HeaderActionProvider>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: categoryLabel }))
+    await user.click(screen.getByRole('button', { name: /^Thêm / }))
+    return user
+  }
+
+  it('bỏ ảnh bìa và mặc định "Đã nghe" cho form nhạc', async () => {
+    await openAddFor('Nhạc')
+
+    expect(screen.queryByPlaceholderText(/Dán link ảnh bìa/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Tải ảnh lên/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Trạng thái')).toHaveValue('COMPLETED')
+  })
+
+  it('cho sách có ô ảnh bìa kèm nút tải lên và xem mẫu', async () => {
+    await openAddFor('Sách')
+
+    expect(screen.getByPlaceholderText(/Dán link ảnh bìa/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tải ảnh lên/ })).toBeInTheDocument()
+    // Chưa có ảnh thì nút xem mẫu bị khoá, tránh mở modal rỗng.
+    expect(screen.getByRole('button', { name: /Xem mẫu/ })).toBeDisabled()
+    expect(screen.getByLabelText('Trạng thái')).toHaveValue('PLANNED')
+  })
+
+  it('mở modal xem mẫu sau khi dán link ảnh bìa', async () => {
+    const user = await openAddFor('Sách')
+
+    await user.type(screen.getByPlaceholderText(/Dán link ảnh bìa/), 'https://example.com/bia.jpg')
+    await user.click(screen.getByRole('button', { name: /Xem mẫu/ }))
+
+    expect(screen.getByAltText('Xem mẫu ảnh bìa')).toHaveAttribute('src', 'https://example.com/bia.jpg')
   })
 })

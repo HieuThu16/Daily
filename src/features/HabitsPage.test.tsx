@@ -47,8 +47,12 @@ describe('HabitsPage', () => {
     expect(within(progress).getByText('0/1')).toBeInTheDocument()
     expect(within(progress).getByText('Tốt · làm được')).toBeInTheDocument()
     expect(within(progress).getByText('Xấu · đã lỡ')).toBeInTheDocument()
-    expect(within(progress).getByText(/Chưa lỡ thói quen xấu nào/)).toBeInTheDocument()
-    expect(within(progress).getByText('0/3')).toBeInTheDocument()
+    // Dòng "0/3 hoàn thành" và câu động viên đã bỏ: số đó đã có sẵn ở tab "Hôm nay".
+    expect(within(progress).queryByText(/Chưa lỡ thói quen xấu nào/)).not.toBeInTheDocument()
+    expect(within(progress).queryByText(/hoàn thành/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Hôm nay 0\/3/ })).toBeInTheDocument()
+    // Tiêu đề "Habits" chỉ còn ở header chung của app, trang không dựng lại.
+    expect(screen.queryByRole('heading', { name: 'Habits' })).not.toBeInTheDocument()
     // Hai nhóm mặc định
     expect(screen.getByText('Thói quen tích cực')).toBeInTheDocument()
     expect(screen.getByText('Theo dõi số liệu')).toBeInTheDocument()

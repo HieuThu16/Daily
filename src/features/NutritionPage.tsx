@@ -187,7 +187,7 @@ export function NutritionPage() {
   const totalSleep = sleepLogs.reduce((sum, log) => sum + log.duration_minutes, 0)
 
   return (
-    <section style={{ maxWidth: 700, margin: '0 auto', display: 'grid', gap: 10 }}>
+    <section className="page-shell is-narrow" style={{ display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div style={{ display: 'flex', gap: 5 }}>
           <button type="button" aria-pressed={tab === 'food'} onClick={() => setTab('food')} className={tab === 'food' ? 'primary' : 'icon'} style={{ padding: '6px 10px', gap: 4 }}><UtensilsCrossed size={13} /> Ăn uống</button>
@@ -264,7 +264,7 @@ export function NutritionPage() {
       {sleepModal && (
         <Modal onClose={() => setSleepModal(false)} title="Ghi giấc ngủ">
           <div className="form-grid">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="form-row-2">
               <label>Ngủ từ<input type="time" value={sleepStart} onChange={(event) => setSleepStart(event.target.value)} /></label>
               <label>Đến<input type="time" value={sleepEnd} onChange={(event) => setSleepEnd(event.target.value)} /></label>
             </div>

@@ -237,7 +237,7 @@ export function PlayTogetherPage() {
   }, [selectedAcc, logsQuery.items])
 
   return (
-    <section style={{ maxWidth: 800, margin: '0 auto' }}>
+    <section className="page-shell">
       {/* Header & Responsive Controls */}
       <div style={{ marginBottom: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -402,7 +402,7 @@ export function PlayTogetherPage() {
       </div>
 
       {/* DAILY TOTAL SUMMARY DASHBOARD */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 8 }}>
+      <div className="form-row-3" style={{ gap: 6, marginTop: 8 }}>
         <div className="stat-card" style={{ padding: '6px 8px', background: 'var(--amber-bg)', borderColor: 'var(--amber)' }}>
           <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--amber)' }}>🎟️ {dailyTotals.totalCoupons}</div>
           <div className="stat-lbl" style={{ fontSize: '0.68rem', fontWeight: 700 }}>Vé Coupon ngày</div>

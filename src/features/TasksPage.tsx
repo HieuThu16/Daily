@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, BarChart3, Check, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Clock, Eye, Filter, History, Lightbulb, Pencil, Plus, Timer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
@@ -6,6 +6,8 @@ import { POSTPONE_PRESETS, formatDeadline, formatMinutes, isOverdue, postponeTo,
 import type { Idea, TaskDifficulty, TaskPostpone, TaskPriority, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { useHeaderAction } from './HeaderAction'
+import { Aside, AsideCard } from './AsideSlot'
 import { saveLocal } from '../lib/persistence'
 
 type Tab = 'tasks' | 'ideas' | 'stats'
@@ -127,7 +129,7 @@ function TaskCard({
     <div className={classes.join(' ')}>
       <div className="task-card-main">
         <button className="task-toggle" onClick={() => onToggle(todo)}>
-          <span className="task-check">{todo.completed && <Check size={15} strokeWidth={3} />}</span>
+          <span className="task-check" aria-hidden="true" />
           <span className="task-title">{todo.title}</span>
         </button>
         <div className="task-actions">
@@ -228,6 +230,12 @@ export function TasksPage() {
     setNewIdeaContent('')
     setAddModal({ kind })
   }
+
+  // Nút "+" của trang dùng ô hành động trên header chung, giống Habits và Người.
+  // Bấm ở tab Ideas thì thêm ý tưởng, các tab còn lại thì thêm công việc.
+  const addKind = activeTab === 'ideas' ? 'idea' : 'todo'
+  const openAddFromHeader = useCallback(() => openAddModal(addKind), [addKind, selectedDate])
+  useHeaderAction(addKind === 'idea' ? 'Thêm ý tưởng' : 'Thêm công việc', openAddFromHeader)
 
   /**
    * Supabase từ chối ghi (thiếu cột do chưa chạy migration, RLS, mất mạng…).
@@ -548,6 +556,7 @@ export function TasksPage() {
     }
   }, [todos.items, overduePreviousTodos.length, ideas.items.length])
 
+
   // Helper date formatter
   const formatDate = (isoString?: string | null) => {
     if (!isoString) return 'Chưa có thông tin'
@@ -564,7 +573,57 @@ export function TasksPage() {
     viewDetail?.kind === 'todo' ? todos.items.find((i) => i.id === viewDetail.item.id) ?? (viewDetail.item as Todo) : null
 
   return (
-    <section style={{ maxWidth: 800, margin: '0 auto' }}>
+    <section className="page-shell">
+      {/* Cột phụ desktop: tình hình việc trong ngày, khỏi cần mở tab Thống kê. */}
+      <Aside>
+        <AsideCard title="Ngày đang xem">
+          <div className="aside-row">
+            <span>Còn phải làm</span>
+            <strong>{pendingTodos.length}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Đã xong</span>
+            <strong>{doneTodos.length}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Quá hạn từ trước</span>
+            <strong>{overduePreviousTodos.length}</strong>
+          </div>
+        </AsideCard>
+
+        <AsideCard title="Toàn bộ">
+          <div className="aside-row">
+            <span>Hoàn thành</span>
+            <strong>{stats.percent}%</strong>
+          </div>
+          <div className="aside-row">
+            <span>Gấp</span>
+            <strong>{stats.urgentCount}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Khó</span>
+            <strong>{stats.hardCount}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Ý tưởng</span>
+            <strong>{stats.totalIdeas}</strong>
+          </div>
+        </AsideCard>
+
+        <AsideCard title="Trì hoãn nhiều nhất">
+          {stats.topPostponed.length === 0 ? (
+            <p className="aside-empty">Chưa hoãn việc nào. Giữ vậy nhé.</p>
+          ) : (
+            stats.topPostponed.slice(0, 4).map((t) => (
+              <div className="aside-row" key={t.id}>
+                <span title={t.title}>{t.title}</span>
+                <strong>{formatMinutes(t.postpone_minutes ?? 0)}</strong>
+              </div>
+            ))
+          )}
+        </AsideCard>
+      </Aside>
+
       {/* 100% Width Full Responsive Sub Tabs Bar */}
       <div className="habit-sub-tabs">
         <button className={activeTab === 'tasks' ? 'active' : ''} onClick={() => setActiveTab('tasks')}>
@@ -575,12 +634,6 @@ export function TasksPage() {
         </button>
         <button className={activeTab === 'stats' ? 'active' : ''} onClick={() => setActiveTab('stats')}>
           <BarChart3 size={14} /> Thống kê
-        </button>
-        <button
-          onClick={() => openAddModal(activeTab === 'ideas' ? 'idea' : 'todo')}
-          style={{ background: 'var(--primary)', color: 'white', fontWeight: 700, padding: '5px 8px', fontSize: '0.74rem', gap: 2 }}
-        >
-          <Plus size={13} /> Thêm
         </button>
       </div>
 
@@ -845,7 +898,7 @@ export function TasksPage() {
           </div>
 
           {/* BREAKDOWN BY DIFFICULTY & PRIORITY */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 10, marginBottom: 10 }}>
             <div className="card" style={{ padding: 10, margin: 0 }}>
               <h2 style={{ fontSize: '0.84rem', marginBottom: 8 }}>🎯 Phân loại theo Độ khó</h2>
               <div style={{ display: 'grid', gap: 6, fontSize: '0.8rem' }}>

@@ -140,7 +140,7 @@ export function DailyPage() {
   // ── render ───────────────────────────────────────────────────────────────
 
   return (
-    <section style={{ maxWidth: 800, margin: '0 auto' }}>
+    <section className="page-shell">
 
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -327,7 +327,7 @@ export function DailyPage() {
           </div>
 
           {/* Summary count cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 10 }}>
+          <div className="form-row-4" style={{ gap: 6, marginBottom: 10 }}>
             {categories.map((cat) => {
               const Icon = cat.icon
               const count = countByType[cat.type] ?? 0
