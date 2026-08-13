@@ -16,6 +16,7 @@ import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId } fr
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
 import { BookGrid } from './library/BookGrid'
+import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 
 const categories = [
@@ -170,6 +171,7 @@ export function LibraryPage() {
   // Modal State for Add & Edit
   const [activeModal, setActiveModal] = useState<{ kind: Kind; item?: Media } | null>(null)
   const [selectedAudioItemId, setSelectedAudioItemId] = useState<string | null>(null)
+  const [selectedVideoItemId, setSelectedVideoItemId] = useState<string | null>(null)
 
   // Hàng đợi nghe liên tục. Chỉ sống trong phiên này, không ghi xuống database.
   const [queuePicks, setQueuePicks] = useState<string[]>([])
@@ -417,7 +419,9 @@ export function LibraryPage() {
         return
       }
       setAudioUrlVal('')
-      showToast('Không chuyển đổi được MP3. Kiểm tra cấu hình converter API.', 'delete')
+      const reason = await (error as { context?: Response })?.context?.json?.().then((b) => b?.error).catch(() => null)
+      console.error('youtube-to-mp3 failed:', reason ?? error)
+      showToast(`Không chuyển đổi được MP3: ${reason ?? error?.message ?? 'lỗi không rõ'}`, 'delete')
       setIsConverting(false)
       return
     }
@@ -861,6 +865,12 @@ export function LibraryPage() {
     const Icon = cat.icon
     const meta = getItemExtraMeta(item)
     const isBook = item.type === 'BOOK'
+    const isVideo = item.type === 'YOUTUBE'
+    /** Sách và TV Show bấm một lần là mở chi tiết; các loại khác chưa có màn riêng. */
+    const openDetail =
+      isBook ? () => setSelectedBookItemId(item.id)
+      : isVideo ? () => setSelectedVideoItemId(item.id)
+      : null
     const isMusic = item.type === 'MUSIC'
     const genreStyle = getMusicGenreStyle(item.music_genre)
     const fmt = item.book_format ?? 'READ'
@@ -896,17 +906,17 @@ export function LibraryPage() {
               lồng nhau) vừa khiến VoiceOver trên iOS gộp cả hàng thành một điểm dừng,
               không vuốt tới được các nút đó. */}
           <div
-            className={'library-media-identity' + (isBook ? ' is-openable' : '')}
-            {...(isBook
+            className={'library-media-identity' + (openDetail ? ' is-openable' : '')}
+            {...(openDetail
               ? {
                   role: 'button',
                   tabIndex: 0,
                   'aria-label': `Xem chi tiết ${item.name}`,
-                  onClick: () => setSelectedBookItemId(item.id),
+                  onClick: openDetail,
                   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
                     if (event.key !== 'Enter' && event.key !== ' ') return
                     event.preventDefault()
-                    setSelectedBookItemId(item.id)
+                    openDetail()
                   },
                 }
               : {})}
@@ -1074,6 +1084,22 @@ export function LibraryPage() {
           setBookHistoryModal({ item })
         }}
         logCount={bookLogCount(selectedBookItem.id)}
+      />
+    )
+  }
+
+  const selectedVideoItem = items.find((item) => item.id === selectedVideoItemId) ?? null
+
+  if (selectedVideoItem) {
+    return (
+      <VideoDetailView
+        item={selectedVideoItem}
+        onBack={() => setSelectedVideoItemId(null)}
+        onEdit={(item) => {
+          setSelectedVideoItemId(null)
+          openEdit(item)
+        }}
+        onStatusChange={(item, status) => patchStatusOrFavorite(item.id, { status })}
       />
     )
   }
