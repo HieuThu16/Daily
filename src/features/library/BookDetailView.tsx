@@ -72,6 +72,8 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
   const [chapters, setChapters] = useState<BookChapterMeta[]>([])
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  /** Mục lục hay Thông tin. Mặc định mục lục vì mở sách ra là để đọc tiếp. */
+  const [tab, setTab] = useState<'toc' | 'info'>('toc')
   const [coverBusy, setCoverBusy] = useState(false)
   const [coverError, setCoverError] = useState('')
 
@@ -231,13 +233,42 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           </div>
         )}
 
-        <div className="library-book-detail-actions">
+        {/* Đọc tiếp đứng cạnh hai tab: mở sách ra thì hai việc hay làm nhất là
+            đọc tiếp và nhảy tới một chương, nên để chúng chung một hàng. */}
+        <div className="library-book-primary-row">
           {status === 'ready' && (
             <button type="button" className="primary" onClick={() => nav(`/read/${item.id}`)}>
               <BookOpen size={14} />
               Đọc tiếp
             </button>
           )}
+          <div className="library-book-tabs" role="tablist" aria-label="Nội dung sách">
+            <button
+              type="button"
+              role="tab"
+              id="library-book-tab-toc"
+              aria-selected={tab === 'toc'}
+              aria-controls="library-book-panel-toc"
+              className={tab === 'toc' ? 'active' : ''}
+              onClick={() => setTab('toc')}
+            >
+              Mục lục{status === 'ready' ? ` (${chapters.length})` : ''}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="library-book-tab-info"
+              aria-selected={tab === 'info'}
+              aria-controls="library-book-panel-info"
+              className={tab === 'info' ? 'active' : ''}
+              onClick={() => setTab('info')}
+            >
+              Thông tin
+            </button>
+          </div>
+        </div>
+
+        <div className="library-book-detail-actions">
           <button type="button" onClick={() => onEdit(item)}>
             <Pencil size={14} />
             Chỉnh sửa
@@ -257,8 +288,13 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           )}
         </div>
 
-        <div className="library-book-section">
-          <h3>Thông tin</h3>
+        <div
+          className="library-book-section"
+          role="tabpanel"
+          id="library-book-panel-info"
+          aria-labelledby="library-book-tab-info"
+          hidden={tab !== 'info'}
+        >
           <dl className="library-book-info">
             {status === 'ready' && document_ && (
               <>
@@ -314,9 +350,13 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           </dl>
         </div>
 
-        <div className="library-book-section">
-          <h3>{status === 'ready' ? `Mục lục (${chapters.length})` : 'Mục lục'}</h3>
-
+        <div
+          className="library-book-section"
+          role="tabpanel"
+          id="library-book-panel-toc"
+          aria-labelledby="library-book-tab-toc"
+          hidden={tab !== 'toc'}
+        >
           {status === 'loading' && <p className="library-book-muted">Đang tải…</p>}
 
           {status === 'no-document' && (

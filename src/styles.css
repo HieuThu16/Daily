@@ -6039,3 +6039,58 @@ input[type='month'] {
   cursor: pointer;
   border-radius: 12px;
 }
+
+/* ---- Chi tiết sách: Đọc tiếp đứng cạnh hai tab Mục lục / Thông tin ---- */
+.library-book-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.library-book-primary-row .primary {
+  flex: 0 0 auto;
+}
+
+.library-book-tabs {
+  display: flex;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--bg-main);
+}
+
+.library-book-tabs button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.library-book-tabs button:hover {
+  color: var(--text-main);
+}
+
+.library-book-tabs button.active {
+  background: var(--card-bg);
+  color: var(--primary);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* Tiêu đề "Thông tin" / "Mục lục" đã nằm trên tab, để lại trong panel là thừa. */
+.library-book-section[role='tabpanel'] > h3 {
+  display: none;
+}
