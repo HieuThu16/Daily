@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'people' | 'library' | 'playtogether' | 'nutrition'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'people' | 'library' | 'playtogether' | 'nutrition' | 'money' | 'calendar'
 
 export type NutritionLog = {
   id: string
@@ -48,6 +48,27 @@ export type Todo = {
   priority?: TaskPriority
   postpone_count?: number
   postpone_minutes?: number
+  /** Tên thể loại, khớp với task_categories.name. Null = chưa phân loại. */
+  category?: string | null
+  /** Mục tiêu mà việc này phục vụ. Null = việc lẻ. */
+  goal_id?: string | null
+}
+
+/** Mục tiêu: tầng trên của công việc. Tiến độ tính từ số task đã xong. */
+export type Goal = {
+  id: string
+  name: string
+  note?: string | null
+  due_date?: string | null
+  created_at: string
+  deleted_at?: string | null
+}
+
+export type TaskCategory = {
+  id: string
+  name: string
+  created_at: string
+  deleted_at?: string | null
 }
 
 export type TaskPostpone = {
@@ -87,6 +108,8 @@ export type Media = {
   is_favorite: boolean
   book_format?: BookFormat | null
   cover_url?: string | null
+  /** Tên người đã chia sẻ sách này cho mình; null nếu tự thêm. */
+  shared_by?: string | null
 }
 
 export type BookReadingLog = {
@@ -135,7 +158,16 @@ export type MusicArtist = { id: string; name: string }
 export type MusicGenre = { id: string; name: string }
 
 export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
-export type Entry = { id: string; content: string; entry_date: string; created_at: string; entry_type: DailyType }
+export type Entry = {
+  id: string
+  content: string
+  entry_date: string
+  created_at: string
+  entry_type: DailyType
+  /** Ảnh đính kèm (bucket daily-photos); image_path để xoá file khi gỡ ảnh. */
+  image_url?: string | null
+  image_path?: string | null
+}
 /** Nhóm quan hệ, dùng làm chip trên thẻ người. */
 export type PersonGroup = 'FAMILY' | 'FRIEND' | 'COLLEAGUE' | 'OTHER'
 
@@ -175,6 +207,32 @@ export type PersonOccasion = {
   is_yearly: boolean
   /** Mặc định 'SOLAR'. 'LUNAR' = lặp theo ngày âm của `occasion_date`. */
   calendar?: OccasionCalendar
+  created_at?: string
+}
+
+/** Ví tiền: tiền mặt hoặc tài khoản ngân hàng nhập tay (không liên kết ngân hàng thật). */
+export type Account = {
+  id: string
+  name: string
+  kind: 'CASH' | 'BANK'
+  bank_name?: string | null
+  account_number?: string | null
+  opening_balance: number
+  created_at?: string
+}
+
+/** Một khoản thu (IN) hoặc chi (OUT); `amount` luôn dương. */
+export type MoneyTransaction = {
+  id: string
+  account_id: string
+  direction: 'IN' | 'OUT'
+  amount: number
+  category: string
+  note?: string | null
+  /** Khoản này chi cho/nhận từ ai. Null = không gắn với người nào. */
+  person_id?: string | null
+  log_date: string
+  log_time?: string | null
   created_at?: string
 }
 

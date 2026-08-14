@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { weekDays } from '../../lib/homeProgress'
 import { parseLocalDate } from '../../lib/occasions'
+import { shiftDate, sleepMinutesOn } from '../../lib/sleep'
 import type { Entry, Habit, HabitLog, Media, NutritionLog, Person, PersonOccasion, SleepLog, Todo } from '../../types'
 
 /**
@@ -55,7 +56,7 @@ export function useHomeData(dateKey: string = localDate()) {
         supabase.from('nutrition_logs').select('*').eq('log_date', today),
         supabase.from('nutrition_logs').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key),
         supabase.from('todos').select('*').eq('completed', true).gte('completed_at', week[0].key).is('deleted_at', null),
-        supabase.from('sleep_logs').select('*').eq('log_date', today).is('deleted_at', null),
+        supabase.from('sleep_logs').select('*').gte('log_date', shiftDate(today, -1)).lte('log_date', today).is('deleted_at', null),
         supabase.from('sleep_logs').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key).is('deleted_at', null),
       ])
 
@@ -72,7 +73,12 @@ export function useHomeData(dateKey: string = localDate()) {
       setMeals((nt.data ?? []) as NutritionLog[])
       setWeekMeals((nw.data ?? []) as NutritionLog[])
       setWeekTodosDone((wt.data ?? []) as Todo[])
-      setSleep((sl.data ?? []) as SleepLog[])
+      // Chỉ giữ phần giờ rơi vào `today`; start/end vẫn là của cả phiên ngủ.
+      setSleep(
+        ((sl.data ?? []) as SleepLog[])
+          .map((log) => ({ ...log, duration_minutes: sleepMinutesOn(log, today) }))
+          .filter((log) => log.duration_minutes > 0),
+      )
       setWeekSleep((sw.data ?? []) as SleepLog[])
       setLoading(false)
     })()

@@ -70,18 +70,30 @@ afterEach(() => {
 })
 
 describe('BookDetailView với sách đã nhập file', () => {
-  it('hiện thông tin sách và mục lục đầy đủ', async () => {
+  it('mở ra là ở tab Mục lục, phần Thông tin ẩn đi', async () => {
     render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
 
     expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
     expect(screen.getByText('Dale Carnegie')).toBeInTheDocument()
-    expect(screen.getByText(/PDF/)).toBeInTheDocument()
-    expect(screen.getByText('dac-nhan-tam.pdf', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('42%')).toBeInTheDocument()
 
+    expect(screen.getByRole('tab', { name: /Mục lục \(3\)/ })).toHaveAttribute('aria-selected', 'true')
     // Tên khả truy cập của nút chương gồm cả số thứ tự và số trang ("2 Chương 1 · … 92 tr"),
     // nên đếm qua chính thẻ <ol> thay vì khớp tên.
     expect(within(screen.getByRole('list')).getAllByRole('button')).toHaveLength(3)
+    expect(screen.getByText(/PDF/)).not.toBeVisible()
+  })
+
+  it('đổi sang tab Thông tin thì hiện dữ liệu sách và giấu mục lục', async () => {
+    const user = userEvent.setup()
+    render(<BookDetailView item={item} onBack={vi.fn()} onEdit={vi.fn()} onCoverChange={vi.fn()} onStatusChange={vi.fn()} {...logProps} />)
+
+    await user.click(await screen.findByRole('tab', { name: 'Thông tin' }))
+
+    expect(screen.getByText(/PDF/)).toBeVisible()
+    expect(screen.getByText('dac-nhan-tam.pdf', { exact: false })).toBeVisible()
+    // getByRole bỏ qua phần tử ẩn nên phải lấy thẳng từ DOM mới kiểm được.
+    expect(document.querySelector('.library-book-toc')).not.toBeVisible()
   })
 
   it('đánh dấu chương đang đọc', async () => {

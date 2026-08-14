@@ -10,10 +10,17 @@ serve(async (req) => {
     const key = Deno.env.get('CONVERTER_API_KEY')
     const endpoint = Deno.env.get('CONVERTER_API_URL') ?? 'https://youtube-mp36.p.rapidapi.com/dl'
     if (!key) throw new Error('Converter API key is not configured')
-    const converted = await fetch(`${endpoint}?id=${encodeURIComponent(id)}`, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com' } })
-    if (!converted.ok) throw new Error(`Converter returned ${converted.status}`)
-    const result = await converted.json(); const downloadUrl = result.link ?? result.downloadUrl ?? result.url
-    if (!downloadUrl) throw new Error('Converter response has no download URL')
+    // ponytail: naive poll — youtube-mp36 replies {status:"processing"} until the job finishes
+    let downloadUrl = '', result: Record<string, unknown> = {}
+    for (let attempt = 0; attempt < 10 && !downloadUrl; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 3000))
+      const converted = await fetch(`${endpoint}?id=${encodeURIComponent(id)}`, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com' } })
+      if (!converted.ok) throw new Error(`Converter returned ${converted.status}: ${await converted.text()}`)
+      result = await converted.json()
+      if (result.status === 'fail') throw new Error(`Converter failed: ${result.msg ?? 'unknown'}`)
+      downloadUrl = String(result.link ?? result.downloadUrl ?? result.url ?? '')
+    }
+    if (!downloadUrl) throw new Error(`Converter still processing: ${JSON.stringify(result)}`)
     const file = await (await fetch(downloadUrl)).arrayBuffer()
     const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } })
     const user = await client.auth.getUser(); if (!user.data.user) throw new Error('Unauthorized')

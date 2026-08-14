@@ -3,6 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LibraryPage } from './LibraryPage'
+import { HeaderActionProvider, useHeaderActionSlot } from './HeaderAction'
+
+/** Dựng lại ô hành động của header chung để bấm được nút "+" mà trang đăng ký. */
+function HeaderActionSlot() {
+  const action = useHeaderActionSlot()
+  return action ? <button onClick={action.onClick}>{action.label}</button> : null
+}
 
 const { mediaItems } = vi.hoisted(() => ({
   mediaItems: [
@@ -87,6 +94,10 @@ describe('LibraryPage audio navigation', () => {
     expect(screen.queryByText(/2026-08-12/)).not.toBeInTheDocument()
     expect(screen.queryByText(/10:04/)).not.toBeInTheDocument()
 
+    // Ở "Tất cả", Tổng thể là bảng thống kê từng thư viện; bấm thẻ Nhạc mới ra danh sách.
+    expect(screen.queryByRole('button', { name: 'Nghe Hẹn một mai' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Mở thư viện Nhạc, 1 mục/ }))
+
     await user.click(screen.getByRole('button', { name: 'Nghe Hẹn một mai' }))
 
     expect(screen.getByRole('heading', { name: 'Hẹn một mai' })).toBeInTheDocument()
@@ -101,123 +112,120 @@ describe('LibraryPage audio navigation', () => {
   })
 })
 
+describe('LibraryPage add form', () => {
+  const openAddFor = async (categoryLabel: string) => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <HeaderActionProvider>
+          <HeaderActionSlot />
+          <LibraryPage />
+        </HeaderActionProvider>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: categoryLabel }))
+    await user.click(screen.getByRole('button', { name: /^Thêm / }))
+    return user
+  }
+
+  it('bỏ ảnh bìa và mặc định "Đã nghe" cho form nhạc', async () => {
+    await openAddFor('Nhạc')
+
+    expect(screen.queryByPlaceholderText(/Dán link ảnh bìa/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Tải ảnh lên/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Trạng thái')).toHaveValue('COMPLETED')
+  })
+
+  it('cho sách có ô ảnh bìa kèm nút tải lên và xem mẫu', async () => {
+    await openAddFor('Sách')
+
+    expect(screen.getByPlaceholderText(/Dán link ảnh bìa/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tải ảnh lên/ })).toBeInTheDocument()
+    // Chưa có ảnh thì nút xem mẫu bị khoá, tránh mở modal rỗng.
+    expect(screen.getByRole('button', { name: /Xem mẫu/ })).toBeDisabled()
+    expect(screen.getByLabelText('Trạng thái')).toHaveValue('PLANNED')
+  })
+
+  it('mở modal xem mẫu sau khi dán link ảnh bìa', async () => {
+    const user = await openAddFor('Sách')
+
+    await user.type(screen.getByPlaceholderText(/Dán link ảnh bìa/), 'https://example.com/bia.jpg')
+    await user.click(screen.getByRole('button', { name: /Xem mẫu/ }))
+
+    expect(screen.getByAltText('Xem mẫu ảnh bìa')).toHaveAttribute('src', 'https://example.com/bia.jpg')
+  })
+})
+
 describe('LibraryPage book navigation', () => {
-  it('mở màn chi tiết khi bấm vào thẻ sách', async () => {
-    const user = userEvent.setup()
+  const renderLibrary = () => {
     render(
       <MemoryRouter>
         <LibraryPage />
       </MemoryRouter>,
     )
+    return userEvent.setup()
+  }
 
-    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm' }))
+  /** Tab "Tất cả" là bảng tổng quan từng thư viện, phải vào Sách mới thấy đầu sách. */
+  const openBooks = async () => {
+    const user = renderLibrary()
+    await user.click(screen.getByRole('button', { name: 'Sách' }))
+    return user
+  }
 
-    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Quay lại thư viện' })).toBeInTheDocument()
-  })
-
-  it('mở màn chi tiết bằng phím Enter', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
-
-    screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm' }).focus()
-    await user.keyboard('{Enter}')
-
-    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
-  })
-
-  // Thẻ sách gọi preventDefault trong onKeyDown của nó. Không chặn keydown ở hàng nút thì
-  // Enter trên nút Sửa bị nuốt mất: nút không chạy, mà lại mở màn chi tiết.
-  it('nhấn Enter trên nút Chỉnh sửa không mở màn chi tiết', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
-
-    screen.getAllByRole('button', { name: 'Edit item' })[1].focus()
-    await user.keyboard('{Enter}')
-
-    expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
-  })
-
-  it('bấm nút Chỉnh sửa trên thẻ không mở màn chi tiết', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
-
-    await user.click(screen.getAllByRole('button', { name: 'Edit item' })[1])
-
-    expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
-  })
-
-  it('hiện ảnh bìa thay icon trên thẻ sách', () => {
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByRole('img', { name: 'Bìa Đắc Nhân Tâm' })).toHaveAttribute(
-      'src',
-      'https://example.com/bia.jpg?v=1',
-    )
-  })
-
-  it('mục Books hiện lưới bìa thay cho danh sách dòng', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
-
-    // Tab "Tất cả" mặc định: sách vẫn là thẻ dạng dòng.
-    expect(document.querySelector('.book-grid')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Books' }))
+  it('thư viện Sách hiện lưới bìa thay cho danh sách dòng', async () => {
+    await openBooks()
 
     expect(document.querySelector('.book-grid')).toBeInTheDocument()
     expect(document.querySelector('.library-media-card')).not.toBeInTheDocument()
   })
 
   it('bấm ô bìa trong lưới mở màn chi tiết', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
+    const user = await openBooks()
 
-    await user.click(screen.getByRole('button', { name: 'Books' }))
     await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+
+    expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quay lại thư viện' })).toBeInTheDocument()
+  })
+
+  it('mở màn chi tiết bằng phím Enter', async () => {
+    const user = await openBooks()
+
+    screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }).focus()
+    await user.keyboard('{Enter}')
 
     expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
   })
 
-  it('ghi trang từ màn chi tiết đóng màn đó và mở modal', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter>
-        <LibraryPage />
-      </MemoryRouter>,
-    )
+  // Ảnh trong lưới để alt rỗng có chủ đích: tên sách đã nằm trong aria-label của
+  // nút bao ngoài, thêm alt nữa thì screen reader đọc hai lần. Nên kiểm src trực tiếp.
+  it('hiện ảnh bìa trong lưới', async () => {
+    await openBooks()
 
-    await user.click(screen.getByRole('button', { name: 'Books' }))
+    expect(document.querySelector('.book-grid-cover img')).toHaveAttribute(
+      'src',
+      'https://example.com/bia.jpg?v=1',
+    )
+  })
+
+  it('ghi trang từ màn chi tiết đóng màn đó và mở modal', async () => {
+    const user = await openBooks()
+
     await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
     await user.click(await screen.findByRole('button', { name: /Ghi trang/ }))
 
     // Màn chi tiết phải đóng, nếu không modal sẽ không được mount và không hiện gì.
     expect(screen.queryByRole('button', { name: 'Quay lại thư viện' })).not.toBeInTheDocument()
     expect(screen.getByText(/Ghi trang đọc/)).toBeInTheDocument()
+  })
+
+  it('quay lại thư viện từ màn chi tiết', async () => {
+    const user = await openBooks()
+
+    await user.click(screen.getByRole('button', { name: 'Xem chi tiết Đắc Nhân Tâm, đang đọc' }))
+    await user.click(await screen.findByRole('button', { name: 'Quay lại thư viện' }))
+
+    expect(document.querySelector('.book-grid')).toBeInTheDocument()
   })
 })

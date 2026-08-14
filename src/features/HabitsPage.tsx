@@ -1,10 +1,12 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Calendar, Check, ChevronLeft, ChevronRight, Flame, FolderCog, LayoutGrid, List, Minus, MoreVertical, Pencil, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import type { Habit, HabitCategory, HabitLog } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { useHeaderAction } from './HeaderAction'
+import { Aside, AsideCard } from './AsideSlot'
 import { HabitHistoryTable } from './habits/HabitHistoryTable'
 import { HabitMonthCalendar } from './habits/HabitMonthCalendar'
 import { isCurrentPeriod, monthDates, monthLabel, shiftAnchor, weekDates, weekLabel, type HistoryRange } from './habits/historyRange'
@@ -249,7 +251,6 @@ export function HabitsPage() {
     habits.setItems((xs) => xs.map((h) => (h.category_id === c.id ? { ...h, category_id: null } : h)))
   }
 
-  const progressPercent = habits.items.length ? Math.round((completed.size / habits.items.length) * 100) : 0
 
   // Hai vòng tròn: xanh cho thói quen tốt (càng đầy càng ngon),
   // đỏ cho thói quen xấu (càng TRỐNG càng ngon — trống = hôm nay không lỡ cái nào).
@@ -258,17 +259,19 @@ export function HabitsPage() {
   const goodPercent = goodHabits.length ? Math.round((goodDone / goodHabits.length) * 100) : 0
   const badPercent = badHabits.length ? Math.round((badDone / badHabits.length) * 100) : 0
 
-  const progressMessage =
-    badHabits.length > 0 && badDone === 0 && goodDone === goodHabits.length && goodHabits.length > 0
-      ? 'Hoàn hảo! Đủ thói quen tốt, không lỡ cái xấu nào 🎉'
-      : badHabits.length > 0 && badDone === 0
-        ? 'Chưa lỡ thói quen xấu nào, giữ vậy nhé 👏'
-        : badHabits.length > 0 && badDone === badHabits.length
-          ? 'Hôm nay lỡ hết thói quen xấu rồi, mai làm lại nhé'
-          : goodHabits.length > 0 && goodDone === goodHabits.length
-            ? 'Xong hết thói quen tốt, tuyệt vời!'
-            : 'Tiếp tục duy trì nhé'
   const todayValue = (habitId: string) => logs.find((l) => l.habit_id === habitId && l.date === localDate())?.value ?? 0
+
+
+  // Nút "+" dùng chung ô hành động trên header của app, giống PeoplePage.
+  const openAddHabit = useCallback(() => {
+    setName('')
+    setCategoryId('')
+    setHabitType('GOOD')
+    setTrackingType('CHECK')
+    setRoutineSlot('MORNING')
+    setAddModal(true)
+  }, [])
+  useHeaderAction('Thêm thói quen', openAddHabit)
 
   const openEditHabit = (h: Habit) => {
     setEditing(h)
@@ -304,9 +307,7 @@ export function HabitsPage() {
             e.stopPropagation()
             toggle(h)
           }}
-        >
-          {isDone && <Check size={15} strokeWidth={3} />}
-        </button>
+        />
 
         <div className="habit-item-body">
           <div className="habit-item-title">{h.name}</div>
@@ -363,40 +364,57 @@ export function HabitsPage() {
   }
 
   return (
-    <section style={{ maxWidth: 800, margin: '0 auto' }}>
-      {/* Top Bar Header */}
-      <div className="habit-header-row" style={{ marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className="icon-box icon-box-amber" style={{ width: 28, height: 28 }}>
-            <Flame size={16} />
+    <section className="page-shell">
+      {/* Cột phụ desktop: hai vòng tròn và tiến độ theo buổi luôn nhìn thấy được. */}
+      <Aside>
+        <AsideCard title="Hôm nay">
+          <div className="aside-ring">
+            <ProgressRing percent={goodPercent} size={104} stroke={9} color="var(--emerald)">
+              <strong style={{ color: 'var(--emerald)' }}>
+                {goodDone}/{goodHabits.length}
+              </strong>
+              <span>thói quen tốt</span>
+            </ProgressRing>
           </div>
-          <h1 style={{ fontSize: '1.2rem', margin: 0 }}>Habits</h1>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button
-            className="habit-add-btn"
-            aria-label="Thêm thói quen"
-            title="Thêm thói quen"
-            onClick={() => { setName(''); setCategoryId(''); setHabitType('GOOD'); setTrackingType('CHECK'); setRoutineSlot('MORNING'); setAddModal(true) }}
-          >
-            <Plus size={20} />
-          </button>
-          <button className="icon" aria-label="Manage categories" title="Quản lý thể loại" onClick={() => setManage(true)} style={{ padding: 5 }}>
-            <FolderCog size={16} />
-          </button>
-        </div>
-      </div>
+          <div className="aside-row">
+            <span>Cần hạn chế đã lỡ</span>
+            <strong style={{ color: badDone ? 'var(--red)' : 'var(--emerald)' }}>
+              {badDone}/{badHabits.length}
+            </strong>
+          </div>
+        </AsideCard>
 
-      {/* Compact Sub Navigation Tabs */}
-      <div className="habit-sub-tabs" style={{ marginBottom: 10 }}>
-        <button className={activeTab === 'today' ? 'active' : ''} onClick={() => setActiveTab('today')}>
-          <List size={14} /> Hôm nay {completed.size}/{habits.items.length}
-        </button>
-        <button className={activeTab === 'categories' ? 'active' : ''} onClick={() => setActiveTab('categories')}>
-          <LayoutGrid size={14} /> Thể loại
-        </button>
-        <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>
-          <Calendar size={14} /> Lịch sử
+        <AsideCard title="Theo buổi">
+          {routineGroups.map((slot) => {
+            const done = slot.habits.filter((h) => completed.has(h.id)).length
+            return (
+              <div className="aside-row" key={slot.key}>
+                <span>{slot.label}</span>
+                <strong style={{ color: slot.color }}>
+                  {done}/{slot.habits.length}
+                </strong>
+              </div>
+            )
+          })}
+        </AsideCard>
+      </Aside>
+
+      {/* Tiêu đề "Habits" + nút thêm đã nằm ở header chung của app, nên ở đây
+          chỉ còn hàng tab; nút quản lý thể loại bám vào cuối hàng đó. */}
+      <div className="habit-top-bar">
+        <div className="habit-sub-tabs">
+          <button className={activeTab === 'today' ? 'active' : ''} onClick={() => setActiveTab('today')}>
+            <List size={14} /> Hôm nay {completed.size}/{habits.items.length}
+          </button>
+          <button className={activeTab === 'categories' ? 'active' : ''} onClick={() => setActiveTab('categories')}>
+            <LayoutGrid size={14} /> Thể loại
+          </button>
+          <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>
+            <Calendar size={14} /> Lịch sử
+          </button>
+        </div>
+        <button className="icon habit-manage-btn" aria-label="Quản lý thể loại" title="Quản lý thể loại" onClick={() => setManage(true)}>
+          <FolderCog size={16} />
         </button>
       </div>
 
@@ -424,14 +442,6 @@ export function HabitsPage() {
                     <span style={{ color: 'var(--red)' }}>Xấu · đã lỡ</span>
                   </div>
                 )}
-              </div>
-              <div className="habit-progress-note">
-                <div className="habit-progress-headline">
-                  <strong>{completed.size}/{habits.items.length}</strong> hoàn thành
-                </div>
-                <p className="muted" style={{ margin: 0, fontSize: '0.86rem' }}>
-                  {progressMessage}
-                </p>
               </div>
             </div>
           )}

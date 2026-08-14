@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { BarChart3, Frown, Heart, NotebookPen, Pencil, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { BarChart3, Frown, Heart, ImagePlus, NotebookPen, Pencil, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import type { DailyType, Entry, Person } from '../types'
@@ -27,6 +27,8 @@ function startOfWeek(d: Date) {
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10)
 }
+
+const PHOTO_BUCKET = 'daily-photos'
 
 function viDate(s: string) {
   const d = new Date(s + 'T12:00:00')
@@ -60,6 +62,8 @@ export function DailyPage() {
   const [saveSuccess, setSaveSuccess] = useState('')
   const [editing, setEditing] = useState<Entry | null>(null)
   const [editText, setEditText] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const entryFileInput = useRef<HTMLInputElement>(null)
   const mentionQuery = content.match(/@([^\s@]*)$/)?.[1]?.toLowerCase() ?? ''
   const mentionPeople = peopleQuery.items.filter((p) => p.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
 
@@ -97,6 +101,50 @@ export function DailyPage() {
     setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, content: editText.trim(), entry_date: date } : i)))
     showToast('✏️ Đã cập nhật bài viết!')
     setEditing(null)
+  }
+
+  const openEntry = (entry: Entry) => {
+    setEditing(entry)
+    setEditText(entry.content)
+    setDate(entry.entry_date)
+  }
+
+  /** Đính ảnh vào dòng nhật ký đang mở; ảnh cũ bị thay và xoá khỏi storage. */
+  const uploadEntryImage = async (file: File) => {
+    if (!editing || !supabase) return
+    setUploading(true)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
+    const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file)
+    if (uploadError) {
+      showToast('❌ Tải ảnh lên thất bại', 'delete')
+      setUploading(false)
+      return
+    }
+    const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
+    const previousPath = editing.image_path
+    const { error } = await supabase.from('daily_entries').update({ image_url: url, image_path: path }).eq('id', editing.id)
+    if (error) {
+      await supabase.storage.from(PHOTO_BUCKET).remove([path])
+      showToast('❌ Chưa lưu được ảnh. Chạy migration daily_entry_image chưa?', 'delete')
+      setUploading(false)
+      return
+    }
+    if (previousPath) await supabase.storage.from(PHOTO_BUCKET).remove([previousPath])
+    setEditing((current) => (current ? { ...current, image_url: url, image_path: path } : current))
+    setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: url, image_path: path } : i)))
+    showToast('🖼️ Đã thêm ảnh')
+    setUploading(false)
+  }
+
+  const removeEntryImage = async () => {
+    if (!editing || !supabase) return
+    const path = editing.image_path
+    await supabase.from('daily_entries').update({ image_url: null, image_path: null }).eq('id', editing.id)
+    if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path])
+    setEditing((current) => (current ? { ...current, image_url: null, image_path: null } : current))
+    setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: null, image_path: null } : i)))
+    showToast('🗑️ Đã gỡ ảnh', 'delete')
   }
 
   const removeEntry = async (id: string) => {
@@ -140,7 +188,7 @@ export function DailyPage() {
   // ── render ───────────────────────────────────────────────────────────────
 
   return (
-    <section style={{ maxWidth: 800, margin: '0 auto' }}>
+    <section className="page-shell">
 
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -262,24 +310,21 @@ export function DailyPage() {
                   const cat = categories.find((c) => c.type === entry.entry_type) ?? categories[0]
                   const Icon = cat.icon
                   return (
-                    <div key={entry.id} className="check-row" style={{ justifyContent: 'space-between', background: 'var(--bg-main)', borderRadius: 8, padding: '6px 8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                        <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 22, height: 22 }}>
-                          <Icon size={12} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0, fontSize: '0.84rem', fontWeight: 500, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {entry.content}
-                        </div>
+                    <button
+                      key={entry.id}
+                      type="button"
+                      aria-label={`Xem chi tiết: ${entry.content}`}
+                      onClick={() => openEntry(entry)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 7, padding: '4px 7px', cursor: 'pointer' }}
+                    >
+                      <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 18, height: 18, flexShrink: 0 }}>
+                        <Icon size={10} />
                       </div>
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        <button className="icon small" aria-label="Edit entry" onClick={() => { setEditing(entry); setEditText(entry.content); setDate(entry.entry_date) }} style={{ padding: 3 }}>
-                          <Pencil size={13} />
-                        </button>
-                        <button className="icon small danger" aria-label="Delete entry" onClick={() => removeEntry(entry.id)} style={{ padding: 3 }}>
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.content}
+                      </span>
+                      {entry.image_url && <img src={entry.image_url} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} />}
+                    </button>
                   )
                 })}
               </div>
@@ -327,7 +372,7 @@ export function DailyPage() {
           </div>
 
           {/* Summary count cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 10 }}>
+          <div className="form-row-4" style={{ gap: 6, marginBottom: 10 }}>
             {categories.map((cat) => {
               const Icon = cat.icon
               const count = countByType[cat.type] ?? 0
@@ -412,7 +457,8 @@ export function DailyPage() {
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                              <button className="icon small" onClick={() => { setEditing(entry); setEditText(entry.content); setDate(entry.entry_date) }} style={{ padding: 3 }}>
+                              {entry.image_url && <img src={entry.image_url} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover' }} />}
+                              <button className="icon small" aria-label="Xem chi tiết" onClick={() => openEntry(entry)} style={{ padding: 3 }}>
                                 <Pencil size={11} />
                               </button>
                               <button className="icon small danger" onClick={() => removeEntry(entry.id)} style={{ padding: 3 }}>
@@ -431,17 +477,47 @@ export function DailyPage() {
         </>
       )}
 
-      {/* Edit modal */}
+      {/* Chi tiết một dòng nhật ký: xem đủ nội dung, sửa, đính ảnh */}
       {editing && (
-        <Modal title="Sửa dòng nhật ký" onClose={() => setEditing(null)}>
+        <Modal title="Chi tiết nhật ký" onClose={() => setEditing(null)}>
           <label>
             Ngày viết
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
           <label>
             Nội dung
-            <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} />
+            <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={5} />
           </label>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            {editing.image_url && (
+              <img src={editing.image_url} alt="Ảnh nhật ký" style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 12, background: 'var(--bg-main)' }} />
+            )}
+            <input
+              ref={entryFileInput}
+              type="file"
+              accept="image/*"
+              hidden
+              aria-label="Chọn ảnh cho nhật ký"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) uploadEntryImage(file)
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => entryFileInput.current?.click()} disabled={!supabase || uploading}>
+                <ImagePlus size={14} /> {uploading ? 'Đang tải…' : editing.image_url ? 'Đổi ảnh' : 'Thêm ảnh'}
+              </button>
+              {editing.image_url && (
+                <button type="button" className="text-danger" onClick={removeEntryImage}>
+                  <Trash2 size={14} /> Gỡ ảnh
+                </button>
+              )}
+            </div>
+            {!supabase && <small className="muted">Chưa cấu hình Supabase nên chưa lưu được ảnh.</small>}
+          </div>
+
           <div className="modal-actions">
             <DeleteButton onDelete={() => removeEntry(editing.id)} />
             <button className="primary" onClick={updateEntry}>Lưu thay đổi</button>

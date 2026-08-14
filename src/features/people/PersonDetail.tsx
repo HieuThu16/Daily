@@ -8,6 +8,7 @@ import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
+import { PersonSpending } from './PersonSpending'
 import type { NewOccasion } from './usePeopleData'
 
 type DetailTab = 'info' | 'occasions' | 'journal'
@@ -116,7 +117,12 @@ export function PersonDetail({
         ))}
       </div>
 
-      {tab === 'info' && <PersonInterests personId={person.id} />}
+      {tab === 'info' && (
+        <>
+          <PersonInterests personId={person.id} />
+          <PersonSpending personId={person.id} />
+        </>
+      )}
 
       {tab === 'occasions' && (
         <OccasionsSection

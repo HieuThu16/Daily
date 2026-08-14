@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Share2, Trash2 } from 'lucide-react'
 import { blobToCover } from '../../lib/book/cover'
 import {
   CHARS_PER_PAGE,
@@ -12,6 +12,7 @@ import {
 } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument, Media } from '../../types'
 import { BookCover } from './BookCover'
+import { BookShareModal } from './BookShareModal'
 
 /** Ảnh lớn hơn mức này bị chặn trước khi giải mã, tránh treo tab trên điện thoại. */
 const MAX_COVER_BYTES = 15 * 1024 * 1024
@@ -72,8 +73,11 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
   const [chapters, setChapters] = useState<BookChapterMeta[]>([])
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  /** Mục lục hay Thông tin. Mặc định mục lục vì mở sách ra là để đọc tiếp. */
+  const [tab, setTab] = useState<'toc' | 'info'>('toc')
   const [coverBusy, setCoverBusy] = useState(false)
   const [coverError, setCoverError] = useState('')
+  const [sharing, setSharing] = useState(false)
 
   const listen = item.book_format === 'LISTEN'
 
@@ -175,6 +179,7 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
             <div className="library-book-badges">
               <span>{listen ? '🎧 Nghe' : '📖 Đọc'}</span>
               {item.is_favorite && <span>♥ Yêu thích</span>}
+              {item.shared_by && <span>📚 Do {item.shared_by} chia sẻ</span>}
               {/* Ô bìa trong lưới không còn dropdown trạng thái, nên nó nằm ở đây — không thì
                   muốn đánh dấu đã đọc phải mở thêm modal Sửa. */}
               <select
@@ -231,16 +236,49 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           </div>
         )}
 
-        <div className="library-book-detail-actions">
+        {/* Đọc tiếp đứng cạnh hai tab: mở sách ra thì hai việc hay làm nhất là
+            đọc tiếp và nhảy tới một chương, nên để chúng chung một hàng. */}
+        <div className="library-book-primary-row">
           {status === 'ready' && (
             <button type="button" className="primary" onClick={() => nav(`/read/${item.id}`)}>
               <BookOpen size={14} />
               Đọc tiếp
             </button>
           )}
+          <div className="library-book-tabs" role="tablist" aria-label="Nội dung sách">
+            <button
+              type="button"
+              role="tab"
+              id="library-book-tab-toc"
+              aria-selected={tab === 'toc'}
+              aria-controls="library-book-panel-toc"
+              className={tab === 'toc' ? 'active' : ''}
+              onClick={() => setTab('toc')}
+            >
+              Mục lục{status === 'ready' ? ` (${chapters.length})` : ''}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="library-book-tab-info"
+              aria-selected={tab === 'info'}
+              aria-controls="library-book-panel-info"
+              className={tab === 'info' ? 'active' : ''}
+              onClick={() => setTab('info')}
+            >
+              Thông tin
+            </button>
+          </div>
+        </div>
+
+        <div className="library-book-detail-actions">
           <button type="button" onClick={() => onEdit(item)}>
             <Pencil size={14} />
             Chỉnh sửa
+          </button>
+          <button type="button" onClick={() => setSharing(true)}>
+            <Share2 size={14} />
+            Chia sẻ
           </button>
           {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
             <>
@@ -257,8 +295,13 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           )}
         </div>
 
-        <div className="library-book-section">
-          <h3>Thông tin</h3>
+        <div
+          className="library-book-section"
+          role="tabpanel"
+          id="library-book-panel-info"
+          aria-labelledby="library-book-tab-info"
+          hidden={tab !== 'info'}
+        >
           <dl className="library-book-info">
             {status === 'ready' && document_ && (
               <>
@@ -314,9 +357,13 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           </dl>
         </div>
 
-        <div className="library-book-section">
-          <h3>{status === 'ready' ? `Mục lục (${chapters.length})` : 'Mục lục'}</h3>
-
+        <div
+          className="library-book-section"
+          role="tabpanel"
+          id="library-book-panel-toc"
+          aria-labelledby="library-book-tab-toc"
+          hidden={tab !== 'toc'}
+        >
           {status === 'loading' && <p className="library-book-muted">Đang tải…</p>}
 
           {status === 'no-document' && (
@@ -354,6 +401,8 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           )}
         </div>
       </div>
+
+      {sharing && <BookShareModal item={item} onClose={() => setSharing(false)} />}
     </section>
   )
 }

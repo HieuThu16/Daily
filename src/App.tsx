@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, Calendar, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
+import { Bell, BellOff, BookOpen, Calendar, CalendarDays, CheckSquare, Download, Flame, Gamepad2, HardDriveDownload, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
 import { localDate, shortDate, vietnameseDate } from './lib/date'
 import type { Tab } from './types'
 import { HeaderActionProvider, useHeaderActionSlot } from './features/HeaderAction'
+import { AsideProvider, useAsideRef } from './features/AsideSlot'
 import { HomePage } from './features/home/HomePage'
 import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
@@ -14,12 +16,18 @@ import { PlayTogetherPage } from './features/PlayTogetherPage'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
+import { MoneyPage } from './features/MoneyPage'
+import { CalendarPage } from './features/CalendarPage'
+import { useTaskReminders } from './features/useTaskReminders'
+import { exportBackup } from './lib/backup'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
+  { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
   { id: 'playtogether', label: 'Game', icon: Gamepad2, colorClass: 'icon-box-cyan' },
@@ -63,6 +71,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const path = useLocation().pathname
   const [dark, setDark] = useState(false)
   const headerAction = useHeaderActionSlot()
+  const asideRef = useAsideRef()
 
   // PWA Install Prompt
   const deferredPrompt = useRef<Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null)
@@ -95,8 +104,46 @@ function Shell({ children }: { children: React.ReactNode }) {
     deferredPrompt.current = null
   }
 
+  // Thông báo đẩy: bật rồi thì nhắc việc tới cả khi app đã đóng.
+  const [pushOn, setPushOn] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  useEffect(() => {
+    void pushEnabled().then(setPushOn)
+  }, [])
+
+  const togglePush = async () => {
+    setPushBusy(true)
+    try {
+      if (pushOn) {
+        await disablePush()
+        setPushOn(false)
+      } else {
+        await enablePush()
+        setPushOn(true)
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không bật được thông báo.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
   const activeTabItem = navigation.find((n) => path === '/' + n.id) ?? navigation[0]
   const ActiveIcon = activeTabItem.icon
+
+  useTaskReminders()
+
+  const [backingUp, setBackingUp] = useState(false)
+  const handleBackup = async () => {
+    setBackingUp(true)
+    try {
+      const backup = await exportBackup()
+      if (backup.failed.length) alert(`Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`)
+    } catch {
+      alert('Chưa sao lưu được — kiểm tra kết nối Supabase.')
+    }
+    setBackingUp(false)
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -104,6 +151,58 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
+      {/* Điều hướng dọc của desktop. Trên điện thoại CSS ẩn đi, thanh tab dưới
+          đáy vẫn là thứ điều hướng duy nhất. */}
+      <aside className="side-nav">
+        <div className="side-nav-brand">
+          <div className="brand-icon">
+            <Sparkles size={18} />
+          </div>
+          <span>Daily</span>
+        </div>
+
+        <nav className="side-nav-list">
+          {navigation.map(({ id, label, icon: Icon, colorClass }) => {
+            const isActive = path === '/' + id
+            return (
+              <button key={id} className={isActive ? 'active' : ''} onClick={() => nav('/' + id)} aria-current={isActive ? 'page' : undefined}>
+                <div className={`nav-icon-wrapper ${colorClass}`}>
+                  <Icon size={17} />
+                </div>
+                <span>{label}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="side-nav-foot">
+          {canInstall && !installed && (
+            <button className="side-nav-mini" onClick={handleInstallPWA} title="Cài đặt ứng dụng về máy">
+              <Download size={16} /> <span>Cài đặt</span>
+            </button>
+          )}
+          <button className="side-nav-mini" onClick={handleBackup} disabled={backingUp} title="Tải toàn bộ dữ liệu về máy dạng JSON">
+            <HardDriveDownload size={16} /> <span>{backingUp ? 'Đang tải…' : 'Sao lưu'}</span>
+          </button>
+          {pushSupported() && (
+            <button
+              className="side-nav-mini"
+              onClick={() => void togglePush()}
+              disabled={pushBusy}
+              title={pushOn ? 'Tắt nhắc việc qua thông báo' : 'Bật nhắc việc kể cả khi đóng app'}
+            >
+              {pushOn ? <Bell size={16} /> : <BellOff size={16} />} <span>{pushOn ? 'Đang nhắc' : 'Bật nhắc'}</span>
+            </button>
+          )}
+          <button className="side-nav-mini" onClick={() => setDark(!dark)} title="Đổi giao diện sáng/tối">
+            <SunMoon size={16} /> <span>{dark ? 'Sáng' : 'Tối'}</span>
+          </button>
+          <button className="side-nav-mini is-danger" onClick={() => supabase?.auth.signOut()} title="Đăng xuất">
+            <LogOut size={16} /> <span>Thoát</span>
+          </button>
+        </div>
+      </aside>
+
       <header>
         <div className="brand">
           <div className={`brand-icon ${activeTabItem.colorClass}`}>
@@ -147,10 +246,10 @@ function Shell({ children }: { children: React.ReactNode }) {
               <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
             </button>
           )}
-          <button aria-label="Toggle theme" className="icon" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
+          <button aria-label="Toggle theme" className="icon header-only" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
             <SunMoon size={20} />
           </button>
-          <button aria-label="Sign out" className="icon danger" onClick={() => supabase?.auth.signOut()}>
+          <button aria-label="Sign out" className="icon danger header-only" onClick={() => supabase?.auth.signOut()}>
             <LogOut size={20} />
           </button>
         </div>
@@ -167,7 +266,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
 
-      <main className="content">{children}</main>
+      <main className={`content page-${activeTabItem.id}`}>{children}</main>
+
+      {/* Cột phụ desktop. Luôn dựng, CSS quyết định có hiện hay không. */}
+      <aside className="side-rail" ref={asideRef} />
     </div>
   )
 }
@@ -199,6 +301,7 @@ function Protected() {
   return (
     <ToastProvider>
       <HeaderActionProvider>
+      <AsideProvider>
       <Routes>
         {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
         <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
@@ -215,12 +318,15 @@ function Protected() {
                 <Route path="/library" element={<LibraryPage />} />
                 <Route path="/playtogether" element={<PlayTogetherPage />} />
                 <Route path="/nutrition" element={<NutritionPage />} />
+                <Route path="/money" element={<MoneyPage />} />
+                <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="*" element={<Navigate to="/home" replace />} />
               </Routes>
             </Shell>
           }
         />
       </Routes>
+      </AsideProvider>
       </HeaderActionProvider>
     </ToastProvider>
   )

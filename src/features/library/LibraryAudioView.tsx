@@ -36,6 +36,7 @@ export function LibraryCategoryBar({ selectedType, categories, onSelect }: Libra
             <span className="icon-box icon-box-sm" style={{ background: category.bg, color: category.color }}>
               <Icon size={14} />
             </span>
+            <span className="library-category-label">{category.label}</span>
           </button>
         )
       })}
@@ -50,7 +51,9 @@ type LibraryAudioActionProps = {
 }
 
 export function LibraryAudioAction({ item, onListen, onAddMp3 }: LibraryAudioActionProps) {
-  if (item.type !== 'MUSIC' && item.type !== 'YOUTUBE') return null
+  // Sách/phim không có nút audio, nhưng vẫn phải chiếm ô của mình trong lưới
+  // thao tác — bỏ trống thì ba nút còn lại tụt sang trái và lệch với các dòng khác.
+  if (item.type !== 'MUSIC' && item.type !== 'YOUTUBE') return <span className="library-audio-slot" aria-hidden="true" />
 
   if (!item.audio_url) {
     const label = `Thêm MP3 cho ${item.name}`
