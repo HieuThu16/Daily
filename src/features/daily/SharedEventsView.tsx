@@ -27,11 +27,13 @@ const CARD_COLORS = [
  */
 export function SharedEventsView({
   personId,
+  personName,
   isPartner = false,
   roomCode = 'HIEU-Y-2026',
   onSendInvite,
 }: {
   personId: string
+  personName?: string
   isPartner?: boolean
   roomCode?: string
   onSendInvite?: () => void
@@ -197,58 +199,75 @@ export function SharedEventsView({
     showToast(next ? '⭐ Đã thích sự kiện' : '🖤 Đã bỏ thích')
   }
 
-  const uploadImage = async (file: File) => {
-    if (!editing || !supabase) return
-    setUploading(true)
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const path = `events/${crypto.randomUUID()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file)
-    if (uploadError) {
-      showToast('❌ Tải ảnh lên thất bại', 'delete')
-      setUploading(false)
-      return
-    }
-    const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
-    const previousPath = editing.image_path
-    const { error } = await supabase.from('shared_events').update({ image_url: url, image_path: path }).eq('id', editing.id)
-    if (error) {
-      await supabase.storage.from(PHOTO_BUCKET).remove([path])
-      showToast('❌ Chưa lưu được ảnh', 'delete')
-      setUploading(false)
-      return
-    }
-    if (previousPath) await supabase.storage.from(PHOTO_BUCKET).remove([previousPath])
-    setEditing((cur) => (cur ? { ...cur, image_url: url, image_path: path } : cur))
-    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? { ...e, image_url: url, image_path: path } : e)))
-    setUploading(false)
-  }
-
-  const removeImage = async () => {
-    if (!editing || !supabase) return
-    const path = editing.image_path
-    await supabase.from('shared_events').update({ image_url: null, image_path: null }).eq('id', editing.id)
-    if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path])
-    setEditing((cur) => (cur ? { ...cur, image_url: null, image_path: null } : cur))
-    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? { ...e, image_url: null, image_path: null } : e)))
-  }
-
   const addPartner = async () => {
     const email = partnerEmail.trim().toLowerCase()
-    if (!email.includes('@')) return
-    const { data, error } = await supabase!.from('shared_partners').insert({ partner_email: email }).select().single()
+    if (!email) return
+    const { data, error } = await supabase!
+      .from('shared_partners')
+      .insert({ partner_email: email })
+      .select()
+      .single()
     if (error || !data) {
-      showToast('❌ Chưa thêm được email này', 'delete')
+      showToast('❌ Không thêm được email', 'delete')
       return
     }
     partners.setItems((prev) => [data as SharedPartner, ...prev])
     setPartnerEmail('')
-    showToast(`💌 ${email} giờ xem được sự kiện của bạn`)
+    showToast(`💌 Đã thêm ${email}`)
   }
 
-  const removePartner = async (p: SharedPartner) => {
-    await supabase!.from('shared_partners').delete().eq('id', p.id)
-    partners.setItems((prev) => prev.filter((x) => x.id !== p.id))
-    showToast('Đã gỡ quyền xem', 'delete')
+  const removePartner = async (id: string) => {
+    const { error } = await supabase!.from('shared_partners').delete().eq('id', id)
+    if (error) {
+      showToast('❌ Chưa xoá được người này', 'delete')
+      return
+    }
+    partners.setItems((prev) => prev.filter((p) => p.id !== id))
+    showToast('🗑️ Đã xoá người chung', 'delete')
+  }
+
+  const uploadImage = async (file: File) => {
+    if (!editing || !supabase) return
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const path = `${myId}/${editing.id}/${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
+      if (upErr) throw upErr
+      const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+      const url = pub.publicUrl
+
+      const { error: dbErr } = await supabase
+        .from('shared_events')
+        .update({ image_url: url, image_path: path })
+        .eq('id', editing.id)
+      if (dbErr) throw dbErr
+
+      events.setItems((prev) => prev.map((item) => (item.id === editing.id ? { ...item, image_url: url, image_path: path } : item)))
+      showToast('📷 Đã tải ảnh lên')
+    } catch {
+      showToast('❌ Không tải ảnh lên được. Tạo bucket daily-photos (public) chưa?', 'delete')
+    } finally {
+      setUploading(false)
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
+
+  const removeImage = async () => {
+    if (!editing || !supabase) return
+    setUploading(true)
+    try {
+      if (editing.image_path) {
+        await supabase.storage.from(PHOTO_BUCKET).remove([editing.image_path])
+      }
+      await supabase.from('shared_events').update({ image_url: null, image_path: null }).eq('id', editing.id)
+      events.setItems((prev) => prev.map((item) => (item.id === editing.id ? { ...item, image_url: null, image_path: null } : item)))
+      showToast('🗑️ Đã xoá ảnh', 'delete')
+    } catch {
+      showToast('❌ Chưa xoá ảnh được', 'delete')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const eventForm = (
@@ -285,30 +304,53 @@ export function SharedEventsView({
     </>
   )
 
+  const partnerDisplayName = personName || 'Người yêu'
+
   return (
     <>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button className="primary" onClick={openAdd} style={{ flex: 1, padding: '7px 0', fontSize: '0.82rem' }}>
-          <Plus size={14} /> Thêm sự kiện
+      {/* Thanh hành động đẹp mắt, không vỡ layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: onSendInvite ? '1fr 1fr' : '1fr 1fr', gap: 8, marginBottom: 10 }}>
+        <button
+          className="primary"
+          onClick={openAdd}
+          style={{ padding: '8px 12px', fontSize: '0.82rem', justifyContent: 'center', minHeight: 38 }}
+        >
+          <Plus size={15} /> Thêm kỷ niệm
         </button>
-        {onSendInvite && (
+
+        {onSendInvite ? (
           <button
             onClick={onSendInvite}
-            style={{ padding: '7px 12px', fontSize: '0.82rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)', fontWeight: 600 }}
+            style={{
+              padding: '8px 12px',
+              fontSize: '0.82rem',
+              background: 'var(--primary-light)',
+              color: 'var(--primary)',
+              border: '1px solid var(--primary)',
+              fontWeight: 600,
+              justifyContent: 'center',
+              minHeight: 38,
+            }}
             title="Gửi lời mời kết nối kỷ niệm"
           >
-            <Mail size={14} /> Gửi lời mời kết nối
+            <Mail size={15} /> Mời kết nối
+          </button>
+        ) : (
+          <button
+            onClick={() => setManagePartners(true)}
+            style={{ padding: '8px 12px', fontSize: '0.82rem', justifyContent: 'center', minHeight: 38 }}
+          >
+            <UserPlus size={15} /> Người chung ({partners.items.length})
           </button>
         )}
-        <button onClick={() => setManagePartners(true)} style={{ padding: '7px 12px', fontSize: '0.82rem' }}>
-          <UserPlus size={14} /> Người chung ({partners.items.length})
-        </button>
-        {roomCode && (
-          <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: 6, background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-            Mã phòng: <strong style={{ color: 'var(--primary)' }}>{roomCode}</strong>
-          </span>
-        )}
       </div>
+
+      {roomCode && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '4px 10px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Phòng kỷ niệm:</span>
+          <strong style={{ fontSize: '0.78rem', color: 'var(--primary)', letterSpacing: 0.5 }}>{roomCode}</strong>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
         <select
@@ -387,12 +429,16 @@ export function SharedEventsView({
                 )}
 
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div className="icon-box icon-box-sm" style={{ width: 22, height: 22, flexShrink: 0, background: c.bg, color: c.color }}>
-                      <CalendarDays size={12} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <div className="icon-box icon-box-sm" style={{ width: 20, height: 20, flexShrink: 0, background: c.bg, color: c.color }}>
+                      <CalendarDays size={11} />
                     </div>
                     <strong style={{ fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</strong>
-                    {!mine && <span className="eyebrow" style={{ margin: 0, padding: '1px 7px', fontSize: '0.6rem' }}>của người kia</span>}
+                    {!mine && (
+                      <span className="eyebrow" style={{ margin: 0, padding: '1px 6px', fontSize: '0.62rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700 }}>
+                        {partnerDisplayName}
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                     {viDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time}` : ''}
@@ -457,8 +503,8 @@ export function SharedEventsView({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>{viewingEvent.title}</h3>
               {viewingEvent.owner_id !== myId && (
-                <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem' }}>
-                  của người kia
+                <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700 }}>
+                  {partnerDisplayName}
                 </span>
               )}
             </div>
@@ -596,7 +642,7 @@ export function SharedEventsView({
             {partners.items.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-main)', borderRadius: 8, padding: '6px 10px' }}>
                 <span style={{ flex: 1, fontSize: '0.82rem' }}>{p.partner_email}</span>
-                <button className="icon small danger" aria-label={`Gỡ ${p.partner_email}`} onClick={() => removePartner(p)}>
+                <button className="icon small danger" aria-label={`Gỡ ${p.partner_email}`} onClick={() => removePartner(p.id)}>
                   <Trash2 size={12} />
                 </button>
               </div>
