@@ -3835,27 +3835,27 @@ input, select, textarea, button {
 .person-hero {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 10px 14px;
   border: 1px solid var(--card-border);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--card-bg);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .person-hero-body { flex: 1; min-width: 0; }
-.person-hero-body h3 { margin: 0 0 5px; font-size: 1.22rem; font-weight: 800; }
-.person-hero-body .group-chip { display: inline-flex; align-items: center; gap: 4px; }
-.person-hero-body p { margin: 5px 0 0; font-size: 0.82rem; color: var(--text-muted); }
-.person-avatar.large { width: 72px; height: 72px; font-size: 1.5rem; }
+.person-hero-body h3 { margin: 0 0 2px; font-size: 1.08rem; font-weight: 800; }
+.person-hero-body .group-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; padding: 1px 7px; }
+.person-hero-body p { margin: 3px 0 0; font-size: 0.76rem; color: var(--text-muted); }
+.person-avatar.large { width: 46px; height: 46px; font-size: 1.1rem; border-radius: 50%; }
 
 .hero-action {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--card-border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: transparent;
   color: var(--primary);
   cursor: pointer;

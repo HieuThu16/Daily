@@ -198,6 +198,7 @@ export function PersonDetail({
       {tab === 'events' && (
         <SharedEventsView
           personId={person.id}
+          personName={person.name}
           isPartner={!!person.is_partner}
           roomCode={person.room_code ?? 'HIEU-Y-2026'}
           onSendInvite={onSendInvite ? () => setInviteModal(true) : undefined}
