@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, CalendarPlus, Check, Pencil, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, Check, Mail, Pencil, Trash2, Users } from 'lucide-react'
 import { ageOnNext, isLunar, lunarLabel, nextOccurrence } from '../../lib/occasions'
 import type { Person, PersonGroup, PersonOccasion } from '../../types'
 import { Modal } from '../shared'
@@ -30,6 +30,7 @@ type Props = {
   onRemoveOccasion: (id: string) => void
   onUpdatePerson: (id: string, patch: Pick<Person, 'name' | 'group_key' | 'is_partner'>) => void
   onDeletePerson?: (id: string) => void
+  onSendInvite?: (person: Person, email: string) => void
 }
 
 export function PersonDetail({
@@ -41,12 +42,16 @@ export function PersonDetail({
   onRemoveOccasion,
   onUpdatePerson,
   onDeletePerson,
+  onSendInvite,
 }: Props) {
   const [tab, setTab] = useState<DetailTab>('info')
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(person.name)
   const [group, setGroup] = useState<PersonGroup | null>(person.group_key ?? null)
   const [isPartner, setIsPartner] = useState(!!person.is_partner)
+
+  const [inviteModal, setInviteModal] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
 
   const birthday = occasions.find((o) => o.person_id === person.id && o.kind === 'BIRTHDAY')
   const nextBirthday = birthday ? nextOccurrence(birthday) : null
@@ -75,6 +80,13 @@ export function PersonDetail({
     }
   }
 
+  const handleSendInviteSubmit = () => {
+    if (!inviteEmail.trim() || !onSendInvite) return
+    onSendInvite(person, inviteEmail.trim())
+    setInviteModal(false)
+    setInviteEmail('')
+  }
+
   return (
     <section className="people-page">
       <div className="detail-bar">
@@ -83,6 +95,16 @@ export function PersonDetail({
         </button>
         <h2>Chi tiết người thân</h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          {onSendInvite && (
+            <button
+              className="icon"
+              style={{ color: 'var(--primary)' }}
+              onClick={() => setInviteModal(true)}
+              title="Gửi lời mời chia sẻ kỷ niệm chung"
+            >
+              <Mail size={18} />
+            </button>
+          )}
           <button className="icon" onClick={openEdit} aria-label="Sửa thông tin">
             <Pencil size={18} />
           </button>
@@ -140,6 +162,20 @@ export function PersonDetail({
 
       {tab === 'info' && (
         <>
+          {onSendInvite && (
+            <div style={{ background: 'var(--primary-light)', padding: 12, borderRadius: 12, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--primary)' }}>
+                {person.is_partner ? '❤️ Đã đánh dấu là người yêu chung' : 'Chưa gửi lời mời kết nối kỷ niệm'}
+              </span>
+              <button
+                className="primary"
+                style={{ padding: '5px 10px', fontSize: '0.8rem' }}
+                onClick={() => setInviteModal(true)}
+              >
+                <Mail size={14} /> {person.is_partner ? 'Gửi lại lời mời' : 'Mời kỷ niệm chung'}
+              </button>
+            </div>
+          )}
           <PersonInterests personId={person.id} />
           <PersonSpending personId={person.id} />
         </>
@@ -208,6 +244,34 @@ export function PersonDetail({
               <button onClick={() => setEditing(false)}>Huỷ</button>
               <button className="primary" onClick={submitEdit} disabled={!name.trim()}>
                 <Check size={15} /> Lưu
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {inviteModal && (
+        <Modal title={`Mời kết nối với ${person.name}`} onClose={() => setInviteModal(false)}>
+          <div className="person-form">
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+              Nhập Gmail của {person.name}. Hệ thống sẽ gửi lời mời đến đối phương. Khi đối phương chấp nhận, hai người sẽ xem được Kỷ niệm chung!
+            </p>
+            <label className="field">
+              <span>Email đối phương</span>
+              <input
+                autoFocus
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendInviteSubmit()}
+                placeholder="VD: nguyenkimy1302.gr@gmail.com"
+                aria-label="Email đối phương"
+              />
+            </label>
+            <div className="modal-actions">
+              <button onClick={() => setInviteModal(false)}>Huỷ</button>
+              <button className="primary" onClick={handleSendInviteSubmit} disabled={!inviteEmail.trim()}>
+                <Mail size={15} /> Gửi lời mời
               </button>
             </div>
           </div>

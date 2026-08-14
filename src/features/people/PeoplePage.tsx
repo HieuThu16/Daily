@@ -170,6 +170,12 @@ export function PeoplePage() {
     showToast(saveSourceLabel(savedTo))
   }
 
+  const handleSendInviteFromDetail = async (person: Person, email: string) => {
+    const savedTo = await sendPartnerInvitation(email)
+    await updatePerson(person.id, { name: person.name, group_key: person.group_key, is_partner: true })
+    showToast(`Đã gửi lời mời đến ${email}! (${saveSourceLabel(savedTo)})`)
+  }
+
   if (selected) {
     return (
       <PersonDetail
@@ -181,6 +187,7 @@ export function PeoplePage() {
         onRemoveOccasion={removeOccasion}
         onUpdatePerson={handleUpdatePerson}
         onDeletePerson={handleDeletePerson}
+        onSendInvite={handleSendInviteFromDetail}
       />
     )
   }
@@ -206,52 +213,99 @@ export function PeoplePage() {
         </button>
       </div>
 
-      {filterOpen && (
-        <div className="people-filters" role="group" aria-label="Lọc theo nhóm">
-          {(['ALL', ...GROUPS.map((g) => g.key)] as const).map((key) => (
+      <div className="people-filters" role="group" aria-label="Lọc theo nhóm" style={{ marginBottom: 16 }}>
+        {(['ALL', ...GROUPS.map((g) => g.key), 'INVITES'] as const).map((key) => {
+          const isInvites = key === 'INVITES'
+          const labelText = isInvites
+            ? `Lời mời nhận được${pendingReceived.length ? ` (${pendingReceived.length})` : ''}`
+            : key === 'ALL'
+            ? 'Tất cả'
+            : groupLabel(key)
+          return (
             <button
               key={key}
               type="button"
-              className={groupFilter === key ? 'active' : ''}
-              aria-pressed={groupFilter === key}
-              onClick={() => setGroupFilter(key)}
+              className={groupFilter === (key as string) ? 'active' : ''}
+              aria-pressed={groupFilter === (key as string)}
+              onClick={() => setGroupFilter(key as typeof groupFilter)}
+              style={isInvites && pendingReceived.length > 0 ? { borderColor: 'var(--primary)', color: 'var(--primary)', fontWeight: 700 } : undefined}
             >
-              {key === 'ALL' ? 'Tất cả' : groupLabel(key)}
+              {labelText}
             </button>
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
 
-      {/* Lời mời nhận được */}
-      {pendingReceived.length > 0 && (
-        <div className="invite-banner" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: 14, borderRadius: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+      {groupFilter === ('INVITES' as unknown) ? (
+        <div className="invite-section" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <HeartHandshake size={22} style={{ color: 'var(--primary)' }} />
-            <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>Lời mời kết nối kỷ niệm chung</strong>
+            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Danh sách Lời mời đã nhận ({pendingReceived.length})</h3>
           </div>
-          {pendingReceived.map((inv) => (
-            <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--card-bg)', padding: '10px 14px', borderRadius: 12 }}>
-              <span style={{ fontSize: '0.9rem' }}>
-                Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> đã gửi lời mời cho bạn.
-              </span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="primary"
-                  style={{ padding: '6px 12px', fontSize: '0.82rem' }}
-                  onClick={() => handleOpenAcceptModal(inv)}
-                >
-                  <Check size={14} /> Chấp nhận
-                </button>
-                <button
-                  style={{ padding: '6px 12px', fontSize: '0.82rem', background: 'transparent', border: '1px solid var(--border)' }}
-                  onClick={() => handleRejectInvite(inv.id)}
-                >
-                  <X size={14} /> Từ chối
-                </button>
-              </div>
+
+          {pendingReceived.length === 0 ? (
+            <p className="home-card-empty">Không có lời mời kết nối nào đang chờ.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {pendingReceived.map((inv) => (
+                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: '12px 16px', borderRadius: 12 }}>
+                  <span style={{ fontSize: '0.9rem' }}>
+                    Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> vừa gửi cho bạn lời mời kết nối kỷ niệm chung.
+                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="primary"
+                      style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+                      onClick={() => handleOpenAcceptModal(inv)}
+                    >
+                      <Check size={14} /> Chấp nhận
+                    </button>
+                    <button
+                      style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+                      onClick={() => handleRejectInvite(inv.id)}
+                    >
+                      <X size={14} /> Từ chối
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
+      ) : (
+        <>
+          {/* Đang có lời mời chưa chấp nhận -> hiện banner nhắc ở trên */}
+          {pendingReceived.length > 0 && (
+            <div className="invite-banner" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: 14, borderRadius: 16, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <HeartHandshake size={22} style={{ color: 'var(--primary)' }} />
+                <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>Bạn có {pendingReceived.length} lời mời kết nối kỷ niệm</strong>
+              </div>
+              {pendingReceived.map((inv) => (
+                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--card-bg)', padding: '10px 14px', borderRadius: 12 }}>
+                  <span style={{ fontSize: '0.9rem' }}>
+                    Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> đã gửi lời mời cho bạn.
+                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="primary"
+                      style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+                      onClick={() => handleOpenAcceptModal(inv)}
+                    >
+                      <Check size={14} /> Chấp nhận
+                    </button>
+                    <button
+                      style={{ padding: '6px 12px', fontSize: '0.82rem', background: 'transparent', border: '1px solid var(--border)' }}
+                      onClick={() => handleRejectInvite(inv.id)}
+                    >
+                      <X size={14} /> Từ chối
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <div className="people-stats">

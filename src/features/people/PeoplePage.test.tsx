@@ -54,15 +54,15 @@ describe('PeoplePage', () => {
 
   it('hiện chip nhóm của từng người', async () => {
     render(<PeoplePage />)
-    expect(await screen.findByText('Gia đình')).toBeInTheDocument()
-    expect(screen.getByText('Bạn bè')).toBeInTheDocument()
+    expect((await screen.findAllByText('Gia đình')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Bạn bè')).length).toBeGreaterThan(0)
   })
 
   it('lọc theo nhóm', async () => {
     render(<PeoplePage />)
     await screen.findByText('Minh')
-    await userEvent.click(screen.getByLabelText('Lọc theo nhóm'))
-    await userEvent.click(screen.getByRole('button', { name: 'Bạn bè', pressed: false }))
+    const buttons = screen.getAllByRole('button', { name: 'Bạn bè' })
+    await userEvent.click(buttons[0])
     expect(screen.queryByText('Nguyễn Thuỳ Linh')).not.toBeInTheDocument()
     expect(screen.getByText('Minh')).toBeInTheDocument()
   })
