@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clock, Download, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, Play, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clock, Download, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, Play, Plus, RefreshCw, Search, Share2, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -21,6 +21,7 @@ import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
+import { BookShareModal } from './library/BookShareModal'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -186,6 +187,7 @@ export function LibraryPage() {
   const [bookStatsOpen, setBookStatsOpen] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
+  const [sharingBookItem, setSharingBookItem] = useState<Media | null>(null)
 
   useEffect(() => {
     void loadImportedMediaItemIds().then(setImportedIds)
@@ -996,11 +998,23 @@ export function LibraryPage() {
               <Heart size={17} fill={item.is_favorite ? 'currentColor' : 'none'} />
             </button>
 
+            {isBook && (
+              <button
+                className="icon small"
+                aria-label={`Chia sẻ sách ${item.name}`}
+                onClick={() => setSharingBookItem(item)}
+                title="Chia sẻ sách"
+              >
+                <Share2 size={16} />
+              </button>
+            )}
+
             <RowMenu
               label={`Thao tác cho ${item.name}`}
               icon={<MoreVertical size={16} />}
               items={[
                 { key: 'edit', label: 'Chỉnh sửa', icon: <Pencil size={14} />, onSelect: () => openEdit(item) },
+                ...(isBook ? [{ key: 'share', label: 'Chia sẻ sách', icon: <Share2 size={14} />, onSelect: () => setSharingBookItem(item) }] : []),
                 {
                   key: 'delete',
                   label: 'Xoá khỏi thư viện',
@@ -1024,6 +1038,13 @@ export function LibraryPage() {
                 <BookOpen size={13} /> Đọc
               </button>
             )}
+            <button
+              className="library-book-btn"
+              onClick={() => setSharingBookItem(item)}
+              title="Chia sẻ sách cho người khác"
+            >
+              <Share2 size={13} /> Chia sẻ
+            </button>
             {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
               <>
                 <button
@@ -2153,6 +2174,10 @@ export function LibraryPage() {
       )}
 
       {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} onClose={() => setBookStatsOpen(false)} />}
+
+      {sharingBookItem && (
+        <BookShareModal item={sharingBookItem} onClose={() => setSharingBookItem(null)} />
+      )}
 
       {importOpen && (
         <BookImportModal

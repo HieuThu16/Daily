@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Share2, Trash2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { blobToCover } from '../../lib/book/cover'
 import {
   CHARS_PER_PAGE,
@@ -12,7 +12,7 @@ import {
 } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument, Media } from '../../types'
 import { BookCover } from './BookCover'
-import { BookShareModal } from './BookShareModal'
+import { useHideHeader } from '../HeaderAction'
 
 /** Ảnh lớn hơn mức này bị chặn trước khi giải mã, tránh treo tab trên điện thoại. */
 const MAX_COVER_BYTES = 15 * 1024 * 1024
@@ -64,6 +64,7 @@ function formatMoment(value: string | null | undefined): string | null {
 }
 
 export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusChange, onLogProgress, onShowHistory, logCount }: BookDetailViewProps) {
+  useHideHeader(true)
   const nav = useNavigate()
   const headingRef = useRef<HTMLHeadingElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -77,7 +78,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
   const [tab, setTab] = useState<'toc' | 'info'>('toc')
   const [coverBusy, setCoverBusy] = useState(false)
   const [coverError, setCoverError] = useState('')
-  const [sharing, setSharing] = useState(false)
 
   const listen = item.book_format === 'LISTEN'
 
@@ -107,8 +107,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
         setStatus('ready')
       } catch (caught) {
         if (cancelled) return
-        // Phân biệt với sách thật sự chưa nhập file bằng dòng lỗi và nút Thử lại.
-        // Xoá dữ liệu cũ để không lộ thông tin của sách trước đó (item.id đổi mà component không remount).
         setDocument(null)
         setChapters([])
         setLoadError(caught instanceof Error ? caught.message : 'Không tải được thông tin sách.')
@@ -128,7 +126,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
       setCoverError('Ảnh quá lớn (tối đa 15MB).')
       return
     }
-
     setCoverBusy(true)
     try {
       const cover = await blobToCover(file)
@@ -140,7 +137,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
       await saveCoverUrl(item.id, url)
       onCoverChange(item.id, url)
     } catch {
-      // Lỗi từ Supabase là chuỗi tiếng Anh và có thể lộ tên policy RLS, không hiện thẳng.
       setCoverError('Không lưu được ảnh bìa, thử lại sau.')
     } finally {
       setCoverBusy(false)
@@ -162,10 +158,31 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
 
   return (
     <section className="library-book-detail" aria-labelledby="library-book-title">
-      <button type="button" className="library-audio-back" aria-label="Quay lại thư viện" onClick={onBack}>
-        <ArrowLeft size={17} />
-        Quay lại
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10 }}>
+        <button
+          type="button"
+          className="library-audio-back"
+          aria-label="Quay lại thư viện"
+          onClick={onBack}
+          style={{ margin: 0, padding: '6px 12px', fontSize: '0.84rem' }}
+        >
+          <ArrowLeft size={16} />
+          Quay lại
+        </button>
+        <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, flex: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          Chi tiết sách
+        </h2>
+        <button
+          type="button"
+          className="icon"
+          onClick={() => onEdit(item)}
+          aria-label="Chỉnh sửa thông tin sách"
+          style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+          title="Chỉnh sửa"
+        >
+          <Pencil size={15} />
+        </button>
+      </div>
 
       <div className="library-book-detail-card">
         <div className="library-book-header">
@@ -180,8 +197,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
               <span>{listen ? '🎧 Nghe' : '📖 Đọc'}</span>
               {item.is_favorite && <span>♥ Yêu thích</span>}
               {item.shared_by && <span>📚 Do {item.shared_by} chia sẻ</span>}
-              {/* Ô bìa trong lưới không còn dropdown trạng thái, nên nó nằm ở đây — không thì
-                  muốn đánh dấu đã đọc phải mở thêm modal Sửa. */}
               <select
                 className="library-book-status"
                 aria-label="Trạng thái"
@@ -236,8 +251,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           </div>
         )}
 
-        {/* Đọc tiếp đứng cạnh hai tab: mở sách ra thì hai việc hay làm nhất là
-            đọc tiếp và nhảy tới một chương, nên để chúng chung một hàng. */}
         <div className="library-book-primary-row">
           {status === 'ready' && (
             <button type="button" className="primary" onClick={() => nav(`/read/${item.id}`)}>
@@ -272,14 +285,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
         </div>
 
         <div className="library-book-detail-actions">
-          <button type="button" onClick={() => onEdit(item)}>
-            <Pencil size={14} />
-            Chỉnh sửa
-          </button>
-          <button type="button" onClick={() => setSharing(true)}>
-            <Share2 size={14} />
-            Chia sẻ
-          </button>
           {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
             <>
               <button type="button" onClick={() => onLogProgress(item)}>
@@ -401,8 +406,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           )}
         </div>
       </div>
-
-      {sharing && <BookShareModal item={item} onClose={() => setSharing(false)} />}
     </section>
   )
 }
