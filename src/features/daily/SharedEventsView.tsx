@@ -61,6 +61,18 @@ export function SharedEventsView({
 
   useEffect(() => {
     supabase?.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null))
+
+    if (!supabase) return
+    const channel = supabase
+      .channel('shared_events_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shared_events' }, () => {
+        events.reload()
+      })
+      .subscribe()
+
+    return () => {
+      supabase?.removeChannel(channel)
+    }
   }, [])
 
   // Kỷ niệm của người này (mình tạo) hoặc kỷ niệm do người yêu chia sẻ sang (owner khác mình)
@@ -485,26 +497,22 @@ export function SharedEventsView({
                 {viewingEvent.is_favorite ? 'Bỏ thích' : 'Yêu thích'}
               </button>
 
-              {viewingEvent.owner_id === myId && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const evToEdit = viewingEvent
-                      setViewing(null)
-                      openEdit(evToEdit)
-                    }}
-                  >
-                    <Pencil size={15} /> Sửa
-                  </button>
-                  <DeleteButton
-                    onDelete={async () => {
-                      await deleteEvent(viewingEvent.id)
-                      setViewing(null)
-                    }}
-                  />
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const evToEdit = viewingEvent
+                  setViewing(null)
+                  openEdit(evToEdit)
+                }}
+              >
+                <Pencil size={15} /> Sửa
+              </button>
+              <DeleteButton
+                onDelete={async () => {
+                  await deleteEvent(viewingEvent.id)
+                  setViewing(null)
+                }}
+              />
             </div>
           </div>
         </Modal>
