@@ -63,6 +63,7 @@ export function NutritionPage() {
   const [loading, setLoading] = useState(true)
 
   const [foodModal, setFoodModal] = useState(false)
+  const [editingFood, setEditingFood] = useState<NutritionLog | null>(null)
   const [activeMeal, setActiveMeal] = useState<MealSlot>('MORNING')
   const [foodName, setFoodName] = useState('')
   const [foodPrice, setFoodPrice] = useState('')
@@ -139,22 +140,80 @@ export function NutritionPage() {
     return map
   }, [logs])
 
-  async function addFood() {
+  function openAddFoodModal(slot: MealSlot) {
+    setEditingFood(null)
+    setActiveMeal(slot)
+    setFoodName('')
+    setFoodPrice('')
+    setFoodLogTime(new Date().toTimeString().slice(0, 5))
+    setFoodModal(true)
+  }
+
+  function openEditFoodModal(log: NutritionLog) {
+    setEditingFood(log)
+    setActiveMeal(log.meal_slot)
+    setFoodName(log.food_name)
+    setFoodPrice(log.price ? String(log.price) : '')
+    setFoodLogTime(log.log_time || new Date().toTimeString().slice(0, 5))
+    setFoodModal(true)
+  }
+
+  async function saveFood() {
     const priceNum = Number(foodPrice.replace(/\D/g, '')) || 0
-    const payload = { meal_slot: activeMeal, food_name: foodName.trim() || 'Món ăn', price: priceNum, log_date: currentDate, log_time: foodLogTime }
-    try {
-      const { data, error } = await supabase!.from('nutrition_logs').insert(payload).select().single()
-      if (error) throw error
-      setLogs((current) => [...current, data as NutritionLog])
-      showToast('✅ Đã ghi món ăn!')
-    } catch {
-      const fallback = { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() }
-      const next = [...logs, fallback]
-      setLogs(next)
-      localStorage.setItem(`nutrition_${currentDate}`, JSON.stringify(next))
-      showToast('📴 Đã lưu offline')
+    const payload = {
+      meal_slot: activeMeal,
+      food_name: foodName.trim() || 'Món ăn',
+      price: priceNum,
+      log_date: editingFood ? editingFood.log_date : currentDate,
+      log_time: foodLogTime,
     }
-    setFoodName(''); setFoodPrice(''); setFoodModal(false)
+
+    if (editingFood) {
+      try {
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('nutrition_logs')
+            .update(payload)
+            .eq('id', editingFood.id)
+            .select()
+            .single()
+          if (error) throw error
+          setLogs((prev) => prev.map((item) => (item.id === editingFood.id ? (data as NutritionLog) : item)))
+          setPeriodFoodLogs((prev) => prev.map((item) => (item.id === editingFood.id ? (data as NutritionLog) : item)))
+        } else {
+          throw new Error('Offline')
+        }
+        showToast('✏️ Đã cập nhật tiền ăn!')
+      } catch {
+        const updated = { ...editingFood, ...payload }
+        setLogs((prev) => prev.map((item) => (item.id === editingFood.id ? updated : item)))
+        setPeriodFoodLogs((prev) => prev.map((item) => (item.id === editingFood.id ? updated : item)))
+        const targetDate = editingFood.log_date || currentDate
+        const local = readLocalRange<NutritionLog>('nutrition', [targetDate])
+        const next = local.map((item) => (item.id === editingFood.id ? updated : item))
+        localStorage.setItem(`nutrition_${targetDate}`, JSON.stringify(next))
+        showToast('📴 Đã cập nhật offline')
+      }
+    } else {
+      try {
+        const { data, error } = await supabase!.from('nutrition_logs').insert(payload).select().single()
+        if (error) throw error
+        setLogs((current) => [...current, data as NutritionLog])
+        setPeriodFoodLogs((current) => [...current, data as NutritionLog])
+        showToast('✅ Đã ghi món ăn!')
+      } catch {
+        const fallback = { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() }
+        const next = [...logs, fallback]
+        setLogs(next)
+        setPeriodFoodLogs((prev) => [...prev, fallback])
+        localStorage.setItem(`nutrition_${currentDate}`, JSON.stringify(next))
+        showToast('📴 Đã lưu offline')
+      }
+    }
+    setFoodName('')
+    setFoodPrice('')
+    setEditingFood(null)
+    setFoodModal(false)
   }
 
   function openAddSleepModal() {
@@ -292,7 +351,7 @@ export function NutritionPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderRadius: 13, background: 'var(--primary)', color: 'white' }}><span>Tổng chi hôm nay</span><strong>{money(totalFood)}</strong></div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 6 }}>
                 {MEALS.map((meal) => (
-                  <button key={meal.slot} type="button" aria-label={meal.label} onClick={() => { setActiveMeal(meal.slot); setFoodModal(true) }} style={{ display: 'grid', justifyItems: 'center', gap: 2, padding: '8px 2px', border: `1px solid ${meal.color}`, borderRadius: 12, background: meal.bg, color: meal.color, cursor: 'pointer' }}>
+                  <button key={meal.slot} type="button" aria-label={meal.label} onClick={() => openAddFoodModal(meal.slot)} style={{ display: 'grid', justifyItems: 'center', gap: 2, padding: '8px 2px', border: `1px solid ${meal.color}`, borderRadius: 12, background: meal.bg, color: meal.color, cursor: 'pointer' }}>
                     <span>{meal.emoji}</span><strong style={{ fontSize: '.67rem' }}>{meal.label}</strong><small>{money(groupedFood[meal.slot].reduce((sum, log) => sum + log.price, 0))}</small><Plus size={11} />
                   </button>
                 ))}
@@ -304,7 +363,10 @@ export function NutritionPage() {
                     <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6, padding: '7px 8px', borderRadius: 9, background: meal.bg }}>
                       <div style={{ flex: 1, minWidth: 0 }}><strong style={{ fontSize: '.78rem' }}>{log.food_name}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{log.log_time}</small></div>
                       <b style={{ color: meal.color, fontSize: '.76rem' }}>{money(log.price)}</b>
-                      <button type="button" aria-label={`Xóa ${log.food_name}`} onClick={() => deleteFood(log.id)} style={{ border: 0, background: 'none', color: '#ef4444' }}><Trash2 size={14} /></button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <button type="button" aria-label={`Sửa ${log.food_name}`} onClick={() => openEditFoodModal(log)} style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}><Pencil size={14} /></button>
+                        <button type="button" aria-label={`Xóa ${log.food_name}`} onClick={() => deleteFood(log.id)} style={{ border: 0, background: 'none', color: '#ef4444', cursor: 'pointer', padding: 2 }}><Trash2 size={14} /></button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -312,7 +374,7 @@ export function NutritionPage() {
             </>
           )}
 
-          {tab === 'food' && periodMode !== 'day' && <FoodPeriodView logs={periodFoodLogs} days={periodRange.days} mealFilter={mealFilter} onMealFilter={setMealFilter} onDelete={deleteFood} />}
+          {tab === 'food' && periodMode !== 'day' && <FoodPeriodView logs={periodFoodLogs} days={periodRange.days} mealFilter={mealFilter} onMealFilter={setMealFilter} onDelete={deleteFood} onEdit={openEditFoodModal} />}
 
           {tab === 'sleep' && periodMode === 'day' && (
             <>
@@ -358,12 +420,12 @@ export function NutritionPage() {
       )}
 
       {foodModal && (
-        <Modal onClose={() => setFoodModal(false)} title={`Thêm bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label}`}>
+        <Modal onClose={() => { setFoodModal(false); setEditingFood(null) }} title={editingFood ? `Sửa bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label} (${editingFood.food_name})` : `Thêm bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label}`}>
           <div className="form-grid">
             <label>Tên món ăn<input autoFocus value={foodName} onChange={(event) => setFoodName(event.target.value)} placeholder="Ví dụ: Cơm tấm" /></label>
             <label>Chi phí<input value={foodPrice} onChange={(event) => setFoodPrice(event.target.value)} placeholder="Ví dụ: 35k" inputMode="numeric" /></label>
             <label>Giờ<input type="time" value={foodLogTime} onChange={(event) => setFoodLogTime(event.target.value)} /></label>
-            <button type="button" className="primary" onClick={addFood}>Lưu món ăn</button>
+            <button type="button" className="primary" onClick={saveFood}>{editingFood ? 'Lưu thay đổi' : 'Lưu món ăn'}</button>
           </div>
         </Modal>
       )}

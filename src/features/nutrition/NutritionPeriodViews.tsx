@@ -73,12 +73,13 @@ function SummaryCards({ items }: { items: { label: string; value: string; color:
   )
 }
 
-export function FoodPeriodView({ logs, days, mealFilter, onMealFilter, onDelete }: {
+export function FoodPeriodView({ logs, days, mealFilter, onMealFilter, onDelete, onEdit }: {
   logs: NutritionLog[]
   days: string[]
   mealFilter: MealFilter
   onMealFilter: (slot: MealFilter) => void
   onDelete: (id: string) => void
+  onEdit?: (log: NutritionLog) => void
 }) {
   const filtered = filterFoodLogs(logs, mealFilter)
   const summary = summarizeFood(filtered, days)
@@ -129,7 +130,14 @@ export function FoodPeriodView({ logs, days, mealFilter, onMealFilter, onDelete 
                 <span className="nutrition-history-icon" style={{ color: meal.color }}>{meal.emoji}</span>
                 <div><strong>{entry.food_name}</strong><small>{meal.label}{entry.log_time ? ` · ${entry.log_time}` : ''}</small></div>
                 <b style={{ color: meal.color }}>{money(entry.price)}</b>
-                <button type="button" aria-label={`Xóa ${entry.food_name}`} onClick={() => onDelete(entry.id)}><Trash2 size={14} /></button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {onEdit && (
+                    <button type="button" aria-label={`Sửa ${entry.food_name}`} onClick={() => onEdit(entry)} style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}>
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                  <button type="button" aria-label={`Xóa ${entry.food_name}`} onClick={() => onDelete(entry.id)} style={{ border: 0, background: 'none', color: '#ef4444', cursor: 'pointer', padding: 2 }}><Trash2 size={14} /></button>
+                </div>
               </div>
             )
           })}
