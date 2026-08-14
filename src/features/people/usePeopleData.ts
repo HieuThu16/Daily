@@ -48,7 +48,15 @@ export function usePeopleData() {
           supabase.from('partner_invitations').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
         ])
         if (p.data) {
-          setPeople(p.data as Person[])
+          const rawPeople = p.data as Person[]
+          const seen = new Set<string>()
+          const unique = rawPeople.filter((item) => {
+            const key = item.id || item.name.trim().toLowerCase()
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          setPeople(unique)
           setSource('Supabase')
         }
         if (o.data) setOccasions(o.data as PersonOccasion[])

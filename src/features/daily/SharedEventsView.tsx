@@ -80,12 +80,32 @@ export function SharedEventsView({
   }, [])
 
   // Kỷ niệm chung của phòng (roomCode), hoặc gắn theo personId, hoặc do đối tác chia sẻ sang
-  const sorted = useMemo(
-    () => events.items
-      .filter((e) => (roomCode && e.room_code === roomCode) || e.person_id === personId || (myId != null && e.owner_id !== myId))
-      .sort((a, b) => b.event_date.localeCompare(a.event_date) || (b.event_time ?? '').localeCompare(a.event_time ?? '')),
-    [events.items, roomCode, personId, myId],
-  )
+  const sorted = useMemo(() => {
+    // 1. Lọc theo roomCode hoặc personId hoặc owner
+    const matched = events.items.filter(
+      (e) => (roomCode && e.room_code === roomCode) || e.person_id === personId || (myId != null && e.owner_id !== myId),
+    )
+
+    // 2. Loại bỏ hoàn toàn bản ghi trùng lặp (theo id hoặc theo title + date + room_code)
+    const seenIds = new Set<string>()
+    const seenKeys = new Set<string>()
+    const unique: SharedEvent[] = []
+
+    for (const item of matched) {
+      if (seenIds.has(item.id)) continue
+      const contentKey = `${item.room_code ?? ''}_${item.event_date}_${item.title.trim().toLowerCase()}`
+      if (seenKeys.has(contentKey)) continue
+
+      seenIds.add(item.id)
+      seenKeys.add(contentKey)
+      unique.push(item)
+    }
+
+    // 3. Sắp xếp theo ngày mới nhất
+    return unique.sort(
+      (a, b) => b.event_date.localeCompare(a.event_date) || (b.event_time ?? '').localeCompare(a.event_time ?? ''),
+    )
+  }, [events.items, roomCode, personId, myId])
 
   const availableYears = useMemo(() => {
     const years = new Set<string>()
