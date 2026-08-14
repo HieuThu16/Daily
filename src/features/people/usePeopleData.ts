@@ -238,12 +238,19 @@ export function usePeopleData() {
     await supabase.from('partner_invitations').update({ status: 'ACCEPTED' }).eq('id', invitation.id)
     setInvitations((prev) => prev.map((inv) => (inv.id === invitation.id ? { ...inv, status: 'ACCEPTED' } : inv)))
 
-    // 2. Thêm shared_partners cho người nhận (để 2 chiều)
+    // 2. Thêm shared_partners cho cả 2 chiều
     if (userData.user?.id) {
       try {
         await supabase
           .from('shared_partners')
           .insert({ user_id: userData.user.id, partner_email: invitation.sender_email })
+      } catch {
+        // Ignored
+      }
+      try {
+        await supabase
+          .from('shared_partners')
+          .insert({ user_id: invitation.sender_id, partner_email: userData.user.email ?? '' })
       } catch {
         // Ignored
       }

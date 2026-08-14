@@ -63,13 +63,12 @@ export function SharedEventsView({
     supabase?.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null))
   }, [])
 
-  // Kỷ niệm của đúng người này (mình tạo). Nếu là người yêu chung thì kèm cả
-  // kỷ niệm do tài khoản kia chia sẻ sang (owner khác mình), bất kể person_id bên họ.
+  // Kỷ niệm của người này (mình tạo) hoặc kỷ niệm do người yêu chia sẻ sang (owner khác mình)
   const sorted = useMemo(
     () => events.items
-      .filter((e) => e.person_id === personId || (isPartner && myId != null && e.owner_id !== myId))
+      .filter((e) => e.person_id === personId || (myId != null && e.owner_id !== myId))
       .sort((a, b) => b.event_date.localeCompare(a.event_date) || (b.event_time ?? '').localeCompare(a.event_time ?? '')),
-    [events.items, personId, isPartner, myId],
+    [events.items, personId, myId],
   )
 
   const availableYears = useMemo(() => {
