@@ -20,7 +20,6 @@ type ReaderSettings = {
 
 const SETTINGS_KEY = 'book-reader-settings'
 const DEFAULT_SETTINGS: ReaderSettings = { fontSize: 17, lineHeight: 1.8, font: 'serif', theme: 'light' }
-const HIDE_BAR_AFTER_PX = 80
 const COMPLETED_RATIO = 0.98
 
 export function BookReaderPage() {
@@ -31,7 +30,6 @@ export function BookReaderPage() {
   const nav = useNavigate()
   const scroller = useRef<HTMLDivElement>(null)
   const pendingRatio = useRef<number | null>(null)
-  const lastScrollTop = useRef(0)
 
   const [bookDocument, setBookDocument] = useState<BookDocument | null>(null)
   const [chapters, setChapters] = useState<BookChapterMeta[]>([])
@@ -47,7 +45,6 @@ export function BookReaderPage() {
   const [percent, setPercent] = useState(0)
   const [tocOpen, setTocOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [barHidden, setBarHidden] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [settings, setSettings] = useState<ReaderSettings>(() => loadLocal(SETTINGS_KEY, DEFAULT_SETTINGS))
 
@@ -156,9 +153,6 @@ export function BookReaderPage() {
     const scrollable = Math.max(1, node.scrollHeight - node.clientHeight)
     const ratio = Math.min(1, Math.max(0, node.scrollTop / scrollable))
 
-    setBarHidden(node.scrollTop > lastScrollTop.current && node.scrollTop > HIDE_BAR_AFTER_PX)
-    lastScrollTop.current = node.scrollTop
-
     const offset = activeChapter.char_offset + ratio * activeChapter.char_count
     setPercent(bookDocument.total_chars > 0 ? Math.min(100, (offset / bookDocument.total_chars) * 100) : 0)
     setCompleted(activeIdx === chapters.length - 1 && ratio > COMPLETED_RATIO)
@@ -177,8 +171,6 @@ export function BookReaderPage() {
     setActiveIdx(idx)
     setTocOpen(false)
     setCompleted(false)
-    lastScrollTop.current = 0
-    setBarHidden(false)
     requestAnimationFrame(() => scroller.current?.scrollTo({ top: 0 }))
   }
 
@@ -277,7 +269,7 @@ export function BookReaderPage() {
 
   return (
     <div className="book-reader" data-reader-theme={settings.theme}>
-      <div className="book-reader-bar" data-hidden={barHidden}>
+      <div className="book-reader-bar">
         <button aria-label="Quay lại thư viện" onClick={leave}>
           <ArrowLeft size={20} />
         </button>
