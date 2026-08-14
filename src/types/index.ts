@@ -288,3 +288,13 @@ export type MoneyTransaction = {
   created_at?: string
 }
 
+export type PartnerInvitation = {
+  id: string
+  sender_id: string
+  sender_email: string
+  receiver_email: string
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  created_at?: string
+}
+
+

@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
-import { CalendarHeart, ChevronRight, Plus, Search, SlidersHorizontal, UserRound, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CalendarHeart, Check, ChevronRight, HeartHandshake, Mail, Plus, Search, SlidersHorizontal, UserRound, Users, X } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { countdownLabel, daysUntil, isLunar, nextOccurrence, upcomingOccasions } from '../../lib/occasions'
 import { saveSourceLabel } from '../../lib/persistence'
-import type { OccasionCalendar, Person, PersonGroup, PersonOccasion } from '../../types'
+import { supabase } from '../../lib/supabase'
+import type { OccasionCalendar, PartnerInvitation, Person, PersonGroup, PersonOccasion } from '../../types'
 import { useHeaderAction } from '../HeaderAction'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
@@ -26,11 +27,36 @@ function birthdayInfo(occasions: PersonOccasion[], personId: string) {
 
 export function PeoplePage() {
   const { showToast } = useToast()
-  const { people, occasions, loading, addPerson, updatePerson, deletePerson, addOccasion, removeOccasion } = usePeopleData()
+  const {
+    people,
+    occasions,
+    invitations,
+    loading,
+    addPerson,
+    updatePerson,
+    deletePerson,
+    addOccasion,
+    removeOccasion,
+    sendPartnerInvitation,
+    acceptPartnerInvitation,
+    rejectPartnerInvitation,
+  } = usePeopleData()
+
   const [selected, setSelected] = useState<Person | null>(null)
   const [search, setSearch] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [groupFilter, setGroupFilter] = useState<PersonGroup | 'ALL'>('ALL')
+  const [currentEmail, setCurrentEmail] = useState<string>('')
+
+  // Modal mời
+  const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [sendingInvite, setSendingInvite] = useState(false)
+
+  // Modal nhận lời mời & đặt tên
+  const [acceptInvitation, setAcceptInvitation] = useState<PartnerInvitation | null>(null)
+  const [partnerCustomName, setPartnerCustomName] = useState('')
+  const [accepting, setAccepting] = useState(false)
 
   const [formOpen, setFormOpen] = useState(false)
   const [name, setName] = useState('')
@@ -39,6 +65,14 @@ export function PeoplePage() {
   const [birthday, setBirthday] = useState(localDate())
   const [birthdayCalendar, setBirthdayCalendar] = useState<OccasionCalendar>('SOLAR')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (supabase?.auth) {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user?.email) setCurrentEmail(data.user.email.toLowerCase())
+      }).catch(() => null)
+    }
+  }, [])
 
   const openForm = useCallback(() => setFormOpen(true), [])
   useHeaderAction('Thêm người', openForm)
@@ -58,6 +92,14 @@ export function PeoplePage() {
     [occasions, people],
   )
 
+  // Danh sách lời mời chờ mình nhận
+  const pendingReceived = useMemo(() => {
+    if (!currentEmail) return invitations.filter((inv) => inv.status === 'PENDING')
+    return invitations.filter(
+      (inv) => inv.status === 'PENDING' && inv.receiver_email.toLowerCase() === currentEmail.toLowerCase(),
+    )
+  }, [invitations, currentEmail])
+
   const handleAddOccasion = async (input: NewOccasion) => {
     const savedTo = await addOccasion(input)
     showToast(saveSourceLabel(savedTo))
@@ -73,6 +115,36 @@ export function PeoplePage() {
     const savedTo = await deletePerson(id)
     setSelected(null)
     showToast(saveSourceLabel(savedTo))
+  }
+
+  const handleSendInvite = async () => {
+    if (!inviteEmail.trim() || sendingInvite) return
+    setSendingInvite(true)
+    const savedTo = await sendPartnerInvitation(inviteEmail)
+    setSendingInvite(false)
+    setInviteModalOpen(false)
+    setInviteEmail('')
+    showToast(`Đã gửi lời mời đến ${inviteEmail.trim()}! (${saveSourceLabel(savedTo)})`)
+  }
+
+  const handleOpenAcceptModal = (inv: PartnerInvitation) => {
+    setAcceptInvitation(inv)
+    setPartnerCustomName('Chồng')
+  }
+
+  const handleConfirmAccept = async () => {
+    if (!acceptInvitation || !partnerCustomName.trim() || accepting) return
+    setAccepting(true)
+    const savedTo = await acceptPartnerInvitation(acceptInvitation, partnerCustomName)
+    setAccepting(false)
+    setAcceptInvitation(null)
+    setPartnerCustomName('')
+    showToast(`Đã chấp nhận và kết nối với ${acceptInvitation.sender_email}! (${saveSourceLabel(savedTo)})`)
+  }
+
+  const handleRejectInvite = async (invId: string) => {
+    await rejectPartnerInvitation(invId)
+    showToast('Đã từ chối lời mời.')
   }
 
   const closeForm = () => {
@@ -150,6 +222,38 @@ export function PeoplePage() {
         </div>
       )}
 
+      {/* Lời mời nhận được */}
+      {pendingReceived.length > 0 && (
+        <div className="invite-banner" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: 14, borderRadius: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <HeartHandshake size={22} style={{ color: 'var(--primary)' }} />
+            <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>Lời mời kết nối kỷ niệm chung</strong>
+          </div>
+          {pendingReceived.map((inv) => (
+            <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--card-bg)', padding: '10px 14px', borderRadius: 12 }}>
+              <span style={{ fontSize: '0.9rem' }}>
+                Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> đã gửi lời mời cho bạn.
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="primary"
+                  style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+                  onClick={() => handleOpenAcceptModal(inv)}
+                >
+                  <Check size={14} /> Chấp nhận
+                </button>
+                <button
+                  style={{ padding: '6px 12px', fontSize: '0.82rem', background: 'transparent', border: '1px solid var(--border)' }}
+                  onClick={() => handleRejectInvite(inv.id)}
+                >
+                  <X size={14} /> Từ chối
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="people-stats">
         <div className="people-stat cyan">
           <Users size={20} />
@@ -161,6 +265,15 @@ export function PeoplePage() {
           <strong>{upcomingCount}</strong>
           <span>dịp sắp tới</span>
         </div>
+        <button
+          className="people-stat"
+          style={{ background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)', cursor: 'pointer', textAlign: 'left' }}
+          onClick={() => setInviteModalOpen(true)}
+        >
+          <Mail size={20} />
+          <strong style={{ fontSize: '0.9rem' }}>Mời kỷ niệm</strong>
+          <span style={{ fontSize: '0.75rem' }}>Gửi lời mời chung</span>
+        </button>
       </div>
 
       <OccasionsSection
@@ -273,6 +386,63 @@ export function PeoplePage() {
               <button onClick={closeForm}>Huỷ</button>
               <button className="primary" onClick={handleAddPerson} disabled={!name.trim() || saving}>
                 <Plus size={15} /> {saving ? 'Đang lưu…' : 'Thêm'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal gửi lời mời */}
+      {inviteModalOpen && (
+        <Modal title="Mời người yêu chung" onClose={() => setInviteModalOpen(false)}>
+          <div className="person-form">
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+              Nhập địa chỉ Gmail của người ấy. Đối phương sẽ nhận được thông báo để chấp nhận và hai người có thể xem kỷ niệm chung của nhau!
+            </p>
+            <label className="field">
+              <span>Email đối phương</span>
+              <input
+                autoFocus
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendInvite()}
+                placeholder="VD: nguyenkimy1302.gr@gmail.com"
+                aria-label="Email người muốn mời"
+              />
+            </label>
+            <div className="modal-actions">
+              <button onClick={() => setInviteModalOpen(false)}>Huỷ</button>
+              <button className="primary" onClick={handleSendInvite} disabled={!inviteEmail.trim() || sendingInvite}>
+                <Mail size={15} /> {sendingInvite ? 'Đang gửi…' : 'Gửi lời mời'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal nhận lời mời & Đặt tên */}
+      {acceptInvitation && (
+        <Modal title="Nhận lời mời & Kết nối" onClose={() => setAcceptInvitation(null)}>
+          <div className="person-form">
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+              Bạn đang chấp nhận lời mời chia sẻ kỷ niệm chung từ tài khoản <strong>{acceptInvitation.sender_email}</strong>.
+            </p>
+            <label className="field">
+              <span>Tên xưng hô trong danh bạ của bạn</span>
+              <input
+                autoFocus
+                value={partnerCustomName}
+                onChange={(e) => setPartnerCustomName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmAccept()}
+                placeholder="VD: Chồng, Vợ, Người yêu..."
+                aria-label="Đặt tên cho người yêu chung"
+              />
+            </label>
+            <div className="modal-actions">
+              <button onClick={() => setAcceptInvitation(null)}>Huỷ</button>
+              <button className="primary" onClick={handleConfirmAccept} disabled={!partnerCustomName.trim() || accepting}>
+                <Check size={15} /> {accepting ? 'Đang kết nối…' : 'Xác nhận & Kết nối'}
               </button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal, type SaveSource } from '../../lib/persistence'
-import type { OccasionCalendar, OccasionKind, Person, PersonGroup, PersonOccasion } from '../../types'
+import type { OccasionCalendar, OccasionKind, PartnerInvitation, Person, PersonGroup, PersonOccasion } from '../../types'
 
 const PEOPLE_KEY = 'daily_people_local'
 const OCCASIONS_KEY = 'daily_occasions_local'
@@ -30,6 +30,7 @@ export type DataSource = SaveSource
 export function usePeopleData() {
   const [people, setPeople] = useState<Person[]>([])
   const [occasions, setOccasions] = useState<PersonOccasion[]>([])
+  const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
   const [source, setSource] = useState<DataSource>('Local')
   const [loading, setLoading] = useState(true)
 
@@ -41,15 +42,17 @@ export function usePeopleData() {
       if (savedOccasions.length) setOccasions(savedOccasions)
 
       if (supabase) {
-        const [p, o] = await Promise.all([
+        const [p, o, inv] = await Promise.all([
           supabase.from('people').select('*').is('deleted_at', null).order('name'),
           supabase.from('person_occasions').select('*').is('deleted_at', null).order('occasion_date'),
+          supabase.from('partner_invitations').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
         ])
         if (p.data) {
           setPeople(p.data as Person[])
           setSource('Supabase')
         }
         if (o.data) setOccasions(o.data as PersonOccasion[])
+        if (inv.data) setInvitations(inv.data as PartnerInvitation[])
       }
       setLoading(false)
     })()
@@ -191,5 +194,100 @@ export function usePeopleData() {
     return 'Supabase'
   }
 
-  return { people, occasions, source, loading, addPerson, updatePerson, deletePerson, addOccasion, removeOccasion }
+  /** Gửi lời mời kết nối người yêu chung qua email */
+  const sendPartnerInvitation = async (receiverEmail: string): Promise<DataSource> => {
+    const email = receiverEmail.trim().toLowerCase()
+    if (!email) return source
+    if (!supabase) return 'Local'
+
+    const { data: userData } = await supabase.auth.getUser()
+    const senderEmail = userData.user?.email ?? ''
+
+    // 1. Thêm vào partner_invitations
+    const { data, error } = await supabase
+      .from('partner_invitations')
+      .insert({ sender_email: senderEmail, receiver_email: email, status: 'PENDING' })
+      .select()
+      .single()
+
+    // 2. Tự động thêm shared_partners cho người gửi để cho đối phương xem trước
+    if (userData.user?.id) {
+      try {
+        await supabase
+          .from('shared_partners')
+          .insert({ user_id: userData.user.id, partner_email: email })
+      } catch {
+        // Ignored
+      }
+    }
+
+    if (!error && data) {
+      setInvitations((prev) => [data as PartnerInvitation, ...prev])
+    }
+    return 'Supabase'
+  }
+
+  /** Chấp nhận lời mời & đặt tên cho người yêu chung trong danh bạ */
+  const acceptPartnerInvitation = async (invitation: PartnerInvitation, partnerCustomName: string): Promise<DataSource> => {
+    const customName = partnerCustomName.trim()
+    if (!customName || !supabase) return 'Local'
+
+    const { data: userData } = await supabase.auth.getUser()
+
+    // 1. Cập nhật trạng thái invitation sang ACCEPTED
+    await supabase.from('partner_invitations').update({ status: 'ACCEPTED' }).eq('id', invitation.id)
+    setInvitations((prev) => prev.map((inv) => (inv.id === invitation.id ? { ...inv, status: 'ACCEPTED' } : inv)))
+
+    // 2. Thêm shared_partners cho người nhận (để 2 chiều)
+    if (userData.user?.id) {
+      try {
+        await supabase
+          .from('shared_partners')
+          .insert({ user_id: userData.user.id, partner_email: invitation.sender_email })
+      } catch {
+        // Ignored
+      }
+    }
+
+    // 3. Tạo người yêu chung trong danh bạ với tên tùy chỉnh
+    const savedTo = await addPerson({
+      name: customName,
+      group_key: 'FRIEND',
+    })
+
+    // 4. Đánh dấu is_partner = true
+    const updatedList = people.map((p) => (p.name === customName ? { ...p, is_partner: true } : p))
+    setPeople(updatedList)
+
+    const createdPerson = people.find((p) => p.name === customName)
+    if (createdPerson) {
+      await updatePerson(createdPerson.id, { name: customName, group_key: 'FRIEND', is_partner: true })
+    }
+
+    return savedTo
+  }
+
+  /** Từ chối lời mời */
+  const rejectPartnerInvitation = async (invitationId: string): Promise<DataSource> => {
+    if (!supabase) return 'Local'
+    await supabase.from('partner_invitations').update({ status: 'REJECTED' }).eq('id', invitationId)
+    setInvitations((prev) => prev.map((inv) => (inv.id === invitationId ? { ...inv, status: 'REJECTED' } : inv)))
+    return 'Supabase'
+  }
+
+  return {
+    people,
+    occasions,
+    invitations,
+    source,
+    loading,
+    addPerson,
+    updatePerson,
+    deletePerson,
+    addOccasion,
+    removeOccasion,
+    sendPartnerInvitation,
+    acceptPartnerInvitation,
+    rejectPartnerInvitation,
+  }
 }
