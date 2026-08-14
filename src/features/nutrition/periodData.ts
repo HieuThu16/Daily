@@ -20,6 +20,7 @@ export type SleepLog = {
   sleep_end: string
   log_date: string
   duration_minutes: number
+  dream?: string | null
   created_at?: string
 }
 

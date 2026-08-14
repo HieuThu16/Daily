@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Moon, Plus, Trash2, UtensilsCrossed } from 'lucide-react'
+import { CloudMoon, Moon, Plus, Trash2, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { shiftDate, sleepDuration, sleepMinutesOn } from '../lib/sleep'
@@ -56,24 +56,16 @@ function periodLabel(anchor: string, mode: PeriodMode) {
   return `${format(range.start)} – ${format(range.end)}`
 }
 
-function readLocalRange<T>(prefix: string, days: string[]) {
-  return days.flatMap((day) => {
-    try { return JSON.parse(localStorage.getItem(`${prefix}_${day}`) ?? '[]') as T[] }
-    catch { return [] as T[] }
-  })
-}
-
 export function NutritionPage() {
   const { showToast } = useToast()
   const [tab, setTab] = useState<SubTab>('food')
+  const [currentDate, setCurrentDate] = useState(localDate())
   const [periodMode, setPeriodMode] = useState<PeriodMode>('day')
-  const [currentDate, setCurrentDate] = useState(localDate(new Date()))
-  const [mealFilter, setMealFilter] = useState<MealFilter>('ALL')
-
   const [logs, setLogs] = useState<NutritionLog[]>([])
   const [sleepLogs, setSleepLogs] = useState<SleepLog[]>([])
   const [periodFoodLogs, setPeriodFoodLogs] = useState<NutritionLog[]>([])
   const [periodSleepLogs, setPeriodSleepLogs] = useState<SleepLog[]>([])
+  const [mealFilter, setMealFilter] = useState<MealFilter>('ALL')
   const [loading, setLoading] = useState(true)
 
   const [foodModal, setFoodModal] = useState(false)
@@ -84,6 +76,7 @@ export function NutritionPage() {
   const [sleepModal, setSleepModal] = useState(false)
   const [sleepStart, setSleepStart] = useState('22:00')
   const [sleepEnd, setSleepEnd] = useState('06:00')
+  const [dream, setDream] = useState('')
 
   const periodRange = useMemo(() => getPeriodRange(currentDate, periodMode), [currentDate, periodMode])
 
@@ -99,7 +92,6 @@ export function NutritionPage() {
             if (!active) return
             setLogs((data ?? []) as NutritionLog[])
           } else {
-            // Lấy thêm hôm trước: giấc ngủ qua đêm của hôm trước vẫn tính giờ cho hôm nay.
             const { data, error } = await supabase!.from('sleep_logs').select('*').gte('log_date', shiftDate(currentDate, -1)).lte('log_date', currentDate).is('deleted_at', null).order('created_at')
             if (error) throw error
             if (!active) return
@@ -118,30 +110,44 @@ export function NutritionPage() {
         if (periodMode === 'day') {
           if (tab === 'food') setLogs(readLocalRange<NutritionLog>('nutrition', [currentDate]))
           else setSleepLogs(readLocalRange<SleepLog>('sleep', [shiftDate(currentDate, -1), currentDate]).filter((log) => sleepMinutesOn(log, currentDate) > 0))
-        } else if (tab === 'food') setPeriodFoodLogs(readLocalRange<NutritionLog>('nutrition', periodRange.days))
-        else setPeriodSleepLogs(readLocalRange<SleepLog>('sleep', periodRange.days))
+        } else {
+          if (tab === 'food') setPeriodFoodLogs(readLocalRange<NutritionLog>('nutrition', periodRange.days))
+          else setPeriodSleepLogs(readLocalRange<SleepLog>('sleep', periodRange.days))
+        }
       } finally {
         if (active) setLoading(false)
       }
     }
-    fetchActiveData()
+
+    void fetchActiveData()
     return () => { active = false }
-  }, [tab, periodMode, currentDate, periodRange.start, periodRange.end])
+  }, [currentDate, tab, periodMode, periodRange])
+
+  function readLocalRange<T extends { log_date: string }>(prefix: string, days: string[]): T[] {
+    const result: T[] = []
+    for (const d of days) {
+      try {
+        const raw = localStorage.getItem(`${prefix}_${d}`)
+        if (raw) result.push(...(JSON.parse(raw) as T[]))
+      } catch { /* empty */ }
+    }
+    return result
+  }
 
   const groupedFood = useMemo(() => {
-    const grouped: Record<MealSlot, NutritionLog[]> = { MORNING: [], LUNCH: [], AFTERNOON: [], EVENING: [] }
-    logs.forEach((log) => grouped[log.meal_slot].push(log))
-    return grouped
+    const map: Record<MealSlot, NutritionLog[]> = { MORNING: [], LUNCH: [], AFTERNOON: [], EVENING: [] }
+    for (const log of logs) map[log.meal_slot]?.push(log)
+    return map
   }, [logs])
 
   async function addFood() {
-    if (!foodName.trim()) { showToast('⚠️ Nhập tên món ăn!'); return }
-    const payload = { meal_slot: activeMeal, food_name: foodName.trim(), price: parsePrice(foodPrice), log_date: currentDate, log_time: foodLogTime }
+    const priceNum = Number(foodPrice.replace(/\D/g, '')) || 0
+    const payload = { meal_slot: activeMeal, food_name: foodName.trim() || 'Món ăn', price: priceNum, log_date: currentDate, log_time: foodLogTime }
     try {
       const { data, error } = await supabase!.from('nutrition_logs').insert(payload).select().single()
       if (error) throw error
       setLogs((current) => [...current, data as NutritionLog])
-      showToast(`✅ Đã thêm ${payload.food_name} (${money(payload.price)})!`)
+      showToast('✅ Đã ghi món ăn!')
     } catch {
       const fallback = { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() }
       const next = [...logs, fallback]
@@ -153,7 +159,13 @@ export function NutritionPage() {
   }
 
   async function addSleep() {
-    const payload = { sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate, duration_minutes: sleepDuration({ sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate }) }
+    const payload = {
+      sleep_start: sleepStart,
+      sleep_end: sleepEnd,
+      log_date: currentDate,
+      duration_minutes: sleepDuration({ sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate }),
+      dream: dream.trim() || null,
+    }
     try {
       const { data, error } = await supabase!.from('sleep_logs').insert(payload).select().single()
       if (error) throw error
@@ -166,6 +178,7 @@ export function NutritionPage() {
       localStorage.setItem(`sleep_${currentDate}`, JSON.stringify(next))
       showToast('📴 Đã lưu offline')
     }
+    setDream('')
     setSleepModal(false)
   }
 
@@ -238,9 +251,26 @@ export function NutritionPage() {
                 <button type="button" className="primary" onClick={() => setSleepModal(true)} style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.4)' }}><Plus size={13} /> Ghi</button>
               </div>
               {sleepLogs.map((log) => (
-                <div key={log.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', margin: 0 }}>
-                  <Moon size={18} color="#6366f1" /><div style={{ flex: 1 }}><strong>{log.sleep_start} → {log.sleep_end}{log.log_date !== currentDate && ' (hôm trước)'}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{duration(log.duration_minutes)}{sleepMinutesOn(log, currentDate) !== log.duration_minutes && ` · tính hôm nay ${duration(sleepMinutesOn(log, currentDate))}`}</small></div>
-                  <button type="button" aria-label={`Xóa giấc ngủ ${log.sleep_start}`} onClick={() => deleteSleep(log.id)} style={{ border: 0, background: 'none', color: '#ef4444' }}><Trash2 size={14} /></button>
+                <div key={log.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', margin: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <Moon size={18} color="#6366f1" />
+                    <div style={{ flex: 1 }}>
+                      <strong>{log.sleep_start} → {log.sleep_end}{log.log_date !== currentDate && ' (hôm trước)'}</strong>
+                      <small style={{ display: 'block', color: 'var(--text-muted)' }}>
+                        {duration(log.duration_minutes)}
+                        {sleepMinutesOn(log, currentDate) !== log.duration_minutes && ` · tính hôm nay ${duration(sleepMinutesOn(log, currentDate))}`}
+                      </small>
+                    </div>
+                    <button type="button" aria-label={`Xóa giấc ngủ ${log.sleep_start}`} onClick={() => deleteSleep(log.id)} style={{ border: 0, background: 'none', color: '#ef4444' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  {log.dream && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 10px', background: 'var(--bg-main)', borderRadius: 8, fontSize: '0.78rem', borderLeft: '3px solid #8b5cf6', color: 'var(--text-main)' }}>
+                      <CloudMoon size={14} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: 2 }} />
+                      <span>{log.dream}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </>
@@ -262,7 +292,7 @@ export function NutritionPage() {
       )}
 
       {sleepModal && (
-        <Modal onClose={() => setSleepModal(false)} title="Ghi giấc ngủ">
+        <Modal onClose={() => setSleepModal(false)} title="Ghi giấc ngủ & Giấc mơ">
           <div className="form-grid">
             <div style={{ display: 'grid', gap: 14, justifyItems: 'center' }}>
               <ClockTimeInput label="Ngủ từ" value={sleepStart} onChange={setSleepStart} />
@@ -272,6 +302,16 @@ export function NutritionPage() {
               {duration(sleepDuration({ sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate }))}
               {sleepEnd <= sleepStart && <small style={{ display: 'block', fontWeight: 600, color: 'var(--text-muted)' }}>Qua đêm — giờ chia cho {currentDate} và ngày hôm sau</small>}
             </div>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>💭 Nằm mơ thấy gì? (Ghi chép giấc mơ)</span>
+              <textarea
+                value={dream}
+                onChange={(event) => setDream(event.target.value)}
+                placeholder="Kể lại giấc mơ nếu bạn nhớ được…"
+                rows={2}
+                style={{ width: '100%', borderRadius: 10, border: '1px solid var(--line)', padding: '8px 10px', fontSize: '0.88rem', resize: 'vertical' }}
+              />
+            </label>
             <button type="button" className="primary" onClick={addSleep}>Lưu giấc ngủ</button>
           </div>
         </Modal>

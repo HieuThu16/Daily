@@ -1,4 +1,4 @@
-import { Moon, Trash2, UtensilsCrossed } from 'lucide-react'
+import { CloudMoon, Moon, Trash2, UtensilsCrossed } from 'lucide-react'
 import {
   aggregateSleepByDate,
   filterFoodLogs,
@@ -178,11 +178,19 @@ export function SleepPeriodView({ logs, days, onDelete }: { logs: SleepLog[]; da
           {entries.map((entry) => {
             const quality = sleepQuality(entry.duration_minutes)
             return (
-              <div key={entry.id} className="nutrition-history-row">
-                <span className="nutrition-history-icon sleep"><Moon size={16} /></span>
-                <div><strong>{entry.sleep_start} → {entry.sleep_end}</strong><small style={{ color: quality.color }}>{quality.label}</small></div>
-                <b style={{ color: quality.color }}>{duration(entry.duration_minutes)}</b>
-                <button type="button" aria-label={`Xóa giấc ngủ ${entry.sleep_start}`} onClick={() => onDelete(entry.id)}><Trash2 size={14} /></button>
+              <div key={entry.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div className="nutrition-history-row">
+                  <span className="nutrition-history-icon sleep"><Moon size={16} /></span>
+                  <div><strong>{entry.sleep_start} → {entry.sleep_end}</strong><small style={{ color: quality.color }}>{quality.label}</small></div>
+                  <b style={{ color: quality.color }}>{duration(entry.duration_minutes)}</b>
+                  <button type="button" aria-label={`Xóa giấc ngủ ${entry.sleep_start}`} onClick={() => onDelete(entry.id)}><Trash2 size={14} /></button>
+                </div>
+                {entry.dream && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '2px 0 6px 36px', padding: '5px 9px', background: 'var(--bg-main)', borderRadius: 7, fontSize: '0.76rem', color: 'var(--text-main)', borderLeft: '3px solid #8b5cf6' }}>
+                    <CloudMoon size={13} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: 2 }} />
+                    <span>{entry.dream}</span>
+                  </div>
+                )}
               </div>
             )
           })}

@@ -35,11 +35,27 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
 
 function Login({ user }: { user: unknown }) {
   const [busy, setBusy] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Read error descriptions returned by Supabase OAuth redirect in hash or search params
+    const hashParams = new URLSearchParams(window.location.hash.substring(1))
+    const searchParams = new URLSearchParams(window.location.search)
+    const errDesc = hashParams.get('error_description') || searchParams.get('error_description') || hashParams.get('error') || searchParams.get('error')
+    if (errDesc) {
+      setErrorMessage(decodeURIComponent(errDesc.replace(/\+/g, ' ')))
+    }
+  }, [])
+
   const login = async () => {
     if (!supabase) return
     setBusy(true)
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
-    setBusy(false)
+    setErrorMessage(null)
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+    if (error) {
+      setErrorMessage(error.message)
+      setBusy(false)
+    }
   }
 
   if (user) return <Navigate to="/home" replace />
@@ -53,6 +69,13 @@ function Login({ user }: { user: unknown }) {
         <span className="eyebrow">YOUR PERSONAL SPACE</span>
         <h1>A calmer place<br />for your everyday.</h1>
         <p>Journal, habits, tasks, ideas, and your personal library — all in one thoughtful blue & white space.</p>
+        
+        {errorMessage && (
+          <div className="notice" style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: 12, borderRadius: 12, marginBottom: 16, fontSize: '0.875rem', textAlign: 'left' }}>
+            <strong>Đăng nhập thất bại:</strong> {errorMessage}
+          </div>
+        )}
+
         {isSupabaseConfigured ? (
           <button className="primary" onClick={login} disabled={busy} style={{ width: '100%', padding: '14px', fontSize: '1rem' }}>
             {busy ? 'Connecting…' : 'Continue with Google'}

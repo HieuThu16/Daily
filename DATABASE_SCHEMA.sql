@@ -607,3 +607,7 @@ do $$ begin
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 exception when duplicate_object then null; end $$;
 
+-- Thêm cột dream cho giấc ngủ để ghi chép giấc mơ.
+alter table public.sleep_logs add column if not exists dream text;
+
+
