@@ -1,4 +1,4 @@
-import { CloudMoon, Moon, Trash2, UtensilsCrossed } from 'lucide-react'
+import { CloudMoon, Moon, Pencil, Trash2, UtensilsCrossed } from 'lucide-react'
 import {
   aggregateSleepByDate,
   filterFoodLogs,
@@ -139,7 +139,19 @@ export function FoodPeriodView({ logs, days, mealFilter, onMealFilter, onDelete 
   )
 }
 
-export function SleepPeriodView({ logs, days, onDelete }: { logs: SleepLog[]; days: string[]; onDelete: (id: string) => void }) {
+export function SleepPeriodView({
+  logs,
+  days,
+  onDelete,
+  onEdit,
+  onDream,
+}: {
+  logs: SleepLog[]
+  days: string[]
+  onDelete: (id: string) => void
+  onEdit?: (log: SleepLog) => void
+  onDream?: (log: SleepLog) => void
+}) {
   const summary = summarizeSleep(logs)
   const byDate = aggregateSleepByDate(logs, days)
   const groups = groupLogsByDate(logs)
@@ -183,12 +195,28 @@ export function SleepPeriodView({ logs, days, onDelete }: { logs: SleepLog[]; da
                   <span className="nutrition-history-icon sleep"><Moon size={16} /></span>
                   <div><strong>{entry.sleep_start} → {entry.sleep_end}</strong><small style={{ color: quality.color }}>{quality.label}</small></div>
                   <b style={{ color: quality.color }}>{duration(entry.duration_minutes)}</b>
-                  <button type="button" aria-label={`Xóa giấc ngủ ${entry.sleep_start}`} onClick={() => onDelete(entry.id)}><Trash2 size={14} /></button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {onDream && (
+                      <button type="button" aria-label={`Ghi giấc mơ ${entry.sleep_start}`} title={entry.dream ? 'Sửa giấc mơ' : 'Thêm giấc mơ'} onClick={() => onDream(entry)} style={{ border: 0, background: 'none', color: '#8b5cf6', padding: 2, cursor: 'pointer' }}>
+                        <CloudMoon size={15} />
+                      </button>
+                    )}
+                    {onEdit && (
+                      <button type="button" aria-label={`Sửa giấc ngủ ${entry.sleep_start}`} title="Sửa phiên ngủ" onClick={() => onEdit(entry)} style={{ border: 0, background: 'none', color: 'var(--text-muted)', padding: 2, cursor: 'pointer' }}>
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                    <button type="button" aria-label={`Xóa giấc ngủ ${entry.sleep_start}`} title="Xoá phiên ngủ" onClick={() => onDelete(entry.id)} style={{ border: 0, background: 'none', color: '#ef4444', padding: 2, cursor: 'pointer' }}><Trash2 size={14} /></button>
+                  </div>
                 </div>
                 {entry.dream && (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '2px 0 6px 36px', padding: '5px 9px', background: 'var(--bg-main)', borderRadius: 7, fontSize: '0.76rem', color: 'var(--text-main)', borderLeft: '3px solid #8b5cf6' }}>
+                  <div
+                    onClick={() => onDream?.(entry)}
+                    style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '2px 0 6px 36px', padding: '5px 9px', background: 'var(--bg-main)', borderRadius: 7, fontSize: '0.76rem', color: 'var(--text-main)', borderLeft: '3px solid #8b5cf6', cursor: onDream ? 'pointer' : 'default' }}
+                  >
                     <CloudMoon size={13} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: 2 }} />
-                    <span>{entry.dream}</span>
+                    <span style={{ flex: 1 }}>{entry.dream}</span>
+                    {onDream && <Pencil size={11} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 3 }} />}
                   </div>
                 )}
               </div>
