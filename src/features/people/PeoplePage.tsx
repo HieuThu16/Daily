@@ -319,15 +319,6 @@ export function PeoplePage() {
           <strong>{upcomingCount}</strong>
           <span>dịp sắp tới</span>
         </div>
-        <button
-          className="people-stat"
-          style={{ background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)', cursor: 'pointer', textAlign: 'left' }}
-          onClick={() => setInviteModalOpen(true)}
-        >
-          <Mail size={20} />
-          <strong style={{ fontSize: '0.9rem' }}>Mời kỷ niệm</strong>
-          <span style={{ fontSize: '0.75rem' }}>Gửi lời mời chung</span>
-        </button>
       </div>
 
       <OccasionsSection

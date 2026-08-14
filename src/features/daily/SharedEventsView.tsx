@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, Filter, ImagePlus, MapPin, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
+import { CalendarDays, CalendarHeart, Filter, ImagePlus, Mail, MapPin, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import type { SharedEvent, SharedPartner } from '../../types'
@@ -25,7 +25,15 @@ const CARD_COLORS = [
  * Nhật ký chung: sự kiện của hai người. Ai thêm email mình vào danh sách
  * "người chung" thì mình thấy sự kiện của họ (xem được, không sửa được).
  */
-export function SharedEventsView({ personId, isPartner = false }: { personId: string; isPartner?: boolean }) {
+export function SharedEventsView({
+  personId,
+  isPartner = false,
+  onSendInvite,
+}: {
+  personId: string
+  isPartner?: boolean
+  onSendInvite?: () => void
+}) {
   const { showToast } = useToast()
   const events = useQuery<SharedEvent>('shared_events')
   const partners = useQuery<SharedPartner>('shared_partners')
@@ -149,26 +157,32 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
     events.setItems((prev) => prev.map((e) => (e.id === editing.id ? { ...e, ...next } : e)))
     showToast('✏️ Đã cập nhật sự kiện')
     setEditing(null)
+    setViewing(null)
+    resetForm()
+  }
+
+  const deleteEvent = async (id: string) => {
+    const { error } = await supabase!.from('shared_events').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+    if (error) {
+      showToast('❌ Chưa xoá được', 'delete')
+      return
+    }
+    events.setItems((prev) => prev.filter((e) => e.id !== id))
+    showToast('🗑️ Đã xoá sự kiện', 'delete')
+    setViewing(null)
   }
 
   const toggleFavorite = async (ev: SharedEvent) => {
     const next = !ev.is_favorite
-    events.setItems((prev) => prev.map((e) => (e.id === ev.id ? { ...e, is_favorite: next } : e)))
     const { error } = await supabase!.from('shared_events').update({ is_favorite: next }).eq('id', ev.id)
     if (error) {
-      events.setItems((prev) => prev.map((e) => (e.id === ev.id ? { ...e, is_favorite: !next } : e)))
-      showToast('❌ Chưa lưu được yêu thích', 'delete')
+      showToast('❌ Chưa đổi được yêu thích', 'delete')
+      return
     }
+    events.setItems((prev) => prev.map((e) => (e.id === ev.id ? { ...e, is_favorite: next } : e)))
+    showToast(next ? '⭐ Đã thích sự kiện' : '🖤 Đã bỏ thích')
   }
 
-  const removeEvent = async (id: string) => {
-    await supabase!.from('shared_events').update({ deleted_at: new Date().toISOString() }).eq('id', id)
-    events.setItems((prev) => prev.filter((e) => e.id !== id))
-    showToast('🗑️ Đã xoá sự kiện', 'delete')
-    setEditing(null)
-  }
-
-  /** Ảnh của sự kiện: thay ảnh cũ và dọn file cũ khỏi storage. */
   const uploadImage = async (file: File) => {
     if (!editing || !supabase) return
     setUploading(true)
@@ -259,10 +273,19 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <button className="primary" onClick={openAdd} style={{ flex: 1, padding: '7px 0', fontSize: '0.82rem' }}>
           <Plus size={14} /> Thêm sự kiện
         </button>
+        {onSendInvite && (
+          <button
+            onClick={onSendInvite}
+            style={{ padding: '7px 12px', fontSize: '0.82rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)', fontWeight: 600 }}
+            title="Gửi lời mời kết nối kỷ niệm"
+          >
+            <Mail size={14} /> Gửi lời mời kết nối
+          </button>
+        )}
         <button onClick={() => setManagePartners(true)} style={{ padding: '7px 12px', fontSize: '0.82rem' }}>
           <UserPlus size={14} /> Người chung ({partners.items.length})
         </button>
@@ -477,7 +500,7 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
                   </button>
                   <DeleteButton
                     onDelete={async () => {
-                      await removeEvent(viewingEvent.id)
+                      await deleteEvent(viewingEvent.id)
                       setViewing(null)
                     }}
                   />
@@ -531,7 +554,7 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
           </div>
 
           <div className="modal-actions">
-            <DeleteButton onDelete={() => removeEvent(editing.id)} />
+            <DeleteButton onDelete={() => deleteEvent(editing.id)} />
             <button className="primary" onClick={saveEvent}>Lưu thay đổi</button>
           </div>
         </Modal>
