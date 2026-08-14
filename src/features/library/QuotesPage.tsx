@@ -192,23 +192,50 @@ export function QuotesPage() {
                 <p>Chưa có trích dẫn nào. Bôi đen đoạn văn khi đọc rồi bấm “Lưu trích dẫn”.</p>
               </div>
             ) : (
-              quotes.map((q) => (
-                <div key={q.id} className="card" style={{ padding: 14, margin: 0, position: 'relative' }}>
-                  <Quote size={16} style={{ opacity: 0.4 }} />
-                  <p style={{ margin: '6px 0', fontStyle: 'italic', lineHeight: 1.6 }}>{q.quote}</p>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    — {q.book_name}{q.author ? `, ${q.author}` : ''}
-                  </div>
-                  <button
-                    className="icon small danger"
-                    aria-label="Xoá trích dẫn"
-                    onClick={() => removeQuote(q.id)}
-                    style={{ position: 'absolute', top: 8, right: 8 }}
+              quotes.map((q) => {
+                const canNavigate = Boolean(q.media_item_id)
+                return (
+                  <div
+                    key={q.id}
+                    className="card"
+                    onClick={() => {
+                      if (!q.media_item_id) return
+                      const params = new URLSearchParams()
+                      if (q.chapter_idx !== undefined && q.chapter_idx !== null) {
+                        params.set('chapter', String(q.chapter_idx))
+                      }
+                      params.set('text', q.quote.slice(0, 80))
+                      nav(`/read/${q.media_item_id}?${params.toString()}`)
+                    }}
+                    style={{
+                      padding: 14,
+                      margin: 0,
+                      position: 'relative',
+                      cursor: canNavigate ? 'pointer' : 'default',
+                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                    }}
+                    title={canNavigate ? 'Nhấn để mở và đi đến vị trí trong sách' : undefined}
                   >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))
+                    <Quote size={16} style={{ opacity: 0.4 }} />
+                    <p style={{ margin: '6px 0', fontStyle: 'italic', lineHeight: 1.6 }}>{q.quote}</p>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>— {q.book_name}{q.author ? `, ${q.author}` : ''}</span>
+                      {canNavigate && <span style={{ color: 'var(--primary)', fontSize: '0.7rem' }}>Đọc đoạn này ›</span>}
+                    </div>
+                    <button
+                      className="icon small danger"
+                      aria-label="Xoá trích dẫn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeQuote(q.id)
+                      }}
+                      style={{ position: 'absolute', top: 8, right: 8 }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )
+              })
             )
           ) : highlights.length === 0 ? (
             <div style={{ textAlign: 'center', opacity: 0.6, padding: '30px 0' }}>
@@ -216,39 +243,67 @@ export function QuotesPage() {
               <p>Chưa có highlight nào. Bôi đen chữ khi đọc rồi chọn “Tô sáng”.</p>
             </div>
           ) : (
-            highlights.map((h) => (
-              <div key={h.id} className="card" style={{ padding: 14, margin: 0, position: 'relative', borderLeft: '4px solid var(--amber)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <Highlighter size={15} style={{ color: 'var(--amber)' }} />
-                  {h.chapter_title && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>{h.chapter_title}</span>}
-                </div>
-                <mark
-                  style={{
-                    background: 'var(--amber-bg)',
-                    color: 'var(--text-main)',
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                    display: 'inline-block',
-                    fontSize: '0.9rem',
-                    lineHeight: 1.6,
-                    fontWeight: 500,
+            highlights.map((h) => {
+              const canNavigate = Boolean(h.media_item_id)
+              return (
+                <div
+                  key={h.id}
+                  className="card"
+                  onClick={() => {
+                    if (!h.media_item_id) return
+                    const params = new URLSearchParams()
+                    if (h.chapter_idx !== undefined && h.chapter_idx !== null) {
+                      params.set('chapter', String(h.chapter_idx))
+                    }
+                    params.set('hl', h.highlight.slice(0, 80))
+                    nav(`/read/${h.media_item_id}?${params.toString()}`)
                   }}
+                  style={{
+                    padding: 14,
+                    margin: 0,
+                    position: 'relative',
+                    borderLeft: '4px solid var(--amber)',
+                    cursor: canNavigate ? 'pointer' : 'default',
+                    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                  }}
+                  title={canNavigate ? 'Nhấn để mở và đi đến vị trí trong sách' : undefined}
                 >
-                  {h.highlight}
-                </mark>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 8 }}>
-                  — {h.book_name}{h.author ? `, ${h.author}` : ''}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <Highlighter size={15} style={{ color: 'var(--amber)' }} />
+                    {h.chapter_title && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>{h.chapter_title}</span>}
+                  </div>
+                  <mark
+                    style={{
+                      background: 'var(--amber-bg)',
+                      color: 'var(--text-main)',
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      display: 'inline-block',
+                      fontSize: '0.9rem',
+                      lineHeight: 1.6,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {h.highlight}
+                  </mark>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>— {h.book_name}{h.author ? `, ${h.author}` : ''}</span>
+                    {canNavigate && <span style={{ color: 'var(--primary)', fontSize: '0.7rem' }}>Đọc đoạn này ›</span>}
+                  </div>
+                  <button
+                    className="icon small danger"
+                    aria-label="Xoá highlight"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeHighlight(h.id)
+                    }}
+                    style={{ position: 'absolute', top: 8, right: 8 }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                <button
-                  className="icon small danger"
-                  aria-label="Xoá highlight"
-                  onClick={() => removeHighlight(h.id)}
-                  style={{ position: 'absolute', top: 8, right: 8 }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))
+              )
+            })
           )}
         </article>
       </div>

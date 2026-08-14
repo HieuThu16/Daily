@@ -27,6 +27,8 @@ export function BookReaderPage() {
   const { showToast } = useToast()
   const [searchParams] = useSearchParams()
   const requestedChapter = searchParams.get('chapter')
+  const requestedTargetText = searchParams.get('text')
+  const requestedHlText = searchParams.get('hl')
   const nav = useNavigate()
   const scroller = useRef<HTMLDivElement>(null)
   const pendingRatio = useRef<number | null>(null)
@@ -47,6 +49,7 @@ export function BookReaderPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [settings, setSettings] = useState<ReaderSettings>(() => loadLocal(SETTINGS_KEY, DEFAULT_SETTINGS))
+  const [targetHighlight, setTargetHighlight] = useState<string | null>(requestedTargetText || requestedHlText || null)
 
   const activeChapter = chapters[activeIdx]
   const content = contentByIdx[activeIdx]
@@ -135,16 +138,45 @@ export function BookReaderPage() {
     if (chapters.length > 0 && contentByIdx[activeIdx] === undefined) void fetchChapter(activeIdx)
   }, [activeIdx, chapters, contentByIdx, fetchChapter])
 
-  // Khôi phục vị trí cuộn sau khi nội dung chương đã render.
+  // Khôi phục vị trí cuộn sau khi nội dung chương đã render hoặc cuộn tới đoạn trích dẫn/highlight.
   useEffect(() => {
-    const ratio = pendingRatio.current
+    if (!content) return
     const node = scroller.current
-    if (ratio === null || content === undefined || !node) return
+    if (!node) return
+
+    if (targetHighlight) {
+      setTimeout(() => {
+        const markElement = node.querySelector('.target-reader-hl')
+        if (markElement) {
+          markElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return
+        }
+        // Fallback: tìm đoạn văn chứa từ khoá
+        const cleanTarget = targetHighlight.trim().slice(0, 50).toLowerCase()
+        const pTags = node.querySelectorAll('p')
+        for (const p of pTags) {
+          if (p.textContent?.toLowerCase().includes(cleanTarget)) {
+            p.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            p.style.transition = 'background-color 0.5s ease'
+            p.style.backgroundColor = 'rgba(251, 191, 36, 0.25)'
+            p.style.borderRadius = '6px'
+            setTimeout(() => {
+              p.style.backgroundColor = 'transparent'
+            }, 3000)
+            break
+          }
+        }
+      }, 100)
+      return
+    }
+
+    const ratio = pendingRatio.current
+    if (ratio === null) return
     pendingRatio.current = null
     requestAnimationFrame(() => {
       node.scrollTop = ratio * Math.max(0, node.scrollHeight - node.clientHeight)
     })
-  }, [content])
+  }, [content, targetHighlight])
 
   const onScroll = () => {
     const node = scroller.current
@@ -171,6 +203,7 @@ export function BookReaderPage() {
     setActiveIdx(idx)
     setTocOpen(false)
     setCompleted(false)
+    setTargetHighlight(null)
     requestAnimationFrame(() => scroller.current?.scrollTo({ top: 0 }))
   }
 
@@ -193,19 +226,29 @@ export function BookReaderPage() {
   }
 
   const saveQuote = async () => {
-    if (!selection || !supabase) return
+    if (!selection) return
     setSavingQuote(true)
-    const { error } = await supabase.from('book_quotes').insert({
-      media_item_id: mediaItemId,
-      book_name: bookName,
+    const payload = {
+      media_item_id: mediaItemId || null,
+      book_name: bookName || 'Đang đọc',
       author: bookAuthor,
+      chapter_title: activeChapter?.title ?? null,
+      chapter_idx: activeIdx,
       quote: selection,
-    })
-    setSavingQuote(false)
-    if (error) {
-      showToast('❌ Chưa lưu được. Chạy migration book_quotes chưa?', 'delete')
-      return
     }
+
+    if (supabase) {
+      const { error } = await supabase.from('book_quotes').insert(payload)
+      if (error) {
+        const local = loadLocal<any[]>('book_quotes_local', [])
+        saveLocal('book_quotes_local', [{ id: crypto.randomUUID(), ...payload, created_at: new Date().toISOString() }, ...local])
+      }
+    } else {
+      const local = loadLocal<any[]>('book_quotes_local', [])
+      saveLocal('book_quotes_local', [{ id: crypto.randomUUID(), ...payload, created_at: new Date().toISOString() }, ...local])
+    }
+
+    setSavingQuote(false)
     showToast('❝ Đã lưu trích dẫn')
     setSelection('')
     window.getSelection()?.removeAllRanges()
@@ -237,6 +280,7 @@ export function BookReaderPage() {
       book_name: bookName || 'Đang đọc',
       author: bookAuthor,
       chapter_title: activeChapter?.title ?? null,
+      chapter_idx: activeIdx,
       highlight: textToHighlight,
     }
 
@@ -380,9 +424,30 @@ export function BookReaderPage() {
 
           {content === undefined && !loadError && <p style={{ opacity: 0.6 }}>Đang tải chương…</p>}
 
-          {paragraphs.map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
+          {paragraphs.map((paragraph, index) => {
+            if (targetHighlight && paragraph.toLowerCase().includes(targetHighlight.toLowerCase().slice(0, 40))) {
+              const targetSnippet = targetHighlight.trim()
+              const lowerPara = paragraph.toLowerCase()
+              const lowerSnippet = targetSnippet.toLowerCase()
+              const matchIdx = lowerPara.indexOf(lowerSnippet)
+
+              if (matchIdx !== -1) {
+                const before = paragraph.slice(0, matchIdx)
+                const matched = paragraph.slice(matchIdx, matchIdx + targetSnippet.length)
+                const after = paragraph.slice(matchIdx + targetSnippet.length)
+                return (
+                  <p key={index}>
+                    {before}
+                    <mark className="reader-hl target-reader-hl" style={{ background: 'var(--amber-bg, #fde68a)', color: 'inherit', padding: '2px 4px', borderRadius: 4 }}>
+                      {matched}
+                    </mark>
+                    {after}
+                  </p>
+                )
+              }
+            }
+            return <p key={index}>{paragraph}</p>
+          })}
 
           {completed && (
             <div className="book-reader-finished">

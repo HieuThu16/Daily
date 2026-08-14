@@ -159,6 +159,8 @@ export type BookQuote = {
   media_item_id: string | null
   book_name: string
   author?: string | null
+  chapter_title?: string | null
+  chapter_idx?: number | null
   quote: string
   created_at?: string
 }
@@ -169,6 +171,7 @@ export type BookHighlight = {
   book_name: string
   author?: string | null
   chapter_title?: string | null
+  chapter_idx?: number | null
   highlight: string
   color?: string | null
   created_at?: string
