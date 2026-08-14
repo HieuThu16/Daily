@@ -5,7 +5,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
 import { localDate, shortDate, vietnameseDate } from './lib/date'
 import type { Tab } from './types'
-import { HeaderActionProvider, useHeaderActionSlot } from './features/HeaderAction'
+import { HeaderActionProvider, useHeaderActionSlot, useIsHeaderHidden } from './features/HeaderAction'
 import { AsideProvider, useAsideRef } from './features/AsideSlot'
 import { HomePage } from './features/home/HomePage'
 import { HabitsPage } from './features/HabitsPage'
@@ -95,6 +95,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const path = useLocation().pathname
   const [dark, setDark] = useState(false)
   const headerAction = useHeaderActionSlot()
+  const isHeaderHidden = useIsHeaderHidden()
   const asideRef = useAsideRef()
 
   // PWA Install Prompt
@@ -227,57 +228,59 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <header>
-        <div className="brand">
-          <div className={`brand-icon ${activeTabItem.colorClass}`}>
-            <ActiveIcon size={20} />
+      {!isHeaderHidden && (
+        <header>
+          <div className="brand">
+            <div className={`brand-icon ${activeTabItem.colorClass}`}>
+              <ActiveIcon size={20} />
+            </div>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
           </div>
-          <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
-        </div>
-        <div className="header-date">
-          <Calendar size={14} />
-          <span className="header-date-full">{vietnameseDate()}</span>
-          <span className="header-date-short">{shortDate()}</span>
-        </div>
-        <div className="header-actions">
-          {headerAction && (
-            <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
-              <Plus size={20} />
-            </button>
-          )}
+          <div className="header-date">
+            <Calendar size={14} />
+            <span className="header-date-full">{vietnameseDate()}</span>
+            <span className="header-date-short">{shortDate()}</span>
+          </div>
+          <div className="header-actions">
+            {headerAction && (
+              <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
+                <Plus size={20} />
+              </button>
+            )}
 
-          {/* PWA Install Button */}
-          {canInstall && !installed && (
-            <button
-              aria-label="Cài đặt ứng dụng"
-              className="icon"
-              onClick={handleInstallPWA}
-              title="Cài đặt ứng dụng về máy"
-              style={{
-                color: 'var(--primary)',
-                background: 'var(--primary-light)',
-                borderRadius: 10,
-                padding: '5px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                border: '1px solid var(--primary)',
-              }}
-            >
-              <Download size={15} />
-              <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
+            {/* PWA Install Button */}
+            {canInstall && !installed && (
+              <button
+                aria-label="Cài đặt ứng dụng"
+                className="icon"
+                onClick={handleInstallPWA}
+                title="Cài đặt ứng dụng về máy"
+                style={{
+                  color: 'var(--primary)',
+                  background: 'var(--primary-light)',
+                  borderRadius: 10,
+                  padding: '5px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  border: '1px solid var(--primary)',
+                }}
+              >
+                <Download size={15} />
+                <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
+              </button>
+            )}
+            <button aria-label="Toggle theme" className="icon header-only" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
+              <SunMoon size={20} />
             </button>
-          )}
-          <button aria-label="Toggle theme" className="icon header-only" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
-            <SunMoon size={20} />
-          </button>
-          <button aria-label="Sign out" className="icon danger header-only" onClick={() => supabase?.auth.signOut()}>
-            <LogOut size={20} />
-          </button>
-        </div>
-      </header>
+            <button aria-label="Sign out" className="icon danger header-only" onClick={() => supabase?.auth.signOut()}>
+              <LogOut size={20} />
+            </button>
+          </div>
+        </header>
+      )}
 
       <nav className="bottom-nav">
         {navigation.map(({ id, label, icon: Icon, colorClass }) => (

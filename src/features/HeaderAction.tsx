@@ -2,18 +2,46 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 
 export type HeaderAction = { label: string; onClick: () => void }
 
-type Store = { action: HeaderAction | null; setAction: (action: HeaderAction | null) => void }
+type Store = {
+  action: HeaderAction | null
+  setAction: (action: HeaderAction | null) => void
+  hidden: boolean
+  setHidden: (hidden: boolean) => void
+}
 
-const HeaderActionContext = createContext<Store>({ action: null, setAction: () => {} })
+const HeaderActionContext = createContext<Store>({
+  action: null,
+  setAction: () => {},
+  hidden: false,
+  setHidden: () => {},
+})
 
 /** Ô hành động riêng của từng tab, hiện trong header chung. */
 export function HeaderActionProvider({ children }: { children: ReactNode }) {
   const [action, setAction] = useState<HeaderAction | null>(null)
-  return <HeaderActionContext.Provider value={{ action, setAction }}>{children}</HeaderActionContext.Provider>
+  const [hidden, setHidden] = useState(false)
+  return (
+    <HeaderActionContext.Provider value={{ action, setAction, hidden, setHidden }}>
+      {children}
+    </HeaderActionContext.Provider>
+  )
 }
 
 export function useHeaderActionSlot(): HeaderAction | null {
   return useContext(HeaderActionContext).action
+}
+
+export function useIsHeaderHidden(): boolean {
+  return useContext(HeaderActionContext).hidden
+}
+
+/** Hook để ẩn header chung của app khi ở trong trang chi tiết */
+export function useHideHeader(shouldHide = true) {
+  const { setHidden } = useContext(HeaderActionContext)
+  useEffect(() => {
+    setHidden(shouldHide)
+    return () => setHidden(false)
+  }, [shouldHide, setHidden])
 }
 
 /**

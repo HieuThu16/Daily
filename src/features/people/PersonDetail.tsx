@@ -6,6 +6,7 @@ import { Modal } from '../shared'
 import { avatarStyle, initials } from './avatar'
 import { GROUPS, groupLabel } from './groups'
 import { SharedEventsView } from '../daily/SharedEventsView'
+import { useHideHeader } from '../HeaderAction'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
@@ -44,6 +45,9 @@ export function PersonDetail({
   onDeletePerson,
   onSendInvite,
 }: Props) {
+  // Ẩn Header chung của App khi xem chi tiết người thân, nhấn quay lại sẽ hiện lại
+  useHideHeader(true)
+
   const [tab, setTab] = useState<DetailTab>('info')
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(person.name)
@@ -74,7 +78,7 @@ export function PersonDetail({
 
   const handleDelete = () => {
     if (!onDeletePerson) return
-    if (confirm(`Bạn có chắc chắn muốn xóa "${person.name}" khỏi danh bạ?`)) {
+    if (confirm(`Bạn có chắc muốn xoá "${person.name}" không?`)) {
       onDeletePerson(person.id)
       onBack()
     }
@@ -89,28 +93,37 @@ export function PersonDetail({
 
   return (
     <section className="people-page">
-      <div className="detail-bar">
-        <button className="icon" onClick={onBack} aria-label="Quay lại danh sách">
-          <ArrowLeft size={20} />
+      <div className="detail-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', marginBottom: 12 }}>
+        <button
+          className="icon"
+          onClick={onBack}
+          aria-label="Quay lại danh sách"
+          style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+        >
+          <ArrowLeft size={18} />
         </button>
-        <h2>Chi tiết người thân</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {onSendInvite && (
-            <button
-              className="icon"
-              style={{ color: 'var(--primary)' }}
-              onClick={() => setInviteModal(true)}
-              title="Gửi lời mời chia sẻ kỷ niệm chung"
-            >
-              <Mail size={18} />
-            </button>
-          )}
-          <button className="icon" onClick={openEdit} aria-label="Sửa thông tin">
-            <Pencil size={18} />
+
+        <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, flex: 1, textAlign: 'center' }}>Chi tiết người thân</h2>
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="icon"
+            onClick={openEdit}
+            aria-label="Sửa thông tin"
+            title="Sửa thông tin"
+            style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+          >
+            <Pencil size={16} />
           </button>
           {onDeletePerson && (
-            <button className="icon danger" onClick={handleDelete} aria-label="Xóa người này">
-              <Trash2 size={18} />
+            <button
+              className="icon danger"
+              onClick={handleDelete}
+              aria-label="Xóa người này"
+              title="Xoá người này"
+              style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+            >
+              <Trash2 size={16} />
             </button>
           )}
         </div>
