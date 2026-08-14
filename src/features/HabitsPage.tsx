@@ -43,6 +43,8 @@ export function HabitsPage() {
   const [historyRange, setHistoryRange] = useState<HistoryRange>('week')
   /** Ngày mốc của kỳ đang xem ở tab Lịch sử (đổi khi bấm ‹ ›). */
   const [anchor, setAnchor] = useState(() => new Date())
+  /** Ngày đang ghi nhận ở tab "Hôm nay"; đổi được để bù log ngày trước. */
+  const [logDate, setLogDate] = useState(localDate())
   const [filter, setFilter] = useState<Filter>('ALL')
   const [editing, setEditing] = useState<Habit | null>(null)
   const [addModal, setAddModal] = useState(false)
@@ -66,8 +68,10 @@ export function HabitsPage() {
   const atCurrentPeriod = isCurrentPeriod(anchor, historyRange)
 
   /** Tải log phủ cả kỳ đang xem lẫn tháng hiện tại (tab "Hôm nay" cần ngày hôm nay). */
-  const fetchFrom = historyDates[0] < `${month}-01` ? historyDates[0] : `${month}-01`
-  const fetchTo = historyDates[historyDates.length - 1] > `${month}-31` ? historyDates[historyDates.length - 1] : `${month}-31`
+  // Khoảng tải phải phủ cả kỳ lịch sử, tháng hiện tại lẫn ngày đang ghi nhận
+  // (ngày đó có thể nằm ngoài tháng này khi người dùng lùi lịch).
+  const fetchFrom = [historyDates[0], `${month}-01`, logDate].sort()[0]
+  const fetchTo = [historyDates[historyDates.length - 1], `${month}-31`, logDate].sort().pop()!
 
   useEffect(() => {
     if (!supabase) return
@@ -79,7 +83,7 @@ export function HabitsPage() {
       .then(({ data }) => setLogs((data ?? []) as HabitLog[]))
   }, [habits.items.length, fetchFrom, fetchTo])
 
-  const completed = new Set(logs.filter((l) => l.date === localDate() && l.completed).map((l) => l.habit_id))
+  const completed = new Set(logs.filter((l) => l.date === logDate && l.completed).map((l) => l.habit_id))
   const category = (h: Habit) => categories.items.find((c) => c.id === h.category_id)
 
   const checkHabits = useMemo(() => habits.items.filter((h) => (h.tracking_type ?? 'CHECK') === 'CHECK'), [habits.items])
@@ -124,8 +128,8 @@ export function HabitsPage() {
 
   const toggle = async (h: Habit) => {
     const done = !completed.has(h.id)
-    setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())), { habit_id: h.id, date: localDate(), completed: done }])
-    const { error } = await supabase!.from('habit_logs').upsert({ habit_id: h.id, date: localDate(), completed: done }, { onConflict: 'habit_id,date' })
+    setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === logDate)), { habit_id: h.id, date: logDate, completed: done }])
+    const { error } = await supabase!.from('habit_logs').upsert({ habit_id: h.id, date: logDate, completed: done }, { onConflict: 'habit_id,date' })
     if (!error) {
       showSaveToast(true, 'trạng thái thói quen')
     } else {
@@ -133,29 +137,31 @@ export function HabitsPage() {
     }
   }
 
-  /** Tăng/giảm số liệu của hôm nay rồi lưu ngay (không còn ô nhập + nút lưu rời). */
-  const stepCount = async (h: Habit, delta: number) => {
-    const value = Math.max(0, todayValue(h.id) + delta)
+  /** Đặt thẳng số liệu của ngày đang chọn rồi lưu ngay. Số âm bị kẹp về 0. */
+  const setCount = async (h: Habit, next: number) => {
+    const value = Math.max(0, Math.round(next) || 0)
     const isDone = value > 0
     // Cập nhật lạc quan để nút bấm phản hồi tức thì.
     setLogs((ls) => [
-      ...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())),
-      { habit_id: h.id, date: localDate(), completed: isDone, value },
+      ...ls.filter((l) => !(l.habit_id === h.id && l.date === logDate)),
+      { habit_id: h.id, date: logDate, completed: isDone, value },
     ])
     setSavingCountId(h.id)
     const { data, error } = await supabase!
       .from('habit_logs')
-      .upsert({ habit_id: h.id, date: localDate(), completed: isDone, value }, { onConflict: 'habit_id,date' })
+      .upsert({ habit_id: h.id, date: logDate, completed: isDone, value }, { onConflict: 'habit_id,date' })
       .select('habit_id,date,completed,value')
       .single()
     setSavingCountId(null)
 
     if (!error && data) {
-      setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === localDate())), data as HabitLog])
+      setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === logDate)), data as HabitLog])
     } else {
       showSaveToast(false, 'số liệu thói quen')
     }
   }
+
+  const stepCount = (h: Habit, delta: number) => setCount(h, todayValue(h.id) + delta)
 
   const create = async () => {
     if (!name.trim()) return
@@ -259,7 +265,7 @@ export function HabitsPage() {
   const goodPercent = goodHabits.length ? Math.round((goodDone / goodHabits.length) * 100) : 0
   const badPercent = badHabits.length ? Math.round((badDone / badHabits.length) * 100) : 0
 
-  const todayValue = (habitId: string) => logs.find((l) => l.habit_id === habitId && l.date === localDate())?.value ?? 0
+  const todayValue = (habitId: string) => logs.find((l) => l.habit_id === habitId && l.date === logDate)?.value ?? 0
 
 
   // Nút "+" dùng chung ô hành động trên header của app, giống PeoplePage.
@@ -342,7 +348,16 @@ export function HabitsPage() {
             >
               <Minus size={14} />
             </button>
-            <span aria-label={`Giá trị hôm nay cho ${h.name}`}>{todayValue(h.id)}</span>
+            <input
+              type="number"
+              min={0}
+              inputMode="numeric"
+              aria-label={`Giá trị hôm nay cho ${h.name}`}
+              value={todayValue(h.id)}
+              disabled={savingCountId === h.id}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setCount(h, Number(e.target.value))}
+            />
             <button aria-label={`Tăng số liệu cho ${h.name}`} disabled={savingCountId === h.id} onClick={() => stepCount(h, 1)}>
               <Plus size={14} />
             </button>
@@ -421,6 +436,15 @@ export function HabitsPage() {
       {/* Main View Area: TODAY TAB */}
       {activeTab === 'today' && (
         <>
+          {/* Ngày đang ghi nhận: đổi để bù thói quen của hôm trước. */}
+          <div className="habit-log-date">
+            <label htmlFor="habit-log-date">Ngày ghi nhận</label>
+            <input id="habit-log-date" type="date" value={logDate} max={localDate()} onChange={(e) => setLogDate(e.target.value || localDate())} />
+            {logDate !== localDate() && (
+              <button type="button" onClick={() => setLogDate(localDate())}>Về hôm nay</button>
+            )}
+          </div>
+
           {habits.items.length > 0 && (
             <div className="habit-progress-card">
               <div className="habit-progress-rings">

@@ -1,19 +1,37 @@
-import { useMemo, useRef, useState } from 'react'
-import { BarChart3, Frown, Heart, ImagePlus, NotebookPen, Pencil, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { BarChart3, CheckCircle2, Clock, Frown, Heart, ImagePlus, ListPlus, Music, NotebookPen, Pencil, Save, Star, Sunrise, Trash2, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
-import type { DailyType, Entry, Person } from '../types'
+import { buildDayReview, type DayEvent } from '../lib/dayReview'
+import type { DailyType, Entry, Media, NutritionLog, Person, SleepLog, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 
 const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
-  { type: 'NEW_THING', title: 'Điều mới',  icon: Sparkles, color: 'var(--amber)',   bg: 'var(--amber-bg)'   },
   { type: 'SAD_THING', title: 'Điều buồn', icon: Frown,    color: 'var(--blue)',    bg: 'var(--blue-bg)'    },
-  { type: 'SMALL_WIN', title: 'Việc nhỏ',  icon: Plus,     color: 'var(--emerald)', bg: 'var(--emerald-bg)' },
 ]
 
-type PageTab = 'write' | 'stats'
+const eventStyles: Record<DayEvent['kind'], { icon: any; color: string; bg: string }> = {
+  WAKE:      { icon: Sunrise,         color: 'var(--amber)',   bg: 'var(--amber-bg)'      },
+  MEAL:      { icon: UtensilsCrossed, color: 'var(--emerald)', bg: 'var(--emerald-bg)'    },
+  DIARY:     { icon: NotebookPen,     color: 'var(--purple)',  bg: 'var(--purple-bg)'     },
+  TASK_ADD:  { icon: ListPlus,        color: 'var(--blue)',    bg: 'var(--blue-bg)'       },
+  TASK_DONE: { icon: CheckCircle2,    color: 'var(--emerald)', bg: 'var(--emerald-bg)'    },
+  MEDIA:     { icon: Music,           color: 'var(--primary)', bg: 'var(--primary-light)' },
+}
+
+/** 'HH:MM' theo giờ máy, cập nhật mỗi 30 giây. */
+function useClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+}
+
+type PageTab = 'write' | 'review' | 'stats'
 type StatsPeriod = 'week' | 'month' | 'all'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -50,18 +68,25 @@ export function DailyPage() {
   const { showToast } = useToast()
   const { items, setItems, loading } = useQuery<Entry>('daily_entries')
   const peopleQuery = useQuery<Person>('people', 'name')
+  // Nguồn cho tab review cả ngày.
+  const sleepQuery = useQuery<SleepLog>('sleep_logs')
+  const mealQuery = useQuery<NutritionLog>('nutrition_logs')
+  const todoQuery = useQuery<Todo>('todos')
+  const mediaQuery = useQuery<Media>('media_items')
 
   const [pageTab, setPageTab] = useState<PageTab>('write')
+  const clock = useClock()
 
   // Write tab state
   const [selectedType, setSelectedType] = useState<DailyType>('FEELING')
   const [content, setContent] = useState('')
-  const [filterType, setFilterType] = useState<'ALL' | DailyType>('ALL')
+  const [filterType, setFilterType] = useState<'ALL' | 'FAV' | DailyType>('ALL')
   const [date, setDate] = useState(localDate())
   const [busy, setBusy] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState('')
   const [editing, setEditing] = useState<Entry | null>(null)
   const [editText, setEditText] = useState('')
+  const [editTime, setEditTime] = useState('')
   const [uploading, setUploading] = useState(false)
   const entryFileInput = useRef<HTMLInputElement>(null)
   const mentionQuery = content.match(/@([^\s@]*)$/)?.[1]?.toLowerCase() ?? ''
@@ -78,8 +103,8 @@ export function DailyPage() {
     if (!lines.length) return
     setBusy(true)
     setSaveSuccess('')
-    const currentTimeString = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    const payload = lines.map((lineText) => ({ content: lineText, entry_date: date, entry_type: selectedType }))
+    const currentTimeString = clock
+    const payload = lines.map((lineText) => ({ content: lineText, entry_date: date, entry_type: selectedType, entry_time: clock }))
     const { data, error } = await supabase!.from('daily_entries').insert(payload).select()
     if (!error && data) {
       setItems((prev) => [...(data as Entry[]), ...prev])
@@ -97,8 +122,9 @@ export function DailyPage() {
 
   const updateEntry = async () => {
     if (!editing || !editText.trim()) return
-    await supabase!.from('daily_entries').update({ content: editText.trim(), entry_date: date }).eq('id', editing.id)
-    setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, content: editText.trim(), entry_date: date } : i)))
+    const patch = { content: editText.trim(), entry_date: date, entry_time: editTime || null }
+    await supabase!.from('daily_entries').update(patch).eq('id', editing.id)
+    setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, ...patch } : i)))
     showToast('✏️ Đã cập nhật bài viết!')
     setEditing(null)
   }
@@ -107,6 +133,7 @@ export function DailyPage() {
     setEditing(entry)
     setEditText(entry.content)
     setDate(entry.entry_date)
+    setEditTime(entry.entry_time ?? '')
   }
 
   /** Đính ảnh vào dòng nhật ký đang mở; ảnh cũ bị thay và xoá khỏi storage. */
@@ -147,6 +174,19 @@ export function DailyPage() {
     showToast('🗑️ Đã gỡ ảnh', 'delete')
   }
 
+  const toggleFavorite = async (entry: Entry) => {
+    const next = !entry.is_favorite
+    setItems((prev) => prev.map((i) => (i.id === entry.id ? { ...i, is_favorite: next } : i)))
+    setEditing((current) => (current?.id === entry.id ? { ...current, is_favorite: next } : current))
+    const { error } = await supabase!.from('daily_entries').update({ is_favorite: next }).eq('id', entry.id)
+    if (error) {
+      setItems((prev) => prev.map((i) => (i.id === entry.id ? { ...i, is_favorite: !next } : i)))
+      showToast('❌ Chưa lưu được. Chạy migration daily_entry_favorite chưa?', 'delete')
+      return
+    }
+    showToast(next ? '⭐ Đã thêm vào yêu thích' : 'Đã bỏ yêu thích')
+  }
+
   const removeEntry = async (id: string) => {
     await supabase!.from('daily_entries').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     setItems((prev) => prev.filter((i) => i.id !== id))
@@ -156,7 +196,13 @@ export function DailyPage() {
 
   // ── derived ──────────────────────────────────────────────────────────────
 
-  const todayEntries = items.filter((i) => i.entry_date === date && (filterType === 'ALL' || i.entry_type === filterType))
+  const todayEntries = items.filter((i) => i.entry_date === date
+    && (filterType === 'ALL' || (filterType === 'FAV' ? i.is_favorite : i.entry_type === filterType)))
+
+  const dayEvents = useMemo(
+    () => buildDayReview({ date, entries: items, meals: mealQuery.items, sleeps: sleepQuery.items, todos: todoQuery.items, media: mediaQuery.items }),
+    [date, items, mealQuery.items, sleepQuery.items, todoQuery.items, mediaQuery.items],
+  )
 
   const statsEntries = useMemo(() => {
     const today = new Date()
@@ -206,6 +252,19 @@ export function DailyPage() {
           <NotebookPen size={13} /> Viết nhật ký
         </button>
         <button
+          onClick={() => setPageTab('review')}
+          style={{
+            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
+            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
+            borderColor: pageTab === 'review' ? 'var(--amber)' : 'var(--card-border)',
+            background: pageTab === 'review' ? 'var(--amber)' : 'var(--card-bg)',
+            color: pageTab === 'review' ? 'white' : 'var(--text-main)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}
+        >
+          <Clock size={13} /> Review ngày
+        </button>
+        <button
           onClick={() => setPageTab('stats')}
           style={{
             flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
@@ -252,6 +311,13 @@ export function DailyPage() {
               </span>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} />
             </div>
+            {/* Giờ hiện tại: đây chính là giờ sẽ được lưu kèm bài viết. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: 'var(--amber-bg)', color: 'var(--amber)', fontSize: '0.82rem', fontWeight: 800 }}>
+                <Clock size={13} /> {clock}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>giờ sẽ lưu cùng bài viết</span>
+            </div>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -290,6 +356,13 @@ export function DailyPage() {
                 >
                   Tất cả
                 </button>
+                <button
+                  onClick={() => setFilterType('FAV')}
+                  aria-label="Lọc bài yêu thích"
+                  style={{ border: 0, background: filterType === 'FAV' ? 'var(--amber-bg)' : 'transparent', color: filterType === 'FAV' ? 'var(--amber)' : 'var(--text-muted)', fontWeight: filterType === 'FAV' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}
+                >
+                  <Star size={11} /> Yêu thích
+                </button>
                 {categories.map((cat) => (
                   <button
                     key={cat.type}
@@ -310,21 +383,42 @@ export function DailyPage() {
                   const cat = categories.find((c) => c.type === entry.entry_type) ?? categories[0]
                   const Icon = cat.icon
                   return (
+                    <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-main)', borderRadius: 7 }}>
                     <button
-                      key={entry.id}
                       type="button"
                       aria-label={`Xem chi tiết: ${entry.content}`}
                       onClick={() => openEntry(entry)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 7, padding: '4px 7px', cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', borderRadius: 7, padding: '4px 7px', cursor: 'pointer' }}
                     >
                       <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 18, height: 18, flexShrink: 0 }}>
                         <Icon size={10} />
                       </div>
+                      {entry.entry_time && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: cat.color, flexShrink: 0 }}>{entry.entry_time}</span>
+                      )}
                       <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {entry.content}
                       </span>
                       {entry.image_url && <img src={entry.image_url} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} />}
                     </button>
+                    <button
+                      type="button"
+                      aria-label={`${entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}: ${entry.content}`}
+                      aria-pressed={!!entry.is_favorite}
+                      onClick={() => toggleFavorite(entry)}
+                      style={{ border: 0, background: 'transparent', padding: '4px 7px', cursor: 'pointer', color: entry.is_favorite ? 'var(--amber)' : 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                    >
+                      <Star size={13} fill={entry.is_favorite ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Sửa: ${entry.content}`}
+                      onClick={() => openEntry(entry)}
+                      style={{ border: 0, background: 'transparent', padding: '4px 7px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    </div>
                   )
                 })}
               </div>
@@ -335,6 +429,45 @@ export function DailyPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ════════════════ REVIEW TAB ═══════════════════════════════════════ */}
+      {pageTab === 'review' && (
+        <div className="card" style={{ padding: 12, margin: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <h2 style={{ margin: 0, fontSize: '0.88rem', color: 'var(--amber)' }}>
+              <Clock size={15} /> Cả ngày ({dayEvents.length} mốc)
+            </h2>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} />
+          </div>
+
+          {dayEvents.length === 0 ? (
+            <Empty icon={Clock} colorClass="icon-box-amber">
+              Ngày này chưa có hoạt động nào được ghi giờ.
+            </Empty>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8, borderLeft: '2px solid var(--card-border)', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+              {dayEvents.map((ev, i) => {
+                const style = eventStyles[ev.kind]
+                const Icon = style.icon
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 800, color: style.color, width: 38, flexShrink: 0, marginTop: 2 }}>
+                      {ev.time || '--:--'}
+                    </span>
+                    <div className="icon-box icon-box-sm" style={{ background: style.bg, color: style.color, width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>
+                      <Icon size={11} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.62rem', fontWeight: 700, color: style.color }}>{ev.label}</div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: 1.4, wordBreak: 'break-word' }}>{ev.detail}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ════════════════ STATS TAB ════════════════════════════════════════ */}
@@ -372,7 +505,7 @@ export function DailyPage() {
           </div>
 
           {/* Summary count cards */}
-          <div className="form-row-4" style={{ gap: 6, marginBottom: 10 }}>
+          <div className="form-row-2" style={{ gap: 6, marginBottom: 10 }}>
             {categories.map((cat) => {
               const Icon = cat.icon
               const count = countByType[cat.type] ?? 0
@@ -480,10 +613,16 @@ export function DailyPage() {
       {/* Chi tiết một dòng nhật ký: xem đủ nội dung, sửa, đính ảnh */}
       {editing && (
         <Modal title="Chi tiết nhật ký" onClose={() => setEditing(null)}>
-          <label>
-            Ngày viết
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ flex: 1 }}>
+              Ngày viết
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label style={{ flex: 1 }}>
+              Giờ
+              <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
+            </label>
+          </div>
           <label>
             Nội dung
             <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={5} />
@@ -520,6 +659,14 @@ export function DailyPage() {
 
           <div className="modal-actions">
             <DeleteButton onDelete={() => removeEntry(editing.id)} />
+            <button
+              type="button"
+              onClick={() => toggleFavorite(editing)}
+              style={{ color: editing.is_favorite ? 'var(--amber)' : undefined }}
+            >
+              <Star size={14} fill={editing.is_favorite ? 'currentColor' : 'none'} />
+              {editing.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+            </button>
             <button className="primary" onClick={updateEntry}>Lưu thay đổi</button>
           </div>
         </Modal>

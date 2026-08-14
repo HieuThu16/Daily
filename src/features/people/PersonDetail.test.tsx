@@ -55,6 +55,6 @@ describe('PersonDetail', () => {
     await userEvent.clear(input)
     await userEvent.type(input, 'Bố')
     await userEvent.click(screen.getByRole('button', { name: 'Lưu' }))
-    expect(onUpdate).toHaveBeenCalledWith('p1', { name: 'Bố', group_key: 'FAMILY' })
+    expect(onUpdate).toHaveBeenCalledWith('p1', { name: 'Bố', group_key: 'FAMILY', is_partner: false })
   })
 })

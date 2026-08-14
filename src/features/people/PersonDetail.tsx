@@ -5,18 +5,20 @@ import type { Person, PersonGroup, PersonOccasion } from '../../types'
 import { Modal } from '../shared'
 import { avatarStyle, initials } from './avatar'
 import { GROUPS, groupLabel } from './groups'
+import { SharedEventsView } from '../daily/SharedEventsView'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
 import { PersonSpending } from './PersonSpending'
 import type { NewOccasion } from './usePeopleData'
 
-type DetailTab = 'info' | 'occasions' | 'journal'
+type DetailTab = 'info' | 'occasions' | 'journal' | 'events'
 
 const TABS: { key: DetailTab; label: string }[] = [
   { key: 'info', label: 'Thông tin' },
   { key: 'occasions', label: 'Dịp' },
   { key: 'journal', label: 'Nhật ký' },
+  { key: 'events', label: 'Kỷ niệm' },
 ]
 
 type Props = {
@@ -42,6 +44,7 @@ export function PersonDetail({
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(person.name)
   const [group, setGroup] = useState<PersonGroup | null>(person.group_key ?? null)
+  const [isPartner, setIsPartner] = useState(!!person.is_partner)
 
   const birthday = occasions.find((o) => o.person_id === person.id && o.kind === 'BIRTHDAY')
   const nextBirthday = birthday ? nextOccurrence(birthday) : null
@@ -52,12 +55,13 @@ export function PersonDetail({
   const openEdit = () => {
     setName(person.name)
     setGroup(person.group_key ?? null)
+    setIsPartner(!!person.is_partner)
     setEditing(true)
   }
 
   const submitEdit = () => {
     if (!name.trim()) return
-    onUpdatePerson(person.id, { name: name.trim(), group_key: group })
+    onUpdatePerson(person.id, { name: name.trim(), group_key: group, is_partner: isPartner })
     setEditing(false)
   }
 
@@ -138,6 +142,8 @@ export function PersonDetail({
 
       {tab === 'journal' && <PersonJournal personId={person.id} personName={person.name} />}
 
+      {tab === 'events' && <SharedEventsView personId={person.id} isPartner={!!person.is_partner} />}
+
       {editing && (
         <Modal title="Sửa thông tin" onClose={() => setEditing(false)}>
           <div className="person-form">
@@ -162,6 +168,11 @@ export function PersonDetail({
                 ))}
               </div>
             </div>
+
+            <label className="check">
+              <input type="checkbox" checked={isPartner} onChange={(e) => setIsPartner(e.target.checked)} />
+              Là người yêu chung (hiện tab Sự kiện chung)
+            </label>
 
             <div className="modal-actions">
               <button onClick={() => setEditing(false)}>Huỷ</button>

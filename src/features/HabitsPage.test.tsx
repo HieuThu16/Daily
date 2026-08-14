@@ -1,6 +1,7 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { localDate } from '../lib/date'
 import { HabitsPage } from './HabitsPage'
 
 const rows: Record<string, unknown[]> = {
@@ -75,10 +76,22 @@ describe('HabitsPage', () => {
     await screen.findByText('Tắm')
 
     expect(screen.getByLabelText('Tăng số liệu cho TikTok')).toBeInTheDocument()
-    expect(screen.getByLabelText('Giá trị hôm nay cho TikTok')).toHaveTextContent('0')
+    // Ô số nhập tay được, không chỉ bấm +/-.
+    expect(screen.getByLabelText('Giá trị hôm nay cho TikTok')).toHaveValue(0)
     // Về 0 thì không giảm được nữa.
     expect(screen.getByLabelText('Giảm số liệu cho TikTok')).toBeDisabled()
     expect(screen.queryByLabelText('Tăng số liệu cho Tắm')).not.toBeInTheDocument()
+  })
+
+  it('cho đổi ngày ghi nhận, mặc định là hôm nay', async () => {
+    render(<HabitsPage />)
+    await screen.findByText('Tắm')
+
+    const picker = screen.getByLabelText('Ngày ghi nhận') as HTMLInputElement
+    expect(picker).toHaveValue(localDate())
+    fireEvent.change(picker, { target: { value: '2026-08-01' } })
+    expect(picker).toHaveValue('2026-08-01')
+    expect(screen.getByText('Về hôm nay')).toBeInTheDocument()
   })
 
   it('mỗi thói quen có nút đánh dấu và nút sửa riêng', async () => {

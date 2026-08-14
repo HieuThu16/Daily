@@ -103,10 +103,11 @@ export function usePeopleData() {
   }
 
   /** Sửa tên/nhóm của một người. */
-  const updatePerson = async (id: string, patch: Pick<Person, 'name' | 'group_key'>): Promise<DataSource> => {
+  const updatePerson = async (id: string, patch: Pick<Person, 'name' | 'group_key' | 'is_partner'>): Promise<DataSource> => {
     const name = patch.name.trim()
     if (!name) return source
-    const next = people.map((p) => (p.id === id ? { ...p, name, group_key: patch.group_key ?? null } : p))
+    const is_partner = patch.is_partner ?? false
+    const next = people.map((p) => (p.id === id ? { ...p, name, group_key: patch.group_key ?? null, is_partner } : p))
 
     if (!supabase) {
       persistPeople(next)
@@ -114,7 +115,7 @@ export function usePeopleData() {
       return 'Local'
     }
 
-    const { error } = await supabase.from('people').update({ name, group_key: patch.group_key ?? null }).eq('id', id)
+    const { error } = await supabase.from('people').update({ name, group_key: patch.group_key ?? null, is_partner }).eq('id', id)
     setPeople(next)
     if (error) {
       saveLocal(PEOPLE_KEY, next)

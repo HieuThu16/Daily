@@ -27,8 +27,6 @@ export const BACKUP_TABLES = [
   'youtube_channels',
   'nutrition_logs',
   'sleep_logs',
-  'playtogether_accounts',
-  'playtogether_logs',
 ] as const
 
 export type BackupFile = {

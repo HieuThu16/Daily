@@ -40,7 +40,8 @@ function shortDate(value: string) {
 
 function fullDate(value: string) {
   const [year, month, day] = value.split('-').map(Number)
-  return `${day}/${month}/${year}`
+  const weekday = new Date(value + 'T12:00:00').toLocaleDateString('vi-VN', { weekday: 'short' })
+  return `${weekday}, ${day}/${month}/${year}`
 }
 
 function sleepQuality(minutes: number) {

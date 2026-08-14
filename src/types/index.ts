@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'people' | 'library' | 'playtogether' | 'nutrition' | 'money' | 'calendar'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'people' | 'library' | 'nutrition' | 'money' | 'calendar'
 
 export type NutritionLog = {
   id: string
@@ -6,6 +6,8 @@ export type NutritionLog = {
   food_name: string
   price: number
   log_date: string
+  /** Giờ ăn 'HH:MM'; null với bản ghi cũ. */
+  log_time?: string | null
   created_at?: string
 }
 
@@ -164,10 +166,34 @@ export type Entry = {
   entry_date: string
   created_at: string
   entry_type: DailyType
+  /** Giờ viết 'HH:MM'; null với bài cũ trước migration daily_entry_time. */
+  entry_time?: string | null
+  is_favorite?: boolean
   /** Ảnh đính kèm (bucket daily-photos); image_path để xoá file khi gỡ ảnh. */
   image_url?: string | null
   image_path?: string | null
 }
+/** Người được mời xem sự kiện chung, định danh bằng email đăng nhập. */
+export type SharedPartner = { id: string; partner_email: string; created_at?: string }
+
+/** Sự kiện trong nhật ký chung; cả hai bên đều thấy, chỉ chủ mới sửa được. */
+export type SharedEvent = {
+  id: string
+  owner_id: string
+  /** Người trong danh bạ mà kỷ niệm này thuộc về. */
+  person_id?: string | null
+  title: string
+  note?: string | null
+  event_date: string
+  /** 'HH:MM'; rỗng = cả ngày. */
+  event_time?: string | null
+  location?: string | null
+  image_url?: string | null
+  image_path?: string | null
+  is_favorite?: boolean
+  created_at?: string
+}
+
 /** Nhóm quan hệ, dùng làm chip trên thẻ người. */
 export type PersonGroup = 'FAMILY' | 'FRIEND' | 'COLLEAGUE' | 'OTHER'
 
@@ -177,6 +203,8 @@ export type Person = {
   group_key?: PersonGroup | null
   avatar_url?: string | null
   notes?: string | null
+  /** true = người yêu chung; chỉ người này có tab "Sự kiện chung". */
+  is_partner?: boolean
   created_at?: string
 }
 
@@ -236,19 +264,3 @@ export type MoneyTransaction = {
   created_at?: string
 }
 
-export type PlayTogetherAccount = {
-  id: string
-  name: string
-  created_at?: string
-}
-
-export type PlayTogetherLog = {
-  id: string
-  account_name: string
-  log_date: string
-  time_slot: string
-  coupons: number
-  gems: number
-  cards: number
-  created_at?: string
-}

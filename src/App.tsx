@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, BookOpen, Calendar, CalendarDays, CheckSquare, Download, Flame, Gamepad2, HardDriveDownload, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet } from 'lucide-react'
+import { Bell, BellOff, BookOpen, Calendar, CalendarDays, CheckSquare, Download, Flame, HardDriveDownload, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
 import { localDate, shortDate, vietnameseDate } from './lib/date'
@@ -12,7 +12,6 @@ import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
-import { PlayTogetherPage } from './features/PlayTogetherPage'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
@@ -30,7 +29,6 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
-  { id: 'playtogether', label: 'Game', icon: Gamepad2, colorClass: 'icon-box-cyan' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
 ]
 
@@ -316,7 +314,6 @@ function Protected() {
                 <Route path="/tasks" element={<TasksPage />} />
                 <Route path="/people" element={<PeoplePage />} />
                 <Route path="/library" element={<LibraryPage />} />
-                <Route path="/playtogether" element={<PlayTogetherPage />} />
                 <Route path="/nutrition" element={<NutritionPage />} />
                 <Route path="/money" element={<MoneyPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />

@@ -1110,7 +1110,7 @@ header {
 /* Daily Page Styles */
 .daily-4-icons {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-top: 0;
   margin-bottom: 8px;
@@ -3404,12 +3404,59 @@ input, select, textarea, button {
   cursor: default;
 }
 
-.habit-stepper span {
+.habit-stepper span,
+.habit-stepper input {
   min-width: 26px;
   text-align: center;
   font-size: 0.88rem;
   font-weight: 700;
   color: var(--text-main);
+}
+
+/* Ô nhập tay nằm gọn giữa hai nút +/-, không có viền riêng. */
+.habit-stepper input {
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.habit-stepper input::-webkit-outer-spin-button,
+.habit-stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.habit-log-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.habit-log-date input {
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 0.8rem;
+  background: var(--card-bg);
+  color: var(--text-main);
+}
+
+.habit-log-date button {
+  border: 0;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
 }
 
 .habit-item-menu {
