@@ -2389,48 +2389,45 @@ header {
   font-weight: 600;
 }
 
-/* --- Ô thêm nhanh --- */
-.task-quick-add {
+/* --- Lọc chưa làm / đã làm (bấm hoặc vuốt ngang danh sách) --- */
+.task-view-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: var(--card-border);
+}
+
+.task-view-tabs button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.task-quick-add input {
-  flex: 1;
-  min-width: 0;
-  padding: 12px 16px;
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  background: var(--card-bg);
-  color: var(--text-main);
-  font-size: 0.86rem;
-}
-
-.task-quick-add input:focus {
-  outline: 0;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-}
-
-.task-quick-add button {
-  width: 46px;
-  height: 46px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
   border: 0;
-  border-radius: 50%;
-  background: var(--primary-gradient);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.task-quick-add button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+.task-view-tabs button.on {
+  background: var(--card-bg);
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.task-view-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.72rem;
 }
 
 /* --- Nhóm: tồn đọng / hôm nay / đã xong --- */
@@ -6094,3 +6091,235 @@ input[type='month'] {
 .library-book-section[role='tabpanel'] > h3 {
   display: none;
 }
+
+/* Bóng đèn ý tưởng: vẽ nét rồi sáng dần, kiểu "wired flat" của lordicon. */
+.bulb-anim {
+  color: #f59e0b;
+  overflow: visible;
+}
+/* Vòng lặp 3s: nét vẽ chạy → tim đèn sáng → tia bung ra → tắt rồi vẽ lại. */
+.bulb-anim .bulb-glass {
+  stroke-dasharray: 46;
+  animation: bulb-draw 3s ease-in-out infinite;
+}
+.bulb-anim .bulb-filament {
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  animation: bulb-filament 3s ease-in-out infinite;
+}
+.bulb-anim .bulb-rays line {
+  transform-origin: 12px 10px;
+  animation: bulb-ray 3s ease-in-out infinite;
+}
+.bulb-anim {
+  animation: bulb-glow 3s ease-in-out infinite;
+}
+
+@keyframes bulb-draw {
+  0% { stroke-dashoffset: 46; }
+  30%, 88% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -46; }
+}
+@keyframes bulb-filament {
+  0%, 30% { stroke-dashoffset: 14; opacity: 0.4; }
+  45%, 85% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes bulb-ray {
+  0%, 45% { opacity: 0; transform: scale(0.3); }
+  60% { opacity: 1; transform: scale(1.25); }
+  85% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.3); }
+}
+@keyframes bulb-glow {
+  0%, 45%, 100% { filter: none; }
+  58% { filter: drop-shadow(0 0 7px rgba(245, 158, 11, 0.9)); }
+  75% { filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.6)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bulb-anim, .bulb-anim * { animation: none; stroke-dashoffset: 0; opacity: 1; }
+}
+
+/* Chia sẻ sách: danh bạ người nhận + nút chia sẻ ra ngoài trên ô bìa */
+.book-grid-share {
+  position: absolute;
+  top: 5px;
+  right: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+.book-grid-shared { margin: 2px 0 0; font-size: 0.68rem; opacity: 0.7; }
+
+.book-share { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.book-share input[type='search'] {
+  width: 100%; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface); color: inherit;
+}
+.book-share-list { list-style: none; margin: 0; padding: 0; max-height: 44vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.book-share-list > li > button {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface); color: inherit; text-align: left; cursor: pointer;
+}
+.book-share-list > li > button.on { border-color: var(--primary); background: var(--primary-light); }
+.book-share-list > li > button small { opacity: 0.65; font-size: 0.75rem; }
+.book-share .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Animation icon toàn hệ thống ───────────────────────────────────────────
+   Lucide render <svg class="lucide …">, nên bám vào đó là đủ cho mọi trang,
+   không phải sửa từng component. Ba trạng thái:
+   1. hover  → nảy nhẹ một nhịp
+   2. :active (đang bấm) → thụt xuống
+   3. đang ở đó (.active / [aria-current] / .on / .checked) → thở nhẹ liên tục */
+
+:where(button, a, [role='button'], label):hover > svg.lucide,
+:where(button, a, [role='button'], label):hover svg.lucide {
+  animation: icon-pop 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:where(button, a, [role='button']):active svg.lucide {
+  transform: scale(0.86);
+}
+
+svg.lucide {
+  transition: transform 0.12s ease;
+}
+
+/* Chỗ đang đứng thì icon chạy hoài. */
+.active > svg.lucide,
+.active svg.lucide,
+[aria-current='page'] svg.lucide,
+[aria-current='true'] svg.lucide,
+.on > svg.lucide,
+.checked .checkbox svg.lucide,
+.daily-icon-btn.active svg.lucide,
+.habit-quick-card.done .habit-quick-check svg.lucide {
+  animation: icon-idle 2.6s ease-in-out infinite;
+}
+
+@keyframes icon-pop {
+  0% { transform: scale(1) rotate(0deg); }
+  40% { transform: scale(1.18) rotate(-7deg); }
+  70% { transform: scale(0.96) rotate(3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes icon-idle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  svg.lucide { animation: none !important; transition: none; }
+}
+
+/* ── Animation riêng theo từng icon ────────────────────────────────────────
+   lucide tự gắn class `lucide-flame`, `lucide-book-open`… nên viết CSS là đủ,
+   không phải đụng vào component. Đè lên icon-pop/icon-idle mặc định ở trên. */
+
+/* Lửa (Habits): bùng lên từ gốc, lắc lư, có quầng cam. */
+svg.lucide-flame {
+  transform-origin: 12px 21px;
+  overflow: visible;
+}
+
+:where(button, a, [role='button'], label):hover svg.lucide-flame,
+.active svg.lucide-flame,
+[aria-current='page'] svg.lucide-flame,
+[aria-current='true'] svg.lucide-flame {
+  animation: icon-flame 1.4s ease-in-out infinite;
+}
+
+@keyframes icon-flame {
+  0%, 100% { transform: scaleY(1) scaleX(1) skewX(0deg); filter: none; }
+  25% { transform: scaleY(1.22) scaleX(0.9) skewX(-4deg); filter: drop-shadow(0 -2px 6px rgba(249, 115, 22, 0.75)); }
+  50% { transform: scaleY(0.94) scaleX(1.08) skewX(3deg); filter: drop-shadow(0 -1px 3px rgba(249, 115, 22, 0.45)); }
+  75% { transform: scaleY(1.14) scaleX(0.95) skewX(-2deg); filter: drop-shadow(0 -2px 5px rgba(234, 88, 12, 0.6)); }
+}
+
+/* Sách (Library): lật mở ra rồi khép hờ, lặp lại. */
+svg.lucide-book-open,
+svg.lucide-book,
+svg.lucide-library {
+  transform-origin: 12px 12px;
+}
+
+:where(button, a, [role='button'], label):hover svg.lucide-book-open,
+:where(button, a, [role='button'], label):hover svg.lucide-book,
+.active svg.lucide-book-open,
+.active svg.lucide-book,
+[aria-current='page'] svg.lucide-book-open,
+[aria-current='true'] svg.lucide-book-open {
+  animation: icon-book-open 2.2s ease-in-out infinite;
+}
+
+@keyframes icon-book-open {
+  0%, 100% { transform: perspective(60px) rotateY(-38deg) scaleX(0.78); }
+  45% { transform: perspective(60px) rotateY(0deg) scaleX(1); }
+  60% { transform: perspective(60px) rotateY(6deg) scaleX(1.02); }
+}
+
+/* Nút mở quản lý thể loại trong bảng lọc của Tasks */
+.task-filter-manage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Ô tích tách khỏi nút tiêu đề: tích = hoàn thành, tiêu đề = mở chi tiết */
+.task-check-btn {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  margin-right: 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.task-check-btn:hover .task-check,
+.task-check-btn:focus-visible .task-check { --check-current: var(--primary); }
+.task-check-btn:hover .task-check::after,
+.task-check-btn:focus-visible .task-check::after { opacity: 0.5; }
+.task-toggle { cursor: pointer; }
+
+/* Chú thích màu của lịch kiêm nút lọc */
+.calendar-legend { display: flex; gap: 8px; flex-wrap: wrap; }
+.calendar-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.45;
+}
+.calendar-legend-chip.on { opacity: 1; color: var(--text-main); border-color: var(--primary); }
+.calendar-legend-chip i { width: 8px; height: 8px; border-radius: 999px; }
+
+/* Thanh tiến độ mục tiêu trong modal Mục tiêu */
+.task-goal-bar { height: 6px; border-radius: 999px; background: var(--card-border); overflow: hidden; }
+.task-goal-bar > div { height: 100%; background: var(--primary); border-radius: 999px; transition: width 200ms ease-out; }

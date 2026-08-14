@@ -1,4 +1,5 @@
 import type { Entry, Habit, HabitLog, NutritionLog, SleepLog, Todo } from '../types'
+import { sleepMinutesOn } from './sleep'
 import type { WeekDay } from './homeProgress'
 
 export const MEAL_SLOTS = [
@@ -108,8 +109,9 @@ export function formatDuration(minutes: number): string {
 }
 
 /** Tổng thời gian ngủ của một ngày, kèm khung giờ của giấc dài nhất. */
-export function sleepSummary(logs: SleepLog[]): SleepSummary {
-  const minutes = logs.reduce((sum, log) => sum + (log.duration_minutes ?? 0), 0)
+export function sleepSummary(logs: SleepLog[], date?: string): SleepSummary {
+  // Có `date`: chỉ cộng phần giờ rơi vào đúng ngày đó (giấc qua đêm chia cho hai ngày).
+  const minutes = logs.reduce((sum, log) => sum + (date ? sleepMinutesOn(log, date) : log.duration_minutes ?? 0), 0)
   const longest = logs.reduce<SleepLog | null>(
     (best, log) => (!best || log.duration_minutes > best.duration_minutes ? log : best),
     null,

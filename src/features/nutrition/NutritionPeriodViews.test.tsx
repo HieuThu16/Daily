@@ -56,7 +56,8 @@ describe('SleepPeriodView', () => {
     expect(screen.getByText('14h')).toBeInTheDocument()
     expect(screen.getByText('7h')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Giấc ngủ 10/8: 8h')).toBeInTheDocument()
+    // Cột ngày 10 chỉ còn 2h (22:00→24:00); 6h còn lại tính sang ngày 11.
+    expect(screen.getByLabelText('Giấc ngủ 10/8: 2h')).toBeInTheDocument()
     expect(screen.getByText('22:00 → 06:00')).toBeInTheDocument()
   })
 })

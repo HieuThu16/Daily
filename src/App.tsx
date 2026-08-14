@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, Calendar, CheckSquare, Download, Flame, Gamepad2, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound } from 'lucide-react'
+import { Bell, BellOff, BookOpen, Calendar, CalendarDays, CheckSquare, Download, Flame, Gamepad2, HardDriveDownload, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
 import { localDate, shortDate, vietnameseDate } from './lib/date'
 import type { Tab } from './types'
 import { HeaderActionProvider, useHeaderActionSlot } from './features/HeaderAction'
@@ -15,12 +16,18 @@ import { PlayTogetherPage } from './features/PlayTogetherPage'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
+import { MoneyPage } from './features/MoneyPage'
+import { CalendarPage } from './features/CalendarPage'
+import { useTaskReminders } from './features/useTaskReminders'
+import { exportBackup } from './lib/backup'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
+  { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
   { id: 'playtogether', label: 'Game', icon: Gamepad2, colorClass: 'icon-box-cyan' },
@@ -97,8 +104,46 @@ function Shell({ children }: { children: React.ReactNode }) {
     deferredPrompt.current = null
   }
 
+  // Thông báo đẩy: bật rồi thì nhắc việc tới cả khi app đã đóng.
+  const [pushOn, setPushOn] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  useEffect(() => {
+    void pushEnabled().then(setPushOn)
+  }, [])
+
+  const togglePush = async () => {
+    setPushBusy(true)
+    try {
+      if (pushOn) {
+        await disablePush()
+        setPushOn(false)
+      } else {
+        await enablePush()
+        setPushOn(true)
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không bật được thông báo.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
   const activeTabItem = navigation.find((n) => path === '/' + n.id) ?? navigation[0]
   const ActiveIcon = activeTabItem.icon
+
+  useTaskReminders()
+
+  const [backingUp, setBackingUp] = useState(false)
+  const handleBackup = async () => {
+    setBackingUp(true)
+    try {
+      const backup = await exportBackup()
+      if (backup.failed.length) alert(`Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`)
+    } catch {
+      alert('Chưa sao lưu được — kiểm tra kết nối Supabase.')
+    }
+    setBackingUp(false)
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -134,6 +179,19 @@ function Shell({ children }: { children: React.ReactNode }) {
           {canInstall && !installed && (
             <button className="side-nav-mini" onClick={handleInstallPWA} title="Cài đặt ứng dụng về máy">
               <Download size={16} /> <span>Cài đặt</span>
+            </button>
+          )}
+          <button className="side-nav-mini" onClick={handleBackup} disabled={backingUp} title="Tải toàn bộ dữ liệu về máy dạng JSON">
+            <HardDriveDownload size={16} /> <span>{backingUp ? 'Đang tải…' : 'Sao lưu'}</span>
+          </button>
+          {pushSupported() && (
+            <button
+              className="side-nav-mini"
+              onClick={() => void togglePush()}
+              disabled={pushBusy}
+              title={pushOn ? 'Tắt nhắc việc qua thông báo' : 'Bật nhắc việc kể cả khi đóng app'}
+            >
+              {pushOn ? <Bell size={16} /> : <BellOff size={16} />} <span>{pushOn ? 'Đang nhắc' : 'Bật nhắc'}</span>
             </button>
           )}
           <button className="side-nav-mini" onClick={() => setDark(!dark)} title="Đổi giao diện sáng/tối">
@@ -260,6 +318,8 @@ function Protected() {
                 <Route path="/library" element={<LibraryPage />} />
                 <Route path="/playtogether" element={<PlayTogetherPage />} />
                 <Route path="/nutrition" element={<NutritionPage />} />
+                <Route path="/money" element={<MoneyPage />} />
+                <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="*" element={<Navigate to="/home" replace />} />
               </Routes>
             </Shell>

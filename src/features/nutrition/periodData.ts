@@ -1,3 +1,5 @@
+import { sleepDates, sleepMinutesOn } from '../../lib/sleep'
+
 export type PeriodMode = 'day' | 'week' | 'month'
 export type MealSlot = 'MORNING' | 'LUNCH' | 'AFTERNOON' | 'EVENING'
 export type MealFilter = 'ALL' | MealSlot
@@ -89,7 +91,10 @@ export function summarizeFood(logs: NutritionLog[], days: string[]) {
 export function aggregateSleepByDate(logs: SleepLog[], days: string[]) {
   const byDate = Object.fromEntries(days.map((day) => [day, 0])) as Record<string, number>
   logs.forEach((log) => {
-    if (log.log_date in byDate) byDate[log.log_date] += log.duration_minutes
+    // Giấc qua đêm được chia cho cả hai ngày nó chiếm.
+    sleepDates(log).forEach((date) => {
+      if (date in byDate) byDate[date] += sleepMinutesOn(log, date)
+    })
   })
   return byDate
 }

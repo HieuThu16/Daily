@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Share2, Trash2 } from 'lucide-react'
 import { blobToCover } from '../../lib/book/cover'
 import {
   CHARS_PER_PAGE,
@@ -12,6 +12,7 @@ import {
 } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument, Media } from '../../types'
 import { BookCover } from './BookCover'
+import { BookShareModal } from './BookShareModal'
 
 /** Ảnh lớn hơn mức này bị chặn trước khi giải mã, tránh treo tab trên điện thoại. */
 const MAX_COVER_BYTES = 15 * 1024 * 1024
@@ -76,6 +77,7 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
   const [tab, setTab] = useState<'toc' | 'info'>('toc')
   const [coverBusy, setCoverBusy] = useState(false)
   const [coverError, setCoverError] = useState('')
+  const [sharing, setSharing] = useState(false)
 
   const listen = item.book_format === 'LISTEN'
 
@@ -177,6 +179,7 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
             <div className="library-book-badges">
               <span>{listen ? '🎧 Nghe' : '📖 Đọc'}</span>
               {item.is_favorite && <span>♥ Yêu thích</span>}
+              {item.shared_by && <span>📚 Do {item.shared_by} chia sẻ</span>}
               {/* Ô bìa trong lưới không còn dropdown trạng thái, nên nó nằm ở đây — không thì
                   muốn đánh dấu đã đọc phải mở thêm modal Sửa. */}
               <select
@@ -272,6 +275,10 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           <button type="button" onClick={() => onEdit(item)}>
             <Pencil size={14} />
             Chỉnh sửa
+          </button>
+          <button type="button" onClick={() => setSharing(true)}>
+            <Share2 size={14} />
+            Chia sẻ
           </button>
           {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
             <>
@@ -394,6 +401,8 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           )}
         </div>
       </div>
+
+      {sharing && <BookShareModal item={item} onClose={() => setSharing(false)} />}
     </section>
   )
 }

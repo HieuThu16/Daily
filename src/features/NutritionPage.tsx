@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Moon, Plus, Trash2, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
+import { shiftDate, sleepDuration, sleepMinutesOn } from '../lib/sleep'
+import { ClockTimeInput } from './nutrition/ClockTimeInput'
 import { useToast } from './ToastContext'
 import { Modal } from './shared'
 import { FoodPeriodView, PeriodSelector, SleepPeriodView } from './nutrition/NutritionPeriodViews'
@@ -32,14 +34,6 @@ function duration(minutes: number) {
   const hours = Math.floor(minutes / 60)
   const rest = minutes % 60
   return hours ? `${hours}h${rest ? `${rest}m` : ''}` : `${rest}m`
-}
-
-function calcDuration(start: string, end: string) {
-  const [startHour, startMinute] = start.split(':').map(Number)
-  const [endHour, endMinute] = end.split(':').map(Number)
-  let minutes = endHour * 60 + endMinute - (startHour * 60 + startMinute)
-  if (minutes < 0) minutes += 24 * 60
-  return minutes
 }
 
 function parsePrice(value: string) {
@@ -99,12 +93,18 @@ export function NutritionPage() {
       setLoading(true)
       try {
         if (periodMode === 'day') {
-          const table = tab === 'food' ? 'nutrition_logs' : 'sleep_logs'
-          const { data, error } = await supabase!.from(table).select('*').eq('log_date', currentDate).is('deleted_at', null).order('created_at')
-          if (error) throw error
-          if (!active) return
-          if (tab === 'food') setLogs((data ?? []) as NutritionLog[])
-          else setSleepLogs((data ?? []) as SleepLog[])
+          if (tab === 'food') {
+            const { data, error } = await supabase!.from('nutrition_logs').select('*').eq('log_date', currentDate).is('deleted_at', null).order('created_at')
+            if (error) throw error
+            if (!active) return
+            setLogs((data ?? []) as NutritionLog[])
+          } else {
+            // Lấy thêm hôm trước: giấc ngủ qua đêm của hôm trước vẫn tính giờ cho hôm nay.
+            const { data, error } = await supabase!.from('sleep_logs').select('*').gte('log_date', shiftDate(currentDate, -1)).lte('log_date', currentDate).is('deleted_at', null).order('created_at')
+            if (error) throw error
+            if (!active) return
+            setSleepLogs(((data ?? []) as SleepLog[]).filter((log) => sleepMinutesOn(log, currentDate) > 0))
+          }
         } else {
           const table = tab === 'food' ? 'nutrition_logs' : 'sleep_logs'
           const { data, error } = await supabase!.from(table).select('*').gte('log_date', periodRange.start).lte('log_date', periodRange.end).is('deleted_at', null).order('log_date', { ascending: false }).order('created_at')
@@ -117,7 +117,7 @@ export function NutritionPage() {
         if (!active) return
         if (periodMode === 'day') {
           if (tab === 'food') setLogs(readLocalRange<NutritionLog>('nutrition', [currentDate]))
-          else setSleepLogs(readLocalRange<SleepLog>('sleep', [currentDate]))
+          else setSleepLogs(readLocalRange<SleepLog>('sleep', [shiftDate(currentDate, -1), currentDate]).filter((log) => sleepMinutesOn(log, currentDate) > 0))
         } else if (tab === 'food') setPeriodFoodLogs(readLocalRange<NutritionLog>('nutrition', periodRange.days))
         else setPeriodSleepLogs(readLocalRange<SleepLog>('sleep', periodRange.days))
       } finally {
@@ -153,7 +153,7 @@ export function NutritionPage() {
   }
 
   async function addSleep() {
-    const payload = { sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate, duration_minutes: calcDuration(sleepStart, sleepEnd) }
+    const payload = { sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate, duration_minutes: sleepDuration({ sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate }) }
     try {
       const { data, error } = await supabase!.from('sleep_logs').insert(payload).select().single()
       if (error) throw error
@@ -184,7 +184,7 @@ export function NutritionPage() {
   }
 
   const totalFood = logs.reduce((sum, log) => sum + log.price, 0)
-  const totalSleep = sleepLogs.reduce((sum, log) => sum + log.duration_minutes, 0)
+  const totalSleep = sleepLogs.reduce((sum, log) => sum + sleepMinutesOn(log, currentDate), 0)
 
   return (
     <section className="page-shell is-narrow" style={{ display: 'grid', gap: 10 }}>
@@ -239,7 +239,7 @@ export function NutritionPage() {
               </div>
               {sleepLogs.map((log) => (
                 <div key={log.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', margin: 0 }}>
-                  <Moon size={18} color="#6366f1" /><div style={{ flex: 1 }}><strong>{log.sleep_start} → {log.sleep_end}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{duration(log.duration_minutes)}</small></div>
+                  <Moon size={18} color="#6366f1" /><div style={{ flex: 1 }}><strong>{log.sleep_start} → {log.sleep_end}{log.log_date !== currentDate && ' (hôm trước)'}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{duration(log.duration_minutes)}{sleepMinutesOn(log, currentDate) !== log.duration_minutes && ` · tính hôm nay ${duration(sleepMinutesOn(log, currentDate))}`}</small></div>
                   <button type="button" aria-label={`Xóa giấc ngủ ${log.sleep_start}`} onClick={() => deleteSleep(log.id)} style={{ border: 0, background: 'none', color: '#ef4444' }}><Trash2 size={14} /></button>
                 </div>
               ))}
@@ -264,11 +264,14 @@ export function NutritionPage() {
       {sleepModal && (
         <Modal onClose={() => setSleepModal(false)} title="Ghi giấc ngủ">
           <div className="form-grid">
-            <div className="form-row-2">
-              <label>Ngủ từ<input type="time" value={sleepStart} onChange={(event) => setSleepStart(event.target.value)} /></label>
-              <label>Đến<input type="time" value={sleepEnd} onChange={(event) => setSleepEnd(event.target.value)} /></label>
+            <div style={{ display: 'grid', gap: 14, justifyItems: 'center' }}>
+              <ClockTimeInput label="Ngủ từ" value={sleepStart} onChange={setSleepStart} />
+              <ClockTimeInput label="Đến" value={sleepEnd} onChange={setSleepEnd} />
             </div>
-            <div style={{ textAlign: 'center', color: '#6366f1', fontWeight: 800 }}>{duration(calcDuration(sleepStart, sleepEnd))}</div>
+            <div style={{ textAlign: 'center', color: '#6366f1', fontWeight: 800 }}>
+              {duration(sleepDuration({ sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate }))}
+              {sleepEnd <= sleepStart && <small style={{ display: 'block', fontWeight: 600, color: 'var(--text-muted)' }}>Qua đêm — giờ chia cho {currentDate} và ngày hôm sau</small>}
+            </div>
             <button type="button" className="primary" onClick={addSleep}>Lưu giấc ngủ</button>
           </div>
         </Modal>

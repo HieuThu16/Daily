@@ -88,16 +88,17 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('TasksPage layout', () => {
-  it('collapses finished tasks into their own group', async () => {
+  it('splits pending and finished tasks into two filter tabs', async () => {
     const user = userEvent.setup()
     render(<TasksPage />)
 
-    // Việc chưa xong hiện ngay, việc đã xong nằm trong nhóm gập
+    // Mặc định ở tab "Chưa làm": chỉ thấy việc chưa xong.
     expect(screen.getByText('Viết báo cáo tuần')).toBeInTheDocument()
     expect(screen.queryByText('Gọi điện cho nha sĩ')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Đã xong/ }))
+    await user.click(screen.getByRole('tab', { name: /Đã làm/ }))
     expect(screen.getByText('Gọi điện cho nha sĩ')).toBeInTheDocument()
+    expect(screen.queryByText('Viết báo cáo tuần')).not.toBeInTheDocument()
   })
 
   it('keeps the filter controls behind the filter button', async () => {
@@ -173,7 +174,8 @@ describe('TasksPage postpone', () => {
     const user = userEvent.setup()
     render(<TasksPage />)
 
-    await user.click(screen.getByRole('button', { name: /Viết báo cáo tuần/ }))
+    // Chỉ ô tích mới đánh dấu hoàn thành; bấm tiêu đề là mở chi tiết.
+    await user.click(screen.getByRole('button', { name: 'Hoàn thành Viết báo cáo tuần' }))
 
     await waitFor(() => expect(toastCalls.some((m) => m.includes("Could not find the 'difficulty' column"))).toBe(true))
     // and it must not claim a clean local save with no explanation

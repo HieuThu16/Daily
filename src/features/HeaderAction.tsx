@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 
 export type HeaderAction = { label: string; onClick: () => void }
 
@@ -16,11 +16,18 @@ export function useHeaderActionSlot(): HeaderAction | null {
   return useContext(HeaderActionContext).action
 }
 
-/** Trang gọi hook này để chiếm ô hành động; rời trang thì tự trả lại. */
+/**
+ * Trang gọi hook này để chiếm ô hành động; rời trang thì tự trả lại.
+ * `onClick` giữ trong ref nên trang không cần bọc useCallback — nếu để nó trong
+ * deps, một hàm tạo mới mỗi lần render sẽ chạy effect → setState → render vô hạn.
+ */
 export function useHeaderAction(label: string, onClick: () => void) {
   const { setAction } = useContext(HeaderActionContext)
+  const handler = useRef(onClick)
+  handler.current = onClick
+
   useEffect(() => {
-    setAction({ label, onClick })
+    setAction({ label, onClick: () => handler.current() })
     return () => setAction(null)
-  }, [label, onClick, setAction])
+  }, [label, setAction])
 }

@@ -6,6 +6,7 @@ import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
 import type { BookAuthor, BookFormat, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
+import { findDuplicateByName } from '../lib/duplicateName'
 import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
 import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './library/LibraryAudioView'
@@ -19,6 +20,7 @@ import { BookDetailView } from './library/BookDetailView'
 import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
+import { BookStatsModal } from './library/BookStatsModal'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -181,6 +183,7 @@ export function LibraryPage() {
   // Sách đã nhập nội dung từ PDF/EPUB — quyết định thẻ nào hiện nút Đọc.
   const nav = useNavigate()
   const [importOpen, setImportOpen] = useState(false)
+  const [bookStatsOpen, setBookStatsOpen] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
 
@@ -277,10 +280,11 @@ export function LibraryPage() {
     return Array.from(set)
   }, [items, movieGenresQuery.items])
 
-  const activeCategoryTitle = useMemo(() => {
-    if (selectedType === 'ALL') return 'Tất cả thể loại'
-    return categories.find((c) => c.id === selectedType)?.label ?? 'Tất cả'
-  }, [selectedType])
+  // Chặn trùng tên ngay ở form: cùng loại (nhạc/sách/truyện…) và tên giống nhau sau khi bỏ dấu.
+  const duplicateItem = useMemo(
+    () => (activeModal ? findDuplicateByName(items, activeModal.kind, name, activeModal.item?.id) : undefined),
+    [activeModal, items, name],
+  )
 
   const openAdd = (kind: Kind) => {
     setActiveModal({ kind })
@@ -466,6 +470,10 @@ export function LibraryPage() {
   const saveItem = async () => {
     if (!activeModal || !name.trim()) return
     const { kind, item } = activeModal
+    if (duplicateItem) {
+      showToast(`⚠️ Đã có "${duplicateItem.name}" trong ${categories.find((c) => c.id === kind)?.label ?? 'thư viện'}. Đổi tên khác nhé!`, 'delete')
+      return
+    }
 
     const payload: Partial<Media> = {
       type: kind,
@@ -1109,13 +1117,6 @@ export function LibraryPage() {
 
   return (
     <section className="page-shell">
-      {/* TITLE BADGE CENTER / INLINE: Shows Active Tab Name Next To Category */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--primary)', background: 'var(--primary-light)', padding: '3px 12px', borderRadius: 20 }}>
-          Library • {activeCategoryTitle}
-        </span>
-      </div>
-
       {/* ROW 1: ALL 6 ICON CATEGORIES IN 1 ROW */}
       <LibraryCategoryBar
         selectedType={selectedType}
@@ -1171,10 +1172,15 @@ export function LibraryPage() {
         </button>
       </div>
 
-      {(selectedType === 'ALL' || selectedType === 'BOOK') && (
-        <button className="library-import-btn" onClick={() => setImportOpen(true)} title="Nhập sách từ file PDF hoặc EPUB">
-          <FileUp size={13} /> Nhập sách từ PDF / EPUB
-        </button>
+      {selectedType === 'BOOK' && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="library-import-btn" onClick={() => setImportOpen(true)} title="Nhập sách từ file PDF hoặc EPUB" style={{ flex: 1 }}>
+            <FileUp size={13} /> Nhập sách từ PDF / EPUB
+          </button>
+          <button className="library-import-btn" onClick={() => setBookStatsOpen(true)} title="Thống kê số trang đã đọc" style={{ flex: 1 }}>
+            <BarChart3 size={13} /> Thống kê sách
+          </button>
+        </div>
       )}
 
       {/* VIEW 1a: TỔNG THỂ khi chưa chọn thể loại — bảng thống kê từng thư viện.
@@ -1533,6 +1539,12 @@ export function LibraryPage() {
             </div>
           )}
 
+          {duplicateItem && (
+            <p role="alert" style={{ margin: 0, padding: '8px 12px', borderRadius: 10, background: 'rgba(239,68,68,.1)', color: '#ef4444', fontSize: '0.8rem', fontWeight: 700 }}>
+              ⚠️ Đã có “{duplicateItem.name}” trong {categories.find((c) => c.id === activeModal.kind)?.label ?? 'thư viện'}.
+            </p>
+          )}
+
           {/* 1. Book / Manga Fields */}
           {(activeModal.kind === 'BOOK' || activeModal.kind === 'MANGA') && (
             <div style={{ display: 'grid', gap: 10 }}>
@@ -1851,7 +1863,7 @@ export function LibraryPage() {
 
           <div className="modal-actions">
             {activeModal.item ? <DeleteButton onDelete={deleteItem} /> : <div />}
-            <button className="primary" onClick={saveItem}>
+            <button className="primary" onClick={saveItem} disabled={Boolean(duplicateItem)}>
               Lưu vào cơ sở dữ liệu
             </button>
           </div>
@@ -2136,6 +2148,8 @@ export function LibraryPage() {
           </div>
         </Modal>
       )}
+
+      {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} onClose={() => setBookStatsOpen(false)} />}
 
       {importOpen && (
         <BookImportModal

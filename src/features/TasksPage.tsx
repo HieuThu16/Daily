@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, BarChart3, Check, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Clock, Eye, Filter, History, Lightbulb, Pencil, Plus, Timer } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, BarChart3, Check, CheckSquare, ChevronLeft, ChevronRight, Clock, Eye, Filter, FolderCog, History, Lightbulb, Pencil, Plus, Tag, Target, Timer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { POSTPONE_PRESETS, formatDeadline, formatMinutes, isOverdue, postponeTo, timeLabel } from '../lib/deadline'
-import type { Idea, TaskDifficulty, TaskPostpone, TaskPriority, Todo } from '../types'
+import { BulbIcon } from './BulbIcon'
+import type { Goal, Idea, TaskCategory, TaskDifficulty, TaskPostpone, TaskPriority, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
@@ -27,6 +28,12 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; tone: string }> = {
   NORMAL: { label: 'Bình thường', tone: '' },
   URGENT: { label: '🔥 Gấp', tone: 'amber' },
 }
+
+type TaskView = 'pending' | 'done'
+const TASK_VIEWS: { id: TaskView; label: string }[] = [
+  { id: 'pending', label: 'Chưa làm' },
+  { id: 'done', label: 'Đã làm' },
+]
 
 const DIFFICULTY_OPTIONS = ['EASY', 'NORMAL', 'HARD'] as const
 const PRIORITY_OPTIONS = ['NORMAL', 'URGENT'] as const
@@ -118,7 +125,7 @@ function TaskCard({
   const urgent = todo.priority === 'URGENT'
 
   // Task dễ + không gấp + không hạn giờ + chưa hoãn thì tầng 2 rỗng, thẻ gọn lại một dòng
-  const hasMeta = Boolean(time) || postponeCount > 0 || urgent || difficulty !== 'EASY'
+  const hasMeta = Boolean(time) || Boolean(todo.category) || postponeCount > 0 || urgent || difficulty !== 'EASY'
 
   const classes = ['task-card']
   if (todo.completed) classes.push('is-done')
@@ -128,8 +135,16 @@ function TaskCard({
   return (
     <div className={classes.join(' ')}>
       <div className="task-card-main">
-        <button className="task-toggle" onClick={() => onToggle(todo)}>
+        {/* Ô tích và tên là hai nút riêng: tích để hoàn thành, bấm tên để xem chi tiết. */}
+        <button
+          className="task-check-btn"
+          aria-label={todo.completed ? `Bỏ tích ${todo.title}` : `Hoàn thành ${todo.title}`}
+          aria-pressed={todo.completed}
+          onClick={() => onToggle(todo)}
+        >
           <span className="task-check" aria-hidden="true" />
+        </button>
+        <button className="task-toggle" aria-label={`Chi tiết ${todo.title}`} onClick={() => onView(todo)}>
           <span className="task-title">{todo.title}</span>
         </button>
         <div className="task-actions">
@@ -152,6 +167,11 @@ function TaskCard({
               <Clock size={11} /> {time}
             </Chip>
           )}
+          {todo.category && (
+            <Chip tone="blue" title="Thể loại">
+              <Tag size={11} /> {todo.category}
+            </Chip>
+          )}
           {difficulty !== 'EASY' && <DifficultyBadge difficulty={difficulty} />}
           <PriorityBadge priority={todo.priority} />
           {postponeCount > 0 && (
@@ -169,6 +189,8 @@ export function TasksPage() {
   const { showToast } = useToast()
   const todos = useQuery<Todo>('todos')
   const ideas = useQuery<Idea>('ideas')
+  const categories = useQuery<TaskCategory>('task_categories', 'name')
+  const goals = useQuery<Goal>('goals', 'name')
 
   const [activeTab, setActiveTab] = useState<Tab>('tasks')
   const [selectedDate, setSelectedDate] = useState<string>(localDate())
@@ -179,9 +201,24 @@ export function TasksPage() {
   const [filterPriority, setFilterPriority] = useState<'ALL' | TaskPriority>('ALL')
   const [sortBy, setSortBy] = useState<'DEFAULT' | 'PRIORITY' | 'DIFFICULTY'>('DEFAULT')
   const [showFilters, setShowFilters] = useState(false)
-  const [showDone, setShowDone] = useState(false)
+  const [taskView, setTaskView] = useState<TaskView>('pending')
+  const swipeStartX = useRef<number | null>(null)
 
-  const filtersActive = filterDifficulty !== 'ALL' || filterPriority !== 'ALL' || sortBy !== 'DEFAULT'
+  // Vuốt ngang trên danh sách để đổi giữa "Chưa làm" và "Đã làm".
+  const onSwipeStart = (event: React.TouchEvent) => {
+    swipeStartX.current = event.touches[0]?.clientX ?? null
+  }
+  const onSwipeEnd = (event: React.TouchEvent) => {
+    const start = swipeStartX.current
+    swipeStartX.current = null
+    const end = event.changedTouches[0]?.clientX
+    if (start == null || end == null || Math.abs(end - start) < 60) return
+    setTaskView(end < start ? 'done' : 'pending')
+  }
+
+  const [filterCategory, setFilterCategory] = useState<string>('ALL')
+  const filtersActive =
+    filterDifficulty !== 'ALL' || filterPriority !== 'ALL' || filterCategory !== 'ALL' || sortBy !== 'DEFAULT'
 
   // Form & Modal states
   const [addModal, setAddModal] = useState<AddModalState>(null)
@@ -190,7 +227,19 @@ export function TasksPage() {
   const [newDueTime, setNewDueTime] = useState('')
   const [newDifficulty, setNewDifficulty] = useState<TaskDifficulty>('EASY')
   const [newPriority, setNewPriority] = useState<TaskPriority>('NORMAL')
+  const [newCategory, setNewCategory] = useState('')
   const [newIdeaContent, setNewIdeaContent] = useState('')
+
+  // Quản lý thể loại
+  const [manageCategories, setManageCategories] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+
+  // Mục tiêu
+  const [newGoalId, setNewGoalId] = useState('')
+  const [editGoalId, setEditGoalId] = useState('')
+  const [manageGoals, setManageGoals] = useState(false)
+  const [newGoalName, setNewGoalName] = useState('')
+  const [newGoalDue, setNewGoalDue] = useState('')
 
   const [edit, setEdit] = useState<EditState | null>(null)
   const [viewDetail, setViewDetail] = useState<ViewState | null>(null)
@@ -201,6 +250,22 @@ export function TasksPage() {
   const [editDueTime, setEditDueTime] = useState('')
   const [editDifficulty, setEditDifficulty] = useState<TaskDifficulty>('EASY')
   const [editPriority, setEditPriority] = useState<TaskPriority>('NORMAL')
+  const [editCategory, setEditCategory] = useState('')
+
+  /**
+   * Mở thẳng chi tiết một task khi tới từ lịch tháng (/tasks?todo=<id>).
+   * Xoá tham số sau khi mở để nút Back hay reload không bật lại modal.
+   */
+  const [deepLinkId, setDeepLinkId] = useState(() => new URLSearchParams(window.location.search).get('todo'))
+  useEffect(() => {
+    if (!deepLinkId) return
+    const found = todos.items.find((t) => t.id === deepLinkId)
+    if (!found) return
+    setViewDetail({ kind: 'todo', item: found })
+    setSelectedDate(found.due_date ?? localDate())
+    setDeepLinkId(null)
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [deepLinkId, todos.items])
 
   // Postpone states
   const [postponeTarget, setPostponeTarget] = useState<Todo | null>(null)
@@ -248,6 +313,124 @@ export function TasksPage() {
     showToast(savedLocally ? `⚠️ Supabase từ chối: ${reason} — đã lưu tạm Local` : `⚠️ Lưu thất bại: ${reason}`, 'local')
   }
 
+  // Thể loại: thêm / đổi tên / xoá. Tên thể loại nằm thẳng trên todo nên đổi tên
+  // phải cập nhật luôn các task đang dùng, không thì chúng trỏ vào tên không còn tồn tại.
+  const addCategory = async () => {
+    const name = newCategoryName.trim()
+    if (!name) return
+    if (categories.items.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      showToast('⚠️ Thể loại này đã có rồi')
+      return
+    }
+    const { data, error } = await supabase!.from('task_categories').insert({ name }).select().single()
+    if (error || !data) {
+      reportWriteError(error, `task_category:${name}`, { name })
+      return
+    }
+    categories.setItems((prev) => [...prev, data as TaskCategory])
+    setNewCategoryName('')
+    showToast('➕ Đã thêm thể loại!')
+  }
+
+  const renameCategory = async (category: TaskCategory) => {
+    const next = prompt('Tên thể loại mới:', category.name)?.trim()
+    if (!next || next === category.name) return
+    await supabase!.from('task_categories').update({ name: next }).eq('id', category.id)
+    await supabase!.from('todos').update({ category: next }).eq('category', category.name)
+    categories.setItems((prev) => prev.map((c) => (c.id === category.id ? { ...c, name: next } : c)))
+    todos.setItems((prev) => prev.map((t) => (t.category === category.name ? { ...t, category: next } : t)))
+    if (filterCategory === category.name) setFilterCategory(next)
+    showToast('✏️ Đã đổi tên thể loại!')
+  }
+
+  /** Xoá thể loại thì gỡ nhãn khỏi task chứ không xoá task. */
+  const deleteCategory = async (category: TaskCategory) => {
+    await supabase!.from('task_categories').update({ deleted_at: new Date().toISOString() }).eq('id', category.id)
+    await supabase!.from('todos').update({ category: null }).eq('category', category.name)
+    categories.setItems((prev) => prev.filter((c) => c.id !== category.id))
+    todos.setItems((prev) => prev.map((t) => (t.category === category.name ? { ...t, category: null } : t)))
+    if (filterCategory === category.name) setFilterCategory('ALL')
+    showToast('🗑️ Đã xoá thể loại')
+  }
+
+  /**
+   * Ô chọn thể loại dùng chung cho modal Thêm và Sửa.
+   * Là hàm dựng JSX chứ không phải component con: khai báo component bên trong render
+   * sẽ tạo type mới mỗi lần vẽ lại, làm select bị remount và mất focus sau mỗi lần chọn.
+   */
+  const categorySelect = (value: string, onChange: (v: string) => void) => (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{ flex: 1 }} aria-label="Thể loại">
+        <option value="">Không phân loại</option>
+        {categories.items.map((c) => (
+          <option key={c.id} value={c.name}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      <button type="button" className="icon small" title="Quản lý thể loại" aria-label="Quản lý thể loại" onClick={() => setManageCategories(true)}>
+        <FolderCog size={15} />
+      </button>
+    </div>
+  )
+
+  /** Tiến độ một mục tiêu = số việc đã xong trên tổng số việc trỏ vào nó. */
+  const goalProgress = (goalId: string) => {
+    const mine = todos.items.filter((t) => t.goal_id === goalId)
+    return { done: mine.filter((t) => t.completed).length, total: mine.length }
+  }
+
+  const addGoal = async () => {
+    const name = newGoalName.trim()
+    if (!name) return
+    const { data, error } = await supabase!
+      .from('goals')
+      .insert({ name, due_date: newGoalDue || null })
+      .select()
+      .single()
+    if (error || !data) {
+      reportWriteError(error, `goal:${name}`, { name })
+      return
+    }
+    goals.setItems((prev) => [...prev, data as Goal])
+    setNewGoalName('')
+    setNewGoalDue('')
+    showToast('🎯 Đã thêm mục tiêu!')
+  }
+
+  const renameGoal = async (goal: Goal) => {
+    const next = prompt('Tên mục tiêu:', goal.name)?.trim()
+    if (!next || next === goal.name) return
+    await supabase!.from('goals').update({ name: next }).eq('id', goal.id)
+    goals.setItems((prev) => prev.map((g) => (g.id === goal.id ? { ...g, name: next } : g)))
+    showToast('✏️ Đã đổi tên mục tiêu!')
+  }
+
+  /** Xoá mục tiêu thì việc vẫn còn, chỉ rụng liên kết (khoá ngoại on delete set null). */
+  const deleteGoal = async (goal: Goal) => {
+    await supabase!.from('goals').update({ deleted_at: new Date().toISOString() }).eq('id', goal.id)
+    await supabase!.from('todos').update({ goal_id: null }).eq('goal_id', goal.id)
+    goals.setItems((prev) => prev.filter((g) => g.id !== goal.id))
+    todos.setItems((prev) => prev.map((t) => (t.goal_id === goal.id ? { ...t, goal_id: null } : t)))
+    showToast('🗑️ Đã xoá mục tiêu (việc vẫn còn)')
+  }
+
+  const goalSelect = (value: string, onChange: (v: string) => void) => (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{ flex: 1 }} aria-label="Mục tiêu">
+        <option value="">Không thuộc mục tiêu nào</option>
+        {goals.items.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.name}
+          </option>
+        ))}
+      </select>
+      <button type="button" className="icon small" title="Quản lý mục tiêu" aria-label="Quản lý mục tiêu" onClick={() => setManageGoals(true)}>
+        <Target size={15} />
+      </button>
+    </div>
+  )
+
   // Create Todo
   const saveNewTodo = async () => {
     if (!newTitle.trim()) return
@@ -259,6 +442,8 @@ export function TasksPage() {
       due_time: newDueTime || null,
       difficulty: newDifficulty,
       priority: newPriority,
+      category: newCategory || null,
+      goal_id: newGoalId || null,
     }
 
     const tempTodo: Todo = {
@@ -269,6 +454,8 @@ export function TasksPage() {
       due_time: newDueTime || null,
       difficulty: newDifficulty,
       priority: newPriority,
+      category: newCategory || null,
+      goal_id: newGoalId || null,
       postpone_count: 0,
       postpone_minutes: 0,
       created_at: new Date().toISOString(),
@@ -280,6 +467,8 @@ export function TasksPage() {
     setNewDueTime('')
     setNewDifficulty('EASY')
     setNewPriority('NORMAL')
+    setNewCategory('')
+    setNewGoalId('')
     showToast('➕ Đã thêm công việc mới!')
 
     const { data, error } = await supabase!.from('todos').insert(payload).select().single()
@@ -343,6 +532,8 @@ export function TasksPage() {
       setEditDueTime(timeLabel(e.item.due_time))
       setEditDifficulty(e.item.difficulty ?? 'EASY')
       setEditPriority(e.item.priority ?? 'NORMAL')
+      setEditCategory(e.item.category ?? '')
+      setEditGoalId(e.item.goal_id ?? '')
     }
   }
 
@@ -356,6 +547,8 @@ export function TasksPage() {
         due_time: editDueTime || null,
         difficulty: editDifficulty,
         priority: editPriority,
+        category: editCategory || null,
+        goal_id: editGoalId || null,
       }
       todos.setItems((prev) => prev.map((i) => (i.id === edit.item.id ? { ...i, ...updateData } : i)))
       const { error } = await supabase!.from('todos').update(updateData).eq('id', edit.item.id)
@@ -477,7 +670,10 @@ export function TasksPage() {
     let result = items.filter((t) => {
       const diffMatch = filterDifficulty === 'ALL' || (t.difficulty ?? 'EASY') === filterDifficulty
       const prioMatch = filterPriority === 'ALL' || (t.priority ?? 'NORMAL') === filterPriority
-      return diffMatch && prioMatch
+      const catMatch =
+        filterCategory === 'ALL' ||
+        (filterCategory === 'NONE' ? !t.category : t.category === filterCategory)
+      return diffMatch && prioMatch && catMatch
     })
 
     if (sortBy === 'PRIORITY') {
@@ -498,7 +694,7 @@ export function TasksPage() {
       return tDate === selectedDate && t.title.toLowerCase().includes(search.toLowerCase())
     })
     return processTodosList(filtered)
-  }, [todos.items, selectedDate, search, filterDifficulty, filterPriority, sortBy])
+  }, [todos.items, selectedDate, search, filterDifficulty, filterPriority, filterCategory, sortBy])
 
   // Việc đã xong tách khỏi việc còn phải làm để không lấn chỗ trong danh sách
   const pendingTodos = useMemo(() => dayTodos.filter((t) => !t.completed), [dayTodos])
@@ -511,7 +707,7 @@ export function TasksPage() {
       return !t.completed && tDate < selectedDate && t.title.toLowerCase().includes(search.toLowerCase())
     })
     return processTodosList(filtered)
-  }, [todos.items, selectedDate, search, filterDifficulty, filterPriority, sortBy])
+  }, [todos.items, selectedDate, search, filterDifficulty, filterPriority, filterCategory, sortBy])
 
   // Filter Ideas
   const filteredIdeas = useMemo(() => {
@@ -630,7 +826,7 @@ export function TasksPage() {
           <CheckSquare size={14} /> Tasks ({dayTodos.length + overduePreviousTodos.length})
         </button>
         <button className={activeTab === 'ideas' ? 'active' : ''} onClick={() => setActiveTab('ideas')}>
-          <Lightbulb size={14} /> Ideas ({ideas.items.length})
+          {activeTab === 'ideas' ? <BulbIcon size={14} /> : <Lightbulb size={14} />} Ideas ({ideas.items.length})
         </button>
         <button className={activeTab === 'stats' ? 'active' : ''} onClick={() => setActiveTab('stats')}>
           <BarChart3 size={14} /> Thống kê
@@ -688,6 +884,24 @@ export function TasksPage() {
                 <option value="HARD">🔴 Khó</option>
               </select>
 
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} aria-label="Lọc theo thể loại">
+                <option value="ALL">🏷️ Thể loại: Tất cả</option>
+                <option value="NONE">Chưa phân loại</option>
+                {categories.items.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <button type="button" className="task-filter-manage" onClick={() => setManageCategories(true)}>
+                <FolderCog size={14} /> Quản lý thể loại
+              </button>
+
+              <button type="button" className="task-filter-manage" onClick={() => setManageGoals(true)}>
+                <Target size={14} /> Mục tiêu
+              </button>
+
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} aria-label="Sắp xếp">
                 <option value="DEFAULT">⇅ Sắp xếp: Mặc định</option>
                 <option value="PRIORITY">⇅ Theo ưu tiên (Gấp trước)</option>
@@ -696,32 +910,28 @@ export function TasksPage() {
             </div>
           )}
 
-          {/* Thêm nhanh */}
-          <div className="task-quick-add">
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  if (newTitle.trim()) saveNewTodo()
-                  else openAddModal('todo')
-                }
-              }}
-              placeholder="Nhập công việc..."
-              aria-label="Nhập công việc"
-            />
-            <button aria-label="Thêm công việc" onClick={() => (newTitle.trim() ? saveNewTodo() : openAddModal('todo'))}>
-              <Plus size={22} />
-            </button>
+          {/* Lọc chưa làm / đã làm — bấm hoặc vuốt ngang trên danh sách */}
+          <div className="task-view-tabs" role="tablist" aria-label="Lọc theo trạng thái">
+            {TASK_VIEWS.map((view) => (
+              <button
+                key={view.id}
+                role="tab"
+                aria-selected={taskView === view.id}
+                className={taskView === view.id ? 'on' : undefined}
+                onClick={() => setTaskView(view.id)}
+              >
+                {view.label}
+                <span className="task-view-count">{view.id === 'pending' ? overduePreviousTodos.length + pendingTodos.length : doneTodos.length}</span>
+              </button>
+            ))}
           </div>
 
           {todos.loading ? (
             <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải công việc…</p>
           ) : (
-            <div className="task-groups">
+            <div className="task-groups" onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
               {/* Tồn đọng ngày trước */}
-              {overduePreviousTodos.length > 0 && (
+              {taskView === 'pending' && overduePreviousTodos.length > 0 && (
                 <section className="task-group-overdue">
                   <div className="task-group-head">
                     <h3>
@@ -738,12 +948,11 @@ export function TasksPage() {
               )}
 
               {/* Việc của ngày đang chọn, chưa xong */}
-              {pendingTodos.length > 0 && (
+              {taskView === 'pending' && pendingTodos.length > 0 && (
                 <section>
                   <div className="task-group-head">
                     <h3>{selectedDate === localDate() ? 'Hôm nay' : 'Cần làm'}</h3>
                     <span className="task-group-count">{pendingTodos.length}</span>
-                    {doneTodos.length > 0 && <span className="task-group-note">{doneTodos.length} việc đã xong</span>}
                   </div>
                   <div className="task-list">
                     {pendingTodos.map((t) => (
@@ -753,28 +962,19 @@ export function TasksPage() {
                 </section>
               )}
 
-              {/* Đã xong — gập sẵn để không đẩy việc còn lại xuống dưới */}
-              {doneTodos.length > 0 && (
+              {taskView === 'done' && doneTodos.length > 0 && (
                 <section>
-                  <button className="task-group-head" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)}>
-                    <h3>
-                      {showDone ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Đã xong
-                    </h3>
-                    <span className="task-group-count">{doneTodos.length}</span>
-                  </button>
-                  {showDone && (
-                    <div className="task-list">
-                      {doneTodos.map((t) => (
-                        <TaskCard key={t.id} todo={t} now={now} onToggle={flipTodo} onPostpone={openPostpone} onView={openView} onEdit={openEditTodo} />
-                      ))}
-                    </div>
-                  )}
+                  <div className="task-list">
+                    {doneTodos.map((t) => (
+                      <TaskCard key={t.id} todo={t} now={now} onToggle={flipTodo} onPostpone={openPostpone} onView={openView} onEdit={openEditTodo} />
+                    ))}
+                  </div>
                 </section>
               )}
 
-              {overduePreviousTodos.length === 0 && dayTodos.length === 0 && (
+              {(taskView === 'pending' ? overduePreviousTodos.length + pendingTodos.length : doneTodos.length) === 0 && (
                 <Empty icon={CheckSquare} colorClass="icon-box-purple">
-                  Chưa có công việc nào khớp với điều kiện tìm kiếm/lọc.
+                  {taskView === 'pending' ? 'Chưa có việc nào cần làm.' : 'Chưa có việc nào đã làm xong.'}
                 </Empty>
               )}
             </div>
@@ -827,7 +1027,7 @@ export function TasksPage() {
               ))}
             </div>
           ) : (
-            <Empty icon={Lightbulb} colorClass="icon-box-amber">
+            <Empty icon={BulbIcon} colorClass="icon-box-amber">
               Chưa có ý tưởng nào. Bấm "+ Thêm" ở trên để tạo mới nhé!
             </Empty>
           )}
@@ -977,6 +1177,16 @@ export function TasksPage() {
                 Mức độ ưu tiên
                 <ChoiceRow options={PRIORITY_OPTIONS} config={PRIORITY_CONFIG} value={newPriority} onChange={setNewPriority} />
               </label>
+
+              <label>
+                Thể loại
+                {categorySelect(newCategory, setNewCategory)}
+              </label>
+
+              <label>
+                Mục tiêu
+                {goalSelect(newGoalId, setNewGoalId)}
+              </label>
             </>
           )}
 
@@ -991,6 +1201,90 @@ export function TasksPage() {
             <button className="primary" onClick={addModal.kind === 'todo' ? saveNewTodo : saveNewIdea}>
               {addModal.kind === 'todo' ? 'Lưu công việc' : 'Lưu ý tưởng'}
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {manageCategories && (
+        <Modal title="🏷️ Quản lý thể loại công việc" onClose={() => setManageCategories(false)}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            <input
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void addCategory()}
+              placeholder="Tên thể loại mới…"
+              style={{ flex: 1 }}
+            />
+            <button className="primary" onClick={() => void addCategory()}>
+              Thêm
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+            {categories.items.length === 0 && (
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Chưa có thể loại nào.</p>
+            )}
+            {categories.items.map((c) => (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
+                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>{c.name}</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="icon small" aria-label={`Sửa thể loại ${c.name}`} onClick={() => void renameCategory(c)} style={{ padding: 3 }}>
+                    <Pencil size={13} />
+                  </button>
+                  <DeleteButton onDelete={() => deleteCategory(c)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {manageGoals && (
+        <Modal title="🎯 Mục tiêu" onClose={() => setManageGoals(false)}>
+          <div style={{ display: 'grid', gap: 6, marginBottom: 14 }}>
+            <input
+              value={newGoalName}
+              onChange={(e) => setNewGoalName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void addGoal()}
+              placeholder="Mục tiêu mới, vd: Đọc 12 cuốn sách…"
+            />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="date" value={newGoalDue} onChange={(e) => setNewGoalDue(e.target.value)} aria-label="Hạn mục tiêu" style={{ flex: 1 }} />
+              <button className="primary" onClick={() => void addGoal()}>Thêm</button>
+            </div>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Bỏ trống hạn nếu đây là mục tiêu chạy dài.</span>
+          </div>
+
+          <div style={{ display: 'grid', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+            {goals.items.length === 0 && (
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Chưa có mục tiêu nào. Thêm một cái rồi gắn việc vào nó.</p>
+            )}
+            {goals.items.map((goal) => {
+              const { done, total } = goalProgress(goal.id)
+              const percent = total ? Math.round((done / total) * 100) : 0
+              return (
+                <div key={goal.id} style={{ background: 'var(--bg-main)', padding: '8px 10px', borderRadius: 10, display: 'grid', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>{goal.name}</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="icon small" aria-label={`Sửa mục tiêu ${goal.name}`} onClick={() => void renameGoal(goal)} style={{ padding: 3 }}>
+                        <Pencil size={13} />
+                      </button>
+                      <DeleteButton onDelete={() => deleteGoal(goal)} />
+                    </div>
+                  </div>
+
+                  <div className="task-goal-bar" role="img" aria-label={`Tiến độ ${percent}%`}>
+                    <div style={{ width: `${percent}%` }} />
+                  </div>
+
+                  <small style={{ color: 'var(--text-muted)' }}>
+                    {total ? `${done}/${total} việc · ${percent}%` : 'Chưa có việc nào gắn vào'}
+                    {goal.due_date ? ` · hạn ${goal.due_date.slice(8)}/${goal.due_date.slice(5, 7)}` : ''}
+                  </small>
+                </div>
+              )
+            })}
           </div>
         </Modal>
       )}
@@ -1035,6 +1329,18 @@ export function TasksPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>🚩 Mức độ ưu tiên:</span>
                     <PriorityBadge priority={detailTodo.priority} showNormal={true} />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>🏷️ Thể loại:</span>
+                    <span style={{ fontWeight: 700 }}>{detailTodo.category || 'Chưa phân loại'}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>🎯 Mục tiêu:</span>
+                    <span style={{ fontWeight: 700 }}>
+                      {goals.items.find((g) => g.id === detailTodo.goal_id)?.name || 'Việc lẻ'}
+                    </span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
@@ -1129,6 +1435,16 @@ export function TasksPage() {
               <label>
                 Mức độ ưu tiên
                 <ChoiceRow options={PRIORITY_OPTIONS} config={PRIORITY_CONFIG} value={editPriority} onChange={setEditPriority} />
+              </label>
+
+              <label>
+                Thể loại
+                {categorySelect(editCategory, setEditCategory)}
+              </label>
+
+              <label>
+                Mục tiêu
+                {goalSelect(editGoalId, setEditGoalId)}
               </label>
             </>
           )}

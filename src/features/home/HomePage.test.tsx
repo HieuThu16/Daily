@@ -10,6 +10,8 @@ const inThreeDays = new Date()
 inThreeDays.setDate(inThreeDays.getDate() + 3)
 const pad = (n: number) => String(n).padStart(2, '0')
 const occasionDate = `2000-${pad(inThreeDays.getMonth() + 1)}-${pad(inThreeDays.getDate())}`
+const now = new Date()
+const todayKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 
 const rows: Record<string, unknown[]> = {
   habits: [
@@ -20,7 +22,8 @@ const rows: Record<string, unknown[]> = {
   todos: [{ id: 't1', title: 'Học tiếng Anh', completed: false, created_at: '2026-08-12T07:00:00', priority: 'URGENT' }],
   daily_entries: [{ id: 'e1', content: 'Gặp chú trên đường đi', entry_date: '2026-08-12', created_at: '2026-08-12T08:30:00', entry_type: 'FEELING' }],
   media_items: [{ id: 'm1', name: 'Người đua diều', type: 'BOOK', status: 'IN_PROGRESS', is_favorite: false, description: null }],
-  sleep_logs: [{ id: 's1', sleep_start: '23:00', sleep_end: '06:30', duration_minutes: 450, log_date: '2026-08-12' }],
+  // log_date bám ngày chạy test vì giấc ngủ nay được chia theo ngày thật, không còn cộng cả phiên.
+  sleep_logs: [{ id: 's1', sleep_start: '23:00', sleep_end: '06:30', duration_minutes: 450, log_date: todayKey }],
   nutrition_logs: [
     { id: 'n1', meal_slot: 'LUNCH', food_name: 'Cơm gà', price: 35000, log_date: '2026-08-12' },
     { id: 'n2', meal_slot: 'EVENING', food_name: 'Phở', price: 50000, log_date: '2026-08-12' },
@@ -83,7 +86,8 @@ describe('HomePage', () => {
   it('hiện tổng giờ ngủ trong ngày', async () => {
     renderHome()
     expect(await screen.findByText('Giấc ngủ')).toBeInTheDocument()
-    expect(screen.getByText('7h30')).toBeInTheDocument()
+    // Giấc 23:00→06:30 qua đêm: ngày 12 chỉ nhận 1h, 6h30 còn lại thuộc ngày 13.
+    expect(screen.getByText('1h')).toBeInTheDocument()
     expect(screen.getByText('23:00 → 06:30')).toBeInTheDocument()
   })
 

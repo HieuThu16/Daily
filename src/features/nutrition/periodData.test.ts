@@ -61,10 +61,12 @@ describe('food period aggregation', () => {
 
 describe('sleep period aggregation', () => {
   it('aggregates multiple sleeps on the same date for charting', () => {
+    // s1 22:00→02:00 chia 120/120 cho ngày 10 và 11; s2 nằm gọn trong ngày 10;
+    // s3 23:00→05:00 chỉ còn 60 phút thuộc ngày 12, 300 phút còn lại rơi sang ngày 13.
     expect(aggregateSleepByDate(sleepLogs, ['2026-08-10', '2026-08-11', '2026-08-12'])).toEqual({
-      '2026-08-10': 480,
-      '2026-08-11': 0,
-      '2026-08-12': 360,
+      '2026-08-10': 360,
+      '2026-08-11': 120,
+      '2026-08-12': 60,
     })
   })
 
