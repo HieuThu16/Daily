@@ -219,22 +219,47 @@ export function BookReaderPage() {
     window.getSelection()?.removeAllRanges()
   }
 
-  /** Tô sáng đoạn đang chọn ngay trên trang — chỉ nổi bật, KHÔNG lưu. */
-  const highlightSelection = () => {
+  /** Tô sáng đoạn đang chọn và lưu vào danh sách highlight. */
+  const highlightSelection = async () => {
+    const textToHighlight = selection
     const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) return
-    const range = sel.getRangeAt(0)
-    const mark = document.createElement('mark')
-    mark.className = 'reader-hl'
-    try {
-      range.surroundContents(mark)
-    } catch {
-      // Đoạn trải nhiều thẻ: gói cả nội dung trích ra rồi chèn lại.
-      mark.appendChild(range.extractContents())
-      range.insertNode(mark)
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0)
+      const mark = document.createElement('mark')
+      mark.className = 'reader-hl'
+      try {
+        range.surroundContents(mark)
+      } catch {
+        // Đoạn trải nhiều thẻ: gói cả nội dung trích ra rồi chèn lại.
+        mark.appendChild(range.extractContents())
+        range.insertNode(mark)
+      }
+      sel.removeAllRanges()
     }
-    sel.removeAllRanges()
     setSelection('')
+
+    if (!textToHighlight) return
+
+    const payload = {
+      media_item_id: mediaItemId || null,
+      book_name: bookName || 'Đang đọc',
+      author: bookAuthor,
+      chapter_title: activeChapter?.title ?? null,
+      highlight: textToHighlight,
+    }
+
+    if (supabase) {
+      const { error } = await supabase.from('book_highlights').insert(payload)
+      if (error) {
+        const local = loadLocal<any[]>('book_highlights_local', [])
+        saveLocal('book_highlights_local', [{ id: crypto.randomUUID(), ...payload, created_at: new Date().toISOString() }, ...local])
+      }
+    } else {
+      const local = loadLocal<any[]>('book_highlights_local', [])
+      saveLocal('book_highlights_local', [{ id: crypto.randomUUID(), ...payload, created_at: new Date().toISOString() }, ...local])
+    }
+
+    showToast('🖍️ Đã lưu highlight')
   }
 
   if (status === 'loading') return <div className="center">Đang mở sách…</div>
@@ -257,8 +282,11 @@ export function BookReaderPage() {
           <ArrowLeft size={20} />
         </button>
         <span className="book-reader-title">{bookName}</span>
-        <button aria-label="Xem trích dẫn" onClick={() => nav(`/quotes/${mediaItemId}`)}>
+        <button aria-label="Xem trích dẫn" title="Xem trích dẫn" onClick={() => nav(`/quotes/${mediaItemId}?tab=quotes`)}>
           <Quote size={20} />
+        </button>
+        <button aria-label="Xem highlight" title="Xem highlight" onClick={() => nav(`/quotes/${mediaItemId}?tab=highlights`)}>
+          <Highlighter size={20} />
         </button>
         <button aria-label="Mục lục" onClick={() => setTocOpen(true)}>
           <List size={20} />

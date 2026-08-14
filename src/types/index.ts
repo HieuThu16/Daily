@@ -162,6 +162,17 @@ export type BookQuote = {
   created_at?: string
 }
 
+export type BookHighlight = {
+  id: string
+  media_item_id: string | null
+  book_name: string
+  author?: string | null
+  chapter_title?: string | null
+  highlight: string
+  color?: string | null
+  created_at?: string
+}
+
 export type MovieGenre = { id: string; name: string }
 export type MovieActor = { id: string; name: string }
 export type BookAuthor = { id: string; name: string }
