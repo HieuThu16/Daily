@@ -22,18 +22,22 @@ begin
     return new;
   end if;
 
-  -- Người yêu chung trong danh bạ của tài khoản vừa tạo.
-  insert into public.people (user_id, name, group_key, is_partner)
-  select new.id, partner_name, 'FRIEND', true
-  where not exists (
-    select 1 from public.people p
-    where p.user_id = new.id and p.is_partner and p.deleted_at is null
-  );
+  begin
+    -- Người yêu chung trong danh bạ của tài khoản vừa tạo.
+    insert into public.people (user_id, name, group_key, is_partner)
+    select new.id, partner_name, 'FRIEND', true
+    where not exists (
+      select 1 from public.people p
+      where p.user_id = new.id and p.is_partner and p.deleted_at is null
+    );
 
-  -- Cho người kia xem sự kiện của mình (chiều còn lại họ tự thêm khi đăng nhập).
-  insert into public.shared_partners (user_id, partner_email)
-  values (new.id, partner_email)
-  on conflict (user_id, partner_email) do nothing;
+    -- Cho người kia xem sự kiện của mình (chiều còn lại họ tự thêm khi đăng nhập).
+    insert into public.shared_partners (user_id, partner_email)
+    values (new.id, partner_email)
+    on conflict (user_id, partner_email) do nothing;
+  exception when others then
+    null;
+  end;
 
   return new;
 end;
