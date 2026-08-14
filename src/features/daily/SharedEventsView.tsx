@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, ImagePlus, MapPin, Pencil, Plus, Star, Trash2, UserPlus } from 'lucide-react'
+import { CalendarDays, CalendarHeart, Filter, ImagePlus, MapPin, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import type { SharedEvent, SharedPartner } from '../../types'
@@ -21,15 +21,6 @@ const CARD_COLORS = [
   { color: 'var(--blue)',    bg: 'var(--blue-bg)'    },
 ]
 
-/** Số ngày tới lần kỷ niệm hằng năm kế tiếp của ngày `s`. */
-function daysToAnniversary(s: string) {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const src = new Date(s + 'T00:00:00')
-  const next = new Date(today.getFullYear(), src.getMonth(), src.getDate())
-  if (next < today) next.setFullYear(next.getFullYear() + 1)
-  return Math.round((next.getTime() - today.getTime()) / 86_400_000)
-}
-
 /**
  * Nhật ký chung: sự kiện của hai người. Ai thêm email mình vào danh sách
  * "người chung" thì mình thấy sự kiện của họ (xem được, không sửa được).
@@ -40,6 +31,7 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
   const partners = useQuery<SharedPartner>('shared_partners')
   const [myId, setMyId] = useState<string | null>(null)
 
+  const [viewing, setViewing] = useState<SharedEvent | null>(null)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<SharedEvent | null>(null)
   const [title, setTitle] = useState('')
@@ -56,6 +48,9 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
   const [partnerEmail, setPartnerEmail] = useState('')
   const [managePartners, setManagePartners] = useState(false)
 
+  const [filterYear, setFilterYear] = useState<string>('ALL')
+  const [filterMonth, setFilterMonth] = useState<string>('ALL')
+
   useEffect(() => {
     supabase?.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null))
   }, [])
@@ -67,6 +62,32 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
       .filter((e) => e.person_id === personId || (isPartner && myId != null && e.owner_id !== myId))
       .sort((a, b) => b.event_date.localeCompare(a.event_date) || (b.event_time ?? '').localeCompare(a.event_time ?? '')),
     [events.items, personId, isPartner, myId],
+  )
+
+  const availableYears = useMemo(() => {
+    const years = new Set<string>()
+    for (const ev of sorted) {
+      if (ev.event_date) {
+        const y = ev.event_date.slice(0, 4)
+        if (y) years.add(y)
+      }
+    }
+    return Array.from(years).sort((a, b) => b.localeCompare(a))
+  }, [sorted])
+
+  const filtered = useMemo(() => {
+    return sorted.filter((ev) => {
+      if (!ev.event_date) return true
+      const [y, m] = ev.event_date.split('-')
+      if (filterYear !== 'ALL' && y !== filterYear) return false
+      if (filterMonth !== 'ALL' && String(parseInt(m, 10)) !== filterMonth) return false
+      return true
+    })
+  }, [sorted, filterYear, filterMonth])
+
+  const viewingEvent = useMemo(
+    () => (viewing ? (events.items.find((e) => e.id === viewing.id) ?? viewing) : null),
+    [events.items, viewing],
   )
 
   const resetForm = () => {
@@ -247,20 +268,74 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
         </button>
       </div>
 
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
+        <select
+          value={filterYear}
+          onChange={(e) => setFilterYear(e.target.value)}
+          aria-label="Lọc theo năm"
+          style={{ flex: 1, padding: '5px 8px', fontSize: '0.8rem', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-main)' }}
+        >
+          <option value="ALL">🗓️ Tất cả năm</option>
+          {availableYears.map((y) => (
+            <option key={y} value={y}>
+              Năm {y}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          aria-label="Lọc theo tháng"
+          style={{ flex: 1, padding: '5px 8px', fontSize: '0.8rem', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-main)' }}
+        >
+          <option value="ALL">📅 Tất cả tháng</option>
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+            <option key={m} value={String(m)}>
+              Tháng {m}
+            </option>
+          ))}
+        </select>
+
+        {(filterYear !== 'ALL' || filterMonth !== 'ALL') && (
+          <button
+            type="button"
+            className="icon small"
+            onClick={() => {
+              setFilterYear('ALL')
+              setFilterMonth('ALL')
+            }}
+            title="Xoá bộ lọc"
+            aria-label="Xoá bộ lọc"
+            style={{ padding: '5px 8px', fontSize: '0.75rem', height: 'auto' }}
+          >
+            <RotateCcw size={13} />
+          </button>
+        )}
+      </div>
+
       {events.loading ? (
         <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải sự kiện…</p>
       ) : !sorted.length ? (
         <Empty icon={CalendarHeart} colorClass="icon-box-rose">
           Chưa có sự kiện chung nào. Thêm kỷ niệm đầu tiên nhé!
         </Empty>
+      ) : !filtered.length ? (
+        <Empty icon={Filter} colorClass="icon-box-amber">
+          Không tìm thấy kỷ niệm nào trong thời gian đã chọn.
+        </Empty>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {sorted.map((ev, i) => {
+          {filtered.map((ev, i) => {
             const mine = ev.owner_id === myId
             const c = CARD_COLORS[i % CARD_COLORS.length]
-            const days = daysToAnniversary(ev.event_date)
             return (
-              <div key={ev.id} className="card" style={{ padding: 10, margin: 0, display: 'flex', gap: 10, alignItems: 'stretch' }}>
+              <div
+                key={ev.id}
+                className="card"
+                onClick={() => setViewing(ev)}
+                style={{ padding: 10, margin: 0, display: 'flex', gap: 10, alignItems: 'stretch', cursor: 'pointer' }}
+              >
                 {ev.image_url ? (
                   <img src={ev.image_url} alt="" style={{ width: 72, height: 72, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
                 ) : (
@@ -280,15 +355,12 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
                   <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                     {viDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time}` : ''}
                   </div>
-                  <span style={{ alignSelf: 'flex-start', fontSize: '0.66rem', fontWeight: 700, color: c.color, background: c.bg, padding: '2px 8px', borderRadius: 20 }}>
-                    {days === 0 ? '🎉 Hôm nay' : `Còn ${days} ngày`}
-                  </span>
                   {ev.location && (
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
                       <MapPin size={11} /> {ev.location}
                     </div>
                   )}
-                  {ev.note && <p style={{ margin: '2px 0 0', fontSize: '0.8rem', lineHeight: 1.4, color: 'var(--text-main)' }}>{ev.note}</p>}
+                  {ev.note && <p style={{ margin: '2px 0 0', fontSize: '0.8rem', lineHeight: 1.4, color: 'var(--text-main)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.note}</p>}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexShrink: 0 }}>
@@ -296,13 +368,23 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
                     className="icon small"
                     aria-label={`${ev.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'} ${ev.title}`}
                     aria-pressed={!!ev.is_favorite}
-                    onClick={() => toggleFavorite(ev)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleFavorite(ev)
+                    }}
                     style={{ color: ev.is_favorite ? 'var(--amber)' : 'var(--text-muted)' }}
                   >
                     <Star size={16} fill={ev.is_favorite ? 'currentColor' : 'none'} />
                   </button>
                   {mine && (
-                    <button className="icon small" aria-label={`Sửa ${ev.title}`} onClick={() => openEdit(ev)}>
+                    <button
+                      className="icon small"
+                      aria-label={`Sửa ${ev.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openEdit(ev)
+                      }}
+                    >
                       <Pencil size={15} />
                     </button>
                   )}
@@ -311,6 +393,99 @@ export function SharedEventsView({ personId, isPartner = false }: { personId: st
             )
           })}
         </div>
+      )}
+
+      {viewingEvent && (
+        <Modal title="Chi tiết kỷ niệm" onClose={() => setViewing(null)}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            {viewingEvent.image_url && (
+              <img
+                src={viewingEvent.image_url}
+                alt={viewingEvent.title}
+                style={{
+                  width: '100%',
+                  maxHeight: 280,
+                  objectFit: 'cover',
+                  borderRadius: 12,
+                  background: 'var(--bg-main)',
+                }}
+              />
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>{viewingEvent.title}</h3>
+              {viewingEvent.owner_id !== myId && (
+                <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem' }}>
+                  của người kia
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <CalendarDays size={16} style={{ color: 'var(--purple)' }} />
+                <strong style={{ color: 'var(--text-main)' }}>{viDate(viewingEvent.event_date)}</strong>
+                {viewingEvent.event_time && <span>· {viewingEvent.event_time}</span>}
+              </div>
+
+              {viewingEvent.location && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <MapPin size={16} style={{ color: 'var(--rose)' }} />
+                  <span>{viewingEvent.location}</span>
+                </div>
+              )}
+            </div>
+
+            {viewingEvent.note && (
+              <div
+                style={{
+                  background: 'var(--bg-main)',
+                  padding: 12,
+                  borderRadius: 8,
+                  fontSize: '0.88rem',
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
+                  color: 'var(--text-main)',
+                  borderLeft: '3px solid var(--purple)',
+                }}
+              >
+                {viewingEvent.note}
+              </div>
+            )}
+
+            <div className="modal-actions" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => toggleFavorite(viewingEvent)}
+                style={{ color: viewingEvent.is_favorite ? 'var(--amber)' : 'inherit' }}
+              >
+                <Star size={16} fill={viewingEvent.is_favorite ? 'currentColor' : 'none'} />
+                {viewingEvent.is_favorite ? 'Bỏ thích' : 'Yêu thích'}
+              </button>
+
+              {viewingEvent.owner_id === myId && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const evToEdit = viewingEvent
+                      setViewing(null)
+                      openEdit(evToEdit)
+                    }}
+                  >
+                    <Pencil size={15} /> Sửa
+                  </button>
+                  <DeleteButton
+                    onDelete={async () => {
+                      await removeEvent(viewingEvent.id)
+                      setViewing(null)
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
 
       {adding && (

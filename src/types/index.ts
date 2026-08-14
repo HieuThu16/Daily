@@ -245,6 +245,8 @@ export type PersonOccasion = {
   is_yearly: boolean
   /** Mặc định 'SOLAR'. 'LUNAR' = lặp theo ngày âm của `occasion_date`. */
   calendar?: OccasionCalendar
+  /** true = cả 2 cùng thấy, false = chỉ mình tôi thấy. */
+  is_shared?: boolean
   created_at?: string
 }
 

@@ -28,7 +28,7 @@ type Props = {
   onBack: () => void
   onAddOccasion: (input: NewOccasion) => void
   onRemoveOccasion: (id: string) => void
-  onUpdatePerson: (id: string, patch: Pick<Person, 'name' | 'group_key'>) => void
+  onUpdatePerson: (id: string, patch: Pick<Person, 'name' | 'group_key' | 'is_partner'>) => void
 }
 
 export function PersonDetail({

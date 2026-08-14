@@ -13,6 +13,7 @@ export type NewOccasion = {
   occasion_date: string
   is_yearly: boolean
   calendar?: OccasionCalendar
+  is_shared?: boolean
 }
 
 /** Thông tin nhập ở form thêm người; sinh nhật lưu thành một dịp BIRTHDAY. */
@@ -127,7 +128,8 @@ export function usePeopleData() {
   }
 
   const addOccasion = async (input: NewOccasion): Promise<DataSource> => {
-    const local: PersonOccasion = { id: crypto.randomUUID(), ...input, title: input.title.trim() }
+    const is_shared = input.is_shared ?? true
+    const local: PersonOccasion = { id: crypto.randomUUID(), ...input, is_shared, title: input.title.trim() }
 
     if (!supabase) {
       persistOccasions([...occasions, local])
@@ -137,7 +139,7 @@ export function usePeopleData() {
 
     const { data, error } = await supabase
       .from('person_occasions')
-      .insert({ ...input, title: input.title.trim() })
+      .insert({ ...input, is_shared, title: input.title.trim() })
       .select()
       .single()
 

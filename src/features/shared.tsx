@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { Plus, Trash2, X, Inbox } from 'lucide-react'
 
@@ -60,7 +61,7 @@ export function InlineForm({ placeholder, onSave }: { placeholder: string; onSav
 }
 
 export function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
@@ -71,7 +72,8 @@ export function Modal({ title, children, onClose }: { title: string; children: R
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

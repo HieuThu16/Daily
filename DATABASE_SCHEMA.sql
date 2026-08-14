@@ -532,6 +532,7 @@ exception when duplicate_object then null; end $$;
 -- Dịp lặp theo âm lịch: occasion_date vẫn là ngày dương gốc,
 -- calendar='LUNAR' nghĩa là lặp theo ngày âm tương ứng.
 alter table public.person_occasions add column if not exists calendar text not null default 'SOLAR';
+alter table public.person_occasions add column if not exists is_shared boolean not null default true;
 do $$ begin
   alter table public.person_occasions add constraint person_occasions_calendar_check
     check (calendar in ('SOLAR', 'LUNAR'));
