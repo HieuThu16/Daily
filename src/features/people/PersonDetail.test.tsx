@@ -42,6 +42,8 @@ describe('PersonDetail', () => {
     expect(screen.getByLabelText('Thêm sở thích')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Nhật ký' }))
+    expect(screen.getByRole('button', { name: /Thêm nhật ký/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Thêm nhật ký/ }))
     expect(screen.getByLabelText('Ngày nhật ký')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Dịp' }))

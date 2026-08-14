@@ -214,6 +214,9 @@ export type SharedEvent = {
   location?: string | null
   image_url?: string | null
   image_path?: string | null
+  /** Danh sách nhiều ảnh trong kỷ niệm */
+  images?: string[] | null
+  image_paths?: string[] | null
   is_favorite?: boolean
   created_at?: string
 }

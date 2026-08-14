@@ -63,6 +63,9 @@ export function SharedEventsView({
   const [filterYear, setFilterYear] = useState<string>('ALL')
   const [filterMonth, setFilterMonth] = useState<string>('ALL')
 
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
+
   useEffect(() => {
     supabase?.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null))
 
@@ -140,6 +143,8 @@ export function SharedEventsView({
     setEventTime('')
     setLocation('')
     setShowExtra(false)
+    setPendingFiles([])
+    setSelectedImageIdx(0)
   }
 
   const openAdd = () => {
@@ -155,6 +160,8 @@ export function SharedEventsView({
     setEventTime(ev.event_time ?? '')
     setLocation(ev.location ?? '')
     setShowExtra(Boolean(ev.location))
+    setPendingFiles([])
+    setSelectedImageIdx(0)
   }
 
   const payload = () => ({
@@ -167,16 +174,68 @@ export function SharedEventsView({
     location: location.trim() || null,
   })
 
+  const uploadMultipleImages = async (eventId: string, files: File[]) => {
+    if (!supabase || !files.length) return { urls: [] as string[], paths: [] as string[] }
+    const urls: string[] = []
+    const paths: string[] = []
+
+    for (const file of files) {
+      try {
+        const ext = file.name.split('.').pop() ?? 'jpg'
+        const path = `${myId || 'common'}/${eventId}/${crypto.randomUUID()}.${ext}`
+        const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
+        if (upErr) continue
+        const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+        urls.push(pub.publicUrl)
+        paths.push(path)
+      } catch {
+        // Ignored
+      }
+    }
+    return { urls, paths }
+  }
+
   const createEvent = async () => {
     if (!title.trim()) return
     setBusy(true)
-    const { data, error } = await supabase!.from('shared_events').insert(payload()).select().single()
-    setBusy(false)
+    const newPayload = payload()
+    const { data, error } = await supabase!.from('shared_events').insert(newPayload).select().single()
+    
     if (error || !data) {
+      setBusy(false)
       showToast('❌ Chưa lưu được. Chạy migration shared_events chưa?', 'delete')
       return
     }
-    events.setItems((prev) => [data as SharedEvent, ...prev])
+
+    let created = data as SharedEvent
+
+    // Upload pending photos if any
+    if (pendingFiles.length > 0) {
+      const { urls, paths } = await uploadMultipleImages(created.id, pendingFiles)
+      if (urls.length > 0) {
+        const firstUrl = urls[0]
+        const firstPath = paths[0]
+        await supabase!
+          .from('shared_events')
+          .update({
+            image_url: firstUrl,
+            image_path: firstPath,
+            images: urls,
+            image_paths: paths,
+          })
+          .eq('id', created.id)
+        created = {
+          ...created,
+          image_url: firstUrl,
+          image_path: firstPath,
+          images: urls,
+          image_paths: paths,
+        }
+      }
+    }
+
+    setBusy(false)
+    events.setItems((prev) => [created, ...prev])
     showToast('💞 Đã thêm sự kiện chung')
     setAdding(false)
     resetForm()
@@ -184,13 +243,33 @@ export function SharedEventsView({
 
   const saveEvent = async () => {
     if (!editing || !title.trim()) return
+    setBusy(true)
     const next = payload()
-    const { error } = await supabase!.from('shared_events').update(next).eq('id', editing.id)
+    
+    let currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
+    let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
+
+    if (pendingFiles.length > 0) {
+      const { urls, paths } = await uploadMultipleImages(editing.id, pendingFiles)
+      currentImages = [...currentImages, ...urls]
+      currentPaths = [...currentPaths, ...paths]
+    }
+
+    const updateData = {
+      ...next,
+      image_url: currentImages[0] || null,
+      image_path: currentPaths[0] || null,
+      images: currentImages,
+      image_paths: currentPaths,
+    }
+
+    const { error } = await supabase!.from('shared_events').update(updateData).eq('id', editing.id)
+    setBusy(false)
     if (error) {
       showToast('❌ Chưa lưu được thay đổi', 'delete')
       return
     }
-    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? { ...e, ...next } : e)))
+    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? { ...e, ...updateData } : e)))
     showToast('✏️ Đã cập nhật sự kiện')
     setEditing(null)
     setViewing(null)
@@ -246,48 +325,40 @@ export function SharedEventsView({
     showToast('🗑️ Đã xoá người chung', 'delete')
   }
 
-  const uploadImage = async (file: File) => {
+  const removeExistingImage = async (imgIdx: number) => {
     if (!editing || !supabase) return
-    setUploading(true)
-    try {
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${myId}/${editing.id}/${Date.now()}.${ext}`
-      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
-      if (upErr) throw upErr
-      const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-      const url = pub.publicUrl
+    const currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
+    const currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
-      const { error: dbErr } = await supabase
-        .from('shared_events')
-        .update({ image_url: url, image_path: path })
-        .eq('id', editing.id)
-      if (dbErr) throw dbErr
-
-      events.setItems((prev) => prev.map((item) => (item.id === editing.id ? { ...item, image_url: url, image_path: path } : item)))
-      showToast('📷 Đã tải ảnh lên')
-    } catch {
-      showToast('❌ Không tải ảnh lên được. Tạo bucket daily-photos (public) chưa?', 'delete')
-    } finally {
-      setUploading(false)
-      if (fileInput.current) fileInput.current.value = ''
+    const pathToDelete = currentPaths[imgIdx]
+    if (pathToDelete) {
+      try {
+        await supabase.storage.from(PHOTO_BUCKET).remove([pathToDelete])
+      } catch {
+        // Ignored
+      }
     }
+
+    currentImages.splice(imgIdx, 1)
+    currentPaths.splice(imgIdx, 1)
+
+    const updateData = {
+      image_url: currentImages[0] || null,
+      image_path: currentPaths[0] || null,
+      images: currentImages,
+      image_paths: currentPaths,
+    }
+
+    await supabase.from('shared_events').update(updateData).eq('id', editing.id)
+    setEditing((cur) => (cur ? { ...cur, ...updateData } : cur))
+    events.setItems((prev) => prev.map((item) => (item.id === editing.id ? { ...item, ...updateData } : item)))
+    showToast('🗑️ Đã gỡ ảnh')
   }
 
-  const removeImage = async () => {
-    if (!editing || !supabase) return
-    setUploading(true)
-    try {
-      if (editing.image_path) {
-        await supabase.storage.from(PHOTO_BUCKET).remove([editing.image_path])
-      }
-      await supabase.from('shared_events').update({ image_url: null, image_path: null }).eq('id', editing.id)
-      events.setItems((prev) => prev.map((item) => (item.id === editing.id ? { ...item, image_url: null, image_path: null } : item)))
-      showToast('🗑️ Đã xoá ảnh', 'delete')
-    } catch {
-      showToast('❌ Chưa xoá ảnh được', 'delete')
-    } finally {
-      setUploading(false)
-    }
+  const handlePendingFileSelection = (files: FileList | null) => {
+    if (!files || !files.length) return
+    const fileArray = Array.from(files)
+    setPendingFiles((prev) => [...prev, ...fileArray])
   }
 
   const eventForm = (
@@ -321,6 +392,50 @@ export function SharedEventsView({
           <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ở đâu?" />
         </label>
       )}
+
+      {/* Chọn nhiều ảnh từ bộ sưu tập */}
+      <div style={{ marginTop: 8 }}>
+        <label style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 6, display: 'block' }}>
+          Ảnh kỷ niệm (chọn nhiều ảnh)
+        </label>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          aria-label="Chọn nhiều ảnh từ bộ sưu tập"
+          onChange={(e) => {
+            handlePendingFileSelection(e.target.files)
+            e.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          style={{ width: '100%', padding: '8px 12px', fontSize: '0.82rem', border: '1px dashed var(--primary)', borderRadius: 10, background: 'var(--primary-light)', color: 'var(--primary)', fontWeight: 600 }}
+        >
+          <ImagePlus size={15} /> Chọn ảnh từ bộ sưu tập (nhiều ảnh)
+        </button>
+
+        {/* Xem trước ảnh mới chọn chuẩn bị lưu */}
+        {pendingFiles.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {pendingFiles.map((file, idx) => (
+              <div key={idx} style={{ position: 'relative', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <button
+                  type="button"
+                  onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}
+                  style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', display: 'grid', placeItems: 'center' }}
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   )
 
@@ -433,15 +548,26 @@ export function SharedEventsView({
           {filtered.map((ev, i) => {
             const mine = ev.owner_id === myId
             const c = CARD_COLORS[i % CARD_COLORS.length]
+            const allImages = ev.images && ev.images.length ? ev.images : (ev.image_url ? [ev.image_url] : [])
             return (
               <div
                 key={ev.id}
                 className="card"
-                onClick={() => setViewing(ev)}
+                onClick={() => {
+                  setSelectedImageIdx(0)
+                  setViewing(ev)
+                }}
                 style={{ padding: 10, margin: 0, display: 'flex', gap: 10, alignItems: 'stretch', cursor: 'pointer' }}
               >
-                {ev.image_url ? (
-                  <img src={ev.image_url} alt="" style={{ width: 72, height: 72, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
+                {allImages.length > 0 ? (
+                  <div style={{ position: 'relative', width: 72, height: 72, flexShrink: 0 }}>
+                    <img src={allImages[0]} alt="" style={{ width: '100%', height: '100%', borderRadius: 12, objectFit: 'cover' }} />
+                    {allImages.length > 1 && (
+                      <span style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: '0.62rem', padding: '1px 5px', borderRadius: 6, fontWeight: 700 }}>
+                        +{allImages.length - 1}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <div className="icon-box" style={{ width: 72, height: 72, borderRadius: 12, flexShrink: 0, background: c.bg, color: c.color }}>
                     <CalendarDays size={26} />
@@ -484,18 +610,16 @@ export function SharedEventsView({
                   >
                     <Star size={16} fill={ev.is_favorite ? 'currentColor' : 'none'} />
                   </button>
-                  {mine && (
-                    <button
-                      className="icon small"
-                      aria-label={`Sửa ${ev.title}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openEdit(ev)
-                      }}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                  )}
+                  <button
+                    className="icon small"
+                    aria-label={`Sửa ${ev.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openEdit(ev)
+                    }}
+                  >
+                    <Pencil size={15} />
+                  </button>
                 </div>
               </div>
             )
@@ -505,97 +629,127 @@ export function SharedEventsView({
 
       {viewingEvent && (
         <Modal title="Chi tiết kỷ niệm" onClose={() => setViewing(null)}>
-          <div style={{ display: 'grid', gap: 12 }}>
-            {viewingEvent.image_url && (
-              <img
-                src={viewingEvent.image_url}
-                alt={viewingEvent.title}
-                style={{
-                  width: '100%',
-                  maxHeight: 280,
-                  objectFit: 'cover',
-                  borderRadius: 12,
-                  background: 'var(--bg-main)',
-                }}
-              />
-            )}
+          {(() => {
+            const allImages = viewingEvent.images && viewingEvent.images.length
+              ? viewingEvent.images
+              : (viewingEvent.image_url ? [viewingEvent.image_url] : [])
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>{viewingEvent.title}</h3>
-              {viewingEvent.owner_id !== myId && (
-                <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700 }}>
-                  {partnerDisplayName}
-                </span>
-              )}
-            </div>
+            return (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {allImages.length > 0 && (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <img
+                      src={allImages[selectedImageIdx] || allImages[0]}
+                      alt={viewingEvent.title}
+                      style={{
+                        width: '100%',
+                        maxHeight: 280,
+                        objectFit: 'contain',
+                        borderRadius: 12,
+                        background: 'var(--bg-main)',
+                      }}
+                    />
+                    {allImages.length > 1 && (
+                      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+                        {allImages.map((imgUrl, idx) => (
+                          <img
+                            key={idx}
+                            src={imgUrl}
+                            alt=""
+                            onClick={() => setSelectedImageIdx(idx)}
+                            style={{
+                              width: 50,
+                              height: 50,
+                              objectFit: 'cover',
+                              borderRadius: 8,
+                              cursor: 'pointer',
+                              border: selectedImageIdx === idx ? '2px solid var(--primary)' : '1px solid var(--border)',
+                              opacity: selectedImageIdx === idx ? 1 : 0.7,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <CalendarDays size={16} style={{ color: 'var(--purple)' }} />
-                <strong style={{ color: 'var(--text-main)' }}>{viDate(viewingEvent.event_date)}</strong>
-                {viewingEvent.event_time && <span>· {viewingEvent.event_time}</span>}
-              </div>
-
-              {viewingEvent.location && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MapPin size={16} style={{ color: 'var(--rose)' }} />
-                  <span>{viewingEvent.location}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>{viewingEvent.title}</h3>
+                  {viewingEvent.owner_id !== myId && (
+                    <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700 }}>
+                      {partnerDisplayName}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {viewingEvent.note && (
-              <div
-                style={{
-                  background: 'var(--bg-main)',
-                  padding: 12,
-                  borderRadius: 8,
-                  fontSize: '0.88rem',
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre-wrap',
-                  color: 'var(--text-main)',
-                  borderLeft: '3px solid var(--purple)',
-                }}
-              >
-                {viewingEvent.note}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CalendarDays size={16} style={{ color: 'var(--purple)' }} />
+                    <strong style={{ color: 'var(--text-main)' }}>{viDate(viewingEvent.event_date)}</strong>
+                    {viewingEvent.event_time && <span>· {viewingEvent.event_time}</span>}
+                  </div>
+
+                  {viewingEvent.location && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <MapPin size={16} style={{ color: 'var(--rose)' }} />
+                      <span>{viewingEvent.location}</span>
+                    </div>
+                  )}
+                </div>
+
+                {viewingEvent.note && (
+                  <div
+                    style={{
+                      background: 'var(--bg-main)',
+                      padding: 12,
+                      borderRadius: 8,
+                      fontSize: '0.88rem',
+                      lineHeight: 1.5,
+                      whiteSpace: 'pre-wrap',
+                      color: 'var(--text-main)',
+                      borderLeft: '3px solid var(--purple)',
+                    }}
+                  >
+                    {viewingEvent.note}
+                  </div>
+                )}
+
+                <div className="modal-actions" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(viewingEvent)}
+                    style={{ color: viewingEvent.is_favorite ? 'var(--amber)' : 'inherit' }}
+                  >
+                    <Star size={16} fill={viewingEvent.is_favorite ? 'currentColor' : 'none'} />
+                    {viewingEvent.is_favorite ? 'Bỏ thích' : 'Yêu thích'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const evToEdit = viewingEvent
+                      setViewing(null)
+                      openEdit(evToEdit)
+                    }}
+                  >
+                    <Pencil size={15} /> Sửa
+                  </button>
+                  <DeleteButton
+                    onDelete={async () => {
+                      await deleteEvent(viewingEvent.id)
+                      setViewing(null)
+                    }}
+                  />
+                </div>
               </div>
-            )}
-
-            <div className="modal-actions" style={{ marginTop: 8 }}>
-              <button
-                type="button"
-                onClick={() => toggleFavorite(viewingEvent)}
-                style={{ color: viewingEvent.is_favorite ? 'var(--amber)' : 'inherit' }}
-              >
-                <Star size={16} fill={viewingEvent.is_favorite ? 'currentColor' : 'none'} />
-                {viewingEvent.is_favorite ? 'Bỏ thích' : 'Yêu thích'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const evToEdit = viewingEvent
-                  setViewing(null)
-                  openEdit(evToEdit)
-                }}
-              >
-                <Pencil size={15} /> Sửa
-              </button>
-              <DeleteButton
-                onDelete={async () => {
-                  await deleteEvent(viewingEvent.id)
-                  setViewing(null)
-                }}
-              />
-            </div>
-          </div>
+            )
+          })()}
         </Modal>
       )}
 
       {adding && (
         <Modal title="Sự kiện chung mới" onClose={() => setAdding(false)}>
           {eventForm}
-          <small className="muted">Lưu xong mở lại sự kiện để đính ảnh.</small>
           <div className="modal-actions">
             <button className="primary" onClick={createEvent} disabled={busy}>{busy ? 'Lưu…' : 'Lưu sự kiện'}</button>
           </div>
@@ -606,33 +760,31 @@ export function SharedEventsView({
         <Modal title="Sửa sự kiện" onClose={() => setEditing(null)}>
           {eventForm}
 
-          <div style={{ display: 'grid', gap: 8 }}>
-            {editing.image_url && (
-              <img src={editing.image_url} alt="Ảnh sự kiện" style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 12, background: 'var(--bg-main)' }} />
-            )}
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              hidden
-              aria-label="Chọn ảnh cho sự kiện"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                e.target.value = ''
-                if (file) uploadImage(file)
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => fileInput.current?.click()} disabled={!supabase || uploading}>
-                <ImagePlus size={14} /> {uploading ? 'Đang tải…' : editing.image_url ? 'Đổi ảnh' : 'Thêm ảnh'}
-              </button>
-              {editing.image_url && (
-                <button type="button" className="text-danger" onClick={removeImage}>
-                  <Trash2 size={14} /> Gỡ ảnh
-                </button>
-              )}
-            </div>
-          </div>
+          {/* Danh sách ảnh hiện tại của sự kiện */}
+          {(() => {
+            const currentImages = editing.images && editing.images.length ? editing.images : (editing.image_url ? [editing.image_url] : [])
+            if (!currentImages.length) return null
+            return (
+              <div style={{ marginTop: 10 }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Ảnh đã lưu ({currentImages.length}):</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  {currentImages.map((url, idx) => (
+                    <div key={idx} style={{ position: 'relative', width: 64, height: 64, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(idx)}
+                        title="Xoá ảnh này"
+                        style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, padding: 0, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.85)', color: '#fff', border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           <div className="modal-actions">
             <DeleteButton onDelete={() => deleteEvent(editing.id)} />
