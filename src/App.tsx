@@ -33,14 +33,16 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
 ]
 
-function Login() {
+function Login({ user }: { user: unknown }) {
   const [busy, setBusy] = useState(false)
   const login = async () => {
     if (!supabase) return
     setBusy(true)
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin } })
+    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
     setBusy(false)
   }
+
+  if (user) return <Navigate to="/home" replace />
 
   return (
     <main className="login">
@@ -275,26 +277,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 import { ToastProvider } from './features/ToastContext'
 
-function Protected() {
-  const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<unknown>(null)
-
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false)
-      return
-    }
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-      setLoading(false)
-    })
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null))
-    return () => {
-      data.subscription.unsubscribe()
-    }
-  }, [])
-
-  if (loading) return <div className="center">Loading your space…</div>
+function Protected({ user }: { user: unknown }) {
   if (!user) return <Navigate to="/login" replace />
 
   return (
@@ -333,10 +316,43 @@ function Protected() {
 }
 
 export default function App() {
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<unknown>(null)
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false)
+      return
+    }
+
+    let mounted = true
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) {
+        setUser(session?.user ?? null)
+        setLoading(false)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (mounted) {
+        setUser(s?.user ?? null)
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  if (loading) return <div className="center">Loading your space…</div>
+
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/*" element={<Protected />} />
+      <Route path="/login" element={<Login user={user} />} />
+      <Route path="/*" element={<Protected user={user} />} />
     </Routes>
   )
 }
