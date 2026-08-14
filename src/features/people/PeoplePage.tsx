@@ -26,7 +26,7 @@ function birthdayInfo(occasions: PersonOccasion[], personId: string) {
 
 export function PeoplePage() {
   const { showToast } = useToast()
-  const { people, occasions, loading, addPerson, updatePerson, addOccasion, removeOccasion } = usePeopleData()
+  const { people, occasions, loading, addPerson, updatePerson, deletePerson, addOccasion, removeOccasion } = usePeopleData()
   const [selected, setSelected] = useState<Person | null>(null)
   const [search, setSearch] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
@@ -63,9 +63,15 @@ export function PeoplePage() {
     showToast(saveSourceLabel(savedTo))
   }
 
-  const handleUpdatePerson = async (id: string, patch: Pick<Person, 'name' | 'group_key'>) => {
+  const handleUpdatePerson = async (id: string, patch: Pick<Person, 'name' | 'group_key' | 'is_partner'>) => {
     const savedTo = await updatePerson(id, patch)
     setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev))
+    showToast(saveSourceLabel(savedTo))
+  }
+
+  const handleDeletePerson = async (id: string) => {
+    const savedTo = await deletePerson(id)
+    setSelected(null)
     showToast(saveSourceLabel(savedTo))
   }
 
@@ -102,6 +108,7 @@ export function PeoplePage() {
         onAddOccasion={handleAddOccasion}
         onRemoveOccasion={removeOccasion}
         onUpdatePerson={handleUpdatePerson}
+        onDeletePerson={handleDeletePerson}
       />
     )
   }

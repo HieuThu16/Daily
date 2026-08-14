@@ -163,5 +163,33 @@ export function usePeopleData() {
     await supabase.from('person_occasions').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   }
 
-  return { people, occasions, source, loading, addPerson, updatePerson, addOccasion, removeOccasion }
+  const deletePerson = async (id: string): Promise<DataSource> => {
+    const nextPeople = people.filter((p) => p.id !== id)
+    const nextOccasions = occasions.filter((o) => o.person_id !== id)
+
+    if (!supabase) {
+      persistPeople(nextPeople)
+      persistOccasions(nextOccasions)
+      setSource('Local')
+      return 'Local'
+    }
+
+    setPeople(nextPeople)
+    setOccasions(nextOccasions)
+
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('people').update({ deleted_at: now }).eq('id', id)
+    await supabase.from('person_occasions').update({ deleted_at: now }).eq('person_id', id)
+
+    if (error) {
+      saveLocal(PEOPLE_KEY, nextPeople)
+      saveLocal(OCCASIONS_KEY, nextOccasions)
+      setSource('Local')
+      return 'Local'
+    }
+    setSource('Supabase')
+    return 'Supabase'
+  }
+
+  return { people, occasions, source, loading, addPerson, updatePerson, deletePerson, addOccasion, removeOccasion }
 }

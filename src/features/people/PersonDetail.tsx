@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, CalendarPlus, Check, Pencil, Users } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, Check, Pencil, Trash2, Users } from 'lucide-react'
 import { ageOnNext, isLunar, lunarLabel, nextOccurrence } from '../../lib/occasions'
 import type { Person, PersonGroup, PersonOccasion } from '../../types'
 import { Modal } from '../shared'
@@ -29,6 +29,7 @@ type Props = {
   onAddOccasion: (input: NewOccasion) => void
   onRemoveOccasion: (id: string) => void
   onUpdatePerson: (id: string, patch: Pick<Person, 'name' | 'group_key' | 'is_partner'>) => void
+  onDeletePerson?: (id: string) => void
 }
 
 export function PersonDetail({
@@ -39,6 +40,7 @@ export function PersonDetail({
   onAddOccasion,
   onRemoveOccasion,
   onUpdatePerson,
+  onDeletePerson,
 }: Props) {
   const [tab, setTab] = useState<DetailTab>('info')
   const [editing, setEditing] = useState(false)
@@ -65,6 +67,14 @@ export function PersonDetail({
     setEditing(false)
   }
 
+  const handleDelete = () => {
+    if (!onDeletePerson) return
+    if (confirm(`Bạn có chắc chắn muốn xóa "${person.name}" khỏi danh bạ?`)) {
+      onDeletePerson(person.id)
+      onBack()
+    }
+  }
+
   return (
     <section className="people-page">
       <div className="detail-bar">
@@ -72,9 +82,16 @@ export function PersonDetail({
           <ArrowLeft size={20} />
         </button>
         <h2>Chi tiết người thân</h2>
-        <button className="icon" onClick={openEdit} aria-label="Sửa thông tin">
-          <Pencil size={18} />
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="icon" onClick={openEdit} aria-label="Sửa thông tin">
+            <Pencil size={18} />
+          </button>
+          {onDeletePerson && (
+            <button className="icon danger" onClick={handleDelete} aria-label="Xóa người này">
+              <Trash2 size={18} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="person-hero">
@@ -175,6 +192,19 @@ export function PersonDetail({
             </label>
 
             <div className="modal-actions">
+              {onDeletePerson && (
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setEditing(false)
+                    handleDelete()
+                  }}
+                  style={{ marginRight: 'auto' }}
+                >
+                  <Trash2 size={15} /> Xóa
+                </button>
+              )}
               <button onClick={() => setEditing(false)}>Huỷ</button>
               <button className="primary" onClick={submitEdit} disabled={!name.trim()}>
                 <Check size={15} /> Lưu
