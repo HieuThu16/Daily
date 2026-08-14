@@ -202,6 +202,8 @@ export type SharedPartner = { id: string; partner_email: string; created_at?: st
 export type SharedEvent = {
   id: string
   owner_id: string
+  /** Mã phòng kỷ niệm chung. */
+  room_code?: string | null
   /** Người trong danh bạ mà kỷ niệm này thuộc về. */
   person_id?: string | null
   title: string
@@ -227,6 +229,8 @@ export type Person = {
   notes?: string | null
   /** true = người yêu chung; chỉ người này có tab "Sự kiện chung". */
   is_partner?: boolean
+  /** Mã phòng kỷ niệm chung của người này. */
+  room_code?: string | null
   created_at?: string
 }
 
@@ -294,6 +298,7 @@ export type PartnerInvitation = {
   sender_email: string
   receiver_email: string
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  room_code?: string | null
   created_at?: string
 }
 

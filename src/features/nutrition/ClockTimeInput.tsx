@@ -15,7 +15,17 @@ function pad(value: number) {
   return String(value).padStart(2, '0')
 }
 
-export function ClockTimeInput({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
+export function ClockTimeInput({
+  label,
+  value,
+  onChange,
+  size = 145,
+}: {
+  label: string
+  value: string
+  onChange: (next: string) => void
+  size?: number
+}) {
   const [mode, setMode] = useState<'hour' | 'minute'>('hour')
   const [hourText, minuteText] = value.split(':')
   const hour = Number(hourText) || 0
@@ -40,22 +50,38 @@ export function ClockTimeInput({ label, value, onChange }: { label: string; valu
   const handTip = mode === 'hour' ? pointOnDial(hour % 12, 12, handRadius) : pointOnDial(minute, 60, OUTER)
 
   return (
-    <div style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
-      <small style={{ color: 'var(--text-muted)' }}>{label}</small>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '2rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-        <button type="button" aria-label={`${label}: chọn giờ`} aria-pressed={mode === 'hour'} onClick={() => setMode('hour')} style={{ border: 0, background: 'none', font: 'inherit', color: mode === 'hour' ? '#6366f1' : 'var(--text-muted)', cursor: 'pointer' }}>{pad(hour)}</button>
+    <div style={{ display: 'grid', gap: 4, justifyItems: 'center' }}>
+      <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600 }}>{label}</small>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: '1.25rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+        <button
+          type="button"
+          aria-label={`${label}: chọn giờ`}
+          aria-pressed={mode === 'hour'}
+          onClick={() => setMode('hour')}
+          style={{ border: 0, background: 'none', font: 'inherit', color: mode === 'hour' ? '#6366f1' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+        >
+          {pad(hour)}
+        </button>
         <span style={{ color: 'var(--text-muted)' }}>:</span>
-        <button type="button" aria-label={`${label}: chọn phút`} aria-pressed={mode === 'minute'} onClick={() => setMode('minute')} style={{ border: 0, background: 'none', font: 'inherit', color: mode === 'minute' ? '#6366f1' : 'var(--text-muted)', cursor: 'pointer' }}>{pad(minute)}</button>
+        <button
+          type="button"
+          aria-label={`${label}: chọn phút`}
+          aria-pressed={mode === 'minute'}
+          onClick={() => setMode('minute')}
+          style={{ border: 0, background: 'none', font: 'inherit', color: mode === 'minute' ? '#6366f1' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+        >
+          {pad(minute)}
+        </button>
       </div>
       <svg
         role="application"
         aria-label={`Mặt đồng hồ ${label}`}
         viewBox={`0 0 ${SIZE} ${SIZE}`}
-        width={SIZE}
-        height={SIZE}
+        width={size}
+        height={size}
         onPointerDown={pick}
         onPointerMove={pick}
-        style={{ touchAction: 'none', userSelect: 'none', cursor: 'pointer', maxWidth: '100%' }}
+        style={{ touchAction: 'none', userSelect: 'none', cursor: 'pointer', width: size, height: size }}
       >
         <circle cx={CENTER} cy={CENTER} r={OUTER + 18} fill="rgba(99,102,241,.08)" />
         <line x1={CENTER} y1={CENTER} x2={handTip.x} y2={handTip.y} stroke="#6366f1" strokeWidth={2} />
@@ -83,7 +109,13 @@ export function ClockTimeInput({ label, value, onChange }: { label: string; valu
               )
             })}
       </svg>
-      <input type="time" aria-label={`${label} (nhập tay)`} value={value} onChange={(event) => event.target.value && onChange(event.target.value)} style={{ width: 120, textAlign: 'center' }} />
+      <input
+        type="time"
+        aria-label={`${label} (nhập tay)`}
+        value={value}
+        onChange={(event) => event.target.value && onChange(event.target.value)}
+        style={{ width: 95, textAlign: 'center', fontSize: '0.78rem', padding: '2px 4px', borderRadius: 6, border: '1px solid var(--line)' }}
+      />
     </div>
   )
 }

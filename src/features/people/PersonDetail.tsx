@@ -195,7 +195,14 @@ export function PersonDetail({
 
       {tab === 'journal' && <PersonJournal personId={person.id} personName={person.name} />}
 
-      {tab === 'events' && <SharedEventsView personId={person.id} isPartner={!!person.is_partner} />}
+      {tab === 'events' && (
+        <SharedEventsView
+          personId={person.id}
+          isPartner={!!person.is_partner}
+          roomCode={person.room_code ?? 'HIEU-Y-2026'}
+          onSendInvite={onSendInvite ? () => setInviteModal(true) : undefined}
+        />
+      )}
 
       {editing && (
         <Modal title="Sửa thông tin" onClose={() => setEditing(false)}>

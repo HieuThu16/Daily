@@ -28,10 +28,12 @@ const CARD_COLORS = [
 export function SharedEventsView({
   personId,
   isPartner = false,
+  roomCode = 'HIEU-Y-2026',
   onSendInvite,
 }: {
   personId: string
   isPartner?: boolean
+  roomCode?: string
   onSendInvite?: () => void
 }) {
   const { showToast } = useToast()
@@ -75,12 +77,12 @@ export function SharedEventsView({
     }
   }, [])
 
-  // Kỷ niệm của người này (mình tạo) hoặc kỷ niệm do người yêu chia sẻ sang (owner khác mình)
+  // Kỷ niệm chung của phòng (roomCode), hoặc gắn theo personId, hoặc do đối tác chia sẻ sang
   const sorted = useMemo(
     () => events.items
-      .filter((e) => e.person_id === personId || (myId != null && e.owner_id !== myId))
+      .filter((e) => (roomCode && e.room_code === roomCode) || e.person_id === personId || (myId != null && e.owner_id !== myId))
       .sort((a, b) => b.event_date.localeCompare(a.event_date) || (b.event_time ?? '').localeCompare(a.event_time ?? '')),
-    [events.items, personId, myId],
+    [events.items, roomCode, personId, myId],
   )
 
   const availableYears = useMemo(() => {
@@ -135,6 +137,7 @@ export function SharedEventsView({
 
   const payload = () => ({
     person_id: personId,
+    room_code: roomCode || 'HIEU-Y-2026',
     title: title.trim(),
     note: note.trim() || null,
     event_date: eventDate,
@@ -284,7 +287,7 @@ export function SharedEventsView({
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <button className="primary" onClick={openAdd} style={{ flex: 1, padding: '7px 0', fontSize: '0.82rem' }}>
           <Plus size={14} /> Thêm sự kiện
         </button>
@@ -300,6 +303,11 @@ export function SharedEventsView({
         <button onClick={() => setManagePartners(true)} style={{ padding: '7px 12px', fontSize: '0.82rem' }}>
           <UserPlus size={14} /> Người chung ({partners.items.length})
         </button>
+        {roomCode && (
+          <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: 6, background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+            Mã phòng: <strong style={{ color: 'var(--primary)' }}>{roomCode}</strong>
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>

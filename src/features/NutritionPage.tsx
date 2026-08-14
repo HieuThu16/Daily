@@ -370,19 +370,20 @@ export function NutritionPage() {
 
       {sleepModal && (
         <Modal onClose={() => { setSleepModal(false); setEditingSleep(null) }} title={editingSleep ? `Sửa phiên ngủ (${editingSleep.sleep_start} → ${editingSleep.sleep_end})` : 'Ghi giấc ngủ & Giấc mơ'}>
-          <div className="form-grid">
-            <div style={{ display: 'grid', gap: 14, justifyItems: 'center' }}>
-              <ClockTimeInput label="Ngủ từ" value={sleepStart} onChange={setSleepStart} />
-              <ClockTimeInput label="Đến" value={sleepEnd} onChange={setSleepEnd} />
+          <div className="form-grid" style={{ gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap' }}>
+              <ClockTimeInput label="Ngủ từ" value={sleepStart} onChange={setSleepStart} size={140} />
+              <ClockTimeInput label="Đến" value={sleepEnd} onChange={setSleepEnd} size={140} />
             </div>
-            <div style={{ textAlign: 'center', color: '#6366f1', fontWeight: 800 }}>
+            <div style={{ textAlign: 'center', color: '#6366f1', fontWeight: 800, fontSize: '0.88rem' }}>
               {duration(sleepDuration({ sleep_start: sleepStart, sleep_end: sleepEnd, log_date: currentDate }))}
+              {sleepEnd <= sleepStart && <small style={{ display: 'block', fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.72rem' }}>Qua đêm — giờ chia cho {currentDate} và ngày hôm sau</small>}
             </div>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>💭 Nằm mơ thấy gì?</span>
-              <textarea value={dream} onChange={(event) => setDream(event.target.value)} placeholder="Kể lại giấc mơ nếu bạn nhớ được…" rows={2} style={{ width: '100%', borderRadius: 10, border: '1px solid var(--line)', padding: '8px 10px', fontSize: '0.88rem', resize: 'vertical' }} />
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>💭 Nằm mơ thấy gì?</span>
+              <textarea value={dream} onChange={(event) => setDream(event.target.value)} placeholder="Kể lại giấc mơ nếu bạn nhớ được…" rows={2} style={{ width: '100%', borderRadius: 8, border: '1px solid var(--line)', padding: '6px 8px', fontSize: '0.84rem', resize: 'vertical' }} />
             </label>
-            <button type="button" className="primary" onClick={saveSleep}>{editingSleep ? 'Cập nhật phiên ngủ' : 'Lưu giấc ngủ'}</button>
+            <button type="button" className="primary" onClick={saveSleep} style={{ padding: '8px 12px' }}>{editingSleep ? 'Cập nhật phiên ngủ' : 'Lưu giấc ngủ'}</button>
           </div>
         </Modal>
       )}

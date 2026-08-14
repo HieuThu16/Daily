@@ -1,6 +1,18 @@
--- Migration: Hỗ trợ tương tác kỷ niệm chung 2 chiều (Xem, Thêm, Sửa, Xoá, Thích, Đổi ảnh) cho cặp đôi
+-- Migration: Thêm cột mã phòng (room_code) và hỗ trợ tương tác kỷ niệm chung 2 chiều
 
--- 1. Trigger tự động liên kết 2 chiều khi lời mời được chấp nhận
+-- 1. Thêm cột room_code vào các bảng
+alter table public.shared_events add column if not exists room_code text;
+alter table public.partner_invitations add column if not exists room_code text;
+alter table public.people add column if not exists room_code text;
+
+create index if not exists shared_events_room_code_idx
+  on public.shared_events(room_code) where deleted_at is null;
+
+-- Gán mã phòng mặc định cho tất cả các sự kiện hiện tại và người thân hiện tại
+update public.shared_events set room_code = 'HIEU-Y-2026' where room_code is null;
+update public.people set room_code = 'HIEU-Y-2026', is_partner = true where deleted_at is null;
+
+-- 2. Trigger tự động liên kết 2 chiều và cập nhật room_code khi lời mời được chấp nhận
 create or replace function public.handle_partner_invitation_accepted()
 returns trigger
 language plpgsql
@@ -8,12 +20,15 @@ security definer
 as $$
 declare
   v_receiver_id uuid;
+  v_room_code text;
 begin
   if new.status = 'ACCEPTED' and (old.status is null or old.status <> 'ACCEPTED') then
+    v_room_code := coalesce(new.room_code, 'ROOM-' || substring(md5(random()::text) from 1 for 6));
+
     -- Tìm user_id của người nhận
     select id into v_receiver_id
     from auth.users
-    where lower(email) = lower(trim(new.receiver_email));
+    where lower(trim(email)) = lower(trim(new.receiver_email));
 
     -- Thêm shared_partners cho người gửi
     insert into public.shared_partners (user_id, partner_email)
@@ -26,12 +41,12 @@ begin
       values (v_receiver_id, lower(trim(new.sender_email)))
       on conflict (user_id, partner_email) do update set deleted_at = null;
 
-      -- Cập nhật is_partner = true cho cả 2 bên
-      update public.people set is_partner = true
+      -- Cập nhật is_partner = true và room_code cho cả 2 bên
+      update public.people set is_partner = true, room_code = v_room_code
       where user_id = v_receiver_id and deleted_at is null;
     end if;
 
-    update public.people set is_partner = true
+    update public.people set is_partner = true, room_code = v_room_code
     where user_id = new.sender_id and deleted_at is null;
   end if;
   return new;
@@ -43,11 +58,20 @@ create trigger on_partner_invitation_accepted
   after insert or update of status on public.partner_invitations
   for each row execute function public.handle_partner_invitation_accepted();
 
--- 2. Cập nhật RLS cho shared_events: Cho phép đối tác xem, sửa, xoá, thích kỷ niệm của nhau
+-- 3. Cập nhật RLS: Cho phép 2 bên cùng Đọc, Sửa, Xoá, Thích kỷ niệm theo mã phòng hoặc đối tác
 drop policy if exists "read shared events" on public.shared_events;
 create policy "read shared events" on public.shared_events for select to authenticated
   using (
     owner_id = auth.uid()
+    or (
+      room_code is not null
+      and exists (
+        select 1 from public.people p
+        where p.user_id = auth.uid()
+          and p.room_code = shared_events.room_code
+          and p.deleted_at is null
+      )
+    )
     or exists (
       select 1 from public.shared_partners p
       where p.user_id = shared_events.owner_id
@@ -69,6 +93,15 @@ drop policy if exists "update shared events" on public.shared_events;
 create policy "update shared events" on public.shared_events for update to authenticated
   using (
     owner_id = auth.uid()
+    or (
+      room_code is not null
+      and exists (
+        select 1 from public.people p
+        where p.user_id = auth.uid()
+          and p.room_code = shared_events.room_code
+          and p.deleted_at is null
+      )
+    )
     or exists (
       select 1 from public.shared_partners p
       where p.user_id = shared_events.owner_id
@@ -78,6 +111,15 @@ create policy "update shared events" on public.shared_events for update to authe
   )
   with check (
     owner_id = auth.uid()
+    or (
+      room_code is not null
+      and exists (
+        select 1 from public.people p
+        where p.user_id = auth.uid()
+          and p.room_code = shared_events.room_code
+          and p.deleted_at is null
+      )
+    )
     or exists (
       select 1 from public.shared_partners p
       where p.user_id = shared_events.owner_id
@@ -91,6 +133,15 @@ drop policy if exists "delete shared events" on public.shared_events;
 create policy "delete shared events" on public.shared_events for delete to authenticated
   using (
     owner_id = auth.uid()
+    or (
+      room_code is not null
+      and exists (
+        select 1 from public.people p
+        where p.user_id = auth.uid()
+          and p.room_code = shared_events.room_code
+          and p.deleted_at is null
+      )
+    )
     or exists (
       select 1 from public.shared_partners p
       where p.user_id = shared_events.owner_id
@@ -99,7 +150,7 @@ create policy "delete shared events" on public.shared_events for delete to authe
     )
   );
 
--- 3. Đảm bảo liên kết 2 chiều ngay lập tức cho 2 tài khoản Hiếu & Kim Ý
+-- 4. Gán mã phòng HIEU-Y-2026 cho 2 tài khoản hiện tại ngay lập tức
 do $$
 declare
   v_hieu_id uuid;
@@ -113,7 +164,7 @@ begin
     values (v_hieu_id, 'nguyenkimy1302.gr@gmail.com')
     on conflict (user_id, partner_email) do update set deleted_at = null;
 
-    update public.people set is_partner = true where user_id = v_hieu_id and deleted_at is null;
+    update public.people set is_partner = true, room_code = 'HIEU-Y-2026' where user_id = v_hieu_id and deleted_at is null;
   end if;
 
   if v_y_id is not null then
@@ -121,6 +172,6 @@ begin
     values (v_y_id, 'truongnguyenminhhieu1000@gmail.com')
     on conflict (user_id, partner_email) do update set deleted_at = null;
 
-    update public.people set is_partner = true where user_id = v_y_id and deleted_at is null;
+    update public.people set is_partner = true, room_code = 'HIEU-Y-2026' where user_id = v_y_id and deleted_at is null;
   end if;
 end $$;

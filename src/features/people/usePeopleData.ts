@@ -202,11 +202,12 @@ export function usePeopleData() {
 
     const { data: userData } = await supabase.auth.getUser()
     const senderEmail = userData.user?.email ?? ''
+    const roomCode = `ROOM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
 
     // 1. Thêm vào partner_invitations
     const { data, error } = await supabase
       .from('partner_invitations')
-      .insert({ sender_email: senderEmail, receiver_email: email, status: 'PENDING' })
+      .insert({ sender_email: senderEmail, receiver_email: email, status: 'PENDING', room_code: roomCode })
       .select()
       .single()
 
@@ -233,6 +234,7 @@ export function usePeopleData() {
     if (!customName || !supabase) return 'Local'
 
     const { data: userData } = await supabase.auth.getUser()
+    const roomCode = invitation.room_code || 'HIEU-Y-2026'
 
     // 1. Cập nhật trạng thái invitation sang ACCEPTED
     await supabase.from('partner_invitations').update({ status: 'ACCEPTED' }).eq('id', invitation.id)
@@ -262,13 +264,20 @@ export function usePeopleData() {
       group_key: 'FRIEND',
     })
 
-    // 4. Đánh dấu is_partner = true
-    const updatedList = people.map((p) => (p.name === customName ? { ...p, is_partner: true } : p))
+    // 4. Đánh dấu is_partner = true và room_code
+    const updatedList = people.map((p) => (p.name === customName ? { ...p, is_partner: true, room_code: roomCode } : p))
     setPeople(updatedList)
 
     const createdPerson = people.find((p) => p.name === customName)
     if (createdPerson) {
       await updatePerson(createdPerson.id, { name: customName, group_key: 'FRIEND', is_partner: true })
+      if (supabase) {
+        try {
+          await supabase.from('people').update({ is_partner: true, room_code: roomCode }).eq('id', createdPerson.id)
+        } catch {
+          // Ignored
+        }
+      }
     }
 
     return savedTo
