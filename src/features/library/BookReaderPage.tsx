@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, List, Type } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Highlighter, List, Quote, Type } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal } from '../../lib/persistence'
 import { loadBookDocument, loadChapterContent, loadChapterList } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument } from '../../types'
 import { useBookReadingProgress } from './useBookReadingProgress'
+import { useToast } from '../ToastContext'
 
 type ReaderTheme = 'light' | 'sepia' | 'dark'
 type ReaderFont = 'sans' | 'serif'
@@ -24,6 +25,7 @@ const COMPLETED_RATIO = 0.98
 
 export function BookReaderPage() {
   const { mediaItemId = '' } = useParams()
+  const { showToast } = useToast()
   const [searchParams] = useSearchParams()
   const requestedChapter = searchParams.get('chapter')
   const nav = useNavigate()
@@ -34,6 +36,10 @@ export function BookReaderPage() {
   const [bookDocument, setBookDocument] = useState<BookDocument | null>(null)
   const [chapters, setChapters] = useState<BookChapterMeta[]>([])
   const [bookName, setBookName] = useState('')
+  const [bookAuthor, setBookAuthor] = useState<string | null>(null)
+  /** Đoạn đang bôi đen, để hiện nút "Lưu trích dẫn". */
+  const [selection, setSelection] = useState('')
+  const [savingQuote, setSavingQuote] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
   const [contentByIdx, setContentByIdx] = useState<Record<number, string>>({})
   const [loadError, setLoadError] = useState('')
@@ -77,15 +83,16 @@ export function BookReaderPage() {
         const list = await loadChapterList(doc.id)
         const { data: item } = await supabase
           .from('media_items')
-          .select('name, status')
+          .select('name, status, author')
           .eq('id', mediaItemId)
           .single()
         if (cancelled) return
 
-        const media = item as { name?: string; status?: string } | null
+        const media = item as { name?: string; status?: string; author?: string | null } | null
         setBookDocument(doc)
         setChapters(list)
         setBookName(media?.name ?? 'Đang đọc')
+        setBookAuthor(media?.author ?? null)
         // Mục lục ở màn chi tiết truyền ?chapter=. Người dùng chủ động chọn chương thì
         // phải vào đầu chương, không phải cuộn tới vị trí đã lưu của chương trước đó.
         // Loại cả chuỗi rỗng: `Number('')` ra 0, sẽ nhảy nhầm về chương đầu.
@@ -187,6 +194,49 @@ export function BookReaderPage() {
 
   const paragraphs = useMemo(() => (content ? content.split('\n\n') : []), [content])
 
+  // Bôi đen trong nội dung -> ghi lại đoạn để hiện nút lưu trích dẫn.
+  const captureSelection = () => {
+    const text = window.getSelection()?.toString().trim() ?? ''
+    setSelection(text)
+  }
+
+  const saveQuote = async () => {
+    if (!selection || !supabase) return
+    setSavingQuote(true)
+    const { error } = await supabase.from('book_quotes').insert({
+      media_item_id: mediaItemId,
+      book_name: bookName,
+      author: bookAuthor,
+      quote: selection,
+    })
+    setSavingQuote(false)
+    if (error) {
+      showToast('❌ Chưa lưu được. Chạy migration book_quotes chưa?', 'delete')
+      return
+    }
+    showToast('❝ Đã lưu trích dẫn')
+    setSelection('')
+    window.getSelection()?.removeAllRanges()
+  }
+
+  /** Tô sáng đoạn đang chọn ngay trên trang — chỉ nổi bật, KHÔNG lưu. */
+  const highlightSelection = () => {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    const mark = document.createElement('mark')
+    mark.className = 'reader-hl'
+    try {
+      range.surroundContents(mark)
+    } catch {
+      // Đoạn trải nhiều thẻ: gói cả nội dung trích ra rồi chèn lại.
+      mark.appendChild(range.extractContents())
+      range.insertNode(mark)
+    }
+    sel.removeAllRanges()
+    setSelection('')
+  }
+
   if (status === 'loading') return <div className="center">Đang mở sách…</div>
 
   if (status === 'missing') {
@@ -207,6 +257,9 @@ export function BookReaderPage() {
           <ArrowLeft size={20} />
         </button>
         <span className="book-reader-title">{bookName}</span>
+        <button aria-label="Xem trích dẫn" onClick={() => nav(`/quotes/${mediaItemId}`)}>
+          <Quote size={20} />
+        </button>
         <button aria-label="Mục lục" onClick={() => setTocOpen(true)}>
           <List size={20} />
         </button>
@@ -288,6 +341,8 @@ export function BookReaderPage() {
         className="book-reader-content"
         ref={scroller}
         onScroll={onScroll}
+        onMouseUp={captureSelection}
+        onTouchEnd={captureSelection}
         style={{
           fontSize: settings.fontSize,
           lineHeight: settings.lineHeight,
@@ -331,6 +386,25 @@ export function BookReaderPage() {
           </div>
         </article>
       </div>
+
+      {selection && (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 24, zIndex: 40, display: 'flex', gap: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.25)', borderRadius: 12 }}>
+          <button
+            className="primary"
+            onClick={saveQuote}
+            disabled={savingQuote}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Quote size={16} /> {savingQuote ? 'Đang lưu…' : 'Lưu trích dẫn'}
+          </button>
+          <button
+            onClick={highlightSelection}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fde68a', color: '#78350f', border: 0, fontWeight: 700 }}
+          >
+            <Highlighter size={16} /> Tô sáng
+          </button>
+        </div>
+      )}
     </div>
   )
 }

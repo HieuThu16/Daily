@@ -152,6 +152,16 @@ export type BookChapterMeta = {
   char_offset: number
 }
 
+/** Trích dẫn/highlight từ một cuốn sách; lưu kèm tựa và tác giả. */
+export type BookQuote = {
+  id: string
+  media_item_id: string | null
+  book_name: string
+  author?: string | null
+  quote: string
+  created_at?: string
+}
+
 export type MovieGenre = { id: string; name: string }
 export type MovieActor = { id: string; name: string }
 export type BookAuthor = { id: string; name: string }

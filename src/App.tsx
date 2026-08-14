@@ -15,6 +15,7 @@ import { LibraryPage } from './features/LibraryPage'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
+import { QuotesPage } from './features/library/QuotesPage'
 import { MoneyPage } from './features/MoneyPage'
 import { CalendarPage } from './features/CalendarPage'
 import { useTaskReminders } from './features/useTaskReminders'
@@ -303,6 +304,8 @@ function Protected() {
       <Routes>
         {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
         <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
+        <Route path="/quotes/:mediaItemId" element={<QuotesPage />} />
+        <Route path="/quotes" element={<QuotesPage />} />
         <Route
           path="*"
           element={

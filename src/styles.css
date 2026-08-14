@@ -2214,6 +2214,7 @@ header {
 .book-reader-progress > div { height: 100%; background: var(--primary); transition: width 0.2s; }
 
 .book-reader-content { flex: 1; overflow-y: auto; padding: 20px 18px 64px; }
+.reader-hl { background: #fde68a; color: inherit; border-radius: 3px; padding: 0 1px; }
 .book-reader-page { max-width: 68ch; margin: 0 auto; }
 .book-reader-page h1 { font-size: 1.15rem; margin: 0 0 18px; line-height: 1.4; }
 .book-reader-page p { margin: 0 0 1em; text-align: justify; overflow-wrap: break-word; }

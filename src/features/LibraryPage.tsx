@@ -1180,6 +1180,9 @@ export function LibraryPage() {
           <button className="library-import-btn" onClick={() => setBookStatsOpen(true)} title="Thống kê số trang đã đọc" style={{ flex: 1 }}>
             <BarChart3 size={13} /> Thống kê sách
           </button>
+          <button className="library-import-btn" onClick={() => nav('/quotes')} title="Xem trích dẫn của tất cả sách" style={{ flex: 1 }}>
+            <BookMarked size={13} /> Xem trích dẫn
+          </button>
         </div>
       )}
 
