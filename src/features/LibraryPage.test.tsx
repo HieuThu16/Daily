@@ -77,6 +77,10 @@ vi.mock('../lib/book/repository', () => ({
   removeCover: vi.fn(),
 }))
 
+vi.mock('../lib/musicShare', () => ({
+  shareMusicToAll: vi.fn(async () => 0),
+}))
+
 afterEach(cleanup)
 
 describe('LibraryPage audio navigation', () => {
@@ -128,12 +132,12 @@ describe('LibraryPage add form', () => {
     return user
   }
 
-  it('bỏ ảnh bìa và mặc định "Đã nghe" cho form nhạc', async () => {
+  it('bỏ ảnh bìa và mặc định "Chưa nghe" (PLANNED) cho form nhạc', async () => {
     await openAddFor('Nhạc')
 
     expect(screen.queryByPlaceholderText(/Dán link ảnh bìa/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Tải ảnh lên/ })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Trạng thái')).toHaveValue('COMPLETED')
+    expect(screen.getByLabelText('Trạng thái')).toHaveValue('PLANNED')
   })
 
   it('cho sách có ô ảnh bìa kèm nút tải lên và xem mẫu', async () => {

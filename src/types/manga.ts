@@ -20,6 +20,12 @@ export interface BLManga {
   description: string;
   genres: string[];
   url: string;
+  author?: string;
+  artist?: string;
+  status?: string;
+  type?: string;
+  source?: 'dualeo' | 'teamsany' | 'nettruyen' | string;
+  sourceName?: string;
   chapters: MangaChapter[];
   totalChapters: number;
   updatedAt?: string;

@@ -9,7 +9,7 @@ import type { BLManga, HotMangaData } from '../../types/manga';
 import { 
   fetchBLMangaList, fetchHotMangaData, 
   getFavorites, toggleFavorite, 
-  getReadingHistory 
+  getReadingHistory, hasMangaData 
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
 import './blManga.css';
@@ -92,10 +92,16 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
           <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
         </button>
 
-        {/* Total Chapters Badge */}
-        <div className="bl-card-chapter-badge">
-          {manga.totalChapters || manga.chapters.length} Ch
-        </div>
+        {/* Total Chapters Badge / No Data Badge */}
+        {hasMangaData(manga) ? (
+          <div className="bl-card-chapter-badge">
+            {manga.totalChapters || manga.chapters.length} Ch
+          </div>
+        ) : (
+          <div className="bl-card-nodata-badge">
+            Chưa có dữ liệu
+          </div>
+        )}
 
         {/* Reading Status Badge */}
         {userProgress && (
@@ -112,16 +118,20 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
         </h3>
 
         <div className="bl-card-actions">
-          <button
-            className="bl-btn-read-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenReader(manga, userProgress?.chapterNumber ?? firstCh);
-            }}
-          >
-            <Play size={13} fill="currentColor" />
-            {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
-          </button>
+          {hasMangaData(manga) ? (
+            <button
+              className="bl-btn-read-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenReader(manga, userProgress?.chapterNumber ?? firstCh);
+              }}
+            >
+              <Play size={13} fill="currentColor" />
+              {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
+            </button>
+          ) : (
+            <span className="bl-nodata-label">Chưa có dữ liệu</span>
+          )}
         </div>
       </div>
     </div>

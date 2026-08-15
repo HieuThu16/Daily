@@ -40,7 +40,60 @@ describe('buildDayReview', () => {
       entries: [{ id: 'e', content: 'x', entry_date: date, entry_time: '08:00', created_at: at('08:00'), entry_type: 'SAD_THING' }],
       todos: [],
       media: [],
+      mangaLogs: [],
     })
     expect(events.map((e) => e.kind)).toEqual(['DIARY', 'MEAL'])
+  })
+
+  it('gom lịch sử đọc truyện BL và ngôn tình vào review ngày', () => {
+    const events = buildDayReview({
+      date,
+      sleeps: [],
+      meals: [],
+      entries: [],
+      todos: [],
+      media: [],
+      mangaLogs: [
+        {
+          id: 'ml1',
+          mangaSlug: 'da-ky',
+          mangaTitle: 'Dạ Ký',
+          mangaType: 'BL',
+          chapterNumber: 5,
+          chapterName: 'Chương 5',
+          readAt: at('14:30'),
+          log_date: date,
+          log_time: '14:30',
+          status: 'COMPLETED',
+        },
+        {
+          id: 'ml2',
+          mangaSlug: 'vung-trom',
+          mangaTitle: 'Vụng Trộm Không Thể Giấu',
+          mangaType: 'NGONTINH',
+          chapterNumber: 12,
+          chapterName: 'Chương 12',
+          readAt: at('21:00'),
+          log_date: date,
+          log_time: '21:00',
+          status: 'READING',
+        },
+      ],
+    })
+
+    expect(events).toEqual([
+      {
+        time: '14:30',
+        kind: 'MANGA',
+        label: 'Đọc truyện BL',
+        detail: 'Dạ Ký — Chương 5 (Đã đọc xong)',
+      },
+      {
+        time: '21:00',
+        kind: 'MANGA',
+        label: 'Đọc truyện Ngôn tình',
+        detail: 'Vụng Trộm Không Thể Giấu — Chương 12',
+      },
+    ])
   })
 })

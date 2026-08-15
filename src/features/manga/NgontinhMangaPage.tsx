@@ -9,7 +9,7 @@ import type { NgontinhManga, HotMangaData } from '../../types/manga';
 import { 
   fetchNgontinhList, fetchNgontinhHotData, 
   getNgontinhFavorites, toggleNgontinhFavorite, 
-  getNgontinhHistory 
+  getNgontinhHistory, hasMangaData 
 } from './ngontinhService';
 import { NgontinhReaderModal } from './NgontinhReaderModal';
 import './ngontinhManga.css';
@@ -92,10 +92,16 @@ const NgontinhCardItem: React.FC<CardProps> = React.memo(({
           <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
         </button>
 
-        {/* Total Chapters Badge */}
-        <div className="ngontinh-card-chapter-badge">
-          {manga.totalChapters || manga.chapters.length} Ch
-        </div>
+        {/* Total Chapters Badge / No Data Badge */}
+        {hasMangaData(manga) ? (
+          <div className="ngontinh-card-chapter-badge">
+            {manga.totalChapters || manga.chapters.length} Ch
+          </div>
+        ) : (
+          <div className="ngontinh-card-nodata-badge">
+            Chưa có dữ liệu
+          </div>
+        )}
 
         {/* Reading Status Badge */}
         {userProgress && (
@@ -112,16 +118,20 @@ const NgontinhCardItem: React.FC<CardProps> = React.memo(({
         </h3>
 
         <div className="ngontinh-card-actions">
-          <button
-            className="ngontinh-btn-read-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenReader(manga, userProgress?.chapterNumber ?? firstCh);
-            }}
-          >
-            <Play size={13} fill="currentColor" />
-            {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
-          </button>
+          {hasMangaData(manga) ? (
+            <button
+              className="ngontinh-btn-read-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenReader(manga, userProgress?.chapterNumber ?? firstCh);
+              }}
+            >
+              <Play size={13} fill="currentColor" />
+              {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
+            </button>
+          ) : (
+            <span className="ngontinh-nodata-label">Chưa có dữ liệu</span>
+          )}
         </div>
       </div>
     </div>

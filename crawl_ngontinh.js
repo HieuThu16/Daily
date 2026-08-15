@@ -6,13 +6,12 @@ const BASE = 'https://nettruyenz.com';
 const CATE_URL = `${BASE}/cate-ngon-tinh`;
 
 const CONFIG = {
-  delayMs: 300,
+  concurrency: 5, // 5 concurrent detail workers for fast, respectful crawling
+  delayMs: 150,
   retry: 3,
-  retryDelayMs: 1000,
+  retryDelayMs: 800,
   timeoutMs: 15000,
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  maxPages: 10, // crawl 10 pages (~240 comics) by default
-  fetchChapterImagesCount: 3, // fetch images for latest 3 chapters per comic
 };
 
 function sleep(ms) {
@@ -68,11 +67,32 @@ async function get(url, attempt = 1) {
 }
 
 /**
- * Scrapes a category page for comic items
+ * Detect total pages available on the category
+ */
+async function detectTotalPages() {
+  try {
+    const html = await get(CATE_URL);
+    const $ = cheerio.load(html);
+    let maxPage = 1;
+    $('a[href*="page="]').each((_, a) => {
+      const href = $(a).attr('href') || '';
+      const match = href.match(/page=(\d+)/);
+      if (match) {
+        const p = parseInt(match[1], 10);
+        if (p > maxPage) maxPage = p;
+      }
+    });
+    return maxPage;
+  } catch {
+    return 114;
+  }
+}
+
+/**
+ * Scrapes a single category page for comic items
  */
 export async function scrapeCategoryPage(page = 1) {
   const url = page === 1 ? CATE_URL : `${CATE_URL}?page=${page}`;
-  console.log(`[LIST] Page ${page}: ${url}`);
   const html = await get(url);
   const $ = cheerio.load(html);
   const list = [];
@@ -93,8 +113,6 @@ export async function scrapeCategoryPage(page = 1) {
     const cover = img.attr('data-original') || img.attr('data-src') || img.attr('src') || null;
 
     const title = $(el).find('h3, .title, a.jtip').first().text().trim() || img.attr('alt')?.trim() || slug;
-    
-    // Latest chapters shown on the item card
     const latestChapter = $(el).find('.chapter a, .comic-item-meta a').first().text().trim();
     const views = $(el).find('.view, .pull-left i.fa-eye, .view-count').parent().text().trim();
 
@@ -159,7 +177,6 @@ export async function scrapeComicDetail(comic) {
         description = $(head).next('.fs-13, div, p').text().trim();
       }
     });
-    // Clean up HTML tags if any left in text
     description = description.replace(/<[^>]*>?/gm, '').replace(/&lt;[^&]*&gt;/gm, '').trim();
 
     // Chapters
@@ -201,7 +218,7 @@ export async function scrapeComicDetail(comic) {
       totalChapters: chapters.length,
     };
   } catch (err) {
-    console.warn(`[WARN] Failed to scrape detail for ${comic.slug}: ${err.message}`);
+    console.warn(`[WARN] Lỗi tải chi tiết truyện ${comic.slug}: ${err.message}`);
     return {
       ...comic,
       description: '',
@@ -233,135 +250,177 @@ export async function scrapeChapterImages(chapterUrl) {
     });
 
     return images;
-  } catch (err) {
-    console.warn(`[WARN] Failed to scrape images from ${chapterUrl}: ${err.message}`);
+  } catch {
     return [];
   }
 }
 
 /**
- * Main Crawl Runner
+ * Main Crawl Runner for All Pages
  */
 export async function crawlAllNgontinh(options = {}) {
-  const pagesToCrawl = options.maxPages || CONFIG.maxPages;
-  console.log(`=== BẮT ĐẦU CÀO TRUYỆN NGÔN TÌNH TỪ NETTRUYENZ.COM (${pagesToCrawl} TRANG) ===\n`);
-
-  let allComicsList = [];
-
-  for (let p = 1; p <= pagesToCrawl; p++) {
-    try {
-      const items = await scrapeCategoryPage(p);
-      console.log(`-> Trang ${p}: tìm thấy ${items.length} truyện`);
-      allComicsList.push(...items);
-      await sleep(CONFIG.delayMs);
-    } catch (e) {
-      console.error(`Lỗi tải trang ${p}:`, e.message);
-    }
-  }
-
-  allComicsList = uniqueBy(allComicsList, c => c.slug);
-  console.log(`\nTổng số truyện đã gom danh sách: ${allComicsList.length} truyện.`);
-  console.log('Bắt đầu tải chi tiết từng truyện và danh sách chương...\n');
-
-  const detailedComics = [];
   const publicDataDir = path.resolve('public', 'data');
   const srcDataDir = path.resolve('src', 'data');
 
   await fs.mkdir(publicDataDir, { recursive: true });
   await fs.mkdir(srcDataDir, { recursive: true });
 
-  const saveProgress = async () => {
-    const jsonStr = JSON.stringify(detailedComics, null, 2);
-    await fs.writeFile(path.join(publicDataDir, 'ngontinh_manga.json'), jsonStr, 'utf-8');
-    await fs.writeFile(path.join(srcDataDir, 'ngontinh_manga.json'), jsonStr, 'utf-8');
-  };
+  const outputFile = path.join(publicDataDir, 'ngontinh_manga.json');
+  const srcOutputFile = path.join(srcDataDir, 'ngontinh_manga.json');
 
-  for (let i = 0; i < allComicsList.length; i++) {
-    const item = allComicsList[i];
-    console.log(`[${i + 1}/${allComicsList.length}] Đang xử lý: ${item.title} (${item.slug})`);
-
-    const detail = await scrapeComicDetail(item);
-
-    // If comic has chapters, fetch images for top chapters (e.g. latest 2-3 and chapter 1)
-    if (detail.chapters && detail.chapters.length > 0) {
-      const chaptersToFetch = [];
-      if (detail.chapters.length > 0) chaptersToFetch.push(detail.chapters[0]); // latest chapter
-      if (detail.chapters.length > 1) chaptersToFetch.push(detail.chapters[1]);
-      const firstChapter = detail.chapters[detail.chapters.length - 1];
-      if (firstChapter && !chaptersToFetch.some(c => c.url === firstChapter.url)) {
-        chaptersToFetch.push(firstChapter);
-      }
-
-      for (const ch of chaptersToFetch) {
-        if (ch.url) {
-          const imgs = await scrapeChapterImages(ch.url);
-          ch.images = imgs;
-          ch.imageCount = imgs.length;
-          await sleep(150);
-        }
+  // Load existing comics to resume/update
+  let existingMap = new Map();
+  try {
+    const raw = await fs.readFile(outputFile, 'utf-8');
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) {
+      for (const item of arr) {
+        existingMap.set(item.slug, item);
       }
     }
+  } catch {}
 
-    detailedComics.push(detail);
+  console.log(`[INIT] Đã nạp ${existingMap.size} truyện có sẵn từ bộ nhớ đệm.`);
 
-    // Save incrementally every 5 comics
-    if ((i + 1) % 5 === 0 || i === allComicsList.length - 1) {
-      await saveProgress();
-      console.log(`--> Đã lưu tạm ${detailedComics.length} truyện vào public/data/ngontinh_manga.json`);
+  const maxTotalPages = await detectTotalPages();
+  const pagesToCrawl = options.maxPages || maxTotalPages;
+
+  console.log(`=== BẮT ĐẦU CÀO TOÀN BỘ TRUYỆN NGÔN TÌNH TỪ NETTRUYENZ.COM (${pagesToCrawl} TRANG) ===\n`);
+
+  // Step 1: Collect Comic Links from all pages
+  let allComicsList = [];
+  for (let p = 1; p <= pagesToCrawl; p++) {
+    try {
+      const items = await scrapeCategoryPage(p);
+      console.log(`[TRANG ${p}/${pagesToCrawl}] Tìm thấy ${items.length} truyện`);
+      allComicsList.push(...items);
+      await sleep(CONFIG.delayMs);
+    } catch (e) {
+      console.error(`Lỗi tải danh mục trang ${p}:`, e.message);
     }
-
-    await sleep(CONFIG.delayMs);
   }
 
-  // Create Hot / Rankings data
-  const hotData = {
-    updatedAt: new Date().toISOString(),
-    hot: detailedComics.slice(0, 20).map((m, idx) => ({
-      rank: idx + 1,
-      slug: m.slug,
-      title: m.title,
-      cover: m.cover,
-      url: m.url,
-      latestChapter: m.chapters[0]?.name || '',
-      views: m.views,
-    })),
-    top_day: detailedComics.slice(10, 25).map((m, idx) => ({
-      rank: idx + 1,
-      slug: m.slug,
-      title: m.title,
-      cover: m.cover,
-      url: m.url,
-      latestChapter: m.chapters[0]?.name || '',
-      views: m.views,
-    })),
-    top_week: detailedComics.slice(5, 20).map((m, idx) => ({
-      rank: idx + 1,
-      slug: m.slug,
-      title: m.title,
-      cover: m.cover,
-      url: m.url,
-      latestChapter: m.chapters[0]?.name || '',
-      views: m.views,
-    })),
-    top_month: detailedComics.slice(0, 15).map((m, idx) => ({
-      rank: idx + 1,
-      slug: m.slug,
-      title: m.title,
-      cover: m.cover,
-      url: m.url,
-      latestChapter: m.chapters[0]?.name || '',
-      views: m.views,
-    })),
+  allComicsList = uniqueBy(allComicsList, c => c.slug);
+  console.log(`\n Tổng số truyện đã tổng hợp: ${allComicsList.length} bộ truyện.`);
+
+  const comicsMap = new Map(existingMap);
+  let processedCount = 0;
+  let saveCounter = 0;
+
+  const saveProgress = async () => {
+    const list = Array.from(comicsMap.values());
+    const jsonStr = JSON.stringify(list, null, 2);
+    await fs.writeFile(outputFile, jsonStr, 'utf-8');
+    await fs.writeFile(srcOutputFile, jsonStr, 'utf-8');
+
+    // Update hot list
+    const hotData = {
+      updatedAt: new Date().toISOString(),
+      hot: list.slice(0, 30).map((m, idx) => ({
+        rank: idx + 1,
+        slug: m.slug,
+        title: m.title,
+        cover: m.cover,
+        url: m.url,
+        latestChapter: m.chapters[0]?.name || '',
+        views: m.views,
+      })),
+      top_day: list.slice(10, 35).map((m, idx) => ({
+        rank: idx + 1,
+        slug: m.slug,
+        title: m.title,
+        cover: m.cover,
+        url: m.url,
+        latestChapter: m.chapters[0]?.name || '',
+        views: m.views,
+      })),
+      top_week: list.slice(5, 30).map((m, idx) => ({
+        rank: idx + 1,
+        slug: m.slug,
+        title: m.title,
+        cover: m.cover,
+        url: m.url,
+        latestChapter: m.chapters[0]?.name || '',
+        views: m.views,
+      })),
+      top_month: list.slice(0, 25).map((m, idx) => ({
+        rank: idx + 1,
+        slug: m.slug,
+        title: m.title,
+        cover: m.cover,
+        url: m.url,
+        latestChapter: m.chapters[0]?.name || '',
+        views: m.views,
+      })),
+    };
+    await fs.writeFile(path.join(publicDataDir, 'ngontinh_hot.json'), JSON.stringify(hotData, null, 2), 'utf-8');
+    await fs.writeFile(path.join(srcDataDir, 'ngontinh_hot.json'), JSON.stringify(hotData, null, 2), 'utf-8');
   };
 
-  await fs.writeFile(path.join(publicDataDir, 'ngontinh_hot.json'), JSON.stringify(hotData, null, 2), 'utf-8');
-  await fs.writeFile(path.join(srcDataDir, 'ngontinh_hot.json'), JSON.stringify(hotData, null, 2), 'utf-8');
+  // Process worker pool for maximum speed & stability
+  const queue = [...allComicsList];
 
-  console.log(`\n HOÀN TẤT CÀO DỮ LIỆU! Đã lưu tổng cộng ${detailedComics.length} truyện ngôn tình.`);
+  async function worker(workerId) {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break;
+
+      processedCount++;
+      const currentIdx = processedCount;
+
+      // If already has chapters, skip or refresh
+      const existing = comicsMap.get(item.slug);
+      if (existing && existing.chapters && existing.chapters.length > 0 && existing.chapters[0]?.images?.length) {
+        // Already fully detailed
+        continue;
+      }
+
+      console.log(`[Worker ${workerId}] [${currentIdx}/${allComicsList.length}] ${item.title} (${item.slug})`);
+
+      const detail = await scrapeComicDetail(item);
+
+      // Preload images for latest 2 chapters and chapter 1
+      if (detail.chapters && detail.chapters.length > 0) {
+        const chaptersToFetch = [];
+        if (detail.chapters.length > 0) chaptersToFetch.push(detail.chapters[0]);
+        if (detail.chapters.length > 1) chaptersToFetch.push(detail.chapters[1]);
+        const firstChapter = detail.chapters[detail.chapters.length - 1];
+        if (firstChapter && !chaptersToFetch.some(c => c.url === firstChapter.url)) {
+          chaptersToFetch.push(firstChapter);
+        }
+
+        for (const ch of chaptersToFetch) {
+          if (ch.url) {
+            const imgs = await scrapeChapterImages(ch.url);
+            ch.images = imgs;
+            ch.imageCount = imgs.length;
+            await sleep(100);
+          }
+        }
+      }
+
+      comicsMap.set(detail.slug, detail);
+      saveCounter++;
+
+      if (saveCounter % 8 === 0 || queue.length === 0) {
+        await saveProgress();
+        console.log(`--> [LƯU TIẾN ĐỘ] Đã lưu ${comicsMap.size} bộ truyện vào ngontinh_manga.json`);
+      }
+
+      await sleep(CONFIG.delayMs);
+    }
+  }
+
+  // Launch parallel workers
+  const workers = Array.from({ length: CONFIG.concurrency }, (_, idx) => worker(idx + 1));
+  await Promise.all(workers);
+
+  await saveProgress();
+  console.log(`\n HOÀN TẤT CÀO TOÀN BỘ! Đã lưu thành công ${comicsMap.size} bộ truyện ngôn tình.`);
 }
 
 // If run directly
 if (process.argv[1]?.endsWith('crawl_ngontinh.js')) {
-  const maxPages = parseInt(process.argv[2], 10) || 5; // Default 5 pages (~120 comics) for quick startup
+  const maxPages = parseInt(process.argv[2], 10) || 114; // Default to all 114 pages (~2,700 stories)
   crawlAllNgontinh({ maxPages }).catch(console.error);
 }

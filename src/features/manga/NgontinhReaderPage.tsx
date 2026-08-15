@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
 import { fetchNgontinhList, saveNgontinhProgress } from './ngontinhService';
+import { recordMangaReading } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhReader.css';
 
@@ -62,35 +63,67 @@ export const NgontinhReaderPage: React.FC = () => {
   // Save reading progress & scroll to top on change
   useEffect(() => {
     if (manga && currentChapter) {
+      const chNum = currentChapter.number ?? currentChapterNum;
       saveNgontinhProgress({
         slug: manga.slug,
-        chapterNumber: currentChapter.number ?? currentChapterNum,
+        chapterNumber: chNum,
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
         totalImages: currentChapter.images?.length || 0,
       });
+
+      recordMangaReading({
+        mangaSlug: manga.slug,
+        mangaTitle: manga.title,
+        mangaType: 'NGONTINH',
+        chapterNumber: chNum,
+        chapterName: currentChapter.name,
+        status: 'READING',
+      });
+
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
       setImageErrors({});
     }
   }, [manga, currentChapter, currentChapterNum]);
 
-  // Track scroll progress
+  // Track scroll progress & mark completed when scrolling near bottom
   useEffect(() => {
     const handleScroll = () => {
       const total = document.documentElement.scrollHeight - window.innerHeight;
       if (total > 0) {
-        setScrollProgress((window.scrollY / total) * 100);
+        const progress = (window.scrollY / total) * 100;
+        setScrollProgress(progress);
+        if (progress >= 85 && manga && currentChapter) {
+          recordMangaReading({
+            mangaSlug: manga.slug,
+            mangaTitle: manga.title,
+            mangaType: 'NGONTINH',
+            chapterNumber: currentChapter.number ?? currentChapterNum,
+            chapterName: currentChapter.name,
+            status: 'COMPLETED',
+          });
+        }
       }
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [manga, currentChapter, currentChapterNum]);
 
   const goToChapter = useCallback((chNum: number) => {
+    if (manga && currentChapter) {
+      recordMangaReading({
+        mangaSlug: manga.slug,
+        mangaTitle: manga.title,
+        mangaType: 'NGONTINH',
+        chapterNumber: currentChapter.number ?? currentChapterNum,
+        chapterName: currentChapter.name,
+        status: 'COMPLETED',
+      });
+    }
     if (slug) {
       navigate(`/ngontinh/${slug}/read/${chNum}`);
     }
-  }, [navigate, slug]);
+  }, [manga, currentChapter, currentChapterNum, navigate, slug]);
 
   const handleNext = useCallback(() => {
     if (nextChapter && nextChapter.number != null) {

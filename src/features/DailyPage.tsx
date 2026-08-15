@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, CheckCircle2, Clock, Frown, Heart, ImagePlus, ListPlus, Music, NotebookPen, Pencil, Save, Star, Sunrise, Trash2, UtensilsCrossed } from 'lucide-react'
+import { BarChart3, BookOpen, CheckCircle2, Clock, Frown, Heart, ImagePlus, ListPlus, Music, NotebookPen, Pencil, Save, Star, Sunrise, Trash2, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { buildDayReview, type DayEvent } from '../lib/dayReview'
+import { useMangaReadingLogs } from '../lib/mangaReadingLog'
 import type { DailyType, Entry, Media, NutritionLog, Person, SleepLog, Todo } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
@@ -19,6 +20,7 @@ const eventStyles: Record<DayEvent['kind'], { icon: any; color: string; bg: stri
   TASK_ADD:  { icon: ListPlus,        color: 'var(--blue)',    bg: 'var(--blue-bg)'       },
   TASK_DONE: { icon: CheckCircle2,    color: 'var(--emerald)', bg: 'var(--emerald-bg)'    },
   MEDIA:     { icon: Music,           color: 'var(--primary)', bg: 'var(--primary-light)' },
+  MANGA:     { icon: BookOpen,        color: '#f43f5e',        bg: 'rgba(244, 63, 94, 0.12)' },
 }
 
 /** 'HH:MM' theo giờ máy, cập nhật mỗi 30 giây. */
@@ -31,7 +33,7 @@ function useClock() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 }
 
-type PageTab = 'write' | 'review' | 'stats'
+type PageTab = 'review' | 'write' | 'stats'
 type StatsPeriod = 'week' | 'month' | 'all'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -73,8 +75,9 @@ export function DailyPage() {
   const mealQuery = useQuery<NutritionLog>('nutrition_logs')
   const todoQuery = useQuery<Todo>('todos')
   const mediaQuery = useQuery<Media>('media_items')
+  const mangaLogs = useMangaReadingLogs()
 
-  const [pageTab, setPageTab] = useState<PageTab>('write')
+  const [pageTab, setPageTab] = useState<PageTab>('review')
   const clock = useClock()
 
   // Write tab state
@@ -200,8 +203,8 @@ export function DailyPage() {
     && (filterType === 'ALL' || (filterType === 'FAV' ? i.is_favorite : i.entry_type === filterType)))
 
   const dayEvents = useMemo(
-    () => buildDayReview({ date, entries: items, meals: mealQuery.items, sleeps: sleepQuery.items, todos: todoQuery.items, media: mediaQuery.items }),
-    [date, items, mealQuery.items, sleepQuery.items, todoQuery.items, mediaQuery.items],
+    () => buildDayReview({ date, entries: items, meals: mealQuery.items, sleeps: sleepQuery.items, todos: todoQuery.items, media: mediaQuery.items, mangaLogs }),
+    [date, items, mealQuery.items, sleepQuery.items, todoQuery.items, mediaQuery.items, mangaLogs],
   )
 
   const statsEntries = useMemo(() => {
@@ -239,19 +242,6 @@ export function DailyPage() {
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         <button
-          onClick={() => setPageTab('write')}
-          style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
-            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
-            borderColor: pageTab === 'write' ? 'var(--primary)' : 'var(--card-border)',
-            background: pageTab === 'write' ? 'var(--primary)' : 'var(--card-bg)',
-            color: pageTab === 'write' ? 'white' : 'var(--text-main)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          }}
-        >
-          <NotebookPen size={13} /> Viết nhật ký
-        </button>
-        <button
           onClick={() => setPageTab('review')}
           style={{
             flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
@@ -263,6 +253,19 @@ export function DailyPage() {
           }}
         >
           <Clock size={13} /> Review ngày
+        </button>
+        <button
+          onClick={() => setPageTab('write')}
+          style={{
+            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
+            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
+            borderColor: pageTab === 'write' ? 'var(--primary)' : 'var(--card-border)',
+            background: pageTab === 'write' ? 'var(--primary)' : 'var(--card-bg)',
+            color: pageTab === 'write' ? 'white' : 'var(--text-main)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}
+        >
+          <NotebookPen size={13} /> Viết nhật ký
         </button>
         <button
           onClick={() => setPageTab('stats')}

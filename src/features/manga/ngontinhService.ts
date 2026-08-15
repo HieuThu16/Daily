@@ -82,3 +82,10 @@ export function getNgontinhProgress(slug: string): ReadingProgress | null {
   const history = getNgontinhHistory();
   return history[slug] || null;
 }
+
+export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number } | null): boolean {
+  if (!manga) return false;
+  const total = manga.totalChapters || manga.chapters?.length || 0;
+  return total > 0;
+}
+

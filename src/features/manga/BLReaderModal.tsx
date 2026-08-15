@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
 import type { BLManga } from '../../types/manga';
 import { saveReadingProgress } from './mangaService';
+import { recordMangaReading } from '../../lib/mangaReadingLog';
 
 interface Props {
   manga: BLManga;
@@ -23,6 +24,7 @@ export const BLReaderModal: React.FC<Props> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   const currentChapter = manga.chapters.find(c => c.number === currentChapterNum) || manga.chapters[0];
   const sortedChapters = [...manga.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
@@ -36,22 +38,70 @@ export const BLReaderModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (currentChapter) {
+      const chNum = currentChapter.number ?? currentChapterNum;
       saveReadingProgress({
         slug: manga.slug,
-        chapterNumber: currentChapter.number ?? 1,
+        chapterNumber: chNum,
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
         totalImages: currentChapter.images?.length || 0,
       });
+
+      recordMangaReading({
+        mangaSlug: manga.slug,
+        mangaTitle: manga.title,
+        mangaType: 'BL',
+        chapterNumber: chNum,
+        chapterName: currentChapter.name,
+        status: 'READING',
+      });
+
       // Scroll to top on chapter change
       if (topRef.current) {
         topRef.current.scrollIntoView({ behavior: 'smooth' });
       }
+      if (mainRef.current) {
+        mainRef.current.scrollTop = 0;
+      }
       setImageErrors({});
     }
-  }, [currentChapter, manga.slug]);
+  }, [currentChapter, currentChapterNum, manga.slug, manga.title]);
+
+  // Track scrolling to mark chapter as completed when reached the end
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      const scrollBottom = el.scrollTop + el.clientHeight;
+      const threshold = el.scrollHeight - 250;
+      if (scrollBottom >= threshold && currentChapter) {
+        recordMangaReading({
+          mangaSlug: manga.slug,
+          mangaTitle: manga.title,
+          mangaType: 'BL',
+          chapterNumber: currentChapter.number ?? currentChapterNum,
+          chapterName: currentChapter.name,
+          status: 'COMPLETED',
+        });
+      }
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [currentChapter, currentChapterNum, manga.slug, manga.title]);
 
   const handleNext = () => {
+    if (currentChapter) {
+      recordMangaReading({
+        mangaSlug: manga.slug,
+        mangaTitle: manga.title,
+        mangaType: 'BL',
+        chapterNumber: currentChapter.number ?? currentChapterNum,
+        chapterName: currentChapter.name,
+        status: 'COMPLETED',
+      });
+    }
     if (nextChapter && nextChapter.number != null) {
       if (onSelectChapter) onSelectChapter(nextChapter.number);
       else setCurrentChapterNum(nextChapter.number);
@@ -140,7 +190,7 @@ export const BLReaderModal: React.FC<Props> = ({
       </header>
 
       {/* Reader Body */}
-      <main className="bl-reader-body">
+      <main ref={mainRef} className="bl-reader-body">
         {images.length > 0 ? (
           <div className="bl-reader-image-stream">
             {images.map((img, idx) => {

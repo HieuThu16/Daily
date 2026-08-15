@@ -1,9 +1,10 @@
 import type { Entry, Media, NutritionLog, SleepLog, Todo } from '../types'
+import { getMangaReadingLogs, type MangaReadingLog } from './mangaReadingLog'
 
 /** Một mốc trong dòng thời gian của một ngày. `time` dạng 'HH:MM'. */
 export type DayEvent = {
   time: string
-  kind: 'WAKE' | 'MEAL' | 'DIARY' | 'TASK_ADD' | 'TASK_DONE' | 'MEDIA'
+  kind: 'WAKE' | 'MEAL' | 'DIARY' | 'TASK_ADD' | 'TASK_DONE' | 'MEDIA' | 'MANGA'
   label: string
   detail: string
 }
@@ -41,10 +42,11 @@ export type DayReviewInput = {
   sleeps: SleepLog[]
   todos: Todo[]
   media: Media[]
+  mangaLogs?: MangaReadingLog[]
 }
 
 /** Gom mọi hoạt động đã có giờ của một ngày thành dòng thời gian tăng dần. */
-export function buildDayReview({ date, entries, meals, sleeps, todos, media }: DayReviewInput): DayEvent[] {
+export function buildDayReview({ date, entries, meals, sleeps, todos, media, mangaLogs }: DayReviewInput): DayEvent[] {
   const events: DayEvent[] = []
 
   sleeps.filter((s) => s.log_date === date && s.sleep_end).forEach((s) =>
@@ -63,6 +65,18 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media }: D
 
   media.filter((m) => m.log_date === date).forEach((m) =>
     events.push({ time: m.log_time || '', kind: 'MEDIA', label: mediaLabel[m.type], detail: m.artist || m.channel ? `${m.name} — ${m.artist || m.channel}` : m.name }))
+
+  const logs = mangaLogs ?? getMangaReadingLogs()
+  logs.filter((m) => m.log_date === date).forEach((m) => {
+    const typeLabel = m.mangaType === 'BL' ? 'Đọc truyện BL' : 'Đọc truyện Ngôn tình'
+    const statusNote = m.status === 'COMPLETED' ? ' (Đã đọc xong)' : ''
+    events.push({
+      time: m.log_time || clock(m.readAt),
+      kind: 'MANGA',
+      label: typeLabel,
+      detail: `${m.mangaTitle} — ${m.chapterName || `Chương ${m.chapterNumber}`}${statusNote}`,
+    })
+  })
 
   // Mục chưa có giờ vẫn giữ lại nhưng xếp cuối, để không im lặng nuốt dữ liệu.
   return events.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'))

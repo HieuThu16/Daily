@@ -15,6 +15,7 @@ import { MarqueeText } from './library/MarqueeText'
 import { RowMenu } from './library/RowMenu'
 import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId } from '../lib/youtubeMeta'
 import { normalizeStorageUrl } from '../lib/storageUrl'
+import { shareMusicToAll } from '../lib/musicShare'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
 import { BookGrid } from './library/BookGrid'
@@ -305,8 +306,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setEndDateVal('')
     setLogDate(localDate())
     setLogTime(getCurrentTimeString())
-    // Nhạc thường được ghi lại sau khi đã nghe xong, nên mặc định là "Đã nghe".
-    setStatusVal(kind === 'MUSIC' ? 'COMPLETED' : 'PLANNED')
+    // Mặc định tiến độ là "Sẽ nghe" / "Chưa nghe" (PLANNED) cho nhạc và các mục thư viện.
+    setStatusVal('PLANNED')
     setBookFormat('READ')
     setCoverPreview(false)
   }
@@ -513,6 +514,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         showSaveToast(!e2, 'mục thư viện')
       } else {
         showSaveToast(true, 'mục thư viện')
+        if (kind === 'MUSIC' && audioUrlVal.trim()) {
+          void shareMusicToAll(item.id)
+            .then((count) => {
+              if (count > 0) showToast(`🎉 Đã chia sẻ bài hát MP3 cho ${count} người dùng!`, 'success')
+            })
+            .catch((err) => console.warn('[Auto share music error]', err))
+        }
       }
     } else {
       const insertData = { ...payload, status: statusVal }
@@ -520,6 +528,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       if (!error && data) {
         setItems((prev) => [data as Media, ...prev])
         showSaveToast(true, 'mục thư viện')
+        if (kind === 'MUSIC' && audioUrlVal.trim() && (data as Media).id) {
+          void shareMusicToAll((data as Media).id)
+            .then((count) => {
+              if (count > 0) showToast(`🎉 Đã chia sẻ bài hát MP3 cho ${count} người dùng!`, 'success')
+            })
+            .catch((err) => console.warn('[Auto share music error]', err))
+        }
       } else {
         console.error('[saveItem insert error — trying safe fallback]', error?.message, error?.code, error?.details)
         // Fallback: insert chỉ các cột cơ bản đã tồn tại từ đầu (bỏ cột mới như music_genre, book_format)
@@ -544,6 +559,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         if (fallbackRes.data) {
           setItems((prev) => [{ ...(fallbackRes.data as Media), ...payload }, ...prev])
           showSaveToast(true, 'mục thư viện')
+          if (kind === 'MUSIC' && audioUrlVal.trim() && (fallbackRes.data as Media).id) {
+            void shareMusicToAll((fallbackRes.data as Media).id)
+              .then((count) => {
+                if (count > 0) showToast(`🎉 Đã chia sẻ bài hát MP3 cho ${count} người dùng!`, 'success')
+              })
+              .catch((err) => console.warn('[Auto share music error]', err))
+          }
         } else {
           console.error('[saveItem fallback error]', fallbackRes.error)
           const tempMedia: Media = {
@@ -569,6 +591,20 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     }
 
     setActiveModal(null)
+  }
+
+  const handleShareMusicToAll = async (item: Media) => {
+    if (!supabase) return showToast('Chưa cấu hình Supabase.', 'delete')
+    try {
+      const count = await shareMusicToAll(item.id)
+      if (count > 0) {
+        showToast(`🎉 Đã chia sẻ "${item.name}" cho ${count} người dùng!`, 'success')
+      } else {
+        showToast(`Tất cả người dùng đã có bài hát "${item.name}" trong thư viện.`, 'info')
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Không thể chia sẻ bài hát, thử lại sau.', 'delete')
+    }
   }
 
   // 1. Book Authors Manager Functions
@@ -886,6 +922,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     const openDetail =
       isBook ? () => setSelectedBookItemId(item.id)
       : isVideo ? () => setSelectedVideoItemId(item.id)
+      : isMusic && item.audio_url ? () => setSelectedAudioItemId(item.id)
       : null
     const isMusic = item.type === 'MUSIC'
     const genreStyle = getMusicGenreStyle(item.music_genre)
@@ -901,6 +938,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     const metaParts: string[] = []
     if (isBook) metaParts.push(fmt === 'READ' ? '📖 Đọc' : '🎧 Nghe')
     if (meta.value) metaParts.push(meta.value)
+    if (item.shared_by) metaParts.push(`🎵 Do ${item.shared_by} chia sẻ`)
     if ((item.type === 'BOOK' || item.type === 'MANGA') && item.current_chapter != null) {
       metaParts.push(`Chương ${item.current_chapter}`)
     }
@@ -1005,6 +1043,16 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               label={`Thao tác cho ${item.name}`}
               icon={<MoreVertical size={16} />}
               items={[
+                ...(item.type === 'MUSIC' && Boolean(item.audio_url)
+                  ? [
+                      {
+                        key: 'share_all',
+                        label: 'Chia sẻ cho mọi người',
+                        icon: <Share2 size={14} />,
+                        onSelect: () => void handleShareMusicToAll(item),
+                      },
+                    ]
+                  : []),
                 { key: 'edit', label: 'Chỉnh sửa', icon: <Pencil size={14} />, onSelect: () => openEdit(item) },
                 {
                   key: 'delete',
@@ -1061,17 +1109,29 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     : selectedType === 'YOUTUBE' ? 'video'
     : 'mục'
 
+  const audioPlaylist = useMemo(() => {
+    return items.filter(
+      (i) =>
+        (i.type === 'MUSIC' || i.type === 'YOUTUBE') &&
+        Boolean(i.audio_url) &&
+        (musicGenreFilter === 'ALL' || (i.type === 'MUSIC' && (i.music_genre ?? 'Chưa phân loại') === musicGenreFilter)),
+    )
+  }, [items, musicGenreFilter])
+
   const selectedAudioItem = items.find((item) => item.id === selectedAudioItemId) ?? null
 
   if (selectedAudioItem) {
     return (
       <LibraryAudioDetail
         item={selectedAudioItem}
+        playlist={audioPlaylist}
+        onSelectTrack={(track) => setSelectedAudioItemId(track.id)}
         onBack={() => setSelectedAudioItemId(null)}
         onEdit={(item) => {
           setSelectedAudioItemId(null)
           openEdit(item)
         }}
+        onShareToAll={(item) => void handleShareMusicToAll(item)}
       />
     )
   }

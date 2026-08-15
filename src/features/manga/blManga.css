@@ -332,6 +332,32 @@
   border-radius: 4px;
 }
 
+.bl-card-nodata-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(100, 116, 139, 0.85);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.bl-nodata-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--surface-bg, #f1f5f9);
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.75rem;
+  font-weight: 600;
+  width: 100%;
+}
+
 .bl-reading-ribbon {
   position: absolute;
   top: 8px;

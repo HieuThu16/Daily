@@ -266,14 +266,18 @@ export const BLMangaDetailPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="bl-hero-actions">
-              <button className="bl-btn-read-main" onClick={handleStartRead}>
-                <Play size={18} fill="currentColor" />
-                <span>
-                  {userProgress 
-                    ? `Đọc tiếp Chapter ${userProgress.chapterNumber}` 
-                    : `Bắt đầu đọc Chapter ${firstChapterNum}`}
-                </span>
-              </button>
+              {manga.chapters && manga.chapters.length > 0 ? (
+                <button className="bl-btn-read-main" onClick={handleStartRead}>
+                  <Play size={18} fill="currentColor" />
+                  <span>
+                    {userProgress 
+                      ? `Đọc tiếp Chapter ${userProgress.chapterNumber}` 
+                      : `Bắt đầu đọc Chapter ${firstChapterNum}`}
+                  </span>
+                </button>
+              ) : (
+                <span className="bl-nodata-detail-badge">Chưa có dữ liệu chapter</span>
+              )}
 
               <button 
                 className={`bl-btn-fav-large ${isFav ? 'favorited' : ''}`}

@@ -104,4 +104,79 @@ describe('LibraryAudioDetail', () => {
 
     expect(onBack).toHaveBeenCalledOnce()
   })
+
+  it('renders shared_by badge and triggers onShareToAll when available', async () => {
+    const user = userEvent.setup()
+    const onShareToAll = vi.fn()
+    const sharedItem: Media = {
+      ...withAudio,
+      shared_by: 'Minh',
+    }
+
+    render(<LibraryAudioDetail item={sharedItem} onBack={vi.fn()} onEdit={vi.fn()} onShareToAll={onShareToAll} />)
+
+    expect(screen.getByText('🎵 Do Minh chia sẻ')).toBeInTheDocument()
+
+    const shareBtn = screen.getByRole('button', { name: 'Chia sẻ cho mọi người' })
+    expect(shareBtn).toBeInTheDocument()
+    await user.click(shareBtn)
+    expect(onShareToAll).toHaveBeenCalledWith(sharedItem)
+  })
+
+  it('renders upcoming playlist queue and allows switching tracks', async () => {
+    const user = userEvent.setup()
+    const onSelectTrack = vi.fn()
+    const track2: Media = {
+      ...withAudio,
+      id: 'music-2',
+      name: 'Nơi này có anh',
+      artist: 'Sơn Tùng M-TP',
+    }
+
+    render(
+      <LibraryAudioDetail
+        item={withAudio}
+        playlist={[withAudio, track2]}
+        onSelectTrack={onSelectTrack}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Danh sách phát (2)')).toBeInTheDocument()
+    expect(screen.getByText('Nơi này có anh')).toBeInTheDocument()
+
+    // Bấm chuyển sang bài thứ 2 trong danh sách
+    await user.click(screen.getByText('Nơi này có anh'))
+    expect(onSelectTrack).toHaveBeenCalledWith(track2)
+  })
+
+  it('controls playback with play/pause and next/prev buttons', async () => {
+    const user = userEvent.setup()
+    const track2: Media = {
+      ...withAudio,
+      id: 'music-2',
+      name: 'Bài hát thứ hai',
+    }
+
+    render(
+      <LibraryAudioDetail
+        item={withAudio}
+        playlist={[withAudio, track2]}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    )
+
+    const playBtn = screen.getByRole('button', { name: 'Phát' })
+    expect(playBtn).toBeInTheDocument()
+    await user.click(playBtn)
+
+    const nextBtn = screen.getByRole('button', { name: 'Bài tiếp theo' })
+    expect(nextBtn).toBeInTheDocument()
+    await user.click(nextBtn)
+
+    expect(await screen.findByRole('heading', { name: 'Bài hát thứ hai' })).toBeInTheDocument()
+  })
 })
+

@@ -3,13 +3,20 @@ import type { BLManga, ReadingProgress, MangaChapter, HotMangaData } from '../..
 const FAVORITES_KEY = 'daily_bl_favorites';
 const HISTORY_KEY = 'daily_bl_history';
 
-export async function fetchBLMangaList(): Promise<BLManga[]> {
+/**
+ * Fetch BL Manga list from DuaLeo database
+ */
+export async function fetchDuaLeoMangaList(): Promise<BLManga[]> {
   try {
     const res = await fetch('/data/bl_manga.json');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        return data;
+        return data.map(m => ({
+          ...m,
+          source: m.source || 'dualeo',
+          sourceName: m.sourceName || 'Dưa Leo'
+        }));
       }
     }
   } catch (err) {
@@ -18,11 +25,77 @@ export async function fetchBLMangaList(): Promise<BLManga[]> {
 
   try {
     const fallback = await import('../../data/bl_manga.json');
-    return (fallback.default || fallback) as unknown as BLManga[];
+    const list = (fallback.default || fallback) as unknown as BLManga[];
+    return list.map(m => ({
+      ...m,
+      source: m.source || 'dualeo',
+      sourceName: m.sourceName || 'Dưa Leo'
+    }));
   } catch (e) {
-    console.warn('Fallback import bl_manga.json not available yet', e);
     return [];
   }
+}
+
+/**
+ * Fetch BL Manga list from Sany Team database
+ */
+export async function fetchTeamsanyMangaList(): Promise<BLManga[]> {
+  try {
+    const res = await fetch('/data/teamsany_manga.json');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map(m => ({
+          ...m,
+          source: 'teamsany',
+          sourceName: 'Sany Team'
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load /data/teamsany_manga.json', err);
+  }
+  return [];
+}
+
+/**
+ * Fetch combined BL Manga list from all database sources (DuaLeo + Sany Team)
+ */
+export async function fetchBLMangaList(): Promise<BLManga[]> {
+  const [dualeoList, sanyList] = await Promise.all([
+    fetchDuaLeoMangaList(),
+    fetchTeamsanyMangaList(),
+  ]);
+
+  const seenSlugs = new Set<string>();
+  const combined: BLManga[] = [];
+
+  // Add Sany Team mangas first or merged
+  for (const item of sanyList) {
+    seenSlugs.add(item.slug);
+    combined.push({
+      ...item,
+      source: 'teamsany',
+      sourceName: 'Sany Team'
+    });
+  }
+
+  // Add DuaLeo mangas
+  for (const item of dualeoList) {
+    let slug = item.slug;
+    if (seenSlugs.has(slug)) {
+      slug = `dl-${slug}`;
+    }
+    seenSlugs.add(slug);
+    combined.push({
+      ...item,
+      slug,
+      source: item.source || 'dualeo',
+      sourceName: item.sourceName || 'Dưa Leo'
+    });
+  }
+
+  return combined;
 }
 
 export async function fetchHotMangaData(): Promise<HotMangaData | null> {
@@ -41,6 +114,18 @@ export async function fetchHotMangaData(): Promise<HotMangaData | null> {
   } catch (e) {
     return null;
   }
+}
+
+export async function fetchTeamsanyHotData(): Promise<HotMangaData | null> {
+  try {
+    const res = await fetch('/data/teamsany_hot.json');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Could not load /data/teamsany_hot.json', err);
+  }
+  return null;
 }
 
 export function getFavorites(): string[] {
@@ -81,4 +166,10 @@ export function saveReadingProgress(progress: ReadingProgress): void {
 export function getMangaProgress(slug: string): ReadingProgress | null {
   const history = getReadingHistory();
   return history[slug] || null;
+}
+
+export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number } | null): boolean {
+  if (!manga) return false;
+  const total = manga.totalChapters || manga.chapters?.length || 0;
+  return total > 0;
 }

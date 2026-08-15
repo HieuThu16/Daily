@@ -13,8 +13,8 @@ export default defineConfig({
       // workbox tự sinh sw.js nên không sửa thẳng được; nạp thêm file xử lý Web Push
       // bằng importScripts thay vì đổi cả dự án sang chế độ injectManifest.
       workbox: {
-        maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
-        globIgnores: ['**/book-parsers-*.js', '**/pdf.worker*.mjs'],
+        maximumFileSizeToCacheInBytes: 35 * 1024 * 1024,
+        globIgnores: ['**/book-parsers-*.js', '**/pdf.worker*.mjs', '**/ngontinh_manga-*.js', '**/bl_manga-*.js'],
         importScripts: ['/push-sw.js'],
       },
       manifest: { name: 'My Space', short_name: 'My Space', theme_color: '#466147', background_color: '#fafaf7', display: 'standalone', icons: [] },
