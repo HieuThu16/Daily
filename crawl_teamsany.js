@@ -1,10 +1,6 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import * as cheerio from 'cheerio';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-
-const execFileAsync = promisify(execFile);
 
 const BASE_URL = 'https://teamsany.com';
 const OUTPUT_DATA_FILE = path.join(process.cwd(), 'public', 'data', 'teamsany_manga.json');
@@ -17,23 +13,32 @@ const CONFIG = {
   maxRetries: 3,
 };
 
+/**
+ * Cross-platform HTTP GET (works on Windows & Linux/GitHub Actions)
+ * Replaces the previous curl.exe-based implementation.
+ */
 async function curlGet(url, attempt = 1) {
   for (let i = attempt; i <= CONFIG.maxRetries; i++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
     try {
-      const { stdout } = await execFileAsync('curl.exe', [
-        '-s', '-L',
-        '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        '-H', 'Referer: https://teamsany.com/',
-        url
-      ], { maxBuffer: 15 * 1024 * 1024, timeout: CONFIG.timeoutMs });
-
-      if (stdout && stdout.length > 300) {
-        return stdout;
-      }
-    } catch (err) {
-      if (i === CONFIG.maxRetries) {
-        return null;
-      }
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://teamsany.com/',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      if (text && text.length > 300) return text;
+    } catch {
+      clearTimeout(timer);
+      if (i === CONFIG.maxRetries) return null;
+      await new Promise(r => setTimeout(r, 800 * i));
     }
   }
   return null;

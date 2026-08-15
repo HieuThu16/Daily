@@ -1,0 +1,114 @@
+name: 🌙 Nightly Crawl — Ngôn Tình + BL + Teamsany
+
+on:
+  # Chạy tự động lúc 1:00 AM giờ Việt Nam (18:00 UTC)
+  schedule:
+    - cron: '0 18 * * *'
+
+  # Cho phép chạy thủ công từ GitHub UI
+  workflow_dispatch:
+    inputs:
+      crawler:
+        description: 'Chọn crawler cần chạy'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ngontinh
+          - bl
+          - teamsany
+
+jobs:
+  crawl:
+    name: 🕷️ Crawl Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # Tối đa 6 giờ
+
+    steps:
+      # ── 1. Checkout code ──────────────────────────────────────────────
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      # ── 2. Setup Node.js ───────────────────────────────────────────────
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Cài dependencies ────────────────────────────────────────────
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # ── 4. Restore dữ liệu đã cào từ lần trước (cache) ────────────────
+      - name: 💾 Restore cached data
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/data
+            src/data
+          key: crawl-data-${{ github.run_number }}
+          restore-keys: |
+            crawl-data-
+
+      # ── 5. Tạo thư mục data ────────────────────────────────────────────
+      - name: 📁 Ensure data directories exist
+        run: |
+          mkdir -p public/data
+          mkdir -p src/data
+
+      # ── 6. Chạy Ngôn Tình crawler ──────────────────────────────────────
+      - name: 📖 Crawl Ngôn Tình (nettruyenz.com)
+        if: github.event.inputs.crawler == 'all' || github.event.inputs.crawler == 'ngontinh' || github.event_name == 'schedule'
+        run: node crawl_ngontinh.js
+        timeout-minutes: 120
+        continue-on-error: true
+
+      # ── 7. Chạy BL crawler ─────────────────────────────────────────────
+      - name: 🏮 Crawl BL/Đam Mỹ (dualeotruyen.com)
+        if: github.event.inputs.crawler == 'all' || github.event.inputs.crawler == 'bl' || github.event_name == 'schedule'
+        run: node crawl_all_bl.js
+        timeout-minutes: 120
+        continue-on-error: true
+
+      # ── 8. Chạy Teamsany crawler ───────────────────────────────────────
+      - name: 🎌 Crawl Teamsany (teamsany.com)
+        if: github.event.inputs.crawler == 'all' || github.event.inputs.crawler == 'teamsany' || github.event_name == 'schedule'
+        run: node crawl_teamsany.js
+        timeout-minutes: 120
+        continue-on-error: true
+
+      # ── 9. Kiểm tra kết quả ────────────────────────────────────────────
+      - name: 📊 Show crawl results
+        run: |
+          echo "=== Kết quả cào dữ liệu ==="
+          for f in public/data/*.json; do
+            if [ -f "$f" ]; then
+              size=$(wc -c < "$f")
+              lines=$(wc -l < "$f")
+              echo "📄 $f — ${size} bytes, ${lines} dòng"
+            fi
+          done
+
+      # ── 10. Commit & push dữ liệu mới vào repo ─────────────────────────
+      - name: 🚀 Commit and push updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data/ src/data/ --force
+          if git diff --cached --quiet; then
+            echo "Không có dữ liệu mới. Bỏ qua commit."
+          else
+            TIMESTAMP=$(TZ='Asia/Ho_Chi_Minh' date '+%d/%m/%Y %H:%M')
+            git commit -m "🤖 [Auto] Cập nhật dữ liệu truyện — ${TIMESTAMP}"
+            git push
+          fi
+
+      # ── 11. Thông báo kết quả (tùy chọn) ─────────────────────────────
+      - name: ✅ Crawl completed
+        run: |
+          echo "✅ Crawl hoàn tất lúc $(TZ='Asia/Ho_Chi_Minh' date '+%H:%M %d/%m/%Y')"
