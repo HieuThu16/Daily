@@ -21,7 +21,6 @@ import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
-import { BookShareModal } from './library/BookShareModal'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -92,7 +91,7 @@ const artGradient = (id: string) => {
   return ART_GRADIENTS[hash % ART_GRADIENTS.length]
 }
 
-type Kind = (typeof categories)[number]['id']
+export type Kind = (typeof categories)[number]['id']
 type SubView = 'overview' | 'favorites' | 'queue' | 'stats'
 type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
 
@@ -150,7 +149,8 @@ function getMusicGenreStyle(genreName?: string | null) {
   return genreColors[index]
 }
 
-export function LibraryPage() {
+export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultType?: 'ALL' | Kind; hideCategoryBar?: boolean }) {
+  const shouldHideBar = hideCategoryBar !== undefined ? hideCategoryBar : (defaultType !== 'ALL')
   const { showToast, showSaveToast } = useToast()
   const { items, setItems, loading } = useQuery<Media>('media_items')
 
@@ -161,8 +161,12 @@ export function LibraryPage() {
   const movieGenresQuery = useQuery<MovieGenre>('movie_genres', 'name')
   const musicGenresQuery = useQuery<MusicGenre>('music_genres', 'name')
 
-  // Selected Category (5 Icon-Only Buttons in 1 Row)
-  const [selectedType, setSelectedType] = useState<'ALL' | Kind>('ALL')
+  // Selected Category
+  const [selectedType, setSelectedType] = useState<'ALL' | Kind>(defaultType)
+  
+  useEffect(() => {
+    setSelectedType(defaultType)
+  }, [defaultType])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [musicGenreFilter, setMusicGenreFilter] = useState<string>('ALL')
   const [subView, setSubView] = useState<SubView>('overview')
@@ -187,7 +191,6 @@ export function LibraryPage() {
   const [bookStatsOpen, setBookStatsOpen] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
-  const [sharingBookItem, setSharingBookItem] = useState<Media | null>(null)
 
   useEffect(() => {
     void loadImportedMediaItemIds().then(setImportedIds)
@@ -998,23 +1001,11 @@ export function LibraryPage() {
               <Heart size={17} fill={item.is_favorite ? 'currentColor' : 'none'} />
             </button>
 
-            {isBook && (
-              <button
-                className="icon small"
-                aria-label={`Chia sẻ sách ${item.name}`}
-                onClick={() => setSharingBookItem(item)}
-                title="Chia sẻ sách"
-              >
-                <Share2 size={16} />
-              </button>
-            )}
-
             <RowMenu
               label={`Thao tác cho ${item.name}`}
               icon={<MoreVertical size={16} />}
               items={[
                 { key: 'edit', label: 'Chỉnh sửa', icon: <Pencil size={14} />, onSelect: () => openEdit(item) },
-                ...(isBook ? [{ key: 'share', label: 'Chia sẻ sách', icon: <Share2 size={14} />, onSelect: () => setSharingBookItem(item) }] : []),
                 {
                   key: 'delete',
                   label: 'Xoá khỏi thư viện',
@@ -1038,13 +1029,6 @@ export function LibraryPage() {
                 <BookOpen size={13} /> Đọc
               </button>
             )}
-            <button
-              className="library-book-btn"
-              onClick={() => setSharingBookItem(item)}
-              title="Chia sẻ sách cho người khác"
-            >
-              <Share2 size={13} /> Chia sẻ
-            </button>
             {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
               <>
                 <button
@@ -1138,15 +1122,17 @@ export function LibraryPage() {
 
   return (
     <section className="page-shell">
-      {/* ROW 1: ALL 6 ICON CATEGORIES IN 1 ROW */}
-      <LibraryCategoryBar
-        selectedType={selectedType}
-        categories={[
-          { id: 'ALL', label: 'Tất cả', icon: Layers, color: 'var(--primary)', bg: 'var(--primary-light)' },
-          ...categories,
-        ]}
-        onSelect={(id) => setSelectedType(id as 'ALL' | Kind)}
-      />
+      {/* Category Bar: only shown when not in single-tab standalone mode */}
+      {!shouldHideBar && (
+        <LibraryCategoryBar
+          selectedType={selectedType}
+          categories={[
+            { id: 'ALL', label: 'Tất cả', icon: Layers, color: 'var(--primary)', bg: 'var(--primary-light)' },
+            ...categories,
+          ]}
+          onSelect={(id) => setSelectedType(id as 'ALL' | Kind)}
+        />
+      )}
 
       {/* ROW 2: SUB-TABS INCLUDING "+ THÊM" BUTTON INSIDE 100% RESPONSIVE BAR */}
       {/* Bảng số liệu kiêm chọn tab: con số là thứ đáng nhìn nhất nên cho nó
@@ -2174,10 +2160,6 @@ export function LibraryPage() {
       )}
 
       {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} onClose={() => setBookStatsOpen(false)} />}
-
-      {sharingBookItem && (
-        <BookShareModal item={sharingBookItem} onClose={() => setSharingBookItem(null)} />
-      )}
 
       {importOpen && (
         <BookImportModal

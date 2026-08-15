@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Flame, HardDriveDownload, Home, LogOut, Menu, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BellOff, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, HardDriveDownload, Heart, HeartHandshake, Home, Layers, LogOut, Menu, Music, NotebookPen, Plus, Salad, Sparkles, SunMoon, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
 import { localDate } from './lib/date'
@@ -18,6 +18,11 @@ import { BookReaderPage } from './features/library/BookReaderPage'
 import { QuotesPage } from './features/library/QuotesPage'
 import { MoneyPage } from './features/MoneyPage'
 import { CalendarPage } from './features/CalendarPage'
+import { BLMangaPage } from './features/manga/BLMangaPage'
+import { BLMangaDetailPage } from './features/manga/BLMangaDetailPage'
+import { NgontinhMangaPage } from './features/manga/NgontinhMangaPage'
+import { NgontinhDetailPage } from './features/manga/NgontinhDetailPage'
+import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
 import { useTaskReminders } from './features/useTaskReminders'
 import { exportBackup } from './lib/backup'
 
@@ -26,22 +31,50 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
+  { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
+  { id: 'books', label: 'Sách', icon: BookOpen, colorClass: 'icon-box-purple' },
+  { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
+  { id: 'manga', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald' },
+  { id: 'bl', label: 'Truyện BL', icon: Heart, colorClass: 'icon-box-rose' },
+  { id: 'ngontinh', label: 'Ngôn Tình', icon: HeartHandshake, colorClass: 'icon-box-rose' },
   { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
-  { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
 ]
 
-// Thanh tab dưới đáy chỉ giữ 5 mục hay dùng nhất; phần còn lại nằm trong ngăn kéo bên trái.
-const primaryNavigation = navigation.slice(0, 5)
+const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
+const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'bl', 'ngontinh']
+
+function getSavedRecentTabs(): Tab[] {
+  try {
+    const raw = localStorage.getItem(RECENT_TABS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const validIds = new Set(navigation.map((n) => n.id))
+        const filtered = parsed.filter((id): id is Tab => validIds.has(id))
+        if (filtered.length > 0) {
+          const combined = [...filtered]
+          for (const item of DEFAULT_PRIMARY_TABS) {
+            if (!combined.includes(item)) combined.push(item)
+          }
+          return combined.slice(0, 5)
+        }
+      }
+    }
+  } catch {}
+  return DEFAULT_PRIMARY_TABS
+}
 
 // Ngăn kéo chia theo nhóm lớn, bấm vào mới xổ các mục con.
 const navGroups: { title: string; ids: Tab[] }[] = [
   { title: 'Tổng quan', ids: ['home', 'calendar'] },
   { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] },
+  { title: 'Giải trí & Nghệ thuật', ids: ['music', 'tvshow', 'books', 'movies', 'manga', 'bl', 'ngontinh'] },
   { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
-  { title: 'Kiến thức & con người', ids: ['library', 'people'] },
+  { title: 'Kiến thức & con người', ids: ['people'] },
 ]
 
 function Login({ user }: { user: unknown }) {
@@ -109,13 +142,16 @@ function Shell({ children }: { children: React.ReactNode }) {
   const isHeaderHidden = useIsHeaderHidden()
   const asideRef = useAsideRef()
   const [menuOpen, setMenuOpen] = useState(false)
-  // Nhóm đang xổ; mặc định là nhóm chứa trang hiện tại.
-  const [openGroup, setOpenGroup] = useState<string | null>(null)
+  // Mặc định tất cả các nhóm đều MỞ HẾT (expanded). collapsedGroups lưu những nhóm người dùng chủ động bấm thu gọn.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
 
-  // Đổi trang thì đóng ngăn kéo lại và ghim sẵn nhóm của trang mới.
+  const toggleGroup = (title: string) => {
+    setCollapsedGroups((prev) => ({ ...prev, [title]: !prev[title] }))
+  }
+
+  // Đổi trang thì đóng ngăn kéo trên mobile
   useEffect(() => {
     setMenuOpen(false)
-    setOpenGroup(navGroups.find((g) => g.ids.some((id) => path === '/' + id))?.title ?? null)
   }, [path])
 
   // PWA Install Prompt
@@ -173,8 +209,37 @@ function Shell({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const activeTabItem = navigation.find((n) => path === '/' + n.id) ?? navigation[0]
+  const activeTabItem = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/')) ?? navigation[0]
   const ActiveIcon = activeTabItem.icon
+
+  // 5 tab gần nhất người dùng đã truy cập cho thanh điều hướng dưới đáy (bottom nav)
+  const [recentTabs, setRecentTabs] = useState<Tab[]>(() => getSavedRecentTabs())
+
+  useEffect(() => {
+    const currentTabId = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/'))?.id
+    if (currentTabId) {
+      setRecentTabs((prev) => {
+        const updated = [currentTabId, ...prev.filter((id) => id !== currentTabId)]
+        const combined = [...updated]
+        for (const defaultTab of navigation.map((n) => n.id)) {
+          if (!combined.includes(defaultTab)) {
+            combined.push(defaultTab)
+          }
+        }
+        const top5 = combined.slice(0, 5)
+        try {
+          localStorage.setItem(RECENT_TABS_STORAGE_KEY, JSON.stringify(top5))
+        } catch {}
+        return top5
+      })
+    }
+  }, [path])
+
+  const dynamicPrimaryNavigation = useMemo(() => {
+    return recentTabs
+      .map((id) => navigation.find((n) => n.id === id))
+      .filter((item): item is (typeof navigation)[number] => item !== undefined)
+  }, [recentTabs])
 
   useTaskReminders()
 
@@ -196,8 +261,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
-      {/* Điều hướng dọc của desktop. Trên điện thoại CSS ẩn đi, thanh tab dưới
-          đáy vẫn là thứ điều hướng duy nhất. */}
+      {/* Điều hướng dọc của desktop: Phân nhóm rõ ràng, mở sẵn toàn bộ, có thể vuốt/cuộn mượt mà */}
       <aside className="side-nav">
         <div className="side-nav-brand">
           <div className="brand-icon">
@@ -207,15 +271,44 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="side-nav-list">
-          {navigation.map(({ id, label, icon: Icon, colorClass }) => {
-            const isActive = path === '/' + id
+          {navGroups.map((group) => {
+            const isOpen = !collapsedGroups[group.title]
             return (
-              <button key={id} className={isActive ? 'active' : ''} onClick={() => nav('/' + id)} aria-current={isActive ? 'page' : undefined}>
-                <div className={`nav-icon-wrapper ${colorClass}`}>
-                  <Icon size={17} />
-                </div>
-                <span>{label}</span>
-              </button>
+              <div key={group.title} className={`nav-group-section ${isOpen ? 'is-open' : 'is-collapsed'}`}>
+                <button
+                  type="button"
+                  className="nav-group-header"
+                  onClick={() => toggleGroup(group.title)}
+                  aria-expanded={isOpen}
+                  title="Bấm để ẩn / hiện nhóm"
+                >
+                  <span>{group.title}</span>
+                  <ChevronRight size={13} className={`nav-group-chevron ${isOpen ? 'rotated' : ''}`} />
+                </button>
+                {isOpen && (
+                  <div className="nav-group-items">
+                    {group.ids.map((id) => {
+                      const item = navigation.find((n) => n.id === id)
+                      if (!item) return null
+                      const Icon = item.icon
+                      const isActive = path === '/' + id
+                      return (
+                        <button
+                          key={id}
+                          className={isActive ? 'active' : ''}
+                          onClick={() => nav('/' + id)}
+                          aria-current={isActive ? 'page' : undefined}
+                        >
+                          <div className={`nav-icon-wrapper ${item.colorClass}`}>
+                            <Icon size={17} />
+                          </div>
+                          <span>{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )
           })}
         </nav>
@@ -294,7 +387,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </header>
       )}
 
-      {/* Ngăn kéo điện thoại: đủ danh sách nghiệp vụ + các nút tiện ích. */}
+      {/* Ngăn kéo điện thoại: mở sẵn toàn bộ theo nhóm, có thể vuốt xuống cuộn mượt mà */}
       {menuOpen && (
         <div className="mobile-drawer-backdrop" onClick={() => setMenuOpen(false)}>
           <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
@@ -305,20 +398,33 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <nav className="mobile-drawer-list">
               {navGroups.map((group) => {
-                const isOpen = openGroup === group.title
+                const isOpen = !collapsedGroups[group.title]
                 return (
-                  <div key={group.title} className={`drawer-group ${isOpen ? 'is-open' : ''}`}>
-                    <button className="drawer-group-head" onClick={() => setOpenGroup(isOpen ? null : group.title)} aria-expanded={isOpen}>
+                  <div key={group.title} className={`drawer-group ${isOpen ? 'is-open' : 'is-collapsed'}`}>
+                    <button
+                      type="button"
+                      className="drawer-group-head"
+                      onClick={() => toggleGroup(group.title)}
+                      aria-expanded={isOpen}
+                    >
                       <span>{group.title}</span>
-                      <ChevronRight size={16} />
+                      <ChevronRight size={16} className={`drawer-group-chevron ${isOpen ? 'rotated' : ''}`} />
                     </button>
                     {isOpen && (
                       <div className="drawer-group-body">
                         {group.ids.map((id) => {
-                          const item = navigation.find((n) => n.id === id)!
+                          const item = navigation.find((n) => n.id === id)
+                          if (!item) return null
                           const Icon = item.icon
                           return (
-                            <button key={id} className={path === '/' + id ? 'active' : ''} onClick={() => nav('/' + id)}>
+                            <button
+                              key={id}
+                              className={path === '/' + id ? 'active' : ''}
+                              onClick={() => {
+                                nav('/' + id)
+                                setMenuOpen(false)
+                              }}
+                            >
                               <div className={`nav-icon-wrapper ${item.colorClass}`}><Icon size={17} /></div>
                               <span>{item.label}</span>
                             </button>
@@ -350,7 +456,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       )}
 
       <nav className="bottom-nav">
-        {primaryNavigation.map(({ id, label, icon: Icon, colorClass }) => (
+        {dynamicPrimaryNavigation.map(({ id, label, icon: Icon, colorClass }) => (
           <button key={id} className={path === '/' + id ? 'active' : ''} onClick={() => nav('/' + id)}>
             <div className={`nav-icon-wrapper ${colorClass}`}>
               <Icon size={18} />
@@ -391,8 +497,18 @@ function Protected({ user }: { user: unknown }) {
                 <Route path="/habit" element={<HabitsPage />} />
                 <Route path="/daily" element={<DailyPage />} />
                 <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
+                <Route path="/tvshow" element={<LibraryPage defaultType="YOUTUBE" />} />
+                <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
+                <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
+                <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
+                <Route path="/bl" element={<BLMangaPage />} />
+                <Route path="/bl/:slug" element={<BLMangaDetailPage />} />
+                <Route path="/ngontinh" element={<NgontinhMangaPage />} />
+                <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
+                <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
                 <Route path="/people" element={<PeoplePage />} />
-                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/library" element={<Navigate to="/books" replace />} />
                 <Route path="/nutrition" element={<NutritionPage />} />
                 <Route path="/money" element={<MoneyPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />

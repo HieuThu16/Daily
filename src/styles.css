@@ -167,13 +167,20 @@ h2 span {
 }
 
 header {
-  min-height: 52px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  min-height: 54px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  background: color-mix(in srgb, var(--bg-main) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 4px 0;
 }
 
 .brand {
@@ -4639,10 +4646,60 @@ input[type='month'] {
   .side-nav-list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--card-border) transparent;
+    padding-right: 2px;
+  }
+
+  .nav-group-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-group-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100%;
+    padding: 6px 8px !important;
+    border: 0;
+    border-radius: 8px;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .nav-group-header:hover {
+    color: var(--text-main) !important;
+    background: var(--bg-main) !important;
+  }
+
+  .nav-group-chevron,
+  .drawer-group-chevron {
+    transition: transform 180ms ease-out;
+  }
+
+  .nav-group-chevron.rotated,
+  .drawer-group-chevron.rotated {
+    transform: rotate(90deg);
+  }
+
+  .nav-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .side-nav-list button {

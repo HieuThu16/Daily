@@ -1,6 +1,5 @@
-import { Heart, Share2 } from 'lucide-react'
+import { Heart } from 'lucide-react'
 import type { Media } from '../../types'
-import { shareOut } from '../../lib/bookShare'
 import { BookCover } from './BookCover'
 
 type BookGridProps = {
@@ -45,16 +44,6 @@ export function BookGrid({ items, onOpen, onToggleFavorite }: BookGridProps) {
               onClick={() => onToggleFavorite(item)}
             >
               <Heart size={14} fill={item.is_favorite ? 'currentColor' : 'none'} />
-            </button>
-
-            {/* Chia sẻ ra ngoài app (hộp chia sẻ của máy). Chia sẻ trong app nằm ở màn chi tiết. */}
-            <button
-              type="button"
-              className="book-grid-share"
-              aria-label={`Chia sẻ ${item.name} ra ngoài`}
-              onClick={() => void shareOut(item.name, item.author).catch(() => undefined)}
-            >
-              <Share2 size={14} />
             </button>
 
             <p className="book-grid-title">

@@ -13,6 +13,7 @@ export default defineConfig({
       // workbox tự sinh sw.js nên không sửa thẳng được; nạp thêm file xử lý Web Push
       // bằng importScripts thay vì đổi cả dự án sang chế độ injectManifest.
       workbox: {
+        maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
         globIgnores: ['**/book-parsers-*.js', '**/pdf.worker*.mjs'],
         importScripts: ['/push-sw.js'],
       },

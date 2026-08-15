@@ -1,9 +1,9 @@
-import { CheckSquare, Flame, Moon, NotebookPen, Salad } from 'lucide-react'
+import { BookMarked, BookOpen, CheckSquare, Film, Flame, Heart, Moon, Music, NotebookPen, Salad, Tv } from 'lucide-react'
 import type { CompletionSummary } from '../../lib/homeProgress'
 import { formatMoney, mealBreakdown, sleepSummary, totalSpend } from '../../lib/report'
 import type { UpcomingOccasion } from '../../lib/occasions'
 import { countdownLabel } from '../../lib/occasions'
-import type { Entry, Habit, HabitLog, NutritionLog, SleepLog, Todo } from '../../types'
+import type { Entry, Habit, HabitLog, Media, NutritionLog, SleepLog, Todo } from '../../types'
 import { ProgressRing } from './ProgressRing'
 
 type Props = {
@@ -15,6 +15,8 @@ type Props = {
   entries: Entry[]
   meals: NutritionLog[]
   sleep: SleepLog[]
+  todayMedia?: Media[]
+  todayReadingLogs?: any[]
   isToday: boolean
   nextOccasion: UpcomingOccasion | null
   onOpen: (tab: string) => void
@@ -70,6 +72,8 @@ export function ReportDay({
   entries,
   meals,
   sleep,
+  todayMedia = [],
+  todayReadingLogs = [],
   isToday,
   nextOccasion,
   onOpen,
@@ -79,6 +83,14 @@ export function ReportDay({
   const spend = totalSpend(meals)
   const byMeal = mealBreakdown(meals)
   const rest = sleepSummary(sleep)
+
+  // Thống kê giải trí trong ngày
+  const musicCount = todayMedia.filter((m) => m.type === 'MUSIC').length
+  const tvCount = todayMedia.filter((m) => m.type === 'YOUTUBE').length
+  const bookCount = todayMedia.filter((m) => m.type === 'BOOK').length + todayReadingLogs.length
+  const movieCount = todayMedia.filter((m) => m.type === 'MOVIE').length
+  const mangaCount = todayMedia.filter((m) => m.type === 'MANGA').length
+  const totalMedia = todayMedia.length + todayReadingLogs.length
 
   return (
     <div className="report">
@@ -131,6 +143,90 @@ export function ReportDay({
           hint={meals.length ? `${meals.length} món trong ngày` : 'Chưa ghi bữa nào'}
           onClick={() => onOpen('/nutrition')}
         />
+      </div>
+
+      {/* Thống kê giải trí & nghệ thuật trong ngày (Nhạc, TV Show, Sách, Phim, Truyện) */}
+      <div className="report-media-section" style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 14, padding: '12px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
+            🎧 Giải trí & Kiến thức {totalMedia > 0 ? `(${totalMedia})` : ''}
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mục trong ngày</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => onOpen('/music')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--cyan-bg)', color: 'var(--cyan)', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <Music size={15} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>Nhạc</span>
+              <strong style={{ fontSize: '0.86rem' }}>{musicCount} bài</strong>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpen('/books')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--purple-bg)', color: 'var(--purple)', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <BookOpen size={15} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>Sách</span>
+              <strong style={{ fontSize: '0.86rem' }}>{bookCount} mục</strong>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpen('/tvshow')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <Tv size={15} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>TV Show</span>
+              <strong style={{ fontSize: '0.86rem' }}>{tvCount} video</strong>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpen('/movies')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--rose-bg)', color: 'var(--rose)', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <Film size={15} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>Phim</span>
+              <strong style={{ fontSize: '0.86rem' }}>{movieCount} phim</strong>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpen('/manga')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--emerald-bg)', color: 'var(--emerald)', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <BookMarked size={15} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>Truyện</span>
+              <strong style={{ fontSize: '0.86rem' }}>{mangaCount} bộ</strong>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpen('/bl')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'rgba(236, 72, 153, 0.12)', color: '#db2777', border: 0, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <Heart size={15} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>Truyện BL</span>
+              <strong style={{ fontSize: '0.86rem' }}>Đọc ngay</strong>
+            </div>
+          </button>
+        </div>
       </div>
 
       <button className="report-sleep" onClick={() => onOpen('/nutrition')}>

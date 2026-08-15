@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'people' | 'library' | 'nutrition' | 'money' | 'calendar'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'money' | 'calendar' | 'people' | 'nutrition'
 
 export type NutritionLog = {
   id: string
@@ -111,6 +111,8 @@ export type Media = {
   is_favorite: boolean
   book_format?: BookFormat | null
   cover_url?: string | null
+  /** Sách công khai cho tất cả mọi người cùng đọc (true) hay riêng tư cá nhân (false) */
+  is_public?: boolean
   /** Tên người đã chia sẻ sách này cho mình; null nếu tự thêm. */
   shared_by?: string | null
 }

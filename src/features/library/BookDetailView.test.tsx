@@ -75,7 +75,7 @@ describe('BookDetailView với sách đã nhập file', () => {
 
     expect(await screen.findByRole('heading', { name: 'Đắc Nhân Tâm' })).toBeInTheDocument()
     expect(screen.getByText('Dale Carnegie')).toBeInTheDocument()
-    expect(screen.getByText('42%')).toBeInTheDocument()
+    expect(await screen.findByText('42%')).toBeInTheDocument()
 
     expect(screen.getByRole('tab', { name: /Mục lục \(3\)/ })).toHaveAttribute('aria-selected', 'true')
     // Tên khả truy cập của nút chương gồm cả số thứ tự và số trang ("2 Chương 1 · … 92 tr"),

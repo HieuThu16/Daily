@@ -108,6 +108,8 @@ export function HomePage() {
           entries={data.entries}
           meals={data.meals}
           sleep={data.sleep}
+          todayMedia={data.todayMedia}
+          todayReadingLogs={data.todayReadingLogs}
           isToday={isToday}
           nextOccasion={nextOccasion}
           onOpen={nav}

@@ -1,21 +1,22 @@
 import { useMemo, useRef, useState } from 'react'
-import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Gift, NotebookPen, Wallet } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Film, Gift, Music, NotebookPen, Tv, Wallet } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { localDate } from '../lib/date'
 import { formatMoney } from '../lib/money'
 import { nextOccurrence, parseLocalDate } from '../lib/occasions'
-import type { Entry, MoneyTransaction, PersonOccasion, Todo } from '../types'
+import type { Entry, Media, MoneyTransaction, PersonOccasion, Todo } from '../types'
 import { useQuery } from './shared'
 
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 
-/** Bốn loại dữ liệu hiện trên lịch; chú thích màu cũng là nút bật/tắt từng loại. */
-type Layer = 'todos' | 'occasions' | 'entries' | 'spend'
+/** Năm loại dữ liệu hiện trên lịch; chú thích màu cũng là nút bật/tắt từng loại. */
+type Layer = 'todos' | 'occasions' | 'entries' | 'spend' | 'media'
 const LAYERS: { id: Layer; label: string; color: string }[] = [
   { id: 'todos', label: 'việc', color: '#8b5cf6' },
   { id: 'occasions', label: 'dịp', color: '#f59e0b' },
   { id: 'entries', label: 'nhật ký', color: '#10b981' },
   { id: 'spend', label: 'chi tiêu', color: '#ef4444' },
+  { id: 'media', label: 'giải trí', color: '#06b6d4' },
 ]
 
 const dayKey = (date: Date) =>
@@ -37,6 +38,7 @@ export function CalendarPage() {
   const entries = useQuery<Entry>('daily_entries')
   const occasions = useQuery<PersonOccasion>('person_occasions')
   const transactions = useQuery<MoneyTransaction>('transactions')
+  const media = useQuery<Media>('media_items')
 
   const today = localDate()
   const [cursor, setCursor] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) - 1 }))
@@ -48,15 +50,19 @@ export function CalendarPage() {
   const cells = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor])
 
   const dayData = useMemo(() => {
-    const map = new Map<string, { todos: Todo[]; entries: Entry[]; occasions: PersonOccasion[]; spend: number }>()
+    const map = new Map<string, { todos: Todo[]; entries: Entry[]; occasions: PersonOccasion[]; spend: number; media: Media[] }>()
     const ensure = (day: string) => {
-      if (!map.has(day)) map.set(day, { todos: [], entries: [], occasions: [], spend: 0 })
+      if (!map.has(day)) map.set(day, { todos: [], entries: [], occasions: [], spend: 0, media: [] })
       return map.get(day)!
     }
     todos.items.forEach((todo) => todo.due_date && ensure(todo.due_date).todos.push(todo))
     entries.items.forEach((entry) => ensure(entry.entry_date).entries.push(entry))
     transactions.items.forEach((tx) => {
       if (tx.direction === 'OUT') ensure(tx.log_date).spend += tx.amount
+    })
+    media.items.forEach((m) => {
+      const d = m.log_date || (m.created_at ? m.created_at.slice(0, 10) : null)
+      if (d) ensure(d).media.push(m)
     })
     // Dịp lặp hằng năm: rơi vào ngày nào thì lần xảy ra kế tiếp tính từ ngày đó chính là ngày đó.
     cells.forEach((day) => {
@@ -67,7 +73,7 @@ export function CalendarPage() {
       })
     })
     return map
-  }, [todos.items, entries.items, occasions.items, transactions.items, cells])
+  }, [todos.items, entries.items, occasions.items, transactions.items, media.items, cells])
 
   const shift = (direction: -1 | 1) =>
     setCursor(({ year, month }) => {
@@ -95,8 +101,9 @@ export function CalendarPage() {
     entries: shows('entries') ? found.entries : [],
     occasions: shows('occasions') ? found.occasions : [],
     spend: shows('spend') ? found.spend : 0,
+    media: shows('media') ? found.media : [],
   }
-  const nothingOnDay = !detail?.occasions.length && !detail?.todos.length && !detail?.entries.length && !detail?.spend
+  const nothingOnDay = !detail?.occasions.length && !detail?.todos.length && !detail?.entries.length && !detail?.spend && !detail?.media.length
 
   return (
     <section className="page-shell is-narrow" style={{ display: 'grid', gap: 10 }}>
@@ -135,6 +142,7 @@ export function CalendarPage() {
                 {data?.occasions.length && shows('occasions') ? <i style={{ width: 5, height: 5, borderRadius: 5, background: '#f59e0b' }} /> : null}
                 {data?.entries.length && shows('entries') ? <i style={{ width: 5, height: 5, borderRadius: 5, background: '#10b981' }} /> : null}
                 {data?.spend && shows('spend') ? <i style={{ width: 5, height: 5, borderRadius: 5, background: '#ef4444' }} /> : null}
+                {data?.media.length && shows('media') ? <i style={{ width: 5, height: 5, borderRadius: 5, background: '#06b6d4' }} /> : null}
               </span>
             </button>
           )
@@ -193,6 +201,36 @@ export function CalendarPage() {
             <div><strong>{entry.content}</strong></div>
           </button>
         ))}
+
+        {/* Danh sách mục giải trí / nghệ thuật / đọc sách ghi vào ngày này */}
+        {detail?.media.map((item) => {
+          const mediaMeta: Record<Media['type'], { icon: typeof Music; color: string; path: string; label: string }> = {
+            MUSIC: { icon: Music, color: '#06b6d4', path: '/music', label: 'Nhạc' },
+            BOOK: { icon: BookOpen, color: '#a855f7', path: '/books', label: 'Sách' },
+            YOUTUBE: { icon: Tv, color: '#f59e0b', path: '/tvshow', label: 'TV Show' },
+            MOVIE: { icon: Film, color: '#f43f5e', path: '/movies', label: 'Phim' },
+            MANGA: { icon: BookMarked, color: '#10b981', path: '/manga', label: 'Truyện' },
+          }
+          const conf = mediaMeta[item.type] || mediaMeta.BOOK
+          const Icon = conf.icon
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => navigate(conf.path)}
+              className="nutrition-history-row"
+              style={{ width: '100%', border: 0, background: 'none', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <span className="nutrition-history-icon">
+                <Icon size={15} color={conf.color} />
+              </span>
+              <div>
+                <strong>{item.name}</strong>
+                <small>{conf.label} • {item.status === 'COMPLETED' ? 'Đã xong' : item.status === 'IN_PROGRESS' ? 'Đang theo dõi' : 'Sẽ xem'}</small>
+              </div>
+            </button>
+          )
+        })}
 
         {detail?.spend ? (
           <button type="button" onClick={() => navigate('/money')} className="nutrition-history-row" style={{ width: '100%', border: 0, background: 'none', textAlign: 'left', cursor: 'pointer' }}>

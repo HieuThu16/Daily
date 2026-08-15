@@ -25,6 +25,9 @@ export function useHomeData(dateKey: string = localDate()) {
   const [weekMeals, setWeekMeals] = useState<NutritionLog[]>([])
   const [weekTodosDone, setWeekTodosDone] = useState<Todo[]>([])
   const [media, setMedia] = useState<Media[]>([])
+  const [todayMedia, setTodayMedia] = useState<Media[]>([])
+  const [weekMedia, setWeekMedia] = useState<Media[]>([])
+  const [todayReadingLogs, setTodayReadingLogs] = useState<any[]>([])
   const [occasions, setOccasions] = useState<PersonOccasion[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,7 +45,7 @@ export function useHomeData(dateKey: string = localDate()) {
       const after = new Date(parseLocalDate(dateKey).getTime() + 86_400_000)
       const tomorrow = `${after.getFullYear()}-${String(after.getMonth() + 1).padStart(2, '0')}-${String(after.getDate()).padStart(2, '0')}`
 
-      const [h, tl, wl, t, td, e, m, o, p, we, nt, nw, wt, sl, sw] = await Promise.all([
+      const [h, tl, wl, t, td, e, m, tm, wm, brl, o, p, we, nt, nw, wt, sl, sw] = await Promise.all([
         supabase.from('habits').select('*').eq('is_active', true).is('deleted_at', null),
         supabase.from('habit_logs').select('*').eq('date', today),
         supabase.from('habit_logs').select('*').gte('date', week[0].key).lte('date', week[6].key),
@@ -50,6 +53,9 @@ export function useHomeData(dateKey: string = localDate()) {
         supabase.from('todos').select('*').eq('completed', true).gte('completed_at', today).lt('completed_at', tomorrow).is('deleted_at', null),
         supabase.from('daily_entries').select('*').eq('entry_date', today).is('deleted_at', null),
         supabase.from('media_items').select('*').eq('status', 'IN_PROGRESS').is('deleted_at', null).limit(5),
+        supabase.from('media_items').select('*').eq('log_date', today).is('deleted_at', null),
+        supabase.from('media_items').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key).is('deleted_at', null),
+        supabase.from('book_reading_logs').select('*').eq('log_date', today).is('deleted_at', null),
         supabase.from('person_occasions').select('*').is('deleted_at', null),
         supabase.from('people').select('*').is('deleted_at', null),
         supabase.from('daily_entries').select('*').gte('entry_date', week[0].key).lte('entry_date', week[6].key).is('deleted_at', null),
@@ -67,6 +73,9 @@ export function useHomeData(dateKey: string = localDate()) {
       setTodosDoneToday((td.data ?? []) as Todo[])
       setEntries((e.data ?? []) as Entry[])
       setMedia((m.data ?? []) as Media[])
+      setTodayMedia((tm.data ?? []) as Media[])
+      setWeekMedia((wm.data ?? []) as Media[])
+      setTodayReadingLogs(brl.data ?? [])
       setOccasions((o.data ?? []) as PersonOccasion[])
       setPeople((p.data ?? []) as Person[])
       setWeekEntries((we.data ?? []) as Entry[])
@@ -98,6 +107,9 @@ export function useHomeData(dateKey: string = localDate()) {
     weekSleep,
     weekTodosDone,
     media,
+    todayMedia,
+    weekMedia,
+    todayReadingLogs,
     occasions,
     people,
     week,

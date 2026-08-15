@@ -41,6 +41,7 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [target, setTarget] = useState('NEW')
+  const [isPublic, setIsPublic] = useState(true)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
 
   // Object URL của bìa phải được thu hồi, nếu không mỗi lần chọn file lại rò một blob.
@@ -105,6 +106,7 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
             status: 'IN_PROGRESS',
             is_favorite: false,
             book_format: 'READ',
+            is_public: isPublic,
             start_date: localDate(),
             log_date: localDate(),
           })
@@ -113,6 +115,8 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
         if (insertError || !data) throw new Error(insertError?.message ?? 'Không tạo được mục sách.')
         createdItem = data as Media
         mediaItemId = createdItem.id
+      } else {
+        await supabase.from('media_items').update({ is_public: isPublic }).eq('id', target)
       }
 
       await saveBook(mediaItemId, { ...book, title: title.trim() || book.title, chapters })
@@ -204,6 +208,29 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
               <span>Tác giả</span>
               <input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="Chưa rõ" />
             </label>
+
+            {/* Tuỳ chọn: Công khai cho mọi người cùng đọc hay Riêng tư cá nhân */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '8px 0', padding: '10px 12px', background: 'var(--card-subtle-bg, rgba(255,255,255,0.04))', borderRadius: 10, border: '1px solid var(--card-border)' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)' }}>Quyền hiển thị</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.84rem' }}>
+                <input
+                  type="radio"
+                  name="book-visibility"
+                  checked={isPublic}
+                  onChange={() => setIsPublic(true)}
+                />
+                <span>🌐 <strong>Tất cả mọi người</strong> (Ai cũng thấy và đọc được sách trong thư viện)</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.84rem' }}>
+                <input
+                  type="radio"
+                  name="book-visibility"
+                  checked={!isPublic}
+                  onChange={() => setIsPublic(false)}
+                />
+                <span>🔒 <strong>Chỉ mình tôi</strong> (Sách riêng tư cá nhân)</span>
+              </label>
+            </div>
 
             <p className="book-import-note">
               {book.sourceFormat} · {chapters.length} chương · {totalChars.toLocaleString('vi-VN')} ký tự ·{' '}

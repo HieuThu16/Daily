@@ -8,10 +8,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "crawl:ngontinh": "node crawl_ngontinh.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "cheerio": "^1.2.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^4.10.38",

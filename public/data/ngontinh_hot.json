@@ -1,0 +1,596 @@
+{
+  "updatedAt": "2026-08-15T14:52:07.391Z",
+  "hot": [
+    {
+      "rank": 1,
+      "slug": "xam-nhap-vao-truong-trung-hoc-tai-phiet",
+      "title": "Xâm Nhập Vào Trường Trung Học Tài Phiệt!",
+      "cover": "https://img.otruyenapi.com/uploads/comics/xam-nhap-vao-truong-trung-hoc-tai-phiet-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-xam-nhap-vao-truong-trung-hoc-tai-phiet",
+      "latestChapter": "Chapter 105",
+      "views": "236"
+    },
+    {
+      "rank": 2,
+      "slug": "vo-cua-luc-tong-khong-phai-dang-vua",
+      "title": "Vợ Của Lục Tổng Không Phải Dạng Vừa",
+      "cover": "https://img.otruyenapi.com/uploads/comics/vo-cua-luc-tong-khong-phai-dang-vua-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-vo-cua-luc-tong-khong-phai-dang-vua",
+      "latestChapter": "Chapter 256",
+      "views": "210"
+    },
+    {
+      "rank": 3,
+      "slug": "ta-o-di-gioi-nuoi-duong-nam-than-than-y-cuu-tieu-thu",
+      "title": "Ta Ở Dị Giới Nuôi Dưỡng Nam Thần: Thần Y Cửu Tiểu Thư",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ta-o-di-gioi-nuoi-duong-nam-than-than-y-cuu-tieu-thu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ta-o-di-gioi-nuoi-duong-nam-than-than-y-cuu-tieu-thu",
+      "latestChapter": "Chapter 280",
+      "views": "89"
+    },
+    {
+      "rank": 4,
+      "slug": "em-co-nghe-thay-toi-noi-khong",
+      "title": "Em Có Nghe Thấy Tôi Nói Không",
+      "cover": "https://img.otruyenapi.com/uploads/comics/em-co-nghe-thay-toi-noi-khong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-em-co-nghe-thay-toi-noi-khong",
+      "latestChapter": "Chapter 112",
+      "views": "131"
+    },
+    {
+      "rank": 5,
+      "slug": "1001-cach-chinh-phuc-chong-yeu",
+      "title": "1001 Cách Chinh Phục Chồng Yêu",
+      "cover": "https://img.otruyenapi.com/uploads/comics/1001-cach-chinh-phuc-chong-yeu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-1001-cach-chinh-phuc-chong-yeu",
+      "latestChapter": "Chapter 108",
+      "views": "78"
+    },
+    {
+      "rank": 6,
+      "slug": "om-khan-tieu-ma-giap-cua-toi",
+      "title": "Ôm Khẩn Tiểu Mã Giáp Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/om-khan-tieu-ma-giap-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-om-khan-tieu-ma-giap-cua-toi",
+      "latestChapter": "Chapter 422",
+      "views": "139"
+    },
+    {
+      "rank": 7,
+      "slug": "lua-nguoi-hop-voi-em",
+      "title": "Lừa Người Hợp Với Em",
+      "cover": "https://img.otruyenapi.com/uploads/comics/lua-nguoi-hop-voi-em-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-lua-nguoi-hop-voi-em",
+      "latestChapter": "Chapter 130",
+      "views": "112"
+    },
+    {
+      "rank": 8,
+      "slug": "ho-yeu-tieu-hong-nuong",
+      "title": "Hồ Yêu Tiểu Hồng Nương",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ho-yeu-tieu-hong-nuong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ho-yeu-tieu-hong-nuong",
+      "latestChapter": "Chapter 296",
+      "views": "97"
+    },
+    {
+      "rank": 9,
+      "slug": "van-may-khong-ngo",
+      "title": "Vận May Không Ngờ",
+      "cover": "https://img.otruyenapi.com/uploads/comics/van-may-khong-ngo-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-van-may-khong-ngo",
+      "latestChapter": "Chapter 87",
+      "views": "83"
+    },
+    {
+      "rank": 10,
+      "slug": "truy-tinh-truc-nguyet",
+      "title": "Truy Tinh Trục Nguyệt",
+      "cover": "https://img.otruyenapi.com/uploads/comics/truy-tinh-truc-nguyet-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-truy-tinh-truc-nguyet",
+      "latestChapter": "Chapter 31",
+      "views": "89"
+    },
+    {
+      "rank": 11,
+      "slug": "tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "title": "Trở Thành Cô Cháu Gái Bị Khinh Miệt Của Gia Tộc Võ Lâm",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "latestChapter": "Chapter 118",
+      "views": "106"
+    },
+    {
+      "rank": 12,
+      "slug": "tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "title": "Tiểu Thư Crystal Là Một Người Đàn Ông",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tieu-thu-crystal-la-mot-nguoi-dan-ong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "latestChapter": "Chapter 69",
+      "views": "61"
+    },
+    {
+      "rank": 13,
+      "slug": "tien-la-tat-ca-chong-la-phu-du",
+      "title": "Tiền Là Tất Cả Chồng Là Phù Du",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tien-la-tat-ca-chong-la-phu-du-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tien-la-tat-ca-chong-la-phu-du",
+      "latestChapter": "Chapter 113",
+      "views": "85"
+    },
+    {
+      "rank": 14,
+      "slug": "khe-uoc-hon-nhan-cua-me-toi",
+      "title": "Khế Ước Hôn Nhân Của Mẹ Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/khe-uoc-hon-nhan-cua-me-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-khe-uoc-hon-nhan-cua-me-toi",
+      "latestChapter": "Chapter 104",
+      "views": "89"
+    },
+    {
+      "rank": 15,
+      "slug": "kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "title": "Kao Ni Denai Kashiwada-San To Kao Ni Deru Oota-Kun",
+      "cover": "https://img.otruyenapi.com/uploads/comics/kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "latestChapter": "Chapter 72",
+      "views": "87"
+    },
+    {
+      "rank": 16,
+      "slug": "hy-vong-duy-nhat",
+      "title": "Hy Vọng Duy Nhất",
+      "cover": "https://img.otruyenapi.com/uploads/comics/hy-vong-duy-nhat-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-hy-vong-duy-nhat",
+      "latestChapter": "Chapter 132",
+      "views": "96"
+    },
+    {
+      "rank": 17,
+      "slug": "cach-thuc-sinh-ton-cua-phao-hoi-khue-nu",
+      "title": "Cách Thức Sinh Tồn Của Pháo Hôi Khuê Nữ",
+      "cover": "https://img.otruyenapi.com/uploads/comics/cach-thuc-sinh-ton-cua-phao-hoi-khue-nu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-cach-thuc-sinh-ton-cua-phao-hoi-khue-nu",
+      "latestChapter": "Chapter 451",
+      "views": "122"
+    },
+    {
+      "rank": 18,
+      "slug": "ba-nguoi-anh-trai-cuc-pham-cua-toi",
+      "title": "Ba Người Anh Trai Cực Phẩm Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ba-nguoi-anh-trai-cuc-pham-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ba-nguoi-anh-trai-cuc-pham-cua-toi",
+      "latestChapter": "Chapter 117",
+      "views": "84"
+    },
+    {
+      "rank": 19,
+      "slug": "vuu-vat",
+      "title": "Vưu Vật",
+      "cover": "https://img.otruyenapi.com/uploads/comics/vuu-vat-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-vuu-vat",
+      "latestChapter": "Chapter 194",
+      "views": "147"
+    },
+    {
+      "rank": 20,
+      "slug": "tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am",
+      "title": "Trở Thành Người Giám Định Chất Độc Cho Thế Lực Hắc Ám",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am",
+      "latestChapter": "Chapter 105",
+      "views": "133"
+    }
+  ],
+  "top_day": [
+    {
+      "rank": 1,
+      "slug": "tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "title": "Trở Thành Cô Cháu Gái Bị Khinh Miệt Của Gia Tộc Võ Lâm",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "latestChapter": "Chapter 118",
+      "views": "106"
+    },
+    {
+      "rank": 2,
+      "slug": "tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "title": "Tiểu Thư Crystal Là Một Người Đàn Ông",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tieu-thu-crystal-la-mot-nguoi-dan-ong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "latestChapter": "Chapter 69",
+      "views": "61"
+    },
+    {
+      "rank": 3,
+      "slug": "tien-la-tat-ca-chong-la-phu-du",
+      "title": "Tiền Là Tất Cả Chồng Là Phù Du",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tien-la-tat-ca-chong-la-phu-du-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tien-la-tat-ca-chong-la-phu-du",
+      "latestChapter": "Chapter 113",
+      "views": "85"
+    },
+    {
+      "rank": 4,
+      "slug": "khe-uoc-hon-nhan-cua-me-toi",
+      "title": "Khế Ước Hôn Nhân Của Mẹ Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/khe-uoc-hon-nhan-cua-me-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-khe-uoc-hon-nhan-cua-me-toi",
+      "latestChapter": "Chapter 104",
+      "views": "89"
+    },
+    {
+      "rank": 5,
+      "slug": "kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "title": "Kao Ni Denai Kashiwada-San To Kao Ni Deru Oota-Kun",
+      "cover": "https://img.otruyenapi.com/uploads/comics/kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "latestChapter": "Chapter 72",
+      "views": "87"
+    },
+    {
+      "rank": 6,
+      "slug": "hy-vong-duy-nhat",
+      "title": "Hy Vọng Duy Nhất",
+      "cover": "https://img.otruyenapi.com/uploads/comics/hy-vong-duy-nhat-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-hy-vong-duy-nhat",
+      "latestChapter": "Chapter 132",
+      "views": "96"
+    },
+    {
+      "rank": 7,
+      "slug": "cach-thuc-sinh-ton-cua-phao-hoi-khue-nu",
+      "title": "Cách Thức Sinh Tồn Của Pháo Hôi Khuê Nữ",
+      "cover": "https://img.otruyenapi.com/uploads/comics/cach-thuc-sinh-ton-cua-phao-hoi-khue-nu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-cach-thuc-sinh-ton-cua-phao-hoi-khue-nu",
+      "latestChapter": "Chapter 451",
+      "views": "122"
+    },
+    {
+      "rank": 8,
+      "slug": "ba-nguoi-anh-trai-cuc-pham-cua-toi",
+      "title": "Ba Người Anh Trai Cực Phẩm Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ba-nguoi-anh-trai-cuc-pham-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ba-nguoi-anh-trai-cuc-pham-cua-toi",
+      "latestChapter": "Chapter 117",
+      "views": "84"
+    },
+    {
+      "rank": 9,
+      "slug": "vuu-vat",
+      "title": "Vưu Vật",
+      "cover": "https://img.otruyenapi.com/uploads/comics/vuu-vat-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-vuu-vat",
+      "latestChapter": "Chapter 194",
+      "views": "147"
+    },
+    {
+      "rank": 10,
+      "slug": "tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am",
+      "title": "Trở Thành Người Giám Định Chất Độc Cho Thế Lực Hắc Ám",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am",
+      "latestChapter": "Chapter 105",
+      "views": "133"
+    },
+    {
+      "rank": 11,
+      "slug": "thai-tu-nguoi-that-ngot-ngao",
+      "title": "Thái Tử, Người Thật Ngọt Ngào",
+      "cover": "https://img.otruyenapi.com/uploads/comics/thai-tu-nguoi-that-ngot-ngao-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-thai-tu-nguoi-that-ngot-ngao",
+      "latestChapter": "Chapter 208",
+      "views": "54"
+    },
+    {
+      "rank": 12,
+      "slug": "tam-co-hon-sung",
+      "title": "Tâm Cơ Hôn Sủng",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tam-co-hon-sung-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tam-co-hon-sung",
+      "latestChapter": "Chapter 217",
+      "views": "129"
+    },
+    {
+      "rank": 13,
+      "slug": "ai-do-dang-dieu-khien-co-the-cua-toi",
+      "title": "Ai Đó Đang Điều Khiển Cơ Thể Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ai-do-dang-dieu-khien-co-the-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ai-do-dang-dieu-khien-co-the-cua-toi",
+      "latestChapter": "Chapter 90",
+      "views": "70"
+    },
+    {
+      "rank": 14,
+      "slug": "toi-cung-muon-lam-mo-ut",
+      "title": "Tôi Cũng Muốn Làm Mợ Út",
+      "cover": "https://img.otruyenapi.com/uploads/comics/toi-cung-muon-lam-mo-ut-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-toi-cung-muon-lam-mo-ut",
+      "latestChapter": "Chapter 95",
+      "views": "81"
+    },
+    {
+      "rank": 15,
+      "slug": "lam-ac-nu-bo-khong-tuyet-sao",
+      "title": "Làm Ác Nữ Bộ Không Tuyệt Sao?",
+      "cover": "https://img.otruyenapi.com/uploads/comics/lam-ac-nu-bo-khong-tuyet-sao-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-lam-ac-nu-bo-khong-tuyet-sao",
+      "latestChapter": "Chapter 94",
+      "views": "67"
+    }
+  ],
+  "top_week": [
+    {
+      "rank": 1,
+      "slug": "om-khan-tieu-ma-giap-cua-toi",
+      "title": "Ôm Khẩn Tiểu Mã Giáp Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/om-khan-tieu-ma-giap-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-om-khan-tieu-ma-giap-cua-toi",
+      "latestChapter": "Chapter 422",
+      "views": "139"
+    },
+    {
+      "rank": 2,
+      "slug": "lua-nguoi-hop-voi-em",
+      "title": "Lừa Người Hợp Với Em",
+      "cover": "https://img.otruyenapi.com/uploads/comics/lua-nguoi-hop-voi-em-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-lua-nguoi-hop-voi-em",
+      "latestChapter": "Chapter 130",
+      "views": "112"
+    },
+    {
+      "rank": 3,
+      "slug": "ho-yeu-tieu-hong-nuong",
+      "title": "Hồ Yêu Tiểu Hồng Nương",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ho-yeu-tieu-hong-nuong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ho-yeu-tieu-hong-nuong",
+      "latestChapter": "Chapter 296",
+      "views": "97"
+    },
+    {
+      "rank": 4,
+      "slug": "van-may-khong-ngo",
+      "title": "Vận May Không Ngờ",
+      "cover": "https://img.otruyenapi.com/uploads/comics/van-may-khong-ngo-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-van-may-khong-ngo",
+      "latestChapter": "Chapter 87",
+      "views": "83"
+    },
+    {
+      "rank": 5,
+      "slug": "truy-tinh-truc-nguyet",
+      "title": "Truy Tinh Trục Nguyệt",
+      "cover": "https://img.otruyenapi.com/uploads/comics/truy-tinh-truc-nguyet-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-truy-tinh-truc-nguyet",
+      "latestChapter": "Chapter 31",
+      "views": "89"
+    },
+    {
+      "rank": 6,
+      "slug": "tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "title": "Trở Thành Cô Cháu Gái Bị Khinh Miệt Của Gia Tộc Võ Lâm",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "latestChapter": "Chapter 118",
+      "views": "106"
+    },
+    {
+      "rank": 7,
+      "slug": "tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "title": "Tiểu Thư Crystal Là Một Người Đàn Ông",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tieu-thu-crystal-la-mot-nguoi-dan-ong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "latestChapter": "Chapter 69",
+      "views": "61"
+    },
+    {
+      "rank": 8,
+      "slug": "tien-la-tat-ca-chong-la-phu-du",
+      "title": "Tiền Là Tất Cả Chồng Là Phù Du",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tien-la-tat-ca-chong-la-phu-du-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tien-la-tat-ca-chong-la-phu-du",
+      "latestChapter": "Chapter 113",
+      "views": "85"
+    },
+    {
+      "rank": 9,
+      "slug": "khe-uoc-hon-nhan-cua-me-toi",
+      "title": "Khế Ước Hôn Nhân Của Mẹ Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/khe-uoc-hon-nhan-cua-me-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-khe-uoc-hon-nhan-cua-me-toi",
+      "latestChapter": "Chapter 104",
+      "views": "89"
+    },
+    {
+      "rank": 10,
+      "slug": "kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "title": "Kao Ni Denai Kashiwada-San To Kao Ni Deru Oota-Kun",
+      "cover": "https://img.otruyenapi.com/uploads/comics/kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "latestChapter": "Chapter 72",
+      "views": "87"
+    },
+    {
+      "rank": 11,
+      "slug": "hy-vong-duy-nhat",
+      "title": "Hy Vọng Duy Nhất",
+      "cover": "https://img.otruyenapi.com/uploads/comics/hy-vong-duy-nhat-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-hy-vong-duy-nhat",
+      "latestChapter": "Chapter 132",
+      "views": "96"
+    },
+    {
+      "rank": 12,
+      "slug": "cach-thuc-sinh-ton-cua-phao-hoi-khue-nu",
+      "title": "Cách Thức Sinh Tồn Của Pháo Hôi Khuê Nữ",
+      "cover": "https://img.otruyenapi.com/uploads/comics/cach-thuc-sinh-ton-cua-phao-hoi-khue-nu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-cach-thuc-sinh-ton-cua-phao-hoi-khue-nu",
+      "latestChapter": "Chapter 451",
+      "views": "122"
+    },
+    {
+      "rank": 13,
+      "slug": "ba-nguoi-anh-trai-cuc-pham-cua-toi",
+      "title": "Ba Người Anh Trai Cực Phẩm Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ba-nguoi-anh-trai-cuc-pham-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ba-nguoi-anh-trai-cuc-pham-cua-toi",
+      "latestChapter": "Chapter 117",
+      "views": "84"
+    },
+    {
+      "rank": 14,
+      "slug": "vuu-vat",
+      "title": "Vưu Vật",
+      "cover": "https://img.otruyenapi.com/uploads/comics/vuu-vat-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-vuu-vat",
+      "latestChapter": "Chapter 194",
+      "views": "147"
+    },
+    {
+      "rank": 15,
+      "slug": "tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am",
+      "title": "Trở Thành Người Giám Định Chất Độc Cho Thế Lực Hắc Ám",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-nguoi-giam-dinh-chat-doc-cho-the-luc-hac-am",
+      "latestChapter": "Chapter 105",
+      "views": "133"
+    }
+  ],
+  "top_month": [
+    {
+      "rank": 1,
+      "slug": "xam-nhap-vao-truong-trung-hoc-tai-phiet",
+      "title": "Xâm Nhập Vào Trường Trung Học Tài Phiệt!",
+      "cover": "https://img.otruyenapi.com/uploads/comics/xam-nhap-vao-truong-trung-hoc-tai-phiet-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-xam-nhap-vao-truong-trung-hoc-tai-phiet",
+      "latestChapter": "Chapter 105",
+      "views": "236"
+    },
+    {
+      "rank": 2,
+      "slug": "vo-cua-luc-tong-khong-phai-dang-vua",
+      "title": "Vợ Của Lục Tổng Không Phải Dạng Vừa",
+      "cover": "https://img.otruyenapi.com/uploads/comics/vo-cua-luc-tong-khong-phai-dang-vua-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-vo-cua-luc-tong-khong-phai-dang-vua",
+      "latestChapter": "Chapter 256",
+      "views": "210"
+    },
+    {
+      "rank": 3,
+      "slug": "ta-o-di-gioi-nuoi-duong-nam-than-than-y-cuu-tieu-thu",
+      "title": "Ta Ở Dị Giới Nuôi Dưỡng Nam Thần: Thần Y Cửu Tiểu Thư",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ta-o-di-gioi-nuoi-duong-nam-than-than-y-cuu-tieu-thu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ta-o-di-gioi-nuoi-duong-nam-than-than-y-cuu-tieu-thu",
+      "latestChapter": "Chapter 280",
+      "views": "89"
+    },
+    {
+      "rank": 4,
+      "slug": "em-co-nghe-thay-toi-noi-khong",
+      "title": "Em Có Nghe Thấy Tôi Nói Không",
+      "cover": "https://img.otruyenapi.com/uploads/comics/em-co-nghe-thay-toi-noi-khong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-em-co-nghe-thay-toi-noi-khong",
+      "latestChapter": "Chapter 112",
+      "views": "131"
+    },
+    {
+      "rank": 5,
+      "slug": "1001-cach-chinh-phuc-chong-yeu",
+      "title": "1001 Cách Chinh Phục Chồng Yêu",
+      "cover": "https://img.otruyenapi.com/uploads/comics/1001-cach-chinh-phuc-chong-yeu-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-1001-cach-chinh-phuc-chong-yeu",
+      "latestChapter": "Chapter 108",
+      "views": "78"
+    },
+    {
+      "rank": 6,
+      "slug": "om-khan-tieu-ma-giap-cua-toi",
+      "title": "Ôm Khẩn Tiểu Mã Giáp Của Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/om-khan-tieu-ma-giap-cua-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-om-khan-tieu-ma-giap-cua-toi",
+      "latestChapter": "Chapter 422",
+      "views": "139"
+    },
+    {
+      "rank": 7,
+      "slug": "lua-nguoi-hop-voi-em",
+      "title": "Lừa Người Hợp Với Em",
+      "cover": "https://img.otruyenapi.com/uploads/comics/lua-nguoi-hop-voi-em-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-lua-nguoi-hop-voi-em",
+      "latestChapter": "Chapter 130",
+      "views": "112"
+    },
+    {
+      "rank": 8,
+      "slug": "ho-yeu-tieu-hong-nuong",
+      "title": "Hồ Yêu Tiểu Hồng Nương",
+      "cover": "https://img.otruyenapi.com/uploads/comics/ho-yeu-tieu-hong-nuong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-ho-yeu-tieu-hong-nuong",
+      "latestChapter": "Chapter 296",
+      "views": "97"
+    },
+    {
+      "rank": 9,
+      "slug": "van-may-khong-ngo",
+      "title": "Vận May Không Ngờ",
+      "cover": "https://img.otruyenapi.com/uploads/comics/van-may-khong-ngo-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-van-may-khong-ngo",
+      "latestChapter": "Chapter 87",
+      "views": "83"
+    },
+    {
+      "rank": 10,
+      "slug": "truy-tinh-truc-nguyet",
+      "title": "Truy Tinh Trục Nguyệt",
+      "cover": "https://img.otruyenapi.com/uploads/comics/truy-tinh-truc-nguyet-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-truy-tinh-truc-nguyet",
+      "latestChapter": "Chapter 31",
+      "views": "89"
+    },
+    {
+      "rank": 11,
+      "slug": "tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "title": "Trở Thành Cô Cháu Gái Bị Khinh Miệt Của Gia Tộc Võ Lâm",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tro-thanh-co-chau-gai-bi-khinh-miet-cua-gia-toc-vo-lam",
+      "latestChapter": "Chapter 118",
+      "views": "106"
+    },
+    {
+      "rank": 12,
+      "slug": "tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "title": "Tiểu Thư Crystal Là Một Người Đàn Ông",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tieu-thu-crystal-la-mot-nguoi-dan-ong-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tieu-thu-crystal-la-mot-nguoi-dan-ong",
+      "latestChapter": "Chapter 69",
+      "views": "61"
+    },
+    {
+      "rank": 13,
+      "slug": "tien-la-tat-ca-chong-la-phu-du",
+      "title": "Tiền Là Tất Cả Chồng Là Phù Du",
+      "cover": "https://img.otruyenapi.com/uploads/comics/tien-la-tat-ca-chong-la-phu-du-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-tien-la-tat-ca-chong-la-phu-du",
+      "latestChapter": "Chapter 113",
+      "views": "85"
+    },
+    {
+      "rank": 14,
+      "slug": "khe-uoc-hon-nhan-cua-me-toi",
+      "title": "Khế Ước Hôn Nhân Của Mẹ Tôi",
+      "cover": "https://img.otruyenapi.com/uploads/comics/khe-uoc-hon-nhan-cua-me-toi-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-khe-uoc-hon-nhan-cua-me-toi",
+      "latestChapter": "Chapter 104",
+      "views": "89"
+    },
+    {
+      "rank": 15,
+      "slug": "kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "title": "Kao Ni Denai Kashiwada-San To Kao Ni Deru Oota-Kun",
+      "cover": "https://img.otruyenapi.com/uploads/comics/kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun-thumb.jpg",
+      "url": "https://nettruyenz.com/comic-kao-ni-denai-kashiwada-san-to-kao-ni-deru-oota-kun",
+      "latestChapter": "Chapter 72",
+      "views": "87"
+    }
+  ]
+}
