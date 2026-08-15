@@ -1,10 +1,9 @@
 # setup_task.ps1
-# Chạy script này 1 lần duy nhất (Run as Administrator) để đăng ký Task Scheduler
-# Sau đó mỗi đêm 1:00 AM sẽ tự động cào dữ liệu
+# Chạy script này 1 lần duy nhất để đăng ký Task Scheduler
+# KHÔNG cần quyền Administrator
 
 $TaskName   = "NightlyCrawl_TruyenNgonTinh"
 $BatFile    = "d:\Desktop\Daily\scheduler\crawl_nightly.bat"
-$TriggerTime = "01:00"   # Giờ chạy mỗi đêm (HH:mm, 24h)
 $ProjectDir  = "d:\Desktop\Daily"
 
 Write-Host "=== Cai dat Windows Task Scheduler ===" -ForegroundColor Cyan
@@ -15,14 +14,19 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Write-Host "[OK] Da xoa task cu." -ForegroundColor Yellow
 }
 
-# Tạo Action: chạy file .bat
+# Action: chạy file .bat
 $Action = New-ScheduledTaskAction `
     -Execute "cmd.exe" `
     -Argument "/c `"$BatFile`"" `
     -WorkingDirectory $ProjectDir
 
-# Trigger: mỗi ngày lúc 1:00 AM
-$Trigger = New-ScheduledTaskTrigger -Daily -At $TriggerTime
+# ── Trigger 1: Mỗi ngày lúc 1:00 AM ─────────────────────────────────
+$Trigger1 = New-ScheduledTaskTrigger -Daily -At "01:00"
+
+# ── Trigger 2: Khi đăng nhập vào Windows ─────────────────────────────
+# → Đảm bảo chạy ngay khi bật máy, dù lỡ giờ 1 AM
+# → File .bat tự check flag "hôm nay đã chạy chưa" nên không bị double-run
+$Trigger2 = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 
 # Settings
 $Settings = New-ScheduledTaskSettingsSet `
@@ -37,23 +41,25 @@ $Principal = New-ScheduledTaskPrincipal `
     -LogonType Interactive `
     -RunLevel Limited
 
-# Đăng ký Task
+# Đăng ký Task với CẢ 2 trigger
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $Action `
-    -Trigger $Trigger `
+    -Trigger @($Trigger1, $Trigger2) `
     -Settings $Settings `
     -Principal $Principal `
-    -Description "Tu dong cao du lieu truyen Ngon Tinh, BL, Teamsany moi dem luc $TriggerTime" `
+    -Description "Tu dong cao truyen Ngon Tinh + BL + Teamsany. Chay luc 1AM hoac ngay khi dang nhap Windows (1 lan/ngay)." `
     -Force | Out-Null
 
 Write-Host ""
 Write-Host "=== HOAN TAT! ===" -ForegroundColor Green
-Write-Host "Task: $TaskName" -ForegroundColor White
-Write-Host "Chay moi dem luc: $TriggerTime" -ForegroundColor White
-Write-Host "Log luu tai: d:\Desktop\Daily\scheduler\logs\" -ForegroundColor White
+Write-Host ""
+Write-Host "  Trigger 1 : Moi ngay luc 01:00 AM" -ForegroundColor White
+Write-Host "  Trigger 2 : Ngay khi dang nhap Windows (bat may la chay)" -ForegroundColor White
+Write-Host "  Bao ve    : Chi chay 1 lan/ngay (file flag)" -ForegroundColor White
+Write-Host "  Log luu   : d:\Desktop\Daily\scheduler\logs\" -ForegroundColor White
 Write-Host ""
 Write-Host "Lenh quan ly:" -ForegroundColor Cyan
-Write-Host "  Xem trang thai : Get-ScheduledTask -TaskName '$TaskName'" -ForegroundColor Gray
-Write-Host "  Chay ngay bay gio: Start-ScheduledTask -TaskName '$TaskName'" -ForegroundColor Gray
-Write-Host "  Xoa task       : Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false" -ForegroundColor Gray
+Write-Host "  Chay ngay bay gio : Start-ScheduledTask -TaskName '$TaskName'" -ForegroundColor Gray
+Write-Host "  Xem trang thai    : Get-ScheduledTaskInfo -TaskName '$TaskName'" -ForegroundColor Gray
+Write-Host "  Xoa task          : Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false" -ForegroundColor Gray
