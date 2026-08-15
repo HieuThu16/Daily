@@ -918,13 +918,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     const meta = getItemExtraMeta(item)
     const isBook = item.type === 'BOOK'
     const isVideo = item.type === 'YOUTUBE'
-    /** Sách và TV Show bấm một lần là mở chi tiết; các loại khác chưa có màn riêng. */
+    const isMusic = item.type === 'MUSIC'
+    /** Sách, TV Show, và Nhạc (có audio) bấm một lần là mở chi tiết */
     const openDetail =
       isBook ? () => setSelectedBookItemId(item.id)
       : isVideo ? () => setSelectedVideoItemId(item.id)
       : isMusic && item.audio_url ? () => setSelectedAudioItemId(item.id)
       : null
-    const isMusic = item.type === 'MUSIC'
     const genreStyle = getMusicGenreStyle(item.music_genre)
     const fmt = item.book_format ?? 'READ'
     // Latest reading log for this book

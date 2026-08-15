@@ -25,6 +25,8 @@ import { NgontinhDetailPage } from './features/manga/NgontinhDetailPage'
 import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
 import { useTaskReminders } from './features/useTaskReminders'
 import { exportBackup } from './lib/backup'
+import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
+import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -482,45 +484,48 @@ function Protected({ user }: { user: unknown }) {
 
   return (
     <ToastProvider>
-      <HeaderActionProvider>
-      <AsideProvider>
-      <Routes>
-        {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
-        <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
-        <Route path="/quotes/:mediaItemId" element={<QuotesPage />} />
-        <Route path="/quotes" element={<QuotesPage />} />
-        <Route
-          path="*"
-          element={
-            <Shell>
-              <Routes>
-                <Route path="/home" element={<HomePage />} />
-                <Route path="/habit" element={<HabitsPage />} />
-                <Route path="/daily" element={<DailyPage />} />
-                <Route path="/tasks" element={<TasksPage />} />
-                <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
-                <Route path="/tvshow" element={<LibraryPage defaultType="YOUTUBE" />} />
-                <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
-                <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
-                <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
-                <Route path="/bl" element={<BLMangaPage />} />
-                <Route path="/bl/:slug" element={<BLMangaDetailPage />} />
-                <Route path="/ngontinh" element={<NgontinhMangaPage />} />
-                <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
-                <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
-                <Route path="/people" element={<PeoplePage />} />
-                <Route path="/library" element={<Navigate to="/books" replace />} />
-                <Route path="/nutrition" element={<NutritionPage />} />
-                <Route path="/money" element={<MoneyPage />} />
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="*" element={<Navigate to="/home" replace />} />
-              </Routes>
-            </Shell>
-          }
-        />
-      </Routes>
-      </AsideProvider>
-      </HeaderActionProvider>
+      <AudioPlayerProvider>
+        <HeaderActionProvider>
+          <AsideProvider>
+            <Routes>
+              {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
+              <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
+              <Route path="/quotes/:mediaItemId" element={<QuotesPage />} />
+              <Route path="/quotes" element={<QuotesPage />} />
+              <Route
+                path="*"
+                element={
+                  <Shell>
+                    <Routes>
+                      <Route path="/home" element={<HomePage />} />
+                      <Route path="/habit" element={<HabitsPage />} />
+                      <Route path="/daily" element={<DailyPage />} />
+                      <Route path="/tasks" element={<TasksPage />} />
+                      <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
+                      <Route path="/tvshow" element={<LibraryPage defaultType="YOUTUBE" />} />
+                      <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
+                      <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
+                      <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
+                      <Route path="/bl" element={<BLMangaPage />} />
+                      <Route path="/bl/:slug" element={<BLMangaDetailPage />} />
+                      <Route path="/ngontinh" element={<NgontinhMangaPage />} />
+                      <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
+                      <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
+                      <Route path="/people" element={<PeoplePage />} />
+                      <Route path="/library" element={<Navigate to="/books" replace />} />
+                      <Route path="/nutrition" element={<NutritionPage />} />
+                      <Route path="/money" element={<MoneyPage />} />
+                      <Route path="/calendar" element={<CalendarPage />} />
+                      <Route path="*" element={<Navigate to="/home" replace />} />
+                    </Routes>
+                  </Shell>
+                }
+              />
+            </Routes>
+            <GlobalMiniPlayer />
+          </AsideProvider>
+        </HeaderActionProvider>
+      </AudioPlayerProvider>
     </ToastProvider>
   )
 }

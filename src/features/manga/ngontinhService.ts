@@ -85,7 +85,9 @@ export function getNgontinhProgress(slug: string): ReadingProgress | null {
 
 export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number } | null): boolean {
   if (!manga) return false;
-  const total = manga.totalChapters || manga.chapters?.length || 0;
-  return total > 0;
+  if (!manga.chapters || manga.chapters.length === 0) return false;
+  return manga.chapters.some(
+    (c) => (c.images && c.images.length > 0) || (c.imageCount && c.imageCount > 0)
+  );
 }
 

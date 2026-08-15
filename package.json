@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "crawl:ngontinh": "node crawl_ngontinh.js"
+    "crawl:ngontinh": "node crawl_ngontinh.js",
+    "crawl:teamsany": "node crawl_teamsany.js",
+    "crawl:bl": "node crawl_all_bl.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

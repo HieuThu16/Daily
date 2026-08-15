@@ -21,7 +21,7 @@ describe('musicShare', () => {
       count: null,
       status: 200,
       statusText: 'OK',
-    })
+    } as any)
 
     const count = await shareMusicToAll('song-123')
     expect(mockRpc).toHaveBeenCalledWith('share_music_to_all', {
@@ -38,7 +38,7 @@ describe('musicShare', () => {
       count: null,
       status: 400,
       statusText: 'Bad Request',
-    })
+    } as any)
 
     await expect(shareMusicToAll('song-invalid')).rejects.toThrow('Bài hát không có file MP3/Audio để chia sẻ.')
   })

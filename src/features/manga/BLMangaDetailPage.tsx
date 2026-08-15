@@ -2,15 +2,16 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Heart, Play, BookOpen, Clock, 
-  Search, ArrowUpDown, ChevronRight, Share2, 
+  Search, ArrowUpDown, ChevronRight,
   CheckCircle2, Sparkles, Flame, Trophy, Zap, Bookmark,
-  Tag, ChevronDown, ChevronUp
+  Tag, ChevronDown, ChevronUp, User, Palette, Layers, Info,
+  ExternalLink, AlertCircle
 } from 'lucide-react';
 import type { BLManga, MangaChapter } from '../../types/manga';
 import { 
   fetchBLMangaList, fetchHotMangaData, 
   getFavorites, toggleFavorite, 
-  getReadingHistory 
+  getReadingHistory, hasMangaData
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
 import './blMangaDetail.css';
@@ -69,7 +70,7 @@ export const BLMangaDetailPage: React.FC = () => {
           }
         }
       } catch (err) {
-        console.error('Failed to load manga detail', err);
+        console.error('Failed to load BL manga detail', err);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -84,21 +85,35 @@ export const BLMangaDetailPage: React.FC = () => {
     };
   }, [slug]);
 
-  const isFav = slug ? favorites.includes(slug) : false;
-  const userProgress = slug ? history[slug] : null;
+  const isFav = useMemo(() => {
+    return manga ? favorites.includes(manga.slug) : false;
+  }, [favorites, manga]);
+
+  const userProgress = useMemo(() => {
+    return manga ? history[manga.slug] : null;
+  }, [history, manga]);
 
   const handleToggleFav = () => {
-    if (!slug) return;
-    toggleFavorite(slug);
+    if (!manga) return;
+    toggleFavorite(manga.slug);
     setFavorites(getFavorites());
   };
 
-  // Filter and sort chapters
+  // Chapter sorting & filtering
   const displayedChapters = useMemo(() => {
-    if (!manga || !manga.chapters) return [];
-    
+    if (!manga?.chapters) return [];
     let list = [...manga.chapters];
-    
+
+    // Filter by search
+    if (chapterSearch.trim()) {
+      const q = chapterSearch.toLowerCase().trim();
+      list = list.filter((ch) => {
+        const nameMatch = ch.name?.toLowerCase().includes(q);
+        const numMatch = ch.number != null && ch.number.toString().includes(q);
+        return nameMatch || numMatch;
+      });
+    }
+
     // Sort
     list.sort((a, b) => {
       const numA = a.number ?? 0;
@@ -106,37 +121,28 @@ export const BLMangaDetailPage: React.FC = () => {
       return sortAsc ? numA - numB : numB - numA;
     });
 
-    // Search filter
-    if (chapterSearch.trim()) {
-      const q = chapterSearch.toLowerCase().trim();
-      list = list.filter(ch => 
-        (ch.title && ch.title.toLowerCase().includes(q)) || 
-        (ch.name && ch.name.toLowerCase().includes(q)) ||
-        (ch.number != null && ch.number.toString().includes(q))
-      );
-    }
-
     return list;
-  }, [manga, sortAsc, chapterSearch]);
+  }, [manga?.chapters, chapterSearch, sortAsc]);
 
   const firstChapterNum = useMemo(() => {
-    if (!manga || !manga.chapters.length) return 1;
+    if (!manga?.chapters || manga.chapters.length === 0) return 1;
     const sorted = [...manga.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
     return sorted[0]?.number ?? 1;
-  }, [manga]);
+  }, [manga?.chapters]);
 
   const handleStartRead = () => {
-    const targetChapter = userProgress?.chapterNumber ?? firstChapterNum;
-    setReadingChapterNum(targetChapter);
+    if (userProgress?.chapterNumber != null) {
+      setReadingChapterNum(userProgress.chapterNumber);
+    } else {
+      setReadingChapterNum(firstChapterNum);
+    }
   };
 
   if (loading) {
     return (
-      <div className="bl-detail-page">
-        <div className="bl-detail-loading">
-          <div className="bl-spinner" />
-          <p>Đang tải thông tin truyện...</p>
-        </div>
+      <div className="bl-detail-loading">
+        <div className="bl-detail-spinner" />
+        <p>Đang tải thông tin truyện...</p>
       </div>
     );
   }
@@ -144,9 +150,8 @@ export const BLMangaDetailPage: React.FC = () => {
   if (!manga) {
     return (
       <div className="bl-detail-page">
-        <div className="bl-detail-empty">
-          <Bookmark size={48} className="bl-empty-icon" />
-          <h2>Không tìm thấy bộ truyện</h2>
+        <div className="bl-detail-notfound">
+          <h2>Không tìm thấy truyện</h2>
           <p>Truyện có thể đã được cập nhật hoặc không tồn tại.</p>
           <button className="bl-btn-back-home" onClick={() => navigate('/bl')}>
             <ArrowLeft size={16} /> Quay lại danh sách truyện BL
@@ -155,6 +160,10 @@ export const BLMangaDetailPage: React.FC = () => {
       </div>
     );
   }
+
+  const isSanyTeam = manga.source === 'teamsany' || manga.sourceName === 'Sany Team';
+  const hasData = hasMangaData(manga);
+  const sourceName = manga.sourceName || (isSanyTeam ? 'Sany Team' : 'Dưa Leo');
 
   return (
     <div className="bl-detail-page">
@@ -215,16 +224,39 @@ export const BLMangaDetailPage: React.FC = () => {
             {!manga.hotRank && manga.isHot && (
               <div className="bl-hot-tag">🔥 HOT</div>
             )}
+
+            {isSanyTeam && (
+              <div className="bl-sany-source-tag-detail">
+                ✨ Sany Team
+              </div>
+            )}
           </div>
 
           {/* Details Meta */}
           <div className="bl-hero-meta">
             <h1 className="bl-hero-title">{manga.title}</h1>
 
+            {/* Badges Row */}
             <div className="bl-hero-badges-row">
-              <span className="bl-badge-pill highlight">
-                <BookOpen size={14} /> {manga.totalChapters || manga.chapters.length} Chapters
+              {hasData ? (
+                <span className="bl-badge-pill highlight">
+                  <BookOpen size={14} /> {manga.totalChapters || manga.chapters.length} Chapters
+                </span>
+              ) : (
+                <span className="bl-badge-pill no-data">
+                  <AlertCircle size={14} /> Chưa có dữ liệu ảnh
+                </span>
+              )}
+
+              <span className="bl-badge-pill source-badge">
+                <Layers size={14} /> Nguồn: {sourceName}
               </span>
+
+              {manga.status && (
+                <span className="bl-badge-pill status-badge">
+                  <CheckCircle2 size={14} /> {manga.status}
+                </span>
+              )}
 
               {userProgress && (
                 <span className="bl-badge-pill reading">
@@ -232,12 +264,39 @@ export const BLMangaDetailPage: React.FC = () => {
                 </span>
               )}
 
-              {manga.isHot && (
-                <span className="bl-badge-pill hot">
-                  <Flame size={14} /> Thịnh hành
+              {manga.topDayRank != null && (
+                <span className="bl-badge-pill top-day">
+                  <Zap size={14} /> Top {manga.topDayRank} Ngày
+                </span>
+              )}
+
+              {manga.topWeekRank != null && (
+                <span className="bl-badge-pill top-week">
+                  <Trophy size={14} /> Top {manga.topWeekRank} Tuần
                 </span>
               )}
             </div>
+
+            {/* Author / Artist Meta */}
+            {(manga.author || manga.artist || manga.type) && (
+              <div className="bl-author-meta-row">
+                {manga.author && (
+                  <span className="bl-author-chip">
+                    <User size={13} /> <strong>Tác giả:</strong> {manga.author}
+                  </span>
+                )}
+                {manga.artist && (
+                  <span className="bl-author-chip">
+                    <Palette size={13} /> <strong>Họa sĩ:</strong> {manga.artist}
+                  </span>
+                )}
+                {manga.type && (
+                  <span className="bl-author-chip">
+                    <Info size={13} /> <strong>Loại:</strong> {manga.type}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Genres Collapsible Toggle */}
             {manga.genres && manga.genres.length > 0 && (
@@ -266,7 +325,7 @@ export const BLMangaDetailPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="bl-hero-actions">
-              {manga.chapters && manga.chapters.length > 0 ? (
+              {hasData ? (
                 <button className="bl-btn-read-main" onClick={handleStartRead}>
                   <Play size={18} fill="currentColor" />
                   <span>
@@ -276,7 +335,21 @@ export const BLMangaDetailPage: React.FC = () => {
                   </span>
                 </button>
               ) : (
-                <span className="bl-nodata-detail-badge">Chưa có dữ liệu chapter</span>
+                <span className="bl-nodata-detail-badge">
+                  <AlertCircle size={15} /> Chưa có dữ liệu đọc
+                </span>
+              )}
+
+              {manga.url && (
+                <a 
+                  href={manga.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="bl-btn-source-link"
+                >
+                  <ExternalLink size={16} />
+                  <span>Mở trên {sourceName}</span>
+                </a>
               )}
 
               <button 
@@ -291,17 +364,48 @@ export const BLMangaDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Body: Chapter List */}
+      {/* Main Body */}
       <div className="bl-detail-body">
+        {/* No-data notice banner */}
+        {!hasData && (
+          <div className="bl-nodata-notice-banner">
+            <AlertCircle size={20} className="bl-notice-icon" />
+            <div className="bl-notice-text">
+              <strong>Chưa có dữ liệu ảnh trong bộ nhớ đệm:</strong>
+              <span>Bộ truyện này hiện chưa có sẵn ảnh các chapter trên hệ thống. Bạn có thể bấm vào từng chương để mở đọc trực tiếp trên trang {sourceName}.</span>
+            </div>
+            {manga.url && (
+              <a 
+                href={manga.url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="bl-notice-btn"
+              >
+                Đọc trên {sourceName} <ExternalLink size={13} />
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Description Section if available */}
+        {manga.description && (
+          <div className="bl-section-card">
+            <h3 className="bl-section-heading">
+              <BookOpen size={18} color="#6366f1" /> Giới thiệu nội dung
+            </h3>
+            <p className="bl-synopsis-text">{manga.description}</p>
+          </div>
+        )}
+
         {/* Chapters Section */}
         <section className="bl-section-card">
           <div className="bl-chapters-header">
             <div className="bl-chapters-title-group">
               <h3 className="bl-section-heading" style={{ margin: 0 }}>
-                Danh sách Chapter
+                Danh sách chương
               </h3>
               <span className="bl-chapters-count-badge">
-                {manga.chapters.length} chapters
+                {manga.chapters.length} chương
               </span>
             </div>
 
@@ -323,7 +427,7 @@ export const BLMangaDetailPage: React.FC = () => {
                 title={sortAsc ? 'Đổi sang Mới nhất trước' : 'Đổi sang Cũ nhất trước'}
               >
                 <ArrowUpDown size={14} />
-                <span>{sortAsc ? 'Cũ nhất trước' : 'Mới nhất trước'}</span>
+                <span>{sortAsc ? 'Cũ nhất' : 'Mới nhất'}</span>
               </button>
             </div>
           </div>
@@ -336,13 +440,14 @@ export const BLMangaDetailPage: React.FC = () => {
               </div>
             ) : (
               displayedChapters.map((ch, idx) => {
-                const chNum = ch.number ?? idx + 1;
+                const chNum = ch.number ?? (idx + 1);
                 const isCurrentlyReading = userProgress?.chapterNumber === chNum;
+                const hasChImages = Boolean((ch.images && ch.images.length > 0) || (ch.imageCount && ch.imageCount > 0));
 
                 return (
                   <button
-                    key={ch.url || `ch-${chNum}`}
-                    className={`bl-ch-card ${isCurrentlyReading ? 'reading' : ''}`}
+                    key={ch.url || `ch-${idx}`}
+                    className={`bl-ch-card ${isCurrentlyReading ? 'reading' : ''} ${!hasChImages ? 'no-images' : ''}`}
                     onClick={() => setReadingChapterNum(chNum)}
                   >
                     <div className="bl-ch-info">
@@ -354,8 +459,17 @@ export const BLMangaDetailPage: React.FC = () => {
                           <CheckCircle2 size={12} /> Đang đọc
                         </span>
                       )}
+                      {!hasChImages && !isCurrentlyReading && (
+                        <span className="bl-ch-noimg-tag">
+                          Chưa có ảnh
+                        </span>
+                      )}
                     </div>
-                    <ChevronRight size={16} className="bl-ch-arrow" />
+                    {hasChImages ? (
+                      <span className="bl-ch-count">{ch.imageCount || ch.images?.length} ảnh</span>
+                    ) : (
+                      <ExternalLink size={13} className="bl-ch-ext-icon" />
+                    )}
                   </button>
                 );
               })
@@ -373,6 +487,7 @@ export const BLMangaDetailPage: React.FC = () => {
             setReadingChapterNum(null);
             setHistory(getReadingHistory());
           }}
+          onSelectChapter={(nextNum) => setReadingChapterNum(nextNum)}
         />
       )}
     </div>

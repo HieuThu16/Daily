@@ -230,7 +230,7 @@ export const BLReaderModal: React.FC<Props> = ({
               className="bl-btn-primary"
               style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
-              <ExternalLink size={15} /> Mở trang DuaLeoTruyen
+              <ExternalLink size={15} /> Mở trang {manga.sourceName || (manga.source === 'teamsany' ? 'Sany Team' : 'Dưa Leo')}
             </a>
           </div>
         )}

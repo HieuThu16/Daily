@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   CloudUpload,
@@ -23,6 +23,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import type { Media } from '../../types'
 import { MarqueeText } from './MarqueeText'
+import { useAudioPlayer, type RepeatMode } from './AudioPlayerContext'
 
 export type LibraryCategory = {
   id: string
@@ -135,59 +136,77 @@ export function LibraryAudioDetail({
   onShareToAll,
 }: LibraryAudioDetailProps) {
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
 
-  // Danh sách phát hoàn chỉnh bao gồm ít nhất bài hiện tại
+  // Kết nối với Global Audio Player nếu có Provider
+  let globalPlayer: ReturnType<typeof useAudioPlayer> | null = null
+  try {
+    globalPlayer = useAudioPlayer()
+  } catch {}
+
+  // Fallback local state nếu chạy trong môi trường test độc lập không có Provider
+  const localAudioRef = useRef<HTMLAudioElement | null>(null)
+  const [localTrack, setLocalTrack] = useState<Media>(item)
+  const [localPlaying, setLocalPlaying] = useState(false)
+  const [localCurrentTime, setLocalCurrentTime] = useState(0)
+  const [localDuration, setLocalDuration] = useState(0)
+  const [localVolume, setLocalVolume] = useState(1)
+  const [localMuted, setLocalMuted] = useState(false)
+  const [localShuffle, setLocalShuffle] = useState(false)
+  const [localRepeat, setLocalRepeat] = useState<RepeatMode>('ALL')
+  const [localError, setLocalError] = useState(false)
+
+  const isGlobal = Boolean(globalPlayer)
+
+  // Danh sách bài hát hoàn chỉnh
   const queue = useMemo(() => {
-    if (playlist.length > 0 && playlist.some((t) => t.id === item.id)) {
-      return playlist
+    const sourceList = isGlobal && globalPlayer?.playlist.length ? globalPlayer.playlist : playlist
+    if (sourceList.length > 0 && sourceList.some((t) => t.id === item.id)) {
+      return sourceList
     }
-    return [item, ...playlist.filter((t) => t.id !== item.id)]
-  }, [playlist, item])
+    return [item, ...sourceList.filter((t) => t.id !== item.id)]
+  }, [playlist, item, isGlobal, globalPlayer?.playlist])
 
-  const [currentTrack, setCurrentTrack] = useState<Media>(item)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
-  const [isMuted, setIsMuted] = useState(false)
-  const [isShuffle, setIsShuffle] = useState(false)
-  const [repeatMode, setRepeatMode] = useState<'OFF' | 'ALL' | 'ONE'>('ALL')
-  const [audioError, setAudioError] = useState(false)
+  // Khởi động phát bài hát khi mở màn hình chi tiết
+  useEffect(() => {
+    if (globalPlayer) {
+      if (globalPlayer.currentTrack?.id !== item.id) {
+        globalPlayer.playTrack(item, queue)
+      }
+    } else {
+      setLocalTrack(item)
+      setLocalCurrentTime(0)
+      if (localAudioRef.current && item.audio_url) {
+        localAudioRef.current.load?.()
+        const p = localAudioRef.current.play?.()
+        if (p && typeof p.then === 'function') {
+          p.then(() => setLocalPlaying(true)).catch(() => setLocalPlaying(false))
+        } else {
+          setLocalPlaying(true)
+        }
+      }
+    }
+  }, [item.id])
+
+  const currentTrack = isGlobal && globalPlayer?.currentTrack ? globalPlayer.currentTrack : localTrack
+  const isPlaying = isGlobal && globalPlayer ? globalPlayer.isPlaying : localPlaying
+  const currentTime = isGlobal && globalPlayer ? globalPlayer.currentTime : localCurrentTime
+  const duration = isGlobal && globalPlayer ? globalPlayer.duration : localDuration
+  const volume = isGlobal && globalPlayer ? globalPlayer.volume : localVolume
+  const isMuted = isGlobal && globalPlayer ? globalPlayer.isMuted : localMuted
+  const isShuffle = isGlobal && globalPlayer ? globalPlayer.isShuffle : localShuffle
+  const repeatMode = isGlobal && globalPlayer ? globalPlayer.repeatMode : localRepeat
+  const audioError = isGlobal && globalPlayer ? globalPlayer.audioError : localError
+
   const [searchQuery, setSearchQuery] = useState('')
   const [showQueue, setShowQueue] = useState(true)
-
-  // Đồng bộ bài hiện tại khi prop item thay đổi
-  useEffect(() => {
-    setCurrentTrack(item)
-    setCurrentTime(0)
-    setAudioError(false)
-  }, [item.id])
 
   // Focus tiêu đề khi đổi bài
   useEffect(() => {
     headingRef.current?.focus()
   }, [currentTrack.id])
 
-  // Tự động phát khi vào màn hình chi tiết hoặc khi đổi bài hát
-  useEffect(() => {
-    if (audioRef.current && currentTrack.audio_url) {
-      setAudioError(false)
-      audioRef.current.load()
-      const playPromise = audioRef.current.play()
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => setIsPlaying(true))
-          .catch((err) => {
-            console.warn('[AutoPlay policy warning]', err)
-            setIsPlaying(false)
-          })
-      }
-    }
-  }, [currentTrack.id, currentTrack.audio_url])
-
   const currentIndex = queue.findIndex((t) => t.id === currentTrack.id)
-  const nextTrack =
+  const nextTrackItem =
     currentIndex >= 0 && currentIndex < queue.length - 1
       ? queue[currentIndex + 1]
       : queue.length > 1 && repeatMode === 'ALL'
@@ -195,104 +214,108 @@ export function LibraryAudioDetail({
         : null
 
   const switchTrack = (track: Media) => {
-    setCurrentTrack(track)
+    if (globalPlayer) {
+      globalPlayer.playTrack(track, queue)
+    } else {
+      setLocalTrack(track)
+      setLocalCurrentTime(0)
+    }
     if (onSelectTrack) onSelectTrack(track)
   }
 
   const handleTogglePlay = () => {
-    if (!audioRef.current) return
-    if (isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
+    if (globalPlayer) {
+      globalPlayer.togglePlay()
+    } else if (localAudioRef.current) {
+      if (localPlaying) {
+        localAudioRef.current.pause?.()
+        setLocalPlaying(false)
+      } else {
+        const p = localAudioRef.current.play?.()
+        if (p && typeof p.then === 'function') {
+          p.then(() => setLocalPlaying(true)).catch(() => setLocalPlaying(false))
+        } else {
+          setLocalPlaying(true)
+        }
+      }
     }
   }
 
   const handleNext = () => {
-    if (queue.length <= 1) {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0
-        audioRef.current.play().catch(() => {})
+    if (globalPlayer) {
+      globalPlayer.nextTrack()
+    } else {
+      if (currentIndex < queue.length - 1) {
+        switchTrack(queue[currentIndex + 1])
+      } else if (repeatMode === 'ALL') {
+        switchTrack(queue[0])
       }
-      return
-    }
-
-    if (isShuffle) {
-      const otherIndices = queue.map((_, i) => i).filter((i) => i !== currentIndex)
-      const randomIdx = otherIndices[Math.floor(Math.random() * otherIndices.length)]
-      switchTrack(queue[randomIdx])
-      return
-    }
-
-    if (currentIndex < queue.length - 1) {
-      switchTrack(queue[currentIndex + 1])
-    } else if (repeatMode === 'ALL') {
-      switchTrack(queue[0])
     }
   }
 
   const handlePrev = () => {
-    if (audioRef.current && audioRef.current.currentTime > 3) {
-      audioRef.current.currentTime = 0
-      return
-    }
-
-    if (queue.length <= 1) {
-      if (audioRef.current) audioRef.current.currentTime = 0
-      return
-    }
-
-    if (currentIndex > 0) {
-      switchTrack(queue[currentIndex - 1])
-    } else if (repeatMode === 'ALL') {
-      switchTrack(queue[queue.length - 1])
-    }
-  }
-
-  const handleEnded = () => {
-    if (repeatMode === 'ONE') {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0
-        audioRef.current.play().catch(() => {})
-      }
+    if (globalPlayer) {
+      globalPlayer.prevTrack()
     } else {
-      handleNext()
+      if (currentIndex > 0) {
+        switchTrack(queue[currentIndex - 1])
+      } else if (repeatMode === 'ALL') {
+        switchTrack(queue[queue.length - 1])
+      }
     }
   }
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value)
-    setCurrentTime(time)
-    if (audioRef.current) {
-      audioRef.current.currentTime = time
+    if (globalPlayer) {
+      globalPlayer.seek(time)
+    } else {
+      setLocalCurrentTime(time)
+      if (localAudioRef.current) localAudioRef.current.currentTime = time
     }
   }
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value)
-    setVolume(val)
-    if (audioRef.current) {
-      audioRef.current.volume = val
-      setIsMuted(val === 0)
+    if (globalPlayer) {
+      globalPlayer.setVolume(val)
+    } else {
+      setLocalVolume(val)
+      if (localAudioRef.current) {
+        localAudioRef.current.volume = val
+        setLocalMuted(val === 0)
+      }
     }
   }
 
   const toggleMute = () => {
-    if (!audioRef.current) return
-    if (isMuted) {
-      audioRef.current.volume = volume || 0.5
-      setIsMuted(false)
-    } else {
-      audioRef.current.volume = 0
-      setIsMuted(true)
+    if (globalPlayer) {
+      globalPlayer.toggleMute()
+    } else if (localAudioRef.current) {
+      if (localMuted) {
+        localAudioRef.current.volume = localVolume || 0.5
+        setLocalMuted(false)
+      } else {
+        localAudioRef.current.volume = 0
+        setLocalMuted(true)
+      }
     }
   }
 
   const toggleRepeat = () => {
-    if (repeatMode === 'OFF') setRepeatMode('ALL')
-    else if (repeatMode === 'ALL') setRepeatMode('ONE')
-    else setRepeatMode('OFF')
+    if (globalPlayer) {
+      globalPlayer.toggleRepeat()
+    } else {
+      setLocalRepeat((prev) => (prev === 'OFF' ? 'ALL' : prev === 'ALL' ? 'ONE' : 'OFF'))
+    }
+  }
+
+  const toggleShuffle = () => {
+    if (globalPlayer) {
+      globalPlayer.toggleShuffle()
+    } else {
+      setLocalShuffle((prev) => !prev)
+    }
   }
 
   const filteredQueue = useMemo(() => {
@@ -311,26 +334,28 @@ export function LibraryAudioDetail({
 
   return (
     <section className="library-audio-detail web-music-player" aria-labelledby="library-audio-title">
-      {/* Hidden Audio Element with Event Listeners */}
-      <audio
-        ref={audioRef}
-        key={currentTrack.id}
-        src={currentTrack.audio_url || undefined}
-        preload="auto"
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onTimeUpdate={() => {
-          if (audioRef.current) setCurrentTime(audioRef.current.currentTime)
-        }}
-        onLoadedMetadata={() => {
-          if (audioRef.current) setDuration(audioRef.current.duration)
-        }}
-        onEnded={handleEnded}
-        onError={() => {
-          setAudioError(true)
-          setIsPlaying(false)
-        }}
-      />
+      {/* Fallback audio element khi chạy độc lập không có global provider */}
+      {!isGlobal && (
+        <audio
+          ref={localAudioRef}
+          key={currentTrack.id}
+          src={currentTrack.audio_url || undefined}
+          preload="auto"
+          onPlay={() => setLocalPlaying(true)}
+          onPause={() => setLocalPlaying(false)}
+          onTimeUpdate={() => {
+            if (localAudioRef.current) setLocalCurrentTime(localAudioRef.current.currentTime)
+          }}
+          onLoadedMetadata={() => {
+            if (localAudioRef.current) setLocalDuration(localAudioRef.current.duration)
+          }}
+          onEnded={handleNext}
+          onError={() => {
+            setLocalError(true)
+            setLocalPlaying(false)
+          }}
+        />
+      )}
 
       {/* Top Navigation Bar */}
       <div className="music-player-topbar">
@@ -437,7 +462,7 @@ export function LibraryAudioDetail({
           <button
             type="button"
             className={`music-ctrl-btn small ${isShuffle ? 'is-active' : ''}`}
-            onClick={() => setIsShuffle(!isShuffle)}
+            onClick={toggleShuffle}
             title={isShuffle ? 'Tắt phát ngẫu nhiên' : 'Bật phát ngẫu nhiên'}
             aria-label="Phát ngẫu nhiên"
           >
@@ -554,10 +579,10 @@ export function LibraryAudioDetail({
               <ListMusic size={18} className="text-cyan" />
               <h3>Danh sách phát ({queue.length})</h3>
             </div>
-            {nextTrack && (
-              <div className="music-next-preview" title={`Bài tiếp theo: ${nextTrack.name}`}>
+            {nextTrackItem && (
+              <div className="music-next-preview" title={`Bài tiếp theo: ${nextTrackItem.name}`}>
                 <small>Tiếp theo:</small>
-                <strong>{nextTrack.name}</strong>
+                <strong>{nextTrackItem.name}</strong>
               </div>
             )}
           </div>

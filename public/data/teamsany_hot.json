@@ -1,0 +1,611 @@
+{
+  "updatedAt": "2026-08-15T15:53:08.514Z",
+  "hot": [
+    {
+      "rank": 1,
+      "slug": "tinh-nhan",
+      "title": "Tình Nhân 4 Tuần",
+      "cover": "https://cdn.teamsany.com/Images//2021/05/1cover.jpg",
+      "url": "https://teamsany.com/manga/tinh-nhan/",
+      "latestChapter": "Tình Nhân 4 Tuần Ngoại Truyện Đặc Biệt"
+    },
+    {
+      "rank": 2,
+      "slug": "nmst",
+      "title": "VÔ ĐẠO ĐỨC",
+      "cover": "https://cdn.teamsany.com/Images//2024/02/image-20250801-M6fuQw.jpg",
+      "url": "https://teamsany.com/manga/nmst/",
+      "latestChapter": "Vô Đạo Đức Chap Hậu Kì SS3"
+    },
+    {
+      "rank": 3,
+      "slug": "ham-muon-chay-bong",
+      "title": "HAM MUỐN CHÁY BỎNG",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/Coverdb22.webp",
+      "url": "https://teamsany.com/manga/ham-muon-chay-bong/",
+      "latestChapter": "Ham Muốn Cháy Bỏng Chap 115 – End"
+    },
+    {
+      "rank": 4,
+      "slug": "vuot-xa-ki-uc",
+      "title": "VƯỢT XA KÍ ỨC",
+      "cover": "https://cdn.teamsany.com/Images//2023/11/coverss3.jpg",
+      "url": "https://teamsany.com/manga/vuot-xa-ki-uc/",
+      "latestChapter": "Vượt Xa Kí Ức Chap 109 -END"
+    },
+    {
+      "rank": 5,
+      "slug": "nlsanyteam",
+      "title": "Người Lạ",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/coversr.jpg",
+      "url": "https://teamsany.com/manga/nlsanyteam/",
+      "latestChapter": "Người Lạ Phần Kết 2"
+    },
+    {
+      "rank": 6,
+      "slug": "tinh-yeu-yakuza",
+      "title": "Tình Yêu Yakuza",
+      "cover": "https://cdn.teamsany.com/Images//2021/06/yakuza-1.jpg",
+      "url": "https://teamsany.com/manga/tinh-yeu-yakuza/",
+      "latestChapter": "Tình Yêu Yakuza Phần 2 Chap 43 – KẾT THÚC"
+    },
+    {
+      "rank": 7,
+      "slug": "loilaptrinh",
+      "title": "Lỗi Lập Trình",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/Anhbia.png",
+      "url": "https://teamsany.com/manga/loilaptrinh/",
+      "latestChapter": "Lỗi Lập Trình Chap 103 – NT10"
+    },
+    {
+      "rank": 8,
+      "slug": "ban-tinh-mot-dem",
+      "title": "Bạn Tình Một Đêm",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/ban-tinh.jpg",
+      "url": "https://teamsany.com/manga/ban-tinh-mot-dem/",
+      "latestChapter": "Bạn Tình Một Đêm Ngoại Truyện 19 – HOÀN"
+    },
+    {
+      "rank": 9,
+      "slug": "cua-hang-tien-loi-nguyhiemm",
+      "title": "Cửa Hàng Tiện Lợi Nguy Hiểm",
+      "cover": "https://cdn.teamsany.com/Images//2021/09/cuahangtienloi2.jpg",
+      "url": "https://teamsany.com/manga/cua-hang-tien-loi-nguyhiemm/",
+      "latestChapter": "Cửa Hàng Tiện Lợi – Giấc Mơ Của Eui Jun 8 – KẾT THÚC"
+    },
+    {
+      "rank": 10,
+      "slug": "ho",
+      "title": "MỘT NỬA CỦA TÔI",
+      "cover": "https://cdn.teamsany.com/Images//2024/04/coverho-2.jpg",
+      "url": "https://teamsany.com/manga/ho/",
+      "latestChapter": "Một Nửa Của Tôi Chap 98 – Kết Thúc"
+    },
+    {
+      "rank": 11,
+      "slug": "tinh-yeu-cungdanhtieng",
+      "title": "TÌNH YÊU CÙNG DANH TIẾNG",
+      "cover": "https://cdn.teamsany.com/Images//2022/10/LFcovernew.png",
+      "url": "https://teamsany.com/manga/tinh-yeu-cungdanhtieng/",
+      "latestChapter": "Tình Yêu Cùng Danh Tiếng Chap 97"
+    },
+    {
+      "rank": 12,
+      "slug": "ai-duc",
+      "title": "ÁI DỤC",
+      "cover": "https://cdn.teamsany.com/Images//2023/10/image-20260602-6THuCx.jpg",
+      "url": "https://teamsany.com/manga/ai-duc/",
+      "latestChapter": "Ái Dục – Hậu Kì"
+    },
+    {
+      "rank": 13,
+      "slug": "homefive",
+      "title": "Homefive",
+      "cover": "https://cdn.teamsany.com/Images//2023/08/27bba0b99bcaa8dcdaa488a42936a607a25e0878_450_635_77883.jpeg",
+      "url": "https://teamsany.com/manga/homefive/",
+      "latestChapter": "Homefive chap 88-END"
+    },
+    {
+      "rank": 14,
+      "slug": "chi-dan-nguy-hiem",
+      "title": "CHỈ DẪN NGUY HIỂM",
+      "cover": "https://cdn.teamsany.com/Images//2023/07/biaaaaaaaaagh.jpg",
+      "url": "https://teamsany.com/manga/chi-dan-nguy-hiem/",
+      "latestChapter": "Chỉ Dẫn Nguy Hiểm Chap 86"
+    },
+    {
+      "rank": 15,
+      "slug": "csdte",
+      "title": "Con Sóng Dõi Theo Em",
+      "cover": "https://cdn.teamsany.com/Images//2022/06/coversg.jpg",
+      "url": "https://teamsany.com/manga/csdte/",
+      "latestChapter": "Con Sóng Dõi Theo Em Chap Ngoại Truyện Đặc Biệt 2"
+    },
+    {
+      "rank": 16,
+      "slug": "bkst",
+      "title": "Hãy Tốt Với Sự Tồi Tệ Của Tôi",
+      "cover": "https://cdn.teamsany.com/Images//2024/10/coverbk-copy-1.jpg",
+      "url": "https://teamsany.com/manga/bkst/",
+      "latestChapter": "Hãy Tốt Với Sự Tồi Tệ Của Tôi Ngoại Truyện 5 – HOÀN"
+    },
+    {
+      "rank": 17,
+      "slug": "ngay-luc-nay",
+      "title": "Ngay Lúc Này",
+      "cover": "https://cdn.teamsany.com/Images//2023/07/covernu.jpg",
+      "url": "https://teamsany.com/manga/ngay-luc-nay/",
+      "latestChapter": "Ngay Lúc Này Ngoại Truyện 21 – HOÀN THÀNH"
+    },
+    {
+      "rank": 18,
+      "slug": "ket-thuc-thu-3",
+      "title": "Kết Thúc Thứ 3",
+      "cover": "https://cdn.teamsany.com/Images//2022/03/w826h1407.avif",
+      "url": "https://teamsany.com/manga/ket-thuc-thu-3/",
+      "latestChapter": "Kết Thúc Thứ 3 – Gay bar"
+    },
+    {
+      "rank": 19,
+      "slug": "ke-thu",
+      "title": "Kẻ Thù",
+      "cover": "https://cdn.teamsany.com/Images//2023/10/COVERNJ-1.jpg",
+      "url": "https://teamsany.com/manga/ke-thu/",
+      "latestChapter": "Kẻ Thù Ngoại Truyện 10 – HOÀN THÀNH"
+    },
+    {
+      "rank": 20,
+      "slug": "ong-bo-yandere-bi-treu-gheo",
+      "title": "Ông Bố Yandere Bị Trêu Ghẹo",
+      "cover": "https://cdn.teamsany.com/Images//2023/12/SANY-TEAM.jpg",
+      "url": "https://teamsany.com/manga/ong-bo-yandere-bi-treu-gheo/",
+      "latestChapter": "Ông Bố Yandere Bị Trêu Ghẹo Chap 73 – KẾT THÚC"
+    },
+    {
+      "rank": 21,
+      "slug": "master-cua-toi",
+      "title": "Master Của Tôi",
+      "cover": "https://cdn.teamsany.com/Images//2021/08/Master-cua-toi-Kihoebiyong.jpg",
+      "url": "https://teamsany.com/manga/master-cua-toi/",
+      "latestChapter": "Master Của Tôi Ngoại Truyện 8 – HOÀN"
+    },
+    {
+      "rank": 22,
+      "slug": "mua-bao",
+      "title": "Mưa Bão",
+      "cover": "https://cdn.teamsany.com/Images//2021/05/COVER1-1.jpg",
+      "url": "https://teamsany.com/manga/mua-bao/",
+      "latestChapter": "Mưa Bão Chap 72 – KẾT THÚC"
+    },
+    {
+      "rank": 23,
+      "slug": "ngon-lua-cua-linh-hon",
+      "title": "NGỌN LỬA CỦA LINH HỒN",
+      "cover": "https://cdn.teamsany.com/Images//2025/04/coverhb.jpg",
+      "url": "https://teamsany.com/manga/ngon-lua-cua-linh-hon/",
+      "latestChapter": "Ngọn Lửa Của Linh Hồn Chap 72 Ngoại Truyện"
+    },
+    {
+      "rank": 24,
+      "slug": "can-nha-mat-troi-moc",
+      "title": "[DROP] CĂN NHÀ MẶT TRỜI MỌC",
+      "cover": "https://cdn.teamsany.com/Images//2023/08/coversh.jpg",
+      "url": "https://teamsany.com/manga/can-nha-mat-troi-moc/",
+      "latestChapter": "Căn Nhà Mặt Trời Mọc Chap 68"
+    },
+    {
+      "rank": 25,
+      "slug": "phia-sau-hao-quang",
+      "title": "PHÍA SAU ÁNH HÀO QUANG",
+      "cover": "https://cdn.teamsany.com/Images//2023/12/coverbc.jpeg",
+      "url": "https://teamsany.com/manga/phia-sau-hao-quang/",
+      "latestChapter": "Phía Sau Ánh Hào Quang Chap 65 – KẾT THÚC PHẦN 2"
+    },
+    {
+      "rank": 26,
+      "slug": "ctvh",
+      "title": "Chàng Trai Văn Học",
+      "cover": "https://cdn.teamsany.com/Images//2022/07/COVER.png",
+      "url": "https://teamsany.com/manga/ctvh/",
+      "latestChapter": "Chàng Trai Văn Học Chap 64 – NGOẠI TRUYỆN"
+    },
+    {
+      "rank": 27,
+      "slug": "unrrst111",
+      "title": "U-N-R-O-M-A-N-T-I-C",
+      "cover": "https://cdn.teamsany.com/Images//2021/06/cover-4.jpg",
+      "url": "https://teamsany.com/manga/unrrst111/",
+      "latestChapter": "Unrmt Side Story 10 – END"
+    },
+    {
+      "rank": 28,
+      "slug": "chuyen-cua-chi-chi",
+      "title": "Chuyện Của Chi Chi",
+      "cover": "https://cdn.teamsany.com/Images//2025/05/image-20250729-D6UMeH.jpg",
+      "url": "https://teamsany.com/manga/chuyen-cua-chi-chi/",
+      "latestChapter": "Chuyện Của Chi Chi Chap 63 – KẾT THÚC"
+    },
+    {
+      "rank": 29,
+      "slug": "ngoi-nha-tinh-yeu-mem-mai",
+      "title": "Ngôi Nhà Tình Yêu Mềm Mại",
+      "cover": "https://cdn.teamsany.com/Images//2022/05/Ngoi-Nha-Tinh-Yeu-Mem-Mai-Jomamelody.png",
+      "url": "https://teamsany.com/manga/ngoi-nha-tinh-yeu-mem-mai/",
+      "latestChapter": "Ngôi Nhà Tình Yêu Mềm Mại Chap 62 NT2 END"
+    },
+    {
+      "rank": 30,
+      "slug": "cau-lac-bo-dau-vo",
+      "title": "CÂU LẠC BỘ ĐẤU VÕ",
+      "cover": "https://cdn.teamsany.com/Images//2025/04/coverfc.jpg",
+      "url": "https://teamsany.com/manga/cau-lac-bo-dau-vo/",
+      "latestChapter": "Câu Lạc Bộ Đấu Võ Chap 62 – NT8"
+    }
+  ],
+  "top_day": [
+    {
+      "rank": 1,
+      "slug": "tinh-nhan",
+      "title": "Tình Nhân 4 Tuần",
+      "cover": "https://cdn.teamsany.com/Images//2021/05/1cover.jpg",
+      "url": "https://teamsany.com/manga/tinh-nhan/",
+      "latestChapter": "Tình Nhân 4 Tuần Ngoại Truyện Đặc Biệt"
+    },
+    {
+      "rank": 2,
+      "slug": "nmst",
+      "title": "VÔ ĐẠO ĐỨC",
+      "cover": "https://cdn.teamsany.com/Images//2024/02/image-20250801-M6fuQw.jpg",
+      "url": "https://teamsany.com/manga/nmst/",
+      "latestChapter": "Vô Đạo Đức Chap Hậu Kì SS3"
+    },
+    {
+      "rank": 3,
+      "slug": "ham-muon-chay-bong",
+      "title": "HAM MUỐN CHÁY BỎNG",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/Coverdb22.webp",
+      "url": "https://teamsany.com/manga/ham-muon-chay-bong/",
+      "latestChapter": "Ham Muốn Cháy Bỏng Chap 115 – End"
+    },
+    {
+      "rank": 4,
+      "slug": "vuot-xa-ki-uc",
+      "title": "VƯỢT XA KÍ ỨC",
+      "cover": "https://cdn.teamsany.com/Images//2023/11/coverss3.jpg",
+      "url": "https://teamsany.com/manga/vuot-xa-ki-uc/",
+      "latestChapter": "Vượt Xa Kí Ức Chap 109 -END"
+    },
+    {
+      "rank": 5,
+      "slug": "nlsanyteam",
+      "title": "Người Lạ",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/coversr.jpg",
+      "url": "https://teamsany.com/manga/nlsanyteam/",
+      "latestChapter": "Người Lạ Phần Kết 2"
+    },
+    {
+      "rank": 6,
+      "slug": "tinh-yeu-yakuza",
+      "title": "Tình Yêu Yakuza",
+      "cover": "https://cdn.teamsany.com/Images//2021/06/yakuza-1.jpg",
+      "url": "https://teamsany.com/manga/tinh-yeu-yakuza/",
+      "latestChapter": "Tình Yêu Yakuza Phần 2 Chap 43 – KẾT THÚC"
+    },
+    {
+      "rank": 7,
+      "slug": "loilaptrinh",
+      "title": "Lỗi Lập Trình",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/Anhbia.png",
+      "url": "https://teamsany.com/manga/loilaptrinh/",
+      "latestChapter": "Lỗi Lập Trình Chap 103 – NT10"
+    },
+    {
+      "rank": 8,
+      "slug": "ban-tinh-mot-dem",
+      "title": "Bạn Tình Một Đêm",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/ban-tinh.jpg",
+      "url": "https://teamsany.com/manga/ban-tinh-mot-dem/",
+      "latestChapter": "Bạn Tình Một Đêm Ngoại Truyện 19 – HOÀN"
+    },
+    {
+      "rank": 9,
+      "slug": "cua-hang-tien-loi-nguyhiemm",
+      "title": "Cửa Hàng Tiện Lợi Nguy Hiểm",
+      "cover": "https://cdn.teamsany.com/Images//2021/09/cuahangtienloi2.jpg",
+      "url": "https://teamsany.com/manga/cua-hang-tien-loi-nguyhiemm/",
+      "latestChapter": "Cửa Hàng Tiện Lợi – Giấc Mơ Của Eui Jun 8 – KẾT THÚC"
+    },
+    {
+      "rank": 10,
+      "slug": "ho",
+      "title": "MỘT NỬA CỦA TÔI",
+      "cover": "https://cdn.teamsany.com/Images//2024/04/coverho-2.jpg",
+      "url": "https://teamsany.com/manga/ho/",
+      "latestChapter": "Một Nửa Của Tôi Chap 98 – Kết Thúc"
+    }
+  ],
+  "top_week": [
+    {
+      "rank": 1,
+      "slug": "tinh-nhan",
+      "title": "Tình Nhân 4 Tuần",
+      "cover": "https://cdn.teamsany.com/Images//2021/05/1cover.jpg",
+      "url": "https://teamsany.com/manga/tinh-nhan/",
+      "latestChapter": "Tình Nhân 4 Tuần Ngoại Truyện Đặc Biệt"
+    },
+    {
+      "rank": 2,
+      "slug": "nmst",
+      "title": "VÔ ĐẠO ĐỨC",
+      "cover": "https://cdn.teamsany.com/Images//2024/02/image-20250801-M6fuQw.jpg",
+      "url": "https://teamsany.com/manga/nmst/",
+      "latestChapter": "Vô Đạo Đức Chap Hậu Kì SS3"
+    },
+    {
+      "rank": 3,
+      "slug": "ham-muon-chay-bong",
+      "title": "HAM MUỐN CHÁY BỎNG",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/Coverdb22.webp",
+      "url": "https://teamsany.com/manga/ham-muon-chay-bong/",
+      "latestChapter": "Ham Muốn Cháy Bỏng Chap 115 – End"
+    },
+    {
+      "rank": 4,
+      "slug": "vuot-xa-ki-uc",
+      "title": "VƯỢT XA KÍ ỨC",
+      "cover": "https://cdn.teamsany.com/Images//2023/11/coverss3.jpg",
+      "url": "https://teamsany.com/manga/vuot-xa-ki-uc/",
+      "latestChapter": "Vượt Xa Kí Ức Chap 109 -END"
+    },
+    {
+      "rank": 5,
+      "slug": "nlsanyteam",
+      "title": "Người Lạ",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/coversr.jpg",
+      "url": "https://teamsany.com/manga/nlsanyteam/",
+      "latestChapter": "Người Lạ Phần Kết 2"
+    },
+    {
+      "rank": 6,
+      "slug": "tinh-yeu-yakuza",
+      "title": "Tình Yêu Yakuza",
+      "cover": "https://cdn.teamsany.com/Images//2021/06/yakuza-1.jpg",
+      "url": "https://teamsany.com/manga/tinh-yeu-yakuza/",
+      "latestChapter": "Tình Yêu Yakuza Phần 2 Chap 43 – KẾT THÚC"
+    },
+    {
+      "rank": 7,
+      "slug": "loilaptrinh",
+      "title": "Lỗi Lập Trình",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/Anhbia.png",
+      "url": "https://teamsany.com/manga/loilaptrinh/",
+      "latestChapter": "Lỗi Lập Trình Chap 103 – NT10"
+    },
+    {
+      "rank": 8,
+      "slug": "ban-tinh-mot-dem",
+      "title": "Bạn Tình Một Đêm",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/ban-tinh.jpg",
+      "url": "https://teamsany.com/manga/ban-tinh-mot-dem/",
+      "latestChapter": "Bạn Tình Một Đêm Ngoại Truyện 19 – HOÀN"
+    },
+    {
+      "rank": 9,
+      "slug": "cua-hang-tien-loi-nguyhiemm",
+      "title": "Cửa Hàng Tiện Lợi Nguy Hiểm",
+      "cover": "https://cdn.teamsany.com/Images//2021/09/cuahangtienloi2.jpg",
+      "url": "https://teamsany.com/manga/cua-hang-tien-loi-nguyhiemm/",
+      "latestChapter": "Cửa Hàng Tiện Lợi – Giấc Mơ Của Eui Jun 8 – KẾT THÚC"
+    },
+    {
+      "rank": 10,
+      "slug": "ho",
+      "title": "MỘT NỬA CỦA TÔI",
+      "cover": "https://cdn.teamsany.com/Images//2024/04/coverho-2.jpg",
+      "url": "https://teamsany.com/manga/ho/",
+      "latestChapter": "Một Nửa Của Tôi Chap 98 – Kết Thúc"
+    },
+    {
+      "rank": 11,
+      "slug": "tinh-yeu-cungdanhtieng",
+      "title": "TÌNH YÊU CÙNG DANH TIẾNG",
+      "cover": "https://cdn.teamsany.com/Images//2022/10/LFcovernew.png",
+      "url": "https://teamsany.com/manga/tinh-yeu-cungdanhtieng/",
+      "latestChapter": "Tình Yêu Cùng Danh Tiếng Chap 97"
+    },
+    {
+      "rank": 12,
+      "slug": "ai-duc",
+      "title": "ÁI DỤC",
+      "cover": "https://cdn.teamsany.com/Images//2023/10/image-20260602-6THuCx.jpg",
+      "url": "https://teamsany.com/manga/ai-duc/",
+      "latestChapter": "Ái Dục – Hậu Kì"
+    },
+    {
+      "rank": 13,
+      "slug": "homefive",
+      "title": "Homefive",
+      "cover": "https://cdn.teamsany.com/Images//2023/08/27bba0b99bcaa8dcdaa488a42936a607a25e0878_450_635_77883.jpeg",
+      "url": "https://teamsany.com/manga/homefive/",
+      "latestChapter": "Homefive chap 88-END"
+    },
+    {
+      "rank": 14,
+      "slug": "chi-dan-nguy-hiem",
+      "title": "CHỈ DẪN NGUY HIỂM",
+      "cover": "https://cdn.teamsany.com/Images//2023/07/biaaaaaaaaagh.jpg",
+      "url": "https://teamsany.com/manga/chi-dan-nguy-hiem/",
+      "latestChapter": "Chỉ Dẫn Nguy Hiểm Chap 86"
+    },
+    {
+      "rank": 15,
+      "slug": "csdte",
+      "title": "Con Sóng Dõi Theo Em",
+      "cover": "https://cdn.teamsany.com/Images//2022/06/coversg.jpg",
+      "url": "https://teamsany.com/manga/csdte/",
+      "latestChapter": "Con Sóng Dõi Theo Em Chap Ngoại Truyện Đặc Biệt 2"
+    }
+  ],
+  "top_month": [
+    {
+      "rank": 1,
+      "slug": "tinh-nhan",
+      "title": "Tình Nhân 4 Tuần",
+      "cover": "https://cdn.teamsany.com/Images//2021/05/1cover.jpg",
+      "url": "https://teamsany.com/manga/tinh-nhan/",
+      "latestChapter": "Tình Nhân 4 Tuần Ngoại Truyện Đặc Biệt"
+    },
+    {
+      "rank": 2,
+      "slug": "nmst",
+      "title": "VÔ ĐẠO ĐỨC",
+      "cover": "https://cdn.teamsany.com/Images//2024/02/image-20250801-M6fuQw.jpg",
+      "url": "https://teamsany.com/manga/nmst/",
+      "latestChapter": "Vô Đạo Đức Chap Hậu Kì SS3"
+    },
+    {
+      "rank": 3,
+      "slug": "ham-muon-chay-bong",
+      "title": "HAM MUỐN CHÁY BỎNG",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/Coverdb22.webp",
+      "url": "https://teamsany.com/manga/ham-muon-chay-bong/",
+      "latestChapter": "Ham Muốn Cháy Bỏng Chap 115 – End"
+    },
+    {
+      "rank": 4,
+      "slug": "vuot-xa-ki-uc",
+      "title": "VƯỢT XA KÍ ỨC",
+      "cover": "https://cdn.teamsany.com/Images//2023/11/coverss3.jpg",
+      "url": "https://teamsany.com/manga/vuot-xa-ki-uc/",
+      "latestChapter": "Vượt Xa Kí Ức Chap 109 -END"
+    },
+    {
+      "rank": 5,
+      "slug": "nlsanyteam",
+      "title": "Người Lạ",
+      "cover": "https://cdn.teamsany.com/Images//2023/05/coversr.jpg",
+      "url": "https://teamsany.com/manga/nlsanyteam/",
+      "latestChapter": "Người Lạ Phần Kết 2"
+    },
+    {
+      "rank": 6,
+      "slug": "tinh-yeu-yakuza",
+      "title": "Tình Yêu Yakuza",
+      "cover": "https://cdn.teamsany.com/Images//2021/06/yakuza-1.jpg",
+      "url": "https://teamsany.com/manga/tinh-yeu-yakuza/",
+      "latestChapter": "Tình Yêu Yakuza Phần 2 Chap 43 – KẾT THÚC"
+    },
+    {
+      "rank": 7,
+      "slug": "loilaptrinh",
+      "title": "Lỗi Lập Trình",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/Anhbia.png",
+      "url": "https://teamsany.com/manga/loilaptrinh/",
+      "latestChapter": "Lỗi Lập Trình Chap 103 – NT10"
+    },
+    {
+      "rank": 8,
+      "slug": "ban-tinh-mot-dem",
+      "title": "Bạn Tình Một Đêm",
+      "cover": "https://cdn.teamsany.com/Images//2021/10/ban-tinh.jpg",
+      "url": "https://teamsany.com/manga/ban-tinh-mot-dem/",
+      "latestChapter": "Bạn Tình Một Đêm Ngoại Truyện 19 – HOÀN"
+    },
+    {
+      "rank": 9,
+      "slug": "cua-hang-tien-loi-nguyhiemm",
+      "title": "Cửa Hàng Tiện Lợi Nguy Hiểm",
+      "cover": "https://cdn.teamsany.com/Images//2021/09/cuahangtienloi2.jpg",
+      "url": "https://teamsany.com/manga/cua-hang-tien-loi-nguyhiemm/",
+      "latestChapter": "Cửa Hàng Tiện Lợi – Giấc Mơ Của Eui Jun 8 – KẾT THÚC"
+    },
+    {
+      "rank": 10,
+      "slug": "ho",
+      "title": "MỘT NỬA CỦA TÔI",
+      "cover": "https://cdn.teamsany.com/Images//2024/04/coverho-2.jpg",
+      "url": "https://teamsany.com/manga/ho/",
+      "latestChapter": "Một Nửa Của Tôi Chap 98 – Kết Thúc"
+    },
+    {
+      "rank": 11,
+      "slug": "tinh-yeu-cungdanhtieng",
+      "title": "TÌNH YÊU CÙNG DANH TIẾNG",
+      "cover": "https://cdn.teamsany.com/Images//2022/10/LFcovernew.png",
+      "url": "https://teamsany.com/manga/tinh-yeu-cungdanhtieng/",
+      "latestChapter": "Tình Yêu Cùng Danh Tiếng Chap 97"
+    },
+    {
+      "rank": 12,
+      "slug": "ai-duc",
+      "title": "ÁI DỤC",
+      "cover": "https://cdn.teamsany.com/Images//2023/10/image-20260602-6THuCx.jpg",
+      "url": "https://teamsany.com/manga/ai-duc/",
+      "latestChapter": "Ái Dục – Hậu Kì"
+    },
+    {
+      "rank": 13,
+      "slug": "homefive",
+      "title": "Homefive",
+      "cover": "https://cdn.teamsany.com/Images//2023/08/27bba0b99bcaa8dcdaa488a42936a607a25e0878_450_635_77883.jpeg",
+      "url": "https://teamsany.com/manga/homefive/",
+      "latestChapter": "Homefive chap 88-END"
+    },
+    {
+      "rank": 14,
+      "slug": "chi-dan-nguy-hiem",
+      "title": "CHỈ DẪN NGUY HIỂM",
+      "cover": "https://cdn.teamsany.com/Images//2023/07/biaaaaaaaaagh.jpg",
+      "url": "https://teamsany.com/manga/chi-dan-nguy-hiem/",
+      "latestChapter": "Chỉ Dẫn Nguy Hiểm Chap 86"
+    },
+    {
+      "rank": 15,
+      "slug": "csdte",
+      "title": "Con Sóng Dõi Theo Em",
+      "cover": "https://cdn.teamsany.com/Images//2022/06/coversg.jpg",
+      "url": "https://teamsany.com/manga/csdte/",
+      "latestChapter": "Con Sóng Dõi Theo Em Chap Ngoại Truyện Đặc Biệt 2"
+    },
+    {
+      "rank": 16,
+      "slug": "bkst",
+      "title": "Hãy Tốt Với Sự Tồi Tệ Của Tôi",
+      "cover": "https://cdn.teamsany.com/Images//2024/10/coverbk-copy-1.jpg",
+      "url": "https://teamsany.com/manga/bkst/",
+      "latestChapter": "Hãy Tốt Với Sự Tồi Tệ Của Tôi Ngoại Truyện 5 – HOÀN"
+    },
+    {
+      "rank": 17,
+      "slug": "ngay-luc-nay",
+      "title": "Ngay Lúc Này",
+      "cover": "https://cdn.teamsany.com/Images//2023/07/covernu.jpg",
+      "url": "https://teamsany.com/manga/ngay-luc-nay/",
+      "latestChapter": "Ngay Lúc Này Ngoại Truyện 21 – HOÀN THÀNH"
+    },
+    {
+      "rank": 18,
+      "slug": "ket-thuc-thu-3",
+      "title": "Kết Thúc Thứ 3",
+      "cover": "https://cdn.teamsany.com/Images//2022/03/w826h1407.avif",
+      "url": "https://teamsany.com/manga/ket-thuc-thu-3/",
+      "latestChapter": "Kết Thúc Thứ 3 – Gay bar"
+    },
+    {
+      "rank": 19,
+      "slug": "ke-thu",
+      "title": "Kẻ Thù",
+      "cover": "https://cdn.teamsany.com/Images//2023/10/COVERNJ-1.jpg",
+      "url": "https://teamsany.com/manga/ke-thu/",
+      "latestChapter": "Kẻ Thù Ngoại Truyện 10 – HOÀN THÀNH"
+    },
+    {
+      "rank": 20,
+      "slug": "ong-bo-yandere-bi-treu-gheo",
+      "title": "Ông Bố Yandere Bị Trêu Ghẹo",
+      "cover": "https://cdn.teamsany.com/Images//2023/12/SANY-TEAM.jpg",
+      "url": "https://teamsany.com/manga/ong-bo-yandere-bi-treu-gheo/",
+      "latestChapter": "Ông Bố Yandere Bị Trêu Ghẹo Chap 73 – KẾT THÚC"
+    }
+  ]
+}

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Search, Heart, BookOpen, Clock, Play, 
   X, Bookmark, ChevronRight,
-  Flame, Trophy, Zap, Calendar, Sparkles, Loader2
+  Flame, Trophy, Zap, Calendar, Sparkles, Loader2,
+  Layers, Check
 } from 'lucide-react';
 import type { BLManga, HotMangaData } from '../../types/manga';
 import { 
@@ -16,6 +17,7 @@ import './blManga.css';
 
 type MainTab = 'all' | 'ranking' | 'history' | 'favorites';
 type RankingType = 'hot' | 'top_day' | 'top_week' | 'top_month';
+type SourceFilter = 'all' | 'teamsany' | 'dualeo';
 
 const BATCH_SIZE = 36;
 
@@ -45,6 +47,8 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
     return [...(manga.chapters || [])].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
   }, [manga.chapters]);
   const firstCh = sortedChs[0]?.number ?? 1;
+
+  const isSanyTeam = manga.source === 'teamsany' || manga.sourceName === 'Sany Team';
 
   return (
     <div className="bl-manga-card" onClick={onClick}>
@@ -83,6 +87,13 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
           <div className="bl-hot-tag">🔥 HOT</div>
         )}
 
+        {/* Source Badge */}
+        {isSanyTeam && (
+          <div className="bl-sany-source-tag" title="Truyện từ nhóm Sany Team">
+            ✨ Sany Team
+          </div>
+        )}
+
         {/* Favorite Button */}
         <button
           className={`bl-card-fav-btn ${isFav ? 'favorited' : ''}`}
@@ -117,6 +128,12 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
           {manga.title}
         </h3>
 
+        {manga.author && (
+          <div className="bl-card-author" title={manga.author}>
+            {manga.author}
+          </div>
+        )}
+
         <div className="bl-card-actions">
           {hasMangaData(manga) ? (
             <button
@@ -147,6 +164,7 @@ export const BLMangaPage: React.FC = () => {
   
   const [activeTab, setActiveTab] = useState<MainTab>('all');
   const [rankingType, setRankingType] = useState<RankingType>('hot');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   
   const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
@@ -187,10 +205,10 @@ export const BLMangaPage: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Reset pagination on tab/search change
+  // Reset pagination on tab/search/source change
   useEffect(() => {
     setVisibleCount(BATCH_SIZE);
-  }, [activeTab, rankingType, searchQuery]);
+  }, [activeTab, rankingType, searchQuery, sourceFilter]);
 
   const handleToggleFav = (e: React.MouseEvent, slug: string) => {
     e.stopPropagation();
@@ -203,7 +221,16 @@ export const BLMangaPage: React.FC = () => {
     return new Map(mangaList.map(m => [m.slug, m]));
   }, [mangaList]);
 
-  // Filtered and Sorted list according to tab
+  // Counts by source
+  const sanyCount = useMemo(() => {
+    return mangaList.filter(m => m.source === 'teamsany' || m.sourceName === 'Sany Team').length;
+  }, [mangaList]);
+
+  const dualeoCount = useMemo(() => {
+    return mangaList.filter(m => m.source !== 'teamsany' && m.sourceName !== 'Sany Team').length;
+  }, [mangaList]);
+
+  // Filtered and Sorted list according to tab and source
   const filteredList = useMemo(() => {
     let result: { manga: BLManga; rank?: number; rankType?: string }[] = [];
 
@@ -315,14 +342,26 @@ export const BLMangaPage: React.FC = () => {
       result = mangaList.map(m => ({ manga: m }));
     }
 
+    // Source Filter
+    if (sourceFilter === 'teamsany') {
+      result = result.filter(item => item.manga.source === 'teamsany' || item.manga.sourceName === 'Sany Team');
+    } else if (sourceFilter === 'dualeo') {
+      result = result.filter(item => item.manga.source !== 'teamsany' && item.manga.sourceName !== 'Sany Team');
+    }
+
     // Search filtering
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(item => item.manga.title.toLowerCase().includes(q));
+      result = result.filter(item => {
+        const titleMatch = item.manga.title.toLowerCase().includes(q);
+        const authorMatch = item.manga.author ? item.manga.author.toLowerCase().includes(q) : false;
+        const genreMatch = item.manga.genres ? item.manga.genres.some(g => g.toLowerCase().includes(q)) : false;
+        return titleMatch || authorMatch || genreMatch;
+      });
     }
 
     return result;
-  }, [mangaList, mangaMap, hotData, activeTab, rankingType, favorites, history, searchQuery]);
+  }, [mangaList, mangaMap, hotData, activeTab, rankingType, sourceFilter, favorites, history, searchQuery]);
 
   // Paginated visible list for performance
   const visibleItems = useMemo(() => {
@@ -421,6 +460,31 @@ export const BLMangaPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Source Filter Tabs: All, Sany Team, DuaLeo */}
+      <div className="bl-source-filter-bar">
+        <span className="bl-source-filter-label">
+          <Layers size={14} /> Nguồn:
+        </span>
+        <button
+          className={`bl-source-pill ${sourceFilter === 'all' ? 'active' : ''}`}
+          onClick={() => setSourceFilter('all')}
+        >
+          Tất cả ({mangaList.length})
+        </button>
+        <button
+          className={`bl-source-pill is-sany ${sourceFilter === 'teamsany' ? 'active' : ''}`}
+          onClick={() => setSourceFilter('teamsany')}
+        >
+          ✨ Sany Team ({sanyCount})
+        </button>
+        <button
+          className={`bl-source-pill ${sourceFilter === 'dualeo' ? 'active' : ''}`}
+          onClick={() => setSourceFilter('dualeo')}
+        >
+          Dưa Leo ({dualeoCount})
+        </button>
+      </div>
+
       {/* Sub-chips for Ranking when Bảng Xếp Hạng is selected */}
       {activeTab === 'ranking' && (
         <div className="bl-ranking-subtabs">
@@ -452,7 +516,7 @@ export const BLMangaPage: React.FC = () => {
       )}
 
       {/* Top 6 Hot Spotlight Carousel */}
-      {activeTab === 'all' && !searchQuery && spotlightItems.length > 0 && (
+      {activeTab === 'all' && !searchQuery && sourceFilter === 'all' && spotlightItems.length > 0 && (
         <div className="bl-spotlight-section">
           <div className="bl-spotlight-head">
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -513,7 +577,7 @@ export const BLMangaPage: React.FC = () => {
         <div className="bl-empty-state">
           <Bookmark size={40} className="bl-empty-icon" />
           <h3>Không tìm thấy truyện phù hợp</h3>
-          <p>Thử tìm kiếm với từ khóa khác hoặc chuyển sang tab khác.</p>
+          <p>Thử tìm kiếm với từ khóa khác hoặc chuyển sang nguồn khác.</p>
         </div>
       ) : (
         <>

@@ -93,8 +93,8 @@ describe('LibraryAudioDetail', () => {
     render(<LibraryAudioDetail item={withAudio} onBack={onBack} onEdit={vi.fn()} />)
 
     expect(screen.getByRole('heading', { name: 'Hẹn một mai' })).toBeInTheDocument()
-    expect(screen.getByText('Bùi Anh Tuấn')).toBeInTheDocument()
-    expect(screen.getByText('Ballad')).toBeInTheDocument()
+    expect(screen.getAllByText('Bùi Anh Tuấn').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Ballad').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/2026-08-12/)).toBeInTheDocument()
     expect(screen.getByText(/10:04/)).toBeInTheDocument()
     expect(document.querySelectorAll('audio')).toHaveLength(1)
@@ -115,9 +115,9 @@ describe('LibraryAudioDetail', () => {
 
     render(<LibraryAudioDetail item={sharedItem} onBack={vi.fn()} onEdit={vi.fn()} onShareToAll={onShareToAll} />)
 
-    expect(screen.getByText('🎵 Do Minh chia sẻ')).toBeInTheDocument()
+    expect(screen.getAllByText(/Do Minh/).length).toBeGreaterThanOrEqual(1)
 
-    const shareBtn = screen.getByRole('button', { name: 'Chia sẻ cho mọi người' })
+    const shareBtn = screen.getByRole('button', { name: 'Chia sẻ' })
     expect(shareBtn).toBeInTheDocument()
     await user.click(shareBtn)
     expect(onShareToAll).toHaveBeenCalledWith(sharedItem)
@@ -144,10 +144,11 @@ describe('LibraryAudioDetail', () => {
     )
 
     expect(screen.getByText('Danh sách phát (2)')).toBeInTheDocument()
-    expect(screen.getByText('Nơi này có anh')).toBeInTheDocument()
+    const matches = screen.getAllByText('Nơi này có anh')
+    expect(matches.length).toBeGreaterThanOrEqual(1)
 
     // Bấm chuyển sang bài thứ 2 trong danh sách
-    await user.click(screen.getByText('Nơi này có anh'))
+    await user.click(matches[matches.length - 1])
     expect(onSelectTrack).toHaveBeenCalledWith(track2)
   })
 
@@ -168,9 +169,13 @@ describe('LibraryAudioDetail', () => {
       />,
     )
 
+    // Auto-play starts playing, so pause button is rendered
+    const pauseBtn = screen.getByRole('button', { name: 'Tạm dừng' })
+    expect(pauseBtn).toBeInTheDocument()
+    await user.click(pauseBtn)
+
     const playBtn = screen.getByRole('button', { name: 'Phát' })
     expect(playBtn).toBeInTheDocument()
-    await user.click(playBtn)
 
     const nextBtn = screen.getByRole('button', { name: 'Bài tiếp theo' })
     expect(nextBtn).toBeInTheDocument()
