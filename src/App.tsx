@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, BookOpen, Calendar, CalendarDays, CheckSquare, Download, Flame, HardDriveDownload, Home, LogOut, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet } from 'lucide-react'
+import { Bell, BellOff, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Flame, HardDriveDownload, Home, LogOut, Menu, NotebookPen, Plus, Salad, Sparkles, SunMoon, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
-import { localDate, shortDate, vietnameseDate } from './lib/date'
+import { localDate } from './lib/date'
 import type { Tab } from './types'
 import { HeaderActionProvider, useHeaderActionSlot, useIsHeaderHidden } from './features/HeaderAction'
 import { AsideProvider, useAsideRef } from './features/AsideSlot'
@@ -31,6 +31,17 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'library', label: 'Library', icon: BookOpen, colorClass: 'icon-box-rose' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
+]
+
+// Thanh tab dưới đáy chỉ giữ 5 mục hay dùng nhất; phần còn lại nằm trong ngăn kéo bên trái.
+const primaryNavigation = navigation.slice(0, 5)
+
+// Ngăn kéo chia theo nhóm lớn, bấm vào mới xổ các mục con.
+const navGroups: { title: string; ids: Tab[] }[] = [
+  { title: 'Tổng quan', ids: ['home', 'calendar'] },
+  { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] },
+  { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
+  { title: 'Kiến thức & con người', ids: ['library', 'people'] },
 ]
 
 function Login({ user }: { user: unknown }) {
@@ -97,6 +108,15 @@ function Shell({ children }: { children: React.ReactNode }) {
   const headerAction = useHeaderActionSlot()
   const isHeaderHidden = useIsHeaderHidden()
   const asideRef = useAsideRef()
+  const [menuOpen, setMenuOpen] = useState(false)
+  // Nhóm đang xổ; mặc định là nhóm chứa trang hiện tại.
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
+
+  // Đổi trang thì đóng ngăn kéo lại và ghim sẵn nhóm của trang mới.
+  useEffect(() => {
+    setMenuOpen(false)
+    setOpenGroup(navGroups.find((g) => g.ids.some((id) => path === '/' + id))?.title ?? null)
+  }, [path])
 
   // PWA Install Prompt
   const deferredPrompt = useRef<Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null)
@@ -231,15 +251,13 @@ function Shell({ children }: { children: React.ReactNode }) {
       {!isHeaderHidden && (
         <header>
           <div className="brand">
+            <button className="mobile-menu-btn" aria-label="Mở danh sách nghiệp vụ" onClick={() => setMenuOpen(true)}>
+              <Menu size={20} />
+            </button>
             <div className={`brand-icon ${activeTabItem.colorClass}`}>
               <ActiveIcon size={20} />
             </div>
             <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
-          </div>
-          <div className="header-date">
-            <Calendar size={14} />
-            <span className="header-date-full">{vietnameseDate()}</span>
-            <span className="header-date-short">{shortDate()}</span>
           </div>
           <div className="header-actions">
             {headerAction && (
@@ -272,18 +290,67 @@ function Shell({ children }: { children: React.ReactNode }) {
                 <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
               </button>
             )}
-            <button aria-label="Toggle theme" className="icon header-only" onClick={() => setDark(!dark)} style={{ color: dark ? '#fbbf24' : '#2563eb' }}>
-              <SunMoon size={20} />
-            </button>
-            <button aria-label="Sign out" className="icon danger header-only" onClick={() => supabase?.auth.signOut()}>
-              <LogOut size={20} />
-            </button>
           </div>
         </header>
       )}
 
+      {/* Ngăn kéo điện thoại: đủ danh sách nghiệp vụ + các nút tiện ích. */}
+      {menuOpen && (
+        <div className="mobile-drawer-backdrop" onClick={() => setMenuOpen(false)}>
+          <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-drawer-head">
+              <div className="brand-icon"><Sparkles size={18} /></div>
+              <span>Daily</span>
+              <button className="icon" aria-label="Đóng" onClick={() => setMenuOpen(false)}><X size={18} /></button>
+            </div>
+            <nav className="mobile-drawer-list">
+              {navGroups.map((group) => {
+                const isOpen = openGroup === group.title
+                return (
+                  <div key={group.title} className={`drawer-group ${isOpen ? 'is-open' : ''}`}>
+                    <button className="drawer-group-head" onClick={() => setOpenGroup(isOpen ? null : group.title)} aria-expanded={isOpen}>
+                      <span>{group.title}</span>
+                      <ChevronRight size={16} />
+                    </button>
+                    {isOpen && (
+                      <div className="drawer-group-body">
+                        {group.ids.map((id) => {
+                          const item = navigation.find((n) => n.id === id)!
+                          const Icon = item.icon
+                          return (
+                            <button key={id} className={path === '/' + id ? 'active' : ''} onClick={() => nav('/' + id)}>
+                              <div className={`nav-icon-wrapper ${item.colorClass}`}><Icon size={17} /></div>
+                              <span>{item.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </nav>
+            <div className="mobile-drawer-foot">
+              {canInstall && !installed && (
+                <button onClick={handleInstallPWA}><Download size={16} /> <span>Cài đặt</span></button>
+              )}
+              <button onClick={handleBackup} disabled={backingUp}>
+                <HardDriveDownload size={16} /> <span>{backingUp ? 'Đang tải…' : 'Sao lưu'}</span>
+              </button>
+              {pushSupported() && (
+                <button onClick={() => void togglePush()} disabled={pushBusy}>
+                  {pushOn ? <Bell size={16} /> : <BellOff size={16} />} <span>{pushOn ? 'Đang nhắc' : 'Bật nhắc'}</span>
+                </button>
+              )}
+              <button onClick={() => setDark(!dark)}><SunMoon size={16} /> <span>{dark ? 'Sáng' : 'Tối'}</span></button>
+              <button className="is-danger" onClick={() => supabase?.auth.signOut()}><LogOut size={16} /> <span>Thoát</span></button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <nav className="bottom-nav">
-        {navigation.map(({ id, label, icon: Icon, colorClass }) => (
+        {primaryNavigation.map(({ id, label, icon: Icon, colorClass }) => (
           <button key={id} className={path === '/' + id ? 'active' : ''} onClick={() => nav('/' + id)}>
             <div className={`nav-icon-wrapper ${colorClass}`}>
               <Icon size={18} />
