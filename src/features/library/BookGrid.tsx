@@ -53,6 +53,11 @@ export function BookGrid({ items, onOpen, onToggleFavorite }: BookGridProps) {
               {item.name}
             </p>
             <p className="book-grid-author">{item.author || 'Chưa rõ tác giả'}</p>
+            {item.genre && (
+              <span className="book-grid-genre-tag" title={`Thể loại: ${item.genre}`}>
+                {item.genre}
+              </span>
+            )}
             {item.shared_by && <p className="book-grid-shared">Do {item.shared_by} chia sẻ</p>}
           </li>
         )

@@ -4,7 +4,7 @@ import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clock, Download
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
-import type { BookAuthor, BookFormat, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
+import type { BookAuthor, BookFormat, BookGenre, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { findDuplicateByName } from '../lib/duplicateName'
 import { useToast } from './ToastContext'
@@ -103,10 +103,10 @@ function getCurrentTimeString() {
   return `${hours}:${minutes}`
 }
 
-function parseDescPrefix(desc: string | null, prefix: string) {
-  if (!desc) return ''
-  const regex = new RegExp(`^${prefix}\\s*(.*?)(?:\\n|$)`, 'i')
-  const match = desc.match(regex)
+function parseDescPrefix(description: string | null | undefined, prefix: string) {
+  if (!description) return ''
+  const regex = new RegExp(`${prefix}\\s*([^\\n|]+)`, 'i')
+  const match = description.match(regex)
   return match ? match[1].trim() : ''
 }
 
@@ -136,12 +136,16 @@ const genreColors = [
   { bg: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: 'rgba(16, 185, 129, 0.3)' }, // Emerald
   { bg: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', border: 'rgba(6, 182, 212, 0.3)' }, // Cyan
   { bg: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: 'rgba(59, 130, 246, 0.3)' }, // Blue
-  { bg: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6', border: 'rgba(139, 92, 246, 0.3)' }, // Purple
+  { bg: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', border: 'rgba(99, 102, 241, 0.3)' }, // Indigo
+  { bg: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', border: 'rgba(168, 85, 247, 0.3)' }, // Purple
   { bg: 'rgba(236, 72, 153, 0.15)', color: '#ec4899', border: 'rgba(236, 72, 153, 0.3)' }, // Pink
+  { bg: 'rgba(107, 114, 128, 0.15)', color: '#6b7280', border: 'rgba(107, 114, 128, 0.3)' }, // Gray
 ]
 
 function getMusicGenreStyle(genreName?: string | null) {
-  if (!genreName) return { bg: 'var(--card-bg)', color: 'var(--text-muted)', border: 'var(--card-border)' }
+  if (!genreName || genreName === 'Chưa phân loại') {
+    return { bg: 'var(--bg-main)', color: 'var(--text-muted)', border: 'var(--card-border)' }
+  }
   let hash = 0
   for (let i = 0; i < genreName.length; i++) {
     hash = genreName.charCodeAt(i) + ((hash << 5) - hash)
@@ -157,6 +161,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
   // Dedicated Management Queries for all metadata categories
   const bookAuthorsQuery = useQuery<BookAuthor>('book_authors', 'name')
+  const bookGenresQuery = useQuery<BookGenre>('book_genres', 'name')
   const youtubeChannelsQuery = useQuery<YouTubeChannel>('youtube_channels', 'name')
   const musicArtistsQuery = useQuery<MusicArtist>('music_artists', 'name')
   const movieGenresQuery = useQuery<MovieGenre>('movie_genres', 'name')
@@ -170,6 +175,9 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   }, [defaultType])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [musicGenreFilter, setMusicGenreFilter] = useState<string>('ALL')
+  const [bookGenreFilter, setBookGenreFilter] = useState<string>('ALL')
+  const [bookAuthorFilter, setBookAuthorFilter] = useState<string>('ALL')
+  const [showBookFilters, setShowBookFilters] = useState(false)
   const [subView, setSubView] = useState<SubView>('overview')
   const [search, setSearch] = useState('')
 
@@ -199,6 +207,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
   // Dedicated Manager Modal States
   const [manageAuthorsModal, setManageAuthorsModal] = useState(false)
+  const [manageBookGenresModal, setManageBookGenresModal] = useState(false)
   const [manageChannelsModal, setManageChannelsModal] = useState(false)
   const [manageArtistsModal, setManageArtistsModal] = useState(false)
   const [manageGenresModal, setManageGenresModal] = useState(false)
@@ -206,11 +215,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
   // New Management Item Input Values
   const [newAuthorName, setNewAuthorName] = useState('')
+  const [newBookGenreName, setNewBookGenreName] = useState('')
   const [newChannelName, setNewChannelName] = useState('')
   const [newArtistName, setNewArtistName] = useState('')
   const [newGenreName, setNewGenreName] = useState('')
   const [newMusicGenreName, setNewMusicGenreName] = useState('')
   const [musicGenreVal, setMusicGenreVal] = useState('')
+  const [bookGenreVal, setBookGenreVal] = useState('')
 
   const [name, setName] = useState('')
   const [extraVal, setExtraVal] = useState('') // Channel, Artist, Author, or Genre
@@ -268,13 +279,21 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     return Array.from(set)
   }, [items, musicGenresQuery.items])
 
+  const bookGenres = useMemo(() => {
+    const set = new Set<string>(bookGenresQuery.items.map((g) => g.name))
+    items.filter((i) => i.type === 'BOOK').forEach((i) => {
+      if (i.genre) set.add(i.genre.trim())
+    })
+    return Array.from(set).filter(Boolean).sort()
+  }, [items, bookGenresQuery.items])
+
   const authors = useMemo(() => {
     const set = new Set<string>(bookAuthorsQuery.items.map((a) => a.name))
-    items.filter((i) => i.type === 'BOOK').forEach((i) => {
+    items.filter((i) => i.type === 'BOOK' || i.type === 'MANGA').forEach((i) => {
       const val = getItemExtraMeta(i).value
       if (val) set.add(val)
     })
-    return Array.from(set)
+    return Array.from(set).filter(Boolean).sort()
   }, [items, bookAuthorsQuery.items])
 
   const movieGenres = useMemo(() => {
@@ -297,6 +316,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setName('')
     setExtraVal('')
     setMusicGenreVal('')
+    setBookGenreVal('')
     setYoutubeUrlVal('')
     setAudioUrlVal('')
     setCoverUrlVal('')
@@ -342,6 +362,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setName(item.name)
     setExtraVal(meta.value)
     setMusicGenreVal(item.music_genre ?? '')
+    setBookGenreVal(item.genre ?? '')
     setYoutubeUrlVal(item.youtube_url ?? '')
     setAudioUrlVal(item.audio_url ?? '')
     setCoverUrlVal(item.cover_url ?? '')
@@ -490,7 +511,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
       artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
       author: (kind === 'BOOK' || kind === 'MANGA') ? extraVal.trim() || null : null,
-      genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+      genre: kind === 'MOVIE' ? extraVal.trim() || null : (kind === 'BOOK' ? bookGenreVal.trim() || null : null),
       music_genre: kind === 'MUSIC' ? musicGenreVal.trim() || null : null,
       youtube_url: youtubeUrlVal.trim() || null,
       audio_url: audioUrlVal.trim() || null,
@@ -548,7 +569,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
             artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
             author: kind === 'BOOK' ? extraVal.trim() || null : null,
-            genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+            genre: kind === 'MOVIE' ? extraVal.trim() || null : (kind === 'BOOK' ? bookGenreVal.trim() || null : null),
             youtube_url: youtubeUrlVal.trim() || null,
             audio_url: audioUrlVal.trim() || null,
             log_date: logDate,
@@ -580,7 +601,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
             artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
             author: kind === 'BOOK' ? extraVal.trim() || null : null,
-            genre: kind === 'MOVIE' ? extraVal.trim() || null : null,
+            genre: kind === 'MOVIE' ? extraVal.trim() || null : (kind === 'BOOK' ? bookGenreVal.trim() || null : null),
             youtube_url: youtubeUrlVal.trim() || null,
             audio_url: audioUrlVal.trim() || null,
           }
@@ -625,6 +646,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     if (!val || val === a.name) return
     bookAuthorsQuery.setItems((prev) => prev.map((item) => (item.id === a.id ? { ...item, name: val } : item)))
     await supabase!.from('book_authors').update({ name: val }).eq('id', a.id)
+    setItems((prev) => prev.map((i) => (i.type === 'BOOK' && i.author === a.name ? { ...i, author: val } : i)))
+    await supabase!.from('media_items').update({ author: val }).eq('type', 'BOOK').eq('author', a.name)
     showToast('✏️ Đã sửa tên tác giả!')
   }
 
@@ -632,6 +655,43 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     bookAuthorsQuery.setItems((prev) => prev.filter((item) => item.id !== a.id))
     await supabase!.from('book_authors').update({ deleted_at: new Date().toISOString() }).eq('id', a.id)
     showToast('🗑️ Đã xóa tác giả', 'delete')
+  }
+
+  // 1b. Book Genres Manager Functions
+  const addBookGenre = async () => {
+    if (!newBookGenreName.trim()) return
+    const name = newBookGenreName.trim()
+    const tempId = Date.now().toString()
+    bookGenresQuery.setItems((prev) => [...prev.filter((g) => g.name !== name), { id: tempId, name }])
+    setNewBookGenreName('')
+    showToast('➕ Đã thêm thể loại sách mới!')
+
+    const { data } = await supabase!.from('book_genres').insert({ name }).select().single()
+    if (data) bookGenresQuery.setItems((prev) => prev.map((g) => (g.id === tempId ? (data as BookGenre) : g)))
+  }
+
+  const renameBookGenre = async (oldGenre: string) => {
+    const val = prompt('Tên thể loại sách mới:', oldGenre)?.trim()
+    if (!val || val === oldGenre) return
+    const found = bookGenresQuery.items.find((g) => g.name === oldGenre)
+    if (found) {
+      bookGenresQuery.setItems((prev) => prev.map((g) => (g.id === found.id ? { ...g, name: val } : g)))
+      await supabase!.from('book_genres').update({ name: val }).eq('id', found.id)
+    }
+    setItems((prev) => prev.map((i) => (i.type === 'BOOK' && i.genre === oldGenre ? { ...i, genre: val } : i)))
+    await supabase!.from('media_items').update({ genre: val }).eq('type', 'BOOK').eq('genre', oldGenre)
+    showToast('✏️ Đã sửa tên thể loại sách!')
+  }
+
+  const deleteBookGenre = async (oldGenre: string) => {
+    const found = bookGenresQuery.items.find((g) => g.name === oldGenre)
+    if (found) {
+      bookGenresQuery.setItems((prev) => prev.filter((item) => item.id !== found.id))
+      await supabase!.from('book_genres').update({ deleted_at: new Date().toISOString() }).eq('id', found.id)
+    }
+    setItems((prev) => prev.map((i) => (i.type === 'BOOK' && i.genre === oldGenre ? { ...i, genre: null } : i)))
+    await supabase!.from('media_items').update({ genre: null }).eq('type', 'BOOK').eq('genre', oldGenre)
+    showToast('🗑️ Đã xóa thể loại sách', 'delete')
   }
 
   // 2. YouTube Channels Manager Functions
@@ -880,14 +940,19 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
   // Filter Overview Items
   const filteredOverviewItems = useMemo(() => {
-    return items.filter(
-      (i) =>
-        (selectedType === 'ALL' || i.type === selectedType) &&
-        (statusFilter === 'ALL' || i.status === statusFilter) &&
-        (musicGenreFilter === 'ALL' || (i.type === 'MUSIC' && (i.music_genre ?? 'Chưa phân loại') === musicGenreFilter)) &&
-        i.name.toLowerCase().includes(search.toLowerCase())
-    )
-  }, [items, selectedType, statusFilter, musicGenreFilter, search])
+    return items.filter((i) => {
+      if (selectedType !== 'ALL' && i.type !== selectedType) return false
+      if (statusFilter !== 'ALL' && i.status !== statusFilter) return false
+      if (selectedType === 'MUSIC' && musicGenreFilter !== 'ALL' && (i.music_genre ?? 'Chưa phân loại') !== musicGenreFilter) return false
+      if (selectedType === 'BOOK') {
+        if (bookGenreFilter !== 'ALL' && (i.genre ?? 'Chưa phân loại') !== bookGenreFilter) return false
+        if (bookAuthorFilter !== 'ALL' && (i.author ?? 'Chưa rõ tác giả') !== bookAuthorFilter) return false
+      }
+      if (!search.trim()) return true
+      const q = search.toLowerCase()
+      return i.name.toLowerCase().includes(q) || (i.author && i.author.toLowerCase().includes(q)) || (i.genre && i.genre.toLowerCase().includes(q))
+    })
+  }, [items, selectedType, statusFilter, musicGenreFilter, bookGenreFilter, bookAuthorFilter, search])
 
   /** Các mục đã gắn MP3 — nguồn cho mục "Nghe liên tục". */
   const audioItems = useMemo(() => {
@@ -902,14 +967,19 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
   // Filter Favorite Items
   const favoriteItems = useMemo(() => {
-    return items.filter(
-      (i) =>
-        i.is_favorite &&
-        (selectedType === 'ALL' || i.type === selectedType) &&
-        (musicGenreFilter === 'ALL' || (i.type === 'MUSIC' && (i.music_genre ?? 'Chưa phân loại') === musicGenreFilter)) &&
-        i.name.toLowerCase().includes(search.toLowerCase())
-    )
-  }, [items, selectedType, musicGenreFilter, search])
+    return items.filter((i) => {
+      if (!i.is_favorite) return false
+      if (selectedType !== 'ALL' && i.type !== selectedType) return false
+      if (selectedType === 'MUSIC' && musicGenreFilter !== 'ALL' && (i.music_genre ?? 'Chưa phân loại') !== musicGenreFilter) return false
+      if (selectedType === 'BOOK') {
+        if (bookGenreFilter !== 'ALL' && (i.genre ?? 'Chưa phân loại') !== bookGenreFilter) return false
+        if (bookAuthorFilter !== 'ALL' && (i.author ?? 'Chưa rõ tác giả') !== bookAuthorFilter) return false
+      }
+      if (!search.trim()) return true
+      const q = search.toLowerCase()
+      return i.name.toLowerCase().includes(q) || (i.author && i.author.toLowerCase().includes(q)) || (i.genre && i.genre.toLowerCase().includes(q))
+    })
+  }, [items, selectedType, musicGenreFilter, bookGenreFilter, bookAuthorFilter, search])
 
   // Ultra-Resilient Non-Overflowing Media Row Renderer
   const renderMediaRow = (item: Media) => {
@@ -1325,14 +1395,33 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               })}
             </div>
 
-            {/* Search Input Bar */}
-            <div className="library-search">
-              <Search size={15} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm mục trong thư viện…"
-              />
+            {/* Search Input Bar + Filter Toggle */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div className="library-search" style={{ flex: 1 }}>
+                <Search size={15} aria-hidden="true" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Tìm kiếm mục trong thư viện…"
+                />
+              </div>
+              {selectedType === 'BOOK' && (
+                <button
+                  type="button"
+                  className={'book-filter-toggle-btn' + (showBookFilters || bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL' ? ' is-active' : '')}
+                  onClick={() => setShowBookFilters((prev) => !prev)}
+                  title="Mở bộ lọc thể loại và tác giả"
+                >
+                  <SlidersHorizontal size={14} />
+                  <span>Bộ lọc</span>
+                  {(bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL') && (
+                    <span style={{ fontSize: '0.68rem', background: 'var(--purple)', color: '#fff', padding: '1px 5px', borderRadius: 99, fontWeight: 700 }}>
+                      {(bookGenreFilter !== 'ALL' ? 1 : 0) + (bookAuthorFilter !== 'ALL' ? 1 : 0)}
+                    </span>
+                  )}
+                  <ChevronDown size={13} style={{ transform: showBookFilters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+              )}
             </div>
 
             {/* Hàng lọc thể loại nhạc, chỉ có nghĩa trong thư viện Music */}
@@ -1362,6 +1451,91 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                     </button>
                   )
                 })}
+              </div>
+            )}
+
+            {/* Collapsible Filter Drawer for Books */}
+            {selectedType === 'BOOK' && showBookFilters && (
+              <div className="book-filter-drawer">
+                <div className="book-filter-drawer-header">
+                  <span className="book-filter-drawer-title">
+                    <BookOpen size={14} /> Bộ lọc thể loại & tác giả
+                  </span>
+                  {(bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL') && (
+                    <button
+                      type="button"
+                      className="icon small"
+                      onClick={() => {
+                        setBookGenreFilter('ALL')
+                        setBookAuthorFilter('ALL')
+                      }}
+                      style={{ fontSize: '0.72rem', color: 'var(--rose)', fontWeight: 700 }}
+                    >
+                      ✕ Đặt lại bộ lọc
+                    </button>
+                  )}
+                </div>
+
+                {/* Hàng lọc thể loại sách */}
+                {bookGenres.length > 0 && (
+                  <div className="library-genre-bar" style={{ margin: 0, paddingBottom: 2 }}>
+                    <button
+                      className={'library-genre-chip' + (bookGenreFilter === 'ALL' ? ' is-on' : '')}
+                      onClick={() => setBookGenreFilter('ALL')}
+                    >
+                      Tất cả thể loại ({items.filter((i) => i.type === 'BOOK').length})
+                    </button>
+                    {bookGenres.map((g) => {
+                      const count = items.filter((i) => i.type === 'BOOK' && i.genre === g).length
+                      const isSelected = bookGenreFilter === g
+                      return (
+                        <button
+                          key={g}
+                          className={'library-genre-chip' + (isSelected ? ' is-on' : '')}
+                          onClick={() => setBookGenreFilter(isSelected ? 'ALL' : g)}
+                          style={isSelected ? { borderColor: 'var(--purple)', background: 'var(--purple-bg)', color: 'var(--purple)' } : undefined}
+                        >
+                          {g} ({count})
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Hàng lọc tác giả sách */}
+                {authors.length > 0 && (
+                  <div className="book-author-select-wrap">
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      ✍️ Tác giả:
+                    </span>
+                    <select
+                      className="book-author-select"
+                      value={bookAuthorFilter}
+                      onChange={(e) => setBookAuthorFilter(e.target.value)}
+                    >
+                      <option value="ALL">Tất cả tác giả ({authors.length})</option>
+                      {authors.map((a) => {
+                        const count = items.filter((i) => i.type === 'BOOK' && i.author === a).length
+                        return (
+                          <option key={a} value={a}>
+                            {a} {count > 0 ? `(${count})` : ''}
+                          </option>
+                        )
+                      })}
+                    </select>
+                    {bookAuthorFilter !== 'ALL' && (
+                      <button
+                        type="button"
+                        className="icon small"
+                        onClick={() => setBookAuthorFilter('ALL')}
+                        title="Xóa bộ lọc tác giả"
+                        style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: 6, background: 'var(--bg-main)', flexShrink: 0 }}
+                      >
+                        ✕ Bỏ lọc
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1652,35 +1826,66 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                 </div>
               )}
 
-              {/* Author (Chỉ dành cho Sách) */}
+              {/* Author & Genre (Chỉ dành cho Sách) */}
               {activeModal.kind === 'BOOK' && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Tác giả sách</span>
-                    <button
-                      type="button"
-                      className="icon small"
-                      aria-label="Manage authors"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setManageAuthorsModal(true)
-                      }}
-                      style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
-                    >
-                      <FolderCog size={13} /> Quản lý tác giả
-                    </button>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Tác giả sách</span>
+                      <button
+                        type="button"
+                        className="icon small"
+                        aria-label="Manage authors"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setManageAuthorsModal(true)
+                        }}
+                        style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
+                      >
+                        <FolderCog size={13} /> Quản lý tác giả ({authors.length})
+                      </button>
+                    </div>
+                    <input
+                      list="book-authors-list"
+                      value={extraVal}
+                      onChange={(e) => setExtraVal(e.target.value)}
+                      placeholder="Chọn hoặc nhập tên tác giả mới…"
+                    />
+                    <datalist id="book-authors-list">
+                      {authors.map((a) => (
+                        <option key={a} value={a} />
+                      ))}
+                    </datalist>
                   </div>
-                  <input
-                    list="book-authors-list"
-                    value={extraVal}
-                    onChange={(e) => setExtraVal(e.target.value)}
-                    placeholder="Chọn hoặc nhập tên tác giả mới…"
-                  />
-                  <datalist id="book-authors-list">
-                    {authors.map((a) => (
-                      <option key={a} value={a} />
-                    ))}
-                  </datalist>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Thể loại sách</span>
+                      <button
+                        type="button"
+                        className="icon small"
+                        aria-label="Manage genres"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setManageBookGenresModal(true)
+                        }}
+                        style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--purple)', fontWeight: 700 }}
+                      >
+                        <FolderCog size={13} /> Quản lý thể loại ({bookGenres.length})
+                      </button>
+                    </div>
+                    <input
+                      list="book-genres-list"
+                      value={bookGenreVal}
+                      onChange={(e) => setBookGenreVal(e.target.value)}
+                      placeholder="Chọn hoặc nhập thể loại sách (Trinh thám, Kinh điển, Tiểu thuyết…)"
+                    />
+                    <datalist id="book-genres-list">
+                      {bookGenres.map((g) => (
+                        <option key={g} value={g} />
+                      ))}
+                    </datalist>
+                  </div>
                 </div>
               )}
 
@@ -2069,24 +2274,83 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               onChange={(e) => setNewAuthorName(e.target.value)}
               placeholder="Tên tác giả mới…"
               style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
+              onKeyDown={(e) => e.key === 'Enter' && addBookAuthor()}
             />
             <button className="primary" onClick={addBookAuthor} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
               Thêm
             </button>
           </div>
 
-          <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
-            {bookAuthorsQuery.items.map((a) => (
-              <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>{a.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="icon small" aria-label="Sửa tác giả" onClick={() => renameBookAuthor(a)} style={{ padding: 3 }}>
-                    <Pencil size={13} />
-                  </button>
-                  <DeleteButton onDelete={() => deleteBookAuthor(a)} />
+          <div style={{ display: 'grid', gap: 6, maxHeight: '260px', overflowY: 'auto' }}>
+            {authors.map((authorName) => {
+              const authorObj = bookAuthorsQuery.items.find((a) => a.name === authorName)
+              const count = items.filter((i) => (i.type === 'BOOK' || i.type === 'MANGA') && i.author === authorName).length
+              return (
+                <div key={authorName} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{authorName}</span>
+                    {count > 0 && (
+                      <span style={{ fontSize: '0.72rem', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '1px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
+                        {count} cuốn
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button
+                      className="icon small"
+                      aria-label="Sửa tác giả"
+                      onClick={() => renameBookAuthor(authorObj || { id: authorName, name: authorName })}
+                      style={{ padding: 3 }}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <DeleteButton onDelete={() => deleteBookAuthor(authorObj || { id: authorName, name: authorName })} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
+          </div>
+        </Modal>
+      )}
+
+      {/* 1b. Book Genres Manager Modal */}
+      {manageBookGenresModal && (
+        <Modal title="📚 Quản lý thể loại sách" onClose={() => setManageBookGenresModal(false)}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            <input
+              value={newBookGenreName}
+              onChange={(e) => setNewBookGenreName(e.target.value)}
+              placeholder="Tên thể loại mới… (Trinh thám, Tiểu thuyết…)"
+              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
+              onKeyDown={(e) => e.key === 'Enter' && addBookGenre()}
+            />
+            <button className="primary" onClick={addBookGenre} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
+              Thêm
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: 6, maxHeight: '260px', overflowY: 'auto' }}>
+            {bookGenres.map((g) => {
+              const count = items.filter((i) => i.type === 'BOOK' && i.genre === g).length
+              return (
+                <div key={g} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g}</span>
+                    {count > 0 && (
+                      <span style={{ fontSize: '0.72rem', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '1px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
+                        {count} cuốn
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button className="icon small" aria-label="Sửa thể loại" onClick={() => renameBookGenre(g)} style={{ padding: 3 }}>
+                      <Pencil size={13} />
+                    </button>
+                    <DeleteButton onDelete={() => deleteBookGenre(g)} />
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </Modal>
       )}

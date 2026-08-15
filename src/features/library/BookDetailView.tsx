@@ -195,6 +195,7 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
             <p>{item.author || 'Chưa cập nhật tác giả'}</p>
             <div className="library-book-badges">
               <span>{listen ? '🎧 Nghe' : '📖 Đọc'}</span>
+              {item.genre && <span style={{ background: 'var(--purple-bg)', color: 'var(--purple)', fontWeight: 600 }}>🏷️ {item.genre}</span>}
               {item.is_favorite && <span>♥ Yêu thích</span>}
               {item.shared_by && <span>📚 Do {item.shared_by} chia sẻ</span>}
               <select
@@ -308,6 +309,18 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
           hidden={tab !== 'info'}
         >
           <dl className="library-book-info">
+            {item.genre && (
+              <div>
+                <dt>Thể loại</dt>
+                <dd style={{ fontWeight: 600, color: 'var(--purple)' }}>{item.genre}</dd>
+              </div>
+            )}
+            {item.description && (
+              <div>
+                <dt>Mô tả</dt>
+                <dd style={{ whiteSpace: 'pre-line', lineHeight: 1.5 }}>{item.description}</dd>
+              </div>
+            )}
             {status === 'ready' && document_ && (
               <>
                 <div>

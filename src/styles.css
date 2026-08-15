@@ -8572,6 +8572,77 @@ svg.lucide-library {
   text-align: left;
 }
 
+.book-filter-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+
+.book-filter-toggle-btn:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.book-filter-toggle-btn.is-active {
+  border-color: var(--purple);
+  background: var(--purple-bg);
+  color: var(--purple);
+}
+
+.book-filter-drawer {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-main);
+  border: 1px solid var(--card-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.book-filter-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.book-filter-drawer-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--purple);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.book-author-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.book-author-select {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 0.76rem;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  outline: none;
+}
+
 .spc-avatar {
   width: 48px;
   height: 48px;
@@ -8825,4 +8896,38 @@ svg.lucide-library {
   .settings-panel {
     max-width: 100%;
   }
+}
+
+/* ── Book Genre and Author Management & Filter Styles ─────────────── */
+.book-grid-genre-tag {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--purple-bg);
+  color: var(--purple);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-author-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.book-author-select {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 0.76rem;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  outline: none;
 }

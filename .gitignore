@@ -3,3 +3,6 @@ dist
 .env
 .vercel
 .claude/worktrees
+prepared_books.json
+extracted_covers/
+

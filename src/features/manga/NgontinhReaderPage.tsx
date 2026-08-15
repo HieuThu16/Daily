@@ -278,20 +278,22 @@ export const NgontinhReaderPage: React.FC = () => {
       <main className={`ngontinh-reader-main-stream fit-${fitMode}`}>
         {images.length > 0 ? (
           images.map((img, idx) => {
+            const imgUrl = typeof img === 'string' ? img : (img.url || '');
+            const imgAlt = (typeof img === 'object' && img.alt) ? img.alt : `Trang ${idx + 1}`;
             const hasError = imageErrors[idx];
             return (
-              <div key={img.url || idx} className="ngontinh-reader-img-card">
+              <div key={imgUrl || idx} className="ngontinh-reader-img-card">
                 {hasError ? (
                   <div className="ngontinh-img-fallback">
                     <p>Không thể hiển thị trang {idx + 1}</p>
-                    <a href={img.url} target="_blank" rel="noreferrer">
+                    <a href={imgUrl} target="_blank" rel="noreferrer">
                       <ExternalLink size={14} /> Mở ảnh gốc
                     </a>
                   </div>
                 ) : (
                   <img
-                    src={img.url}
-                    alt={img.alt || `Trang ${idx + 1}`}
+                    src={imgUrl}
+                    alt={imgAlt}
                     loading={idx < 3 ? 'eager' : 'lazy'}
                     referrerPolicy="no-referrer"
                     onError={() => setImageErrors(prev => ({ ...prev, [idx]: true }))}

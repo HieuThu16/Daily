@@ -182,6 +182,7 @@ export type BookHighlight = {
 export type MovieGenre = { id: string; name: string }
 export type MovieActor = { id: string; name: string }
 export type BookAuthor = { id: string; name: string }
+export type BookGenre = { id: string; name: string }
 export type YouTubeChannel = { id: string; name: string }
 export type MusicArtist = { id: string; name: string }
 export type MusicGenre = { id: string; name: string }
@@ -309,5 +310,3 @@ export type PartnerInvitation = {
   room_code?: string | null
   created_at?: string
 }
-
-

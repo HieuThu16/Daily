@@ -194,20 +194,22 @@ export const BLReaderModal: React.FC<Props> = ({
         {images.length > 0 ? (
           <div className="bl-reader-image-stream">
             {images.map((img, idx) => {
+              const imgUrl = typeof img === 'string' ? img : (img.url || '');
+              const imgAlt = (typeof img === 'object' && img.alt) ? img.alt : `Trang ${idx + 1}`;
               const hasError = imageErrors[idx];
               return (
-                <div key={img.url || idx} className="bl-image-frame">
+                <div key={imgUrl || idx} className="bl-image-frame">
                   {hasError ? (
                     <div className="bl-image-error">
                       <p>Không thể tải ảnh {idx + 1}</p>
-                      <a href={img.url} target="_blank" rel="noreferrer" className="bl-link-direct">
+                      <a href={imgUrl} target="_blank" rel="noreferrer" className="bl-link-direct">
                         <ExternalLink size={14} /> Mở ảnh gốc
                       </a>
                     </div>
                   ) : (
                     <img
-                      src={img.url}
-                      alt={img.alt || `Trang ${idx + 1}`}
+                      src={imgUrl}
+                      alt={imgAlt}
                       loading={idx < 3 ? 'eager' : 'lazy'}
                       onError={() => setImageErrors(prev => ({ ...prev, [idx]: true }))}
                       className="bl-chapter-img"

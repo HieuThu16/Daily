@@ -1,15 +1,17 @@
 export interface MangaImage {
   url: string;
   alt?: string;
-  index: number;
+  index?: number;
 }
+
+export type ChapterImage = string | MangaImage;
 
 export interface MangaChapter {
   number: number | null;
   name: string;
   title?: string;
   url: string;
-  images?: MangaImage[];
+  images?: ChapterImage[];
   imageCount?: number;
 }
 

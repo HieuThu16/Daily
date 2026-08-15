@@ -267,6 +267,8 @@ create table if not exists public.media_items (
   -- migration: 20260815000000_person_occasions_media_cover — URL ảnh bìa,
   -- file nằm trong bucket book-covers (20260818000000_book_covers_storage)
   cover_url      text,
+  -- migration: 20260816000000_add_is_public_column — công khai hay riêng tư
+  is_public      boolean     not null default true,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   deleted_at     timestamptz
@@ -307,11 +309,28 @@ create index if not exists media_items_user_type_status_idx
   on public.media_items(user_id, type, status) where deleted_at is null;
 create index if not exists media_items_movie_genre_idx
   on public.media_items(user_id, movie_genre_id) where deleted_at is null;
+create index if not exists media_items_is_public_idx
+  on public.media_items(is_public) where deleted_at is null;
 
 alter table public.media_items enable row level security;
 do $$ begin
-  create policy "own media" on public.media_items
-    for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+  create policy "view own and public media" on public.media_items
+    for select using (user_id = auth.uid() or is_public = true);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "manage own media" on public.media_items
+    for insert with check (user_id = auth.uid());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "update own media" on public.media_items
+    for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "delete own media" on public.media_items
+    for delete using (user_id = auth.uid());
 exception when duplicate_object then null; end $$;
 do $$ begin
   create trigger media_updated before update on public.media_items
@@ -374,6 +393,13 @@ create table if not exists public.book_authors (
   deleted_at timestamptz
 );
 
+create table if not exists public.book_genres (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null check (length(trim(name)) > 0),
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
 create table if not exists public.youtube_channels (
   id         uuid primary key default gen_random_uuid(),
   name       text not null check (length(trim(name)) > 0),
@@ -389,10 +415,12 @@ create table if not exists public.music_artists (
 );
 
 alter table public.book_authors    enable row level security;
+alter table public.book_genres     enable row level security;
 alter table public.youtube_channels enable row level security;
 alter table public.music_artists   enable row level security;
 
 do $$ begin create policy "Public book_authors access"     on public.book_authors     for all using (true) with check (true); exception when duplicate_object then null; end $$;
+do $$ begin create policy "Public book_genres access"      on public.book_genres      for all using (true) with check (true); exception when duplicate_object then null; end $$;
 do $$ begin create policy "Public youtube_channels access" on public.youtube_channels for all using (true) with check (true); exception when duplicate_object then null; end $$;
 do $$ begin create policy "Public music_artists access"    on public.music_artists    for all using (true) with check (true); exception when duplicate_object then null; end $$;
 
