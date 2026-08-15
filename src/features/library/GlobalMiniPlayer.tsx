@@ -1,16 +1,46 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ListMusic, Music2, Pause, Play, SkipForward, Volume2, VolumeX, X } from 'lucide-react'
+import { ListMusic, Music2, Pause, Play, Repeat, Repeat1, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react'
 import { useAudioPlayer } from './AudioPlayerContext'
 import { MarqueeText } from './MarqueeText'
 
+type MiniPlayerPosition = {
+  top: number | null
+  left: number | null
+  bottom: number | null
+  right: number | null
+}
+
 export function GlobalMiniPlayer() {
-  const { currentTrack, playlist, isPlaying, volume, isMuted, togglePlay, nextTrack, playTrack, setVolume, toggleMute, closePlayer } = useAudioPlayer()
+  const { currentTrack, playlist, isPlaying, volume, isMuted, repeatMode, togglePlay, nextTrack, prevTrack, playTrack, setVolume, toggleMute, toggleRepeat, closePlayer } = useAudioPlayer()
   const [showQueuePopover, setShowQueuePopover] = useState(false)
   const [showVolume, setShowVolume] = useState(false)
-  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const popoverRef = useRef<HTMLElement | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false)
+  const [position, setPosition] = useState<MiniPlayerPosition>(() => {
+    const saved = localStorage.getItem('miniPlayerPosition')
+    if (saved) {
+      try {
+        return JSON.parse(saved) as MiniPlayerPosition
+      } catch {
+        localStorage.removeItem('miniPlayerPosition')
+      }
+    }
+    // Vị trí mặc định: góc dưới bên phải
+    return { 
+      bottom: 20, 
+      right: 20,
+      top: null,
+      left: null
+    }
+  })
+  const playerRef = useRef<HTMLElement | null>(null)
+  const positionRef = useRef(position)
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
 
   // Đóng popover danh sách khi click ra ngoài
   useEffect(() => {
@@ -26,6 +56,79 @@ export function GlobalMiniPlayer() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showQueuePopover, showVolume])
+
+  // Handle drag movement
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const drag = dragRef.current
+      if (!playerRef.current || !drag || e.pointerId !== drag.pointerId) return
+      
+      const playerWidth = playerRef.current.offsetWidth
+      const playerHeight = playerRef.current.offsetHeight
+      
+      // Tính toán vị trí mới dựa trên con trỏ chuột
+      const newLeft = e.clientX - drag.offsetX
+      const newTop = e.clientY - drag.offsetY
+      
+      // Giới hạn trong viewport
+      const maxLeft = window.innerWidth - playerWidth
+      const maxTop = window.innerHeight - playerHeight
+      
+      const clampedLeft = Math.max(0, Math.min(newLeft, maxLeft))
+      const clampedTop = Math.max(0, Math.min(newTop, maxTop))
+      
+      // Tính bottom và right từ top và left
+      const bottom = window.innerHeight - clampedTop - playerHeight
+      const right = window.innerWidth - clampedLeft - playerWidth
+      
+      const nextPosition = {
+        top: clampedTop,
+        left: clampedLeft,
+        bottom,
+        right
+      }
+      positionRef.current = nextPosition
+      setPosition(nextPosition)
+    }
+
+    const handlePointerEnd = (e: PointerEvent) => {
+      if (dragRef.current?.pointerId !== e.pointerId) return
+      dragRef.current = null
+      setIsDragging(false)
+      localStorage.setItem('miniPlayerPosition', JSON.stringify(positionRef.current))
+    }
+
+    document.addEventListener('pointermove', handlePointerMove)
+    document.addEventListener('pointerup', handlePointerEnd)
+    document.addEventListener('pointercancel', handlePointerEnd)
+
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove)
+      document.removeEventListener('pointerup', handlePointerEnd)
+      document.removeEventListener('pointercancel', handlePointerEnd)
+    }
+  }, [isDragging])
+
+  const handleDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    if (!playerRef.current) return
+    
+    const rect = playerRef.current.getBoundingClientRect()
+    dragRef.current = {
+      pointerId: e.pointerId,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    e.preventDefault()
+    setIsDragging(true)
+    
+    // Đóng các popover khi bắt đầu kéo
+    setShowQueuePopover(false)
+    setShowVolume(false)
+  }
 
   // Không có bài hát nào đang mở thì không hiển thị
   if (!currentTrack) return null
@@ -44,9 +147,21 @@ export function GlobalMiniPlayer() {
 
   return (
     <aside
-      className={`global-mini-player ${isMusicRoute ? 'is-on-music-page' : ''}`}
+      ref={(el) => {
+        playerRef.current = el
+        popoverRef.current = el
+      }}
+      className={`global-mini-player ${isMusicRoute ? 'is-on-music-page' : ''} ${isDragging ? 'is-dragging' : ''}`}
       aria-label="Trình phát nhạc thu nhỏ"
-      ref={popoverRef}
+      style={{
+        ...(position.top !== null && position.top !== undefined
+          ? { top: `${position.top}px`, bottom: 'auto' }
+          : { bottom: `${position.bottom ?? 20}px`, top: 'auto' }),
+        ...(position.left !== null && position.left !== undefined
+          ? { left: `${position.left}px`, right: 'auto' }
+          : { right: `${position.right ?? 20}px`, left: 'auto' }),
+        cursor: isDragging ? 'grabbing' : 'grab'
+      }}
     >
       {/* Popover danh sách phát nổi phía trên */}
       {showQueuePopover && (
@@ -118,10 +233,11 @@ export function GlobalMiniPlayer() {
       {/* Vùng bấm mở lại trình phát đầy đủ */}
       <div
         className="mini-player-main-info"
-        onClick={openFullPlayer}
+        onPointerDown={handleDragStart}
+        onDoubleClick={openFullPlayer}
         role="button"
         tabIndex={0}
-        aria-label={`Mở trình phát đầy đủ cho bài hát ${currentTrack.name}`}
+        aria-label={`Kéo để di chuyển hoặc nhấp đúp để mở trình phát đầy đủ - ${currentTrack.name}`}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
@@ -145,6 +261,20 @@ export function GlobalMiniPlayer() {
 
       {/* Cụm điều khiển mini */}
       <div className="mini-player-actions">
+        {/* Nút quay lại bài trước */}
+        <button
+          type="button"
+          className="mini-ctrl-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            prevTrack()
+          }}
+          title="Bài trước"
+          aria-label="Bài trước"
+        >
+          <SkipBack size={16} fill="currentColor" />
+        </button>
+
         <button
           type="button"
           className="mini-ctrl-btn mini-play-btn"
@@ -169,6 +299,20 @@ export function GlobalMiniPlayer() {
           aria-label="Bài tiếp theo"
         >
           <SkipForward size={16} fill="currentColor" />
+        </button>
+
+        {/* Nút lặp lại */}
+        <button
+          type="button"
+          className={`mini-ctrl-btn ${repeatMode !== 'OFF' ? 'is-active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleRepeat()
+          }}
+          title={repeatMode === 'OFF' ? 'Lặp lại: Tắt' : repeatMode === 'ALL' ? 'Lặp lại: Tất cả' : 'Lặp lại: Bài này'}
+          aria-label={repeatMode === 'OFF' ? 'Lặp lại: Tắt' : repeatMode === 'ALL' ? 'Lặp lại: Tất cả' : 'Lặp lại: Bài này'}
+        >
+          {repeatMode === 'ONE' ? <Repeat1 size={16} /> : <Repeat size={16} />}
         </button>
 
         {/* Volume control: icon toggle + inline slider popover */}
@@ -243,4 +387,3 @@ export function GlobalMiniPlayer() {
     </aside>
   )
 }
-

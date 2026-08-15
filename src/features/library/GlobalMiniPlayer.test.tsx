@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,10 @@ import type { Media } from '../../types'
 import { AudioPlayerProvider, useAudioPlayer } from './AudioPlayerContext'
 import { GlobalMiniPlayer } from './GlobalMiniPlayer'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.removeItem('miniPlayerPosition')
+})
 
 const sampleSong: Media = {
   id: 'music-1',
@@ -103,5 +106,37 @@ describe('GlobalMiniPlayer', () => {
     await user.click(screen.getByText('Nơi này có anh'))
     expect(screen.getAllByText('Nơi này có anh').length).toBeGreaterThanOrEqual(1)
   })
-})
 
+  it('cho phép kéo mini player bằng Pointer Events, kể cả trên màn hình cảm ứng', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <MemoryRouter initialEntries={['/home']}>
+        <AudioPlayerProvider>
+          <TestConsumer track={sampleSong} />
+          <GlobalMiniPlayer />
+        </AudioPlayerProvider>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Kích hoạt phát' }))
+    const player = screen.getByLabelText('Trình phát nhạc thu nhỏ')
+    const dragArea = screen.getByRole('button', { name: /Kéo để di chuyển/ })
+    Object.defineProperties(player, {
+      offsetWidth: { configurable: true, value: 360 },
+      offsetHeight: { configurable: true, value: 60 },
+    })
+    vi.spyOn(player, 'getBoundingClientRect').mockReturnValue({
+      x: 20, y: 20, top: 20, left: 20, bottom: 80, right: 380, width: 360, height: 60,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.pointerDown(dragArea, { pointerId: 7, pointerType: 'touch', clientX: 40, clientY: 35 })
+    fireEvent.pointerMove(document, { pointerId: 7, pointerType: 'touch', clientX: 240, clientY: 135 })
+    fireEvent.pointerUp(document, { pointerId: 7, pointerType: 'touch' })
+
+    expect(player).toHaveStyle({ left: '220px', top: '120px' })
+    expect(JSON.parse(localStorage.getItem('miniPlayerPosition') || '{}')).toMatchObject({ left: 220, top: 120 })
+    vi.restoreAllMocks()
+    expect(container).toBeInTheDocument()
+  })
+})

@@ -1,7 +1,8 @@
 /**
- * crawl_bl_images.js
+ * crawl_bl_images.cjs
  * Cào chi tiết ảnh cho từng chapter từ dualeotruyencw.com
- * Dùng thuộc tính data-img (lazy-load), data-src, data-original
+ * Tự động bỏ qua các chapter / manga đã có ảnh
+ * Lưu an toàn chống file lock trên Windows
  */
 
 const https = require('https');
@@ -12,9 +13,9 @@ const path = require('path');
 const DATA_PATH = path.resolve('public/data/bl_manga.json');
 const SRC_DATA_PATH = path.resolve('src/data/bl_manga.json');
 const BASE = 'https://dualeotruyencw.com';
-const SAVE_EVERY = 10; // lưu mỗi 10 manga đã xong
-const DELAY_BETWEEN_CHAPTERS = 400; // ms
-const DELAY_BETWEEN_MANGA = 800; // ms
+const SAVE_EVERY = 5; // lưu mỗi 5 manga đã xong
+const DELAY_BETWEEN_CHAPTERS = 250; // ms
+const DELAY_BETWEEN_MANGA = 500; // ms
 const MAX_RETRIES = 3;
 
 function sleep(ms) {
@@ -43,7 +44,7 @@ function get(url, retry = 0) {
 
     req.on('error', async (err) => {
       if (retry < MAX_RETRIES) {
-        await sleep(1500 * (retry + 1));
+        await sleep(1000 * (retry + 1));
         return resolve(get(url, retry + 1));
       }
       reject(err);
@@ -52,7 +53,7 @@ function get(url, retry = 0) {
     req.on('timeout', () => {
       req.destroy();
       if (retry < MAX_RETRIES) {
-        sleep(1500 * (retry + 1)).then(() => resolve(get(url, retry + 1)));
+        sleep(1000 * (retry + 1)).then(() => resolve(get(url, retry + 1)));
       } else {
         reject(new Error(`Timeout: ${url}`));
       }
@@ -100,6 +101,7 @@ function extractImages(html) {
       clean.includes('imgdualeo') ||
       clean.includes('cdn') ||
       clean.includes('/uploads/') ||
+      clean.includes('/upbia/') ||
       clean.includes('part') ||
       (clean.match(/\.(webp|jpg|jpeg|png)/i) && !clean.includes('/skin/'))
     ) {
@@ -127,18 +129,50 @@ async function scrapeChapterImages(chapterUrl) {
   }
 }
 
+function safeWrite(filePath, dataStr) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const tempPath = `${filePath}.tmp`;
+      fs.writeFileSync(tempPath, dataStr, 'utf8');
+      fs.copyFileSync(tempPath, filePath);
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+      return;
+    } catch (e) {
+      if (attempt === 5) {
+        console.error(`⚠️ Không thể ghi file ${filePath} sau 5 lần thử: ${e.message}`);
+      } else {
+        const wait = attempt * 300;
+        const now = Date.now();
+        while (Date.now() - now < wait) {} // sync busy wait
+      }
+    }
+  }
+}
+
+function saveData(data) {
+  const jsonStr = JSON.stringify(data, null, 2);
+  safeWrite(DATA_PATH, jsonStr);
+  safeWrite(SRC_DATA_PATH, jsonStr);
+}
+
 async function main() {
   console.log('📖 Đọc dữ liệu bl_manga.json...');
   const raw = fs.readFileSync(DATA_PATH, 'utf8');
   const allManga = JSON.parse(raw);
   console.log(`📚 Tổng số bộ truyện: ${allManga.length}`);
 
-  // Đếm số manga và chapter cần cào
+  const mangaDone = allManga.filter(m =>
+    m.chapters && m.chapters.length > 0 &&
+    m.chapters.every(c => c.images && c.images.length > 0)
+  ).length;
+
   const mangaNeedCrawl = allManga.filter(m =>
     m.chapters && m.chapters.length > 0 &&
     m.chapters.some(c => !c.images || c.images.length === 0)
   );
-  console.log(`🔍 Số bộ truyện cần cào ảnh: ${mangaNeedCrawl.length}`);
+
+  console.log(`✅ Đã hoàn thành sẵn: ${mangaDone} bộ`);
+  console.log(`🔍 Số bộ truyện còn cần cào: ${mangaNeedCrawl.length} bộ`);
 
   let totalMangaDone = 0;
   let totalChaptersDone = 0;
@@ -161,7 +195,6 @@ async function main() {
       try {
         const images = await scrapeChapterImages(chUrl);
 
-        // Update vào manga object
         const chIdx = manga.chapters.findIndex(c => c.url === chUrl);
         if (chIdx !== -1) {
           manga.chapters[chIdx].images = images;
@@ -172,7 +205,7 @@ async function main() {
           process.stdout.write(`  ✅ Chapter "${ch.name || ch.title || 'N/A'}": ${images.length} ảnh\n`);
           totalImagesFound += images.length;
         } else {
-          process.stdout.write(`  ⚠️ Chapter "${ch.name || ch.title || 'N/A'}": Không có ảnh (có thể VIP/redirect)\n`);
+          process.stdout.write(`  ⚠️ Chapter "${ch.name || ch.title || 'N/A'}": Không có ảnh\n`);
         }
 
         totalChaptersDone++;
@@ -183,32 +216,23 @@ async function main() {
       }
     }
 
-    if (mangaUpdated) totalMangaDone++;
+    if (mangaUpdated) {
+      totalMangaDone++;
+    }
 
     // Lưu định kỳ mỗi SAVE_EVERY manga
     if (totalMangaDone > 0 && totalMangaDone % SAVE_EVERY === 0) {
       saveData(allManga);
-      console.log(`\n💾 Đã lưu tiến độ (${totalMangaDone} manga, ${totalChaptersDone} chapter, ${totalImagesFound} ảnh)...`);
+      console.log(`\n💾 Đã lưu an toàn (${totalMangaDone} manga mới, ${totalChaptersDone} chapter, ${totalImagesFound} ảnh)...`);
     }
 
     await sleep(DELAY_BETWEEN_MANGA);
   }
 
-  // Lưu lần cuối
   saveData(allManga);
-  console.log(`\n🎉 HOÀN TẤT!`);
-  console.log(`   - Manga đã cập nhật: ${totalMangaDone}`);
-  console.log(`   - Chapters đã cào: ${totalChaptersDone}`);
-  console.log(`   - Tổng ảnh tìm thấy: ${totalImagesFound}`);
-}
-
-function saveData(data) {
-  const jsonStr = JSON.stringify(data, null, 2);
-  fs.writeFileSync(DATA_PATH, jsonStr, 'utf8');
-  fs.writeFileSync(SRC_DATA_PATH, jsonStr, 'utf8');
+  console.log(`\n🎉 HOÀN TẤT TOÀN BỘ KHO TRUYỆN!`);
 }
 
 main().catch(e => {
   console.error('Fatal error:', e);
-  process.exit(1);
 });

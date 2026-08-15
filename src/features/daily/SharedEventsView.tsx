@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, Filter, ImagePlus, Mail, MapPin, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
+import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import type { SharedEvent, SharedPartner } from '../../types'
@@ -11,15 +11,6 @@ const PHOTO_BUCKET = 'daily-photos'
 function viDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
 }
-
-// Bảng màu xoay vòng cho icon lịch mỗi thẻ, cho danh sách đỡ đơn điệu.
-const CARD_COLORS = [
-  { color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
-  { color: 'var(--rose)',    bg: 'var(--rose-bg)'    },
-  { color: 'var(--emerald)', bg: 'var(--emerald-bg)' },
-  { color: 'var(--amber)',   bg: 'var(--amber-bg)'   },
-  { color: 'var(--blue)',    bg: 'var(--blue-bg)'    },
-]
 
 /**
  * Nhật ký chung: sự kiện của hai người. Ai thêm email mình vào danh sách
@@ -442,13 +433,11 @@ export function SharedEventsView({
   const partnerDisplayName = personName || 'Người yêu'
 
   return (
-    <>
-      {/* Thanh hành động đẹp mắt, không vỡ layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: onSendInvite ? '1fr 1fr' : '1fr 1fr', gap: 8, marginBottom: 10 }}>
+    <section className="memory-view">
+      <div className="memory-actions">
         <button
-          className="primary"
+          className="memory-add"
           onClick={openAdd}
-          style={{ padding: '8px 12px', fontSize: '0.82rem', justifyContent: 'center', minHeight: 38 }}
         >
           <Plus size={15} /> Thêm kỷ niệm
         </button>
@@ -456,16 +445,7 @@ export function SharedEventsView({
         {onSendInvite ? (
           <button
             onClick={onSendInvite}
-            style={{
-              padding: '8px 12px',
-              fontSize: '0.82rem',
-              background: 'var(--primary-light)',
-              color: 'var(--primary)',
-              border: '1px solid var(--primary)',
-              fontWeight: 600,
-              justifyContent: 'center',
-              minHeight: 38,
-            }}
+            className="memory-invite"
             title="Gửi lời mời kết nối kỷ niệm"
           >
             <Mail size={15} /> Mời kết nối
@@ -473,7 +453,7 @@ export function SharedEventsView({
         ) : (
           <button
             onClick={() => setManagePartners(true)}
-            style={{ padding: '8px 12px', fontSize: '0.82rem', justifyContent: 'center', minHeight: 38 }}
+            className="memory-invite"
           >
             <UserPlus size={15} /> Người chung ({partners.items.length})
           </button>
@@ -481,18 +461,17 @@ export function SharedEventsView({
       </div>
 
       {roomCode && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '4px 10px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Phòng kỷ niệm:</span>
-          <strong style={{ fontSize: '0.78rem', color: 'var(--primary)', letterSpacing: 0.5 }}>{roomCode}</strong>
+        <div className="memory-room">
+          <span>Phòng kỷ niệm</span>
+          <strong>{roomCode}</strong>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
+      <div className="memory-filters">
         <select
           value={filterYear}
           onChange={(e) => setFilterYear(e.target.value)}
           aria-label="Lọc theo năm"
-          style={{ flex: 1, padding: '5px 8px', fontSize: '0.8rem', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-main)' }}
         >
           <option value="ALL">🗓️ Tất cả năm</option>
           {availableYears.map((y) => (
@@ -506,7 +485,6 @@ export function SharedEventsView({
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
           aria-label="Lọc theo tháng"
-          style={{ flex: 1, padding: '5px 8px', fontSize: '0.8rem', borderRadius: 8, border: '1px solid var(--border-color)', background: 'var(--bg-card)', color: 'var(--text-main)' }}
         >
           <option value="ALL">📅 Tất cả tháng</option>
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
@@ -519,14 +497,13 @@ export function SharedEventsView({
         {(filterYear !== 'ALL' || filterMonth !== 'ALL') && (
           <button
             type="button"
-            className="icon small"
+            className="memory-reset"
             onClick={() => {
               setFilterYear('ALL')
               setFilterMonth('ALL')
             }}
             title="Xoá bộ lọc"
             aria-label="Xoá bộ lọc"
-            style={{ padding: '5px 8px', fontSize: '0.75rem', height: 'auto' }}
           >
             <RotateCcw size={13} />
           </button>
@@ -544,84 +521,78 @@ export function SharedEventsView({
           Không tìm thấy kỷ niệm nào trong thời gian đã chọn.
         </Empty>
       ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div className="memory-list">
           {filtered.map((ev, i) => {
             const mine = ev.owner_id === myId
-            const c = CARD_COLORS[i % CARD_COLORS.length]
             const allImages = ev.images && ev.images.length ? ev.images : (ev.image_url ? [ev.image_url] : [])
             return (
-              <div
+              <article
                 key={ev.id}
-                className="card"
+                className="memory-card"
                 onClick={() => {
                   setSelectedImageIdx(0)
                   setViewing(ev)
                 }}
-                style={{ padding: 10, margin: 0, display: 'flex', gap: 10, alignItems: 'stretch', cursor: 'pointer' }}
               >
-                {allImages.length > 0 ? (
-                  <div style={{ position: 'relative', width: 72, height: 72, flexShrink: 0 }}>
-                    <img src={allImages[0]} alt="" style={{ width: '100%', height: '100%', borderRadius: 12, objectFit: 'cover' }} />
+                <time className={`memory-date memory-date-${i % 5}`} dateTime={ev.event_date}>
+                  <strong>{ev.event_date.slice(8, 10)}</strong>
+                  <span>Thg {Number(ev.event_date.slice(5, 7))}</span>
+                </time>
+                {allImages.length > 0 && (
+                  <div className="memory-thumb">
+                    <img src={allImages[0]} alt="" />
                     {allImages.length > 1 && (
-                      <span style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: '0.62rem', padding: '1px 5px', borderRadius: 6, fontWeight: 700 }}>
+                      <span>
                         +{allImages.length - 1}
                       </span>
                     )}
                   </div>
-                ) : (
-                  <div className="icon-box" style={{ width: 72, height: 72, borderRadius: 12, flexShrink: 0, background: c.bg, color: c.color }}>
-                    <CalendarDays size={26} />
-                  </div>
                 )}
 
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <div className="icon-box icon-box-sm" style={{ width: 20, height: 20, flexShrink: 0, background: c.bg, color: c.color }}>
-                      <CalendarDays size={11} />
-                    </div>
-                    <strong style={{ fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</strong>
+                <div className="memory-card-body">
+                  <div className="memory-card-title">
+                    <strong>{ev.title}</strong>
                     {!mine && (
-                      <span className="eyebrow" style={{ margin: 0, padding: '1px 6px', fontSize: '0.62rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700 }}>
+                      <span className="memory-partner">
                         {partnerDisplayName}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  <div className="memory-card-meta">
                     {viDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time}` : ''}
                   </div>
                   {ev.location && (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <div className="memory-location">
                       <MapPin size={11} /> {ev.location}
                     </div>
                   )}
-                  {ev.note && <p style={{ margin: '2px 0 0', fontSize: '0.8rem', lineHeight: 1.4, color: 'var(--text-main)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.note}</p>}
+                  {ev.note && <p>{ev.note}</p>}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexShrink: 0 }}>
+                <div className="memory-card-actions">
                   <button
-                    className="icon small"
+                    className="memory-icon"
                     aria-label={`${ev.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'} ${ev.title}`}
                     aria-pressed={!!ev.is_favorite}
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleFavorite(ev)
                     }}
-                    style={{ color: ev.is_favorite ? 'var(--amber)' : 'var(--text-muted)' }}
                   >
-                    <Star size={16} fill={ev.is_favorite ? 'currentColor' : 'none'} />
+                    <Heart size={16} fill={ev.is_favorite ? 'currentColor' : 'none'} />
                   </button>
                   <button
-                    className="icon small"
+                    className="memory-icon"
                     aria-label={`Sửa ${ev.title}`}
                     onClick={(e) => {
                       e.stopPropagation()
                       openEdit(ev)
                     }}
                   >
-                    <Pencil size={15} />
+                    <MoreVertical size={17} />
                   </button>
                 </div>
-              </div>
+              </article>
             )
           })}
         </div>
@@ -822,6 +793,6 @@ export function SharedEventsView({
           </div>
         </Modal>
       )}
-    </>
+    </section>
   )
 }

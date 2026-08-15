@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, HardDriveDownload, Heart, HeartHandshake, Home, Layers, LogOut, Menu, Music, NotebookPen, Plus, Salad, Sparkles, SunMoon, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BellOff, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, HardDriveDownload, Heart, HeartHandshake, Home, LogOut, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, SunMoon, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
 import { localDate } from './lib/date'
@@ -27,6 +27,7 @@ import { useTaskReminders } from './features/useTaskReminders'
 import { exportBackup } from './lib/backup'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
+import { SettingsPage, UpdateToast } from './features/ProfilePage'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -44,6 +45,7 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
+  { id: 'settings', label: 'Cài đặt', icon: Settings, colorClass: 'icon-box-slate' },
 ]
 
 const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
@@ -78,6 +80,7 @@ const navGroups: { title: string; ids: Tab[] }[] = [
   { title: 'Giải trí & Nghệ thuật', ids: ['music', 'tvshow', 'movies', 'manga'] },
   { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
   { title: 'Kiến thức & con người', ids: ['people'] },
+  { title: 'Hệ thống', ids: ['settings'] },
 ]
 
 function Login({ user }: { user: unknown }) {
@@ -137,7 +140,7 @@ function Login({ user }: { user: unknown }) {
   )
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, user }: { children: React.ReactNode; user: unknown }) {
   const nav = useNavigate()
   const path = useLocation().pathname
   const [dark, setDark] = useState(false)
@@ -316,32 +319,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="side-nav-foot">
-          {canInstall && !installed && (
-            <button className="side-nav-mini" onClick={handleInstallPWA} title="Cài đặt ứng dụng về máy">
-              <Download size={16} /> <span>Cài đặt</span>
-            </button>
-          )}
-          <button className="side-nav-mini" onClick={handleBackup} disabled={backingUp} title="Tải toàn bộ dữ liệu về máy dạng JSON">
-            <HardDriveDownload size={16} /> <span>{backingUp ? 'Đang tải…' : 'Sao lưu'}</span>
-          </button>
-          {pushSupported() && (
-            <button
-              className="side-nav-mini"
-              onClick={() => void togglePush()}
-              disabled={pushBusy}
-              title={pushOn ? 'Tắt nhắc việc qua thông báo' : 'Bật nhắc việc kể cả khi đóng app'}
-            >
-              {pushOn ? <Bell size={16} /> : <BellOff size={16} />} <span>{pushOn ? 'Đang nhắc' : 'Bật nhắc'}</span>
-            </button>
-          )}
-          <button className="side-nav-mini" onClick={() => setDark(!dark)} title="Đổi giao diện sáng/tối">
-            <SunMoon size={16} /> <span>{dark ? 'Sáng' : 'Tối'}</span>
-          </button>
-          <button className="side-nav-mini is-danger" onClick={() => supabase?.auth.signOut()} title="Đăng xuất">
-            <LogOut size={16} /> <span>Thoát</span>
-          </button>
-        </div>
       </aside>
 
       {!isHeaderHidden && (
@@ -359,31 +336,6 @@ function Shell({ children }: { children: React.ReactNode }) {
             {headerAction && (
               <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
                 <Plus size={20} />
-              </button>
-            )}
-
-            {/* PWA Install Button */}
-            {canInstall && !installed && (
-              <button
-                aria-label="Cài đặt ứng dụng"
-                className="icon"
-                onClick={handleInstallPWA}
-                title="Cài đặt ứng dụng về máy"
-                style={{
-                  color: 'var(--primary)',
-                  background: 'var(--primary-light)',
-                  borderRadius: 10,
-                  padding: '5px 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  border: '1px solid var(--primary)',
-                }}
-              >
-                <Download size={15} />
-                <span style={{ display: 'none' }} className="pwa-install-label">Cài PWA</span>
               </button>
             )}
           </div>
@@ -439,21 +391,6 @@ function Shell({ children }: { children: React.ReactNode }) {
                 )
               })}
             </nav>
-            <div className="mobile-drawer-foot">
-              {canInstall && !installed && (
-                <button onClick={handleInstallPWA}><Download size={16} /> <span>Cài đặt</span></button>
-              )}
-              <button onClick={handleBackup} disabled={backingUp}>
-                <HardDriveDownload size={16} /> <span>{backingUp ? 'Đang tải…' : 'Sao lưu'}</span>
-              </button>
-              {pushSupported() && (
-                <button onClick={() => void togglePush()} disabled={pushBusy}>
-                  {pushOn ? <Bell size={16} /> : <BellOff size={16} />} <span>{pushOn ? 'Đang nhắc' : 'Bật nhắc'}</span>
-                </button>
-              )}
-              <button onClick={() => setDark(!dark)}><SunMoon size={16} /> <span>{dark ? 'Sáng' : 'Tối'}</span></button>
-              <button className="is-danger" onClick={() => supabase?.auth.signOut()}><LogOut size={16} /> <span>Thoát</span></button>
-            </div>
           </aside>
         </div>
       )}
@@ -469,10 +406,21 @@ function Shell({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
 
-      <main className={`content page-${activeTabItem.id}`}>{children}</main>
+      <main className={`content page-${activeTabItem.id}`}>
+        {path === '/settings' ? (
+          <SettingsPage
+            user={user as { email?: string | null; full_name?: string | null; avatar_url?: string | null; created_at?: string | null }}
+            dark={dark}
+            onToggleDark={() => setDark((isDark) => !isDark)}
+            canInstall={canInstall && !installed}
+            onInstallPWA={handleInstallPWA}
+          />
+        ) : children}
+      </main>
 
       {/* Cột phụ desktop. Luôn dựng, CSS quyết định có hiện hay không. */}
       <aside className="side-rail" ref={asideRef} />
+
     </div>
   )
 }
@@ -481,6 +429,14 @@ import { ToastProvider } from './features/ToastContext'
 
 function Protected({ user }: { user: unknown }) {
   if (!user) return <Navigate to="/login" replace />
+
+  // Lưu ngày tham gia lần đầu vào localStorage
+  if (user && typeof user === 'object' && 'created_at' in user) {
+    const u = user as { created_at?: string }
+    if (u.created_at && !localStorage.getItem('daily_joined_at')) {
+      localStorage.setItem('daily_joined_at', u.created_at)
+    }
+  }
 
   return (
     <ToastProvider>
@@ -495,7 +451,7 @@ function Protected({ user }: { user: unknown }) {
               <Route
                 path="*"
                 element={
-                  <Shell>
+                  <Shell user={user}>
                     <Routes>
                       <Route path="/home" element={<HomePage />} />
                       <Route path="/habit" element={<HabitsPage />} />
@@ -516,6 +472,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/nutrition" element={<NutritionPage />} />
                       <Route path="/money" element={<MoneyPage />} />
                       <Route path="/calendar" element={<CalendarPage />} />
+                      <Route path="/settings" element={null} />
                       <Route path="*" element={<Navigate to="/home" replace />} />
                     </Routes>
                   </Shell>
@@ -523,6 +480,8 @@ function Protected({ user }: { user: unknown }) {
               />
             </Routes>
             <GlobalMiniPlayer />
+            {/* Toast cập nhật: hiện toàn cục khi có bản cập nhật mới chưa xem */}
+            <UpdateToast />
           </AsideProvider>
         </HeaderActionProvider>
       </AudioPlayerProvider>

@@ -227,14 +227,22 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
 
   const handleEnded = useCallback(() => {
     if (repeatMode === 'ONE') {
+      // Lặp lại bài hiện tại
       if (audioRef.current) {
         audioRef.current.currentTime = 0
         audioRef.current.play?.()
       }
-    } else {
+    } else if (repeatMode === 'ALL') {
+      // Lặp lại toàn bộ playlist
       nextTrack()
+    } else {
+      // repeatMode === 'OFF': chỉ phát bài tiếp, không lặp lại khi hết playlist
+      if (currentIndex >= 0 && currentIndex < playlist.length - 1) {
+        nextTrack()
+      }
+      // Nếu đã là bài cuối cùng, dừng lại
     }
-  }, [repeatMode, nextTrack])
+  }, [repeatMode, nextTrack, currentIndex, playlist.length])
 
   const value = useMemo<AudioPlayerContextType>(
     () => ({

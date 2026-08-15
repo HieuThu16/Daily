@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'money' | 'calendar' | 'people' | 'nutrition'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'money' | 'calendar' | 'people' | 'nutrition' | 'settings'
 
 export type NutritionLog = {
   id: string
