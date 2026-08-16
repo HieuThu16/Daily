@@ -10,6 +10,7 @@ import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
 import { Aside, AsideCard } from './AsideSlot'
 import { saveLocal } from '../lib/persistence'
+import { notifyTasksChanged } from './useUncompletedTasks'
 
 type Tab = 'tasks' | 'ideas' | 'stats'
 type EditState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
@@ -462,6 +463,7 @@ export function TasksPage() {
     }
 
     todos.setItems((prev) => [tempTodo, ...prev])
+    notifyTasksChanged()
     setAddModal(null)
     setNewTitle('')
     setNewDueTime('')
@@ -474,6 +476,7 @@ export function TasksPage() {
     const { data, error } = await supabase!.from('todos').insert(payload).select().single()
     if (!error && data) {
       todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (data as Todo) : item)))
+      notifyTasksChanged()
       showToast('Đã lưu Supabase')
     } else {
       reportWriteError(error, `todo:${tempTodo.id}`, tempTodo)
@@ -512,6 +515,7 @@ export function TasksPage() {
     const updateData = { completed: next, completed_at: completedAt }
 
     todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
+    notifyTasksChanged()
     const { error } = await supabase!.from('todos').update(updateData).eq('id', t.id)
     if (error) {
       reportWriteError(error, `todo:${t.id}`, { ...t, ...updateData })
@@ -551,6 +555,7 @@ export function TasksPage() {
         goal_id: editGoalId || null,
       }
       todos.setItems((prev) => prev.map((i) => (i.id === edit.item.id ? { ...i, ...updateData } : i)))
+      notifyTasksChanged()
       const { error } = await supabase!.from('todos').update(updateData).eq('id', edit.item.id)
       if (error) {
         reportWriteError(error, `todo:${edit.item.id}`, { ...edit.item, ...updateData })
@@ -574,6 +579,7 @@ export function TasksPage() {
     await supabase!.from(table).update({ deleted_at: new Date().toISOString() }).eq('id', edit.item.id)
     if (edit.kind === 'todo') {
       todos.setItems((prev) => prev.filter((i) => i.id !== edit.item.id))
+      notifyTasksChanged()
     } else {
       ideas.setItems((prev) => prev.filter((i) => i.id !== edit.item.id))
     }
@@ -615,6 +621,7 @@ export function TasksPage() {
 
     setPostponeBusy(true)
     todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
+    notifyTasksChanged()
     setPostponeTarget(null)
     showToast(`⏳ Đã trì hoãn ${formatMinutes(postponeMinutes)} → hạn mới ${formatDeadline({ ...t, ...next })}`)
 

@@ -14,6 +14,21 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 'v1.9-comic-detail-redesign',
+    date: '2026-08-16',
+    version: '1.9',
+    title: 'Giao diện chi tiết Truyện BL & Ngôn Tình mới',
+    description: 'Nâng cấp toàn diện giao diện chi tiết truyện BL và Ngôn Tình với thiết kế chuẩn hiện đại, thanh thao tác 5 nút tiện lợi và danh sách chương tinh gọn.',
+    highlights: [
+      'Giao diện chi tiết truyện mới: bìa bo góc, lưới thống kê 2x2, huy hiệu xác thực và trạng thái',
+      'Hàng 5 nút thao tác nhanh: Bắt đầu đọc, Tiếp tục đọc, Giới thiệu & Thể loại, Mở nguồn web, Yêu thích',
+      'Phần Giới thiệu & Thể loại thu gọn linh hoạt, dễ dàng mở rộng khi cần',
+      'Danh sách chương chuẩn hóa: hiển thị gọn gàng Chapter {N} và nút xem tất cả ở cuối trang',
+      'Tối ưu hiển thị không che khuất chuông thông báo và thanh điều hướng'
+    ],
+    type: 'feature',
+  },
+  {
     id: 'v1.8-profile',
     date: '2026-08-15',
     version: '1.8',

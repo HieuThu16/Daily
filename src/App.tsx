@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, HardDriveDownload, Heart, HeartHandshake, Home, LogOut, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, SunMoon, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Film, Flame, Heart, HeartHandshake, Home, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { disablePush, enablePush, pushEnabled, pushSupported } from './lib/push'
+import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
 import { HeaderActionProvider, useHeaderActionSlot, useIsHeaderHidden } from './features/HeaderAction'
@@ -28,6 +28,8 @@ import { exportBackup } from './lib/backup'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
+import { TaskNotificationBell } from './features/TaskNotificationBell'
+import { ToastProvider } from './features/ToastContext'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -318,7 +320,6 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             )
           })}
         </nav>
-
       </aside>
 
       {!isHeaderHidden && (
@@ -333,6 +334,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
           </div>
           <div className="header-actions">
+            <TaskNotificationBell />
             {headerAction && (
               <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
                 <Plus size={20} />
@@ -424,8 +426,6 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     </div>
   )
 }
-
-import { ToastProvider } from './features/ToastContext'
 
 function Protected({ user }: { user: unknown }) {
   if (!user) return <Navigate to="/login" replace />

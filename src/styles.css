@@ -8400,6 +8400,466 @@ svg.lucide-library {
   color: var(--text-main);
 }
 
+.book-author-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.book-author-select {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 0.76rem;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  outline: none;
+}
+
+/* ==========================================================================
+   Task Notification Bell in Header & Responsive Modal/Sheet
+   ========================================================================== */
+
+.task-bell-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-bell-btn {
+  display: grid;
+  place-items: center;
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.task-bell-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.task-bell-btn:active {
+  transform: scale(0.95);
+}
+
+.task-bell-btn.is-active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.task-bell-btn.has-tasks {
+  color: var(--primary);
+}
+
+.task-bell-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--card-bg);
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.45);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.task-bell-badge.is-overdue {
+  animation: bellBadgePulse 2s infinite ease-in-out;
+}
+
+@keyframes bellBadgePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.45);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+  }
+}
+
+/* Modal Portal Backdrop */
+.task-bell-portal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  animation: bellBackdropFadeIn 0.2s ease-out;
+}
+
+@keyframes bellBackdropFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Desktop Dropdown / Modal */
+.task-bell-dropdown-modal {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 80px);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px -10px rgba(15, 23, 42, 0.25), 0 8px 24px -4px rgba(15, 23, 42, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: bellModalInDesktop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10000;
+}
+
+@keyframes bellModalInDesktop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.task-bell-sheet-handle {
+  display: none;
+}
+
+.task-bell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card-bg);
+  flex-shrink: 0;
+}
+
+.task-bell-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.task-bell-title-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
+.task-bell-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.task-bell-count-pill {
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+
+.task-bell-overdue-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--rose-bg);
+  color: var(--rose);
+}
+
+.task-bell-close-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-bell-close-btn:hover {
+  background: var(--soft);
+  color: var(--text-main);
+}
+
+.task-bell-body {
+  overflow-y: auto;
+  max-height: 360px;
+  padding: 4px 0;
+}
+
+.task-bell-empty {
+  padding: 32px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-bell-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+}
+
+.task-bell-empty-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.task-bell-empty-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  max-width: 260px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.task-bell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-bell-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.task-bell-item:last-child {
+  border-bottom: none;
+}
+
+.task-bell-item:hover {
+  background: var(--soft);
+}
+
+.task-bell-item.is-overdue {
+  background: rgba(225, 29, 72, 0.04);
+}
+
+.task-bell-item.is-overdue:hover {
+  background: rgba(225, 29, 72, 0.08);
+}
+
+.task-bell-item.is-completing {
+  opacity: 0.4;
+  transform: scale(0.97);
+}
+
+.task-bell-check-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--text-muted);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.task-bell-check-btn .check-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.task-bell-check-btn:hover {
+  border-color: var(--emerald);
+  background: var(--emerald-bg);
+}
+
+.task-bell-check-btn:hover .check-ring {
+  opacity: 0.5;
+  background: var(--emerald);
+}
+
+.task-bell-check-btn.checked {
+  background: var(--emerald);
+  border-color: var(--emerald);
+  color: #ffffff;
+}
+
+.task-bell-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-bell-item-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.task-bell-item-title.done {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.task-bell-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.task-tag-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.3;
+}
+
+.task-tag-badge.tag-overdue {
+  background: var(--rose-bg);
+  color: var(--rose);
+}
+
+.task-tag-badge.tag-today {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+
+.task-tag-badge.tag-due {
+  background: var(--soft);
+  color: var(--text-muted);
+}
+
+.task-tag-badge.tag-urgent {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.task-tag-badge.tag-category {
+  background: var(--purple-bg);
+  color: var(--purple);
+}
+
+.task-bell-item-arrow {
+  color: var(--text-muted);
+  opacity: 0.4;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.task-bell-item:hover .task-bell-item-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.task-bell-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--card-bg);
+}
+
+.task-bell-view-all-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--soft);
+  color: var(--primary);
+  border: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-bell-view-all-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary-hover);
+}
+
+@media (max-width: 600px) {
+  .task-bell-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .task-bell-dropdown {
+    width: calc(100vw - 16px);
+    right: -40px;
+  }
+}
+
 .ut-close {
   position: absolute;
   top: 8px;

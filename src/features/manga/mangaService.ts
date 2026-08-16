@@ -128,6 +128,25 @@ export async function fetchTeamsanyHotData(): Promise<HotMangaData | null> {
   return null;
 }
 
+const FOLLOW_KEY = 'daily_bl_following';
+
+export function getFollows(): string[] {
+  try {
+    const raw = localStorage.getItem(FOLLOW_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function toggleFollow(slug: string): boolean {
+  const current = getFollows();
+  const exists = current.includes(slug);
+  const updated = exists ? current.filter(s => s !== slug) : [...current, slug];
+  localStorage.setItem(FOLLOW_KEY, JSON.stringify(updated));
+  return !exists;
+}
+
 export function getFavorites(): string[] {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);

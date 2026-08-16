@@ -43,6 +43,25 @@ export async function fetchNgontinhHotData(): Promise<HotMangaData | null> {
   }
 }
 
+const FOLLOW_KEY = 'daily_ngontinh_following';
+
+export function getNgontinhFollows(): string[] {
+  try {
+    const raw = localStorage.getItem(FOLLOW_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function toggleNgontinhFollow(slug: string): boolean {
+  const current = getNgontinhFollows();
+  const exists = current.includes(slug);
+  const updated = exists ? current.filter(s => s !== slug) : [...current, slug];
+  localStorage.setItem(FOLLOW_KEY, JSON.stringify(updated));
+  return !exists;
+}
+
 export function getNgontinhFavorites(): string[] {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);
