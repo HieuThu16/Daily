@@ -1,27 +1,64 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { Plus, Trash2, X, Inbox } from 'lucide-react'
 
+/** Supabase cắt mọi select ở 1000 dòng. App ghi nhật ký hằng ngày nên phải kéo hết từng trang. */
+const PAGE_SIZE = 1000
+
+async function fetchAll<T>(table: string, order: string): Promise<T[]> {
+  const all: T[] = []
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await supabase!
+      .from(table)
+      .select('*')
+      .is('deleted_at', null)
+      .order(order, { ascending: false })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
+    if (error) throw error
+    if (data) all.push(...(data as T[]))
+    if (!data || data.length < PAGE_SIZE) return all
+  }
+}
+
+// Giữ dữ liệu đã tải giữa các lần đổi tab để quay lại không thấy màn hình trống.
+const cache = new Map<string, unknown[]>()
+
 export function useQuery<T>(table: string, order = 'created_at') {
-  const [items, setItems] = useState<T[]>([])
-  const [loading, setLoading] = useState(true)
+  const cacheKey = `${table}:${order}`
+  const [items, setItems] = useState<T[]>(() => (cache.get(cacheKey) ?? []) as T[])
+  const [loading, setLoading] = useState(!cache.has(cacheKey))
   const [error, setError] = useState('')
 
   const reload = async () => {
     if (!supabase) return
     setLoading(true)
-    const { data, error } = await supabase.from(table).select('*').is('deleted_at', null).order(order, { ascending: false })
-    if (error) setError('Could not load data. Please try again.')
-    else setItems((data ?? []) as T[])
+    try {
+      const rows = await fetchAll<T>(table, order)
+      cache.set(cacheKey, rows)
+      setItems(rows)
+      setError('')
+    } catch {
+      setError('Chưa tải được dữ liệu. Thử lại nhé.')
+    }
     setLoading(false)
   }
 
   useEffect(() => {
-    reload()
-  }, [table])
+    setItems((cache.get(cacheKey) ?? []) as T[])
+    void reload()
+  }, [cacheKey])
 
-  return { items, setItems, loading, error, reload }
+  // Sửa tại chỗ cũng phải ghi vào cache, nếu không lần sau quay lại sẽ thấy dữ liệu cũ.
+  const setItemsCached: typeof setItems = (update) => {
+    setItems((prev) => {
+      const next = typeof update === 'function' ? (update as (p: T[]) => T[])(prev) : update
+      cache.set(cacheKey, next)
+      return next
+    })
+  }
+
+  return { items, setItems: setItemsCached, loading, error, reload }
 }
 
 export function Empty({ children, icon: Icon = Inbox, colorClass = 'icon-box-blue' }: { children: React.ReactNode; icon?: any; colorClass?: string }) {
@@ -54,19 +91,49 @@ export function InlineForm({ placeholder, onSave }: { placeholder: string; onSav
       <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} />
       <button className="primary" disabled={busy}>
         <Plus size={16} />
-        {busy ? 'Saving…' : 'Add'}
+        {busy ? 'Đang lưu…' : 'Thêm'}
       </button>
     </form>
   )
 }
 
 export function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  const panel = useRef<HTMLElement>(null)
+  // `onClose` thường là arrow inline nên đổi mỗi lần render. Giữ qua ref để effect
+  // chỉ chạy đúng một lần lúc mở — chạy lại sẽ cướp tiêu điểm giữa lúc người dùng gõ.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null
+    panel.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus()
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return closeRef.current()
+      if (e.key !== 'Tab' || !panel.current) return
+      // Giữ Tab quẩn trong hộp thoại, nếu không tiêu điểm lọt ra trang phía sau.
+      const stops = [...panel.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      if (!stops.length) return
+      const edge = e.shiftKey ? stops[0] : stops[stops.length - 1]
+      if (document.activeElement === edge) {
+        e.preventDefault()
+        ;(e.shiftKey ? stops[stops.length - 1] : stops[0]).focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      opener?.focus?.()
+    }
+  }, [])
+
   return createPortal(
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
+      <section ref={panel} className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="icon" aria-label="Close form" onClick={onClose}>
+          <button className="icon" aria-label="Đóng" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
@@ -85,15 +152,19 @@ export function DeleteButton({ onDelete }: { onDelete: () => Promise<void> }) {
       className="text-danger"
       disabled={busy}
       onClick={async () => {
-        if (confirm('Remove this item? You can’t undo this from the app.')) {
-          setBusy(true)
+        if (!confirm('Xoá mục này? App không hoàn tác lại được.')) return
+        setBusy(true)
+        try {
           await onDelete()
+        } finally {
+          // Xoá hỏng mà không nhả busy thì nút kẹt "Đang xoá…" vĩnh viễn.
+          setBusy(false)
         }
       }}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
     >
       <Trash2 size={16} />
-      {busy ? 'Removing…' : 'Delete'}
+      {busy ? 'Đang xoá…' : 'Xoá'}
     </button>
   )
 }

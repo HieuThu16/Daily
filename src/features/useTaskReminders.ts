@@ -32,9 +32,18 @@ export function useTaskReminders() {
         .is('deleted_at', null)
       if (!alive || !data) return
 
+      // Khoá theo cả mốc hạn: dời hạn thì được nhắc lại, và Set không phình mãi vì
+      // mỗi vòng chỉ giữ đúng các việc còn trong tầm truy vấn (hôm nay + ngày mai).
+      const keyOf = (todo: Pick<Todo, 'id' | 'due_date' | 'due_time'>) => `${todo.id}@${todo.due_date}T${todo.due_time ?? ''}`
+      const live = new Set((data as Todo[]).map(keyOf))
+      notified.current.forEach((key) => {
+        if (!live.has(key)) notified.current.delete(key)
+      })
+
       dueSoon(data as Todo[]).forEach((todo) => {
-        if (notified.current.has(todo.id)) return
-        notified.current.add(todo.id)
+        const key = keyOf(todo)
+        if (notified.current.has(key)) return
+        notified.current.add(key)
         const text = reminderText(todo)
         showToast(`⏰ ${todo.title} — ${text}`, 'info')
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {

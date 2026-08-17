@@ -23,7 +23,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import type { Media } from '../../types'
 import { MarqueeText } from './MarqueeText'
-import { useAudioPlayer, type RepeatMode } from './AudioPlayerContext'
+import { useOptionalAudioPlayer, type RepeatMode } from './AudioPlayerContext'
 
 export type LibraryCategory = {
   id: string
@@ -138,10 +138,7 @@ export function LibraryAudioDetail({
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   // Kết nối với Global Audio Player nếu có Provider
-  let globalPlayer: ReturnType<typeof useAudioPlayer> | null = null
-  try {
-    globalPlayer = useAudioPlayer()
-  } catch {}
+  const globalPlayer = useOptionalAudioPlayer()
 
   // Fallback local state nếu chạy trong môi trường test độc lập không có Provider
   const localAudioRef = useRef<HTMLAudioElement | null>(null)

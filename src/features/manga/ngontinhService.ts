@@ -16,13 +16,9 @@ export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
     console.warn('Could not load /data/ngontinh_manga.json from public', err);
   }
 
-  try {
-    const fallback = await import('../../data/ngontinh_manga.json');
-    return (fallback.default || fallback) as unknown as NgontinhManga[];
-  } catch (e) {
-    console.warn('Fallback import ngontinh_manga.json not available yet', e);
-    return [];
-  }
+  // Trước đây có nhánh `import('../../data/ngontinh_manga.json')` dự phòng: nó kéo 49MB
+  // vào bundle, mà chính file đó nằm trong .gitignore nên clone sạch là build gãy.
+  return [];
 }
 
 export async function fetchNgontinhHotData(): Promise<HotMangaData | null> {
@@ -35,12 +31,7 @@ export async function fetchNgontinhHotData(): Promise<HotMangaData | null> {
     console.warn('Could not load /data/ngontinh_hot.json from public', err);
   }
 
-  try {
-    const fallback = await import('../../data/ngontinh_hot.json');
-    return (fallback.default || fallback) as unknown as HotMangaData;
-  } catch (e) {
-    return null;
-  }
+  return null;
 }
 
 const FOLLOW_KEY = 'daily_ngontinh_following';

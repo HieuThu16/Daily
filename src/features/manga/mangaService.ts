@@ -128,12 +128,7 @@ export async function fetchHotMangaData(): Promise<HotMangaData | null> {
     console.warn('Could not load /data/bl_hot_manga.json', err);
   }
 
-  try {
-    const fallback = await import('../../data/bl_hot_manga.json');
-    return (fallback.default || fallback) as unknown as HotMangaData;
-  } catch (e) {
-    return null;
-  }
+  return null;
 }
 
 export async function fetchTeamsanyHotData(): Promise<HotMangaData | null> {

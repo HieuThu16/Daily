@@ -262,17 +262,13 @@ export async function crawlBatch10() {
 
   // Đảm bảo thư mục lưu dữ liệu tồn tại
   await fs.mkdir('public/data', { recursive: true });
-  await fs.mkdir('src/data', { recursive: true });
 
   const dataPath1 = path.join('public', 'data', 'bl_manga.json');
-  const dataPath2 = path.join('src', 'data', 'bl_manga.json');
 
   await fs.writeFile(dataPath1, JSON.stringify(fullBooks, null, 2), 'utf8');
-  await fs.writeFile(dataPath2, JSON.stringify(fullBooks, null, 2), 'utf8');
 
   console.log(`\n🎉 Đã hoàn tất cào 10 truyện và lưu vào:`);
   console.log(`- ${dataPath1}`);
-  console.log(`- ${dataPath2}`);
 }
 
 if (process.argv[1]?.endsWith('crawl_10.js')) {

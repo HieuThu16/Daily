@@ -10,7 +10,6 @@ const fs = require('fs');
 const path = require('path');
 
 const DATA_PATH = path.resolve('public/data/bl_manga.json');
-const SRC_DATA_PATH = path.resolve('src/data/bl_manga.json');
 const BASE = 'https://dualeotruyencw.com';
 const SAVE_EVERY = 10; // lưu mỗi 10 manga đã xong
 const DELAY_BETWEEN_CHAPTERS = 400; // ms
@@ -205,7 +204,6 @@ async function main() {
 function saveData(data) {
   const jsonStr = JSON.stringify(data, null, 2);
   fs.writeFileSync(DATA_PATH, jsonStr, 'utf8');
-  fs.writeFileSync(SRC_DATA_PATH, jsonStr, 'utf8');
 }
 
 main().catch(e => {

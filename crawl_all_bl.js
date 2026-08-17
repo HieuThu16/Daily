@@ -225,8 +225,6 @@ async function saveData(data) {
   await fs.mkdir('public/data', { recursive: true });
   await fs.writeFile('public/data/bl_manga.json', jsonStr, 'utf8');
 
-  await fs.mkdir('src/data', { recursive: true });
-  await fs.writeFile('src/data/bl_manga.json', jsonStr, 'utf8');
 }
 
 export async function crawlAllMaster() {

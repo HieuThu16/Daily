@@ -3,7 +3,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const BASE = 'https://nettruyenz.com';
-const CATE_URL = `${BASE}/cate-ngon-tinh`;
+// Cào thể loại khác mà không phải sửa code:
+//   CATE=school-life OUT=school_life_manga node crawl_ngontinh.js 10
+const CATE_URL = `${BASE}/cate-${process.env.CATE || 'ngon-tinh'}`;
+const OUT_NAME = process.env.OUT || 'ngontinh_manga';
 
 const CONFIG = {
   concurrency: 5, // 5 concurrent detail workers for fast, respectful crawling
@@ -265,8 +268,8 @@ export async function crawlAllNgontinh(options = {}) {
   await fs.mkdir(publicDataDir, { recursive: true });
   await fs.mkdir(srcDataDir, { recursive: true });
 
-  const outputFile = path.join(publicDataDir, 'ngontinh_manga.json');
-  const srcOutputFile = path.join(srcDataDir, 'ngontinh_manga.json');
+  const outputFile = path.join(publicDataDir, `${OUT_NAME}.json`);
+  const srcOutputFile = path.join(srcDataDir, `${OUT_NAME}.json`);
 
   // Load existing comics to resume/update
   let existingMap = new Map();
@@ -283,7 +286,8 @@ export async function crawlAllNgontinh(options = {}) {
   console.log(`[INIT] Đã nạp ${existingMap.size} truyện có sẵn từ bộ nhớ đệm.`);
 
   const maxTotalPages = await detectTotalPages();
-  const pagesToCrawl = options.maxPages || maxTotalPages;
+  // Chặn trên bằng số trang thật: truyền 999 để "cào hết" thì không tải hàng trăm trang rỗng.
+  const pagesToCrawl = Math.min(options.maxPages || maxTotalPages, maxTotalPages);
 
   console.log(`=== BẮT ĐẦU CÀO TOÀN BỘ TRUYỆN NGÔN TÌNH TỪ NETTRUYENZ.COM (${pagesToCrawl} TRANG) ===\n`);
 

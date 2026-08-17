@@ -17,7 +17,7 @@ vi.mock('../../lib/supabase', () => ({
     from: (table: string) => {
       const result = { data: rows[table] ?? [], error: null }
       const query: Record<string, unknown> = {}
-      for (const method of ['select', 'eq', 'is', 'order', 'insert', 'update', 'upsert', 'delete', 'single', 'maybeSingle']) {
+      for (const method of ['select', 'eq', 'is', 'order', 'range', 'insert', 'update', 'upsert', 'delete', 'single', 'maybeSingle']) {
         query[method] = vi.fn(() => query)
       }
       query.then = (resolve: (value: typeof result) => void) => Promise.resolve(result).then(resolve)

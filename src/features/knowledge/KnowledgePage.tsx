@@ -3,6 +3,7 @@ import { Check, ChevronDown, Plus, Search, Settings2, Tags, Trash2 } from 'lucid
 import { supabase } from '../../lib/supabase'
 import { useHeaderAction } from '../HeaderAction'
 import { Modal } from '../shared'
+import { useToast } from '../ToastContext'
 import type { KnowledgeItem } from '../../types'
 import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory } from './knowledge'
 
@@ -13,6 +14,7 @@ const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
 
 /** Tab Kiến thức: danh sách câu hỏi — bấm để mở câu trả lời, lọc theo thể loại và tìm kiếm. */
 export function KnowledgePage() {
+  const { showToast } = useToast()
   const [items, setItems] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
@@ -70,7 +72,7 @@ export function KnowledgePage() {
       .eq('category', from)
       .is('deleted_at', null)
     if (error) {
-      alert('Chưa đổi được tên thể loại — kiểm tra kết nối.')
+      showToast('❌ Chưa đổi được tên thể loại — kiểm tra kết nối.', 'delete')
       return
     }
     setItems((prev) => prev.map((i) => (i.category === from ? { ...i, category: to } : i)))
@@ -87,7 +89,7 @@ export function KnowledgePage() {
       .eq('category', name)
       .is('deleted_at', null)
     if (error) {
-      alert('Chưa xoá được thể loại — kiểm tra kết nối.')
+      showToast('❌ Chưa xoá được thể loại — kiểm tra kết nối.', 'delete')
       return
     }
     setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: DEFAULT_CATEGORY } : i)))
@@ -109,7 +111,7 @@ export function KnowledgePage() {
       .select()
       .single()
     if (error) {
-      alert('Chưa lưu được thẻ — kiểm tra kết nối.')
+      showToast('❌ Chưa lưu được thẻ — kiểm tra kết nối.', 'delete')
       return
     }
     setItems((prev) => [data as KnowledgeItem, ...prev])

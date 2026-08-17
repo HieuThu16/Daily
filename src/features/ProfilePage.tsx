@@ -9,6 +9,7 @@ import { CHANGELOG, getUnseenLatest, markLatestSeen } from '../data/changelog'
 import { exportBackup } from '../lib/backup'
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push'
 import { supabase } from '../lib/supabase'
+import { useToast } from './ToastContext'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,7 +17,8 @@ function fmtDate(iso: string) {
   return new Intl.DateTimeFormat('vi-VN', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso))
 }
 
-const INSTALL_HINT = 'Trình duyệt này chưa cho cài tự động.\n\n• iPhone/iPad (Safari): nút Chia sẻ → "Thêm vào MH chính".\n• Android (Chrome): menu ⋮ → "Cài đặt ứng dụng".\n• Máy tính: biểu tượng cài đặt ở thanh địa chỉ.\n\nNếu đã cài rồi thì mở app từ màn hình chính nhé.'
+// Toast ngắn hơn hộp alert cũ nên gộp lại một dòng; hướng dẫn đủ dài đã nằm ngay dưới nút.
+const INSTALL_HINT = 'ℹ️ Trình duyệt chưa cho cài tự động — Safari: Chia sẻ → Thêm vào MH chính. Chrome: menu ⋮ → Cài đặt ứng dụng.'
 
 const TYPE_META: Record<ChangelogEntry['type'], { label: string; color: string }> = {
   feature: { label: 'Tính năng mới', color: 'var(--primary)' },
@@ -173,6 +175,7 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPWA }: SettingsPageProps) {
+  const { showToast } = useToast()
   const [showChangelog, setShowChangelog] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [pushOn, setPushOn] = useState(false)
@@ -188,7 +191,7 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
       if (pushOn) { await disablePush(); setPushOn(false) }
       else { await enablePush(); setPushOn(true) }
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Không bật được thông báo.')
+      showToast(`❌ ${error instanceof Error ? error.message : 'Không bật được thông báo.'}`, 'delete')
     } finally { setPushBusy(false) }
   }
 
@@ -196,9 +199,10 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
     setBackingUp(true)
     try {
       const backup = await exportBackup()
-      if (backup.failed.length) alert(`Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`)
+      if (backup.failed.length) showToast(`⚠️ Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`, 'info')
+      else showToast('☁️ Đã tải bản sao lưu.')
     } catch {
-      alert('Chưa sao lưu được — kiểm tra kết nối Supabase.')
+      showToast('❌ Chưa sao lưu được — kiểm tra kết nối Supabase.', 'delete')
     }
     setBackingUp(false)
   }
@@ -269,7 +273,7 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
                 {/* Cài app PWA — luôn hiện; trình duyệt không hỗ trợ prompt thì chỉ dẫn thủ công */}
                 <button
                   className="settings-row settings-row--highlight"
-                  onClick={() => (canInstall ? onInstallPWA() : alert(INSTALL_HINT))}
+                  onClick={() => (canInstall ? onInstallPWA() : showToast(INSTALL_HINT, 'local'))}
                 >
                   <div className="sr-icon sr-icon--primary"><Download size={16} /></div>
                   <div className="sr-label-group">

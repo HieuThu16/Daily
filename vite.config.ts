@@ -33,5 +33,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    // Worktree có node_modules riêng -> React bị nạp 2 lần, mọi test trong đó fail giả.
+    exclude: ['node_modules/**', 'dist/**', '.claude/**'],
   },
 })

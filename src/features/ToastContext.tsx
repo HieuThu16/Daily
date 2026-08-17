@@ -20,17 +20,23 @@ const ToastContext = createContext<ToastContextType>({
 
 export const useToast = () => useContext(ToastContext)
 
+let nextToastId = 0
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
-  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+
+  const dismiss = useCallback((id: number) => {
+    setToasts((current) => current.filter((t) => t.id !== id))
+  }, [])
 
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
-    const id = Date.now()
-    setToast({ id, message, type })
+    // Date.now() trùng khi hai toast bắn cùng mili giây, cái này sẽ xoá nhầm cái kia.
+    const id = (nextToastId += 1)
+    // Giữ tối đa 3 cái: báo lưu và báo lỗi hay bắn liên tiếp, đè nhau thì mất thông tin.
+    setToasts((current) => [...current, { id, message, type }].slice(-3))
     // Cảnh báo lưu hỏng thường kèm câu lỗi dài, cần thời gian đọc lâu hơn
-    setTimeout(() => {
-      setToast((current) => (current?.id === id ? null : current))
-    }, type === 'local' ? 6000 : 2500)
-  }, [])
+    setTimeout(() => dismiss(id), type === 'local' ? 6000 : 2500)
+  }, [dismiss])
 
   const showSaveToast = useCallback((isSupabaseSaved: boolean, actionLabel: string = 'dữ liệu') => {
     if (isSupabaseSaved) {
@@ -55,41 +61,60 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const currentColors = getToastColors(toast?.type)
-
   return (
     <ToastContext.Provider value={{ showToast, showSaveToast }}>
       {children}
-      {toast && (
-        <div
-          className={`app-toast toast-${toast.type || 'success'}`}
-          style={{
-            position: 'fixed',
-            bottom: 68,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9999,
-            background: currentColors.bg,
-            color: currentColors.color,
-            border: `1.5px solid ${currentColors.border}`,
-            padding: '8px 16px',
-            borderRadius: '20px',
-            fontSize: '0.82rem',
-            fontWeight: 700,
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            backdropFilter: 'blur(12px)',
-            animation: 'toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-            maxWidth: 'min(92vw, 460px)',
-            textAlign: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <span>{toast.message}</span>
-        </div>
-      )}
+      <div
+        // role="status" để trình đọc màn hình đọc lên mà không cướp tiêu điểm.
+        role="status"
+        aria-live="polite"
+        style={{
+          position: 'fixed',
+          bottom: 68,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8,
+          pointerEvents: 'none',
+        }}
+      >
+        {toasts.map((toast) => {
+          const colors = getToastColors(toast.type)
+          return (
+            <button
+              key={toast.id}
+              type="button"
+              aria-label="Đóng thông báo"
+              onClick={() => dismiss(toast.id)}
+              className={`app-toast toast-${toast.type || 'success'}`}
+              style={{
+                background: colors.bg,
+                color: colors.color,
+                border: `1.5px solid ${colors.border}`,
+                padding: '8px 16px',
+                borderRadius: '20px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                backdropFilter: 'blur(12px)',
+                animation: 'toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                maxWidth: 'min(92vw, 460px)',
+                textAlign: 'center',
+                cursor: 'pointer',
+                pointerEvents: 'auto',
+              }}
+            >
+              <span>{toast.message}</span>
+            </button>
+          )
+        })}
+      </div>
     </ToastContext.Provider>
   )
 }

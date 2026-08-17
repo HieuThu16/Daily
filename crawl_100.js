@@ -214,11 +214,8 @@ export async function scrapeChapter(slug, chapterNumber) {
 
 async function saveData(books) {
   await fs.mkdir('public/data', { recursive: true });
-  await fs.mkdir('src/data', { recursive: true });
   const p1 = path.join('public', 'data', 'bl_manga.json');
-  const p2 = path.join('src', 'data', 'bl_manga.json');
   await fs.writeFile(p1, JSON.stringify(books, null, 2), 'utf8');
-  await fs.writeFile(p2, JSON.stringify(books, null, 2), 'utf8');
 }
 
 export async function crawl100Unique() {

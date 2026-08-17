@@ -1,27 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Clock, FileText, History, ImagePlus, Loader2, Pencil, Trash2 } from 'lucide-react'
-import { blobToCover } from '../../lib/book/cover'
-import {
-  CHARS_PER_PAGE,
-  loadBookDocument,
-  loadChapterList,
-  removeCover,
-  saveCoverUrl,
-  uploadCover,
-} from '../../lib/book/repository'
+import { ArrowLeft, BookOpen, ChevronRight, Clock, FileText, History, Pencil } from 'lucide-react'
+import { CHARS_PER_PAGE, loadBookDocument, loadChapterList } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument, Media } from '../../types'
 import { BookCover } from './BookCover'
 import { useHideHeader } from '../HeaderAction'
-
-/** Ảnh lớn hơn mức này bị chặn trước khi giải mã, tránh treo tab trên điện thoại. */
-const MAX_COVER_BYTES = 15 * 1024 * 1024
 
 type BookDetailViewProps = {
   item: Media
   onBack: () => void
   onEdit: (item: Media) => void
-  onCoverChange: (mediaItemId: string, coverUrl: string | null) => void
   onStatusChange: (item: Media, status: Media['status']) => void
   onLogProgress: (item: Media) => void
   onShowHistory: (item: Media) => void
@@ -63,11 +51,10 @@ function formatMoment(value: string | null | undefined): string | null {
   }).format(date)
 }
 
-export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusChange, onLogProgress, onShowHistory, logCount }: BookDetailViewProps) {
+export function BookDetailView({ item, onBack, onEdit, onStatusChange, onLogProgress, onShowHistory, logCount }: BookDetailViewProps) {
   useHideHeader(true)
   const nav = useNavigate()
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const fileInput = useRef<HTMLInputElement>(null)
 
   const [status, setStatus] = useState<Status>('loading')
   const [document_, setDocument] = useState<BookDocument | null>(null)
@@ -76,8 +63,6 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
   const [reloadKey, setReloadKey] = useState(0)
   /** Mục lục hay Thông tin. Mặc định mục lục vì mở sách ra là để đọc tiếp. */
   const [tab, setTab] = useState<'toc' | 'info'>('toc')
-  const [coverBusy, setCoverBusy] = useState(false)
-  const [coverError, setCoverError] = useState('')
 
   const listen = item.book_format === 'LISTEN'
 
@@ -120,69 +105,23 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
     }
   }, [item.id, reloadKey])
 
-  const handleCoverFile = async (file: File) => {
-    setCoverError('')
-    if (file.size > MAX_COVER_BYTES) {
-      setCoverError('Ảnh quá lớn (tối đa 15MB).')
-      return
-    }
-    setCoverBusy(true)
-    try {
-      const cover = await blobToCover(file)
-      if (!cover) {
-        setCoverError('File này không phải ảnh hợp lệ.')
-        return
-      }
-      const url = await uploadCover(item.id, cover)
-      await saveCoverUrl(item.id, url)
-      onCoverChange(item.id, url)
-    } catch {
-      setCoverError('Không lưu được ảnh bìa, thử lại sau.')
-    } finally {
-      setCoverBusy(false)
-    }
-  }
-
-  const handleCoverRemove = async () => {
-    setCoverError('')
-    setCoverBusy(true)
-    try {
-      await removeCover(item.id)
-      onCoverChange(item.id, null)
-    } catch {
-      setCoverError('Không xoá được ảnh bìa, thử lại sau.')
-    } finally {
-      setCoverBusy(false)
-    }
-  }
-
   return (
     <section className="library-book-detail" aria-labelledby="library-book-title">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10 }}>
-        <button
-          type="button"
-          className="library-audio-back"
-          aria-label="Quay lại thư viện"
-          onClick={onBack}
-          style={{ margin: 0, padding: '6px 12px', fontSize: '0.84rem' }}
-        >
-          <ArrowLeft size={16} />
-          Quay lại
+      <header className="library-book-topbar">
+        <button type="button" className="library-book-round" aria-label="Quay lại thư viện" onClick={onBack}>
+          <ArrowLeft size={18} />
         </button>
-        <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, flex: 1, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          Chi tiết sách
-        </h2>
+        <h2>Chi tiết sách</h2>
         <button
           type="button"
-          className="icon"
+          className="library-book-round"
           onClick={() => onEdit(item)}
           aria-label="Chỉnh sửa thông tin sách"
-          style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--border)' }}
           title="Chỉnh sửa"
         >
-          <Pencil size={15} />
+          <Pencil size={16} />
         </button>
-      </div>
+      </header>
 
       <div className="library-book-detail-card">
         <div className="library-book-header">
@@ -195,7 +134,7 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
             <p>{item.author || 'Chưa cập nhật tác giả'}</p>
             <div className="library-book-badges">
               <span>{listen ? '🎧 Nghe' : '📖 Đọc'}</span>
-              {item.genre && <span style={{ background: 'var(--purple-bg)', color: 'var(--purple)', fontWeight: 600 }}>🏷️ {item.genre}</span>}
+              {item.genre && <span>🏷️ {item.genre}</span>}
               {item.is_favorite && <span>♥ Yêu thích</span>}
               {item.shared_by && <span>📚 Do {item.shared_by} chia sẻ</span>}
               <select
@@ -211,94 +150,89 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
                 ))}
               </select>
             </div>
-
-            <div className="library-book-cover-actions">
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                aria-label="Chọn ảnh bìa mới"
-                style={{ display: 'none' }}
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  event.target.value = ''
-                  if (file) void handleCoverFile(file)
-                }}
-              />
-              <button type="button" disabled={coverBusy} onClick={() => fileInput.current?.click()}>
-                {coverBusy ? <Loader2 size={13} className="spin" /> : <ImagePlus size={13} />}
-                {coverBusy ? 'Đang lưu…' : 'Đổi ảnh bìa'}
-              </button>
-              {item.cover_url && (
-                <button type="button" disabled={coverBusy} aria-label="Xoá ảnh bìa" onClick={() => void handleCoverRemove()}>
-                  <Trash2 size={13} />
-                  Xoá bìa
-                </button>
-              )}
-            </div>
-            {coverError && <p className="library-book-error" role="alert">{coverError}</p>}
           </div>
         </div>
 
         {status === 'ready' && document_ && (
-          <div className="library-book-progress">
-            <div className="library-book-bar">
-              <div style={{ width: `${Math.min(100, Math.max(0, document_.percent))}%` }} />
+          <div className="library-book-stats">
+            <div>
+              <FileText size={15} />
+              <strong>{document_.chapter_count} chương</strong>
+              <span>{document_.page_count ? `${document_.page_count} trang` : `~${document_.est_pages} trang`}</span>
             </div>
-            <span>{Math.round(document_.percent)}%</span>
-            <span>
-              Chương {Math.min(document_.last_chapter_idx + 1, chapters.length)}/{chapters.length}
-            </span>
+            <div>
+              <BookOpen size={15} />
+              <strong>{document_.total_chars.toLocaleString('vi-VN')}</strong>
+              <span>Số chữ</span>
+            </div>
+            <div>
+              <Clock size={15} />
+              <strong>{Math.round(document_.percent)}%</strong>
+              <span>Đã {listen ? 'nghe' : 'đọc'}</span>
+            </div>
           </div>
         )}
 
-        <div className="library-book-primary-row">
-          {status === 'ready' && (
-            <button type="button" className="primary" onClick={() => nav(`/read/${item.id}`)}>
-              <BookOpen size={14} />
-              Đọc tiếp
-            </button>
-          )}
-          <div className="library-book-tabs" role="tablist" aria-label="Nội dung sách">
-            <button
-              type="button"
-              role="tab"
-              id="library-book-tab-toc"
-              aria-selected={tab === 'toc'}
-              aria-controls="library-book-panel-toc"
-              className={tab === 'toc' ? 'active' : ''}
-              onClick={() => setTab('toc')}
-            >
-              Mục lục{status === 'ready' ? ` (${chapters.length})` : ''}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="library-book-tab-info"
-              aria-selected={tab === 'info'}
-              aria-controls="library-book-panel-info"
-              className={tab === 'info' ? 'active' : ''}
-              onClick={() => setTab('info')}
-            >
-              Thông tin
-            </button>
+        {status === 'ready' && document_ && (
+          <div className="library-book-progress-card">
+            <div className="library-book-progress">
+              <span>Tiến độ {listen ? 'nghe' : 'đọc'}</span>
+              <span>
+                Chương {Math.min(document_.last_chapter_idx + 1, chapters.length)}/{chapters.length}
+              </span>
+            </div>
+            <div className="library-book-bar">
+              <div style={{ width: `${Math.min(100, Math.max(0, document_.percent))}%` }} />
+            </div>
           </div>
-        </div>
+        )}
+
+        {status === 'ready' && (
+          <button type="button" className="library-book-cta" onClick={() => nav(`/read/${item.id}`)}>
+            <BookOpen size={16} />
+            Đọc tiếp
+          </button>
+        )}
 
         <div className="library-book-detail-actions">
           {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
             <>
               <button type="button" onClick={() => onLogProgress(item)}>
-                {listen ? <Clock size={14} /> : <FileText size={14} />}
+                {listen ? <Clock size={16} /> : <FileText size={16} />}
                 {listen ? 'Ghi giờ' : 'Ghi trang'}
               </button>
               <button type="button" onClick={() => onShowHistory(item)}>
-                <History size={14} />
+                <History size={16} />
                 Lịch sử
                 <span className="library-book-count">{logCount}</span>
               </button>
             </>
           )}
+        </div>
+
+        <div className="library-book-tabs" role="tablist" aria-label="Nội dung sách">
+          <button
+            type="button"
+            role="tab"
+            id="library-book-tab-toc"
+            aria-selected={tab === 'toc'}
+            aria-controls="library-book-panel-toc"
+            className={tab === 'toc' ? 'active' : ''}
+            onClick={() => setTab('toc')}
+          >
+            Mục lục{status === 'ready' ? ` (${chapters.length})` : ''}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="library-book-tab-info"
+            aria-selected={tab === 'info'}
+            aria-controls="library-book-panel-info"
+            className={tab === 'info' ? 'active' : ''}
+            onClick={() => setTab('info')}
+          >
+            Thông tin
+          </button>
         </div>
 
         <div
@@ -411,7 +345,8 @@ export function BookDetailView({ item, onBack, onEdit, onCoverChange, onStatusCh
                   >
                     <span className="library-book-toc-index">{chapter.idx + 1}</span>
                     <span className="library-book-toc-title">{chapter.title}</span>
-                    <span className="library-book-toc-pages">{chapterPages(chapter, document_)} tr</span>
+                    <span className="library-book-toc-pages">{chapterPages(chapter, document_)} trang</span>
+                    <ChevronRight size={14} className="library-book-toc-chevron" />
                   </button>
                 </li>
               ))}

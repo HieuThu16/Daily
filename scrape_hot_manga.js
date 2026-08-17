@@ -112,8 +112,6 @@ export async function updateHotData() {
   await fs.mkdir('public/data', { recursive: true });
   await fs.writeFile('public/data/bl_hot_manga.json', JSON.stringify(hotData, null, 2), 'utf8');
 
-  await fs.mkdir('src/data', { recursive: true });
-  await fs.writeFile('src/data/bl_hot_manga.json', JSON.stringify(hotData, null, 2), 'utf8');
 
   console.log(`✅ Đã lưu dữ liệu HOT:`);
   console.log(`   - Truyện Hot: ${hotList.length} truyện`);
@@ -143,7 +141,6 @@ export async function updateHotData() {
     });
 
     await fs.writeFile('public/data/bl_manga.json', JSON.stringify(updatedManga, null, 2), 'utf8');
-    await fs.writeFile('src/data/bl_manga.json', JSON.stringify(updatedManga, null, 2), 'utf8');
     console.log(`⚡ Đã đồng bộ thông tin rank HOT vào toàn bộ ${updatedManga.length} bộ truyện!`);
   } catch (err) {
     console.error('Error syncing hot info to bl_manga.json:', err);

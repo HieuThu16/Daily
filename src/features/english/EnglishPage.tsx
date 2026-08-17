@@ -3,6 +3,7 @@ import { Plus, Trash2, Volume2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { speakEnglish } from '../../lib/tts'
 import { useHeaderAction } from '../HeaderAction'
+import { useToast } from '../ToastContext'
 import type { EnglishItem, EnglishKind } from '../../types'
 
 const KIND_LABEL: Record<EnglishKind, string> = { WORD: 'Từ', SENTENCE: 'Câu' }
@@ -16,6 +17,7 @@ export function parseTags(raw: string): string[] {
 
 /** Tab tiếng Anh: thẻ lật (flip card) học từ và câu, có nút đọc thành tiếng và lọc theo tag. */
 export function EnglishPage() {
+  const { showToast } = useToast()
   const [items, setItems] = useState<EnglishItem[]>([])
   const [loading, setLoading] = useState(true)
   const [kindFilter, setKindFilter] = useState<EnglishKind | 'ALL'>('ALL')
@@ -62,7 +64,7 @@ export function EnglishPage() {
       .select()
       .single()
     if (error) {
-      alert('Chưa lưu được thẻ — kiểm tra kết nối.')
+      showToast('❌ Chưa lưu được thẻ — kiểm tra kết nối.', 'delete')
       return
     }
     setItems((prev) => [data as EnglishItem, ...prev])

@@ -39,6 +39,14 @@ export function useAudioPlayer(): AudioPlayerContextType {
   return context
 }
 
+/**
+ * Dành cho màn hình chạy được cả khi không có Provider (test độc lập).
+ * Bọc `useAudioPlayer()` trong try/catch là gọi hook có điều kiện — sai Rules of Hooks.
+ */
+export function useOptionalAudioPlayer(): AudioPlayerContextType | null {
+  return useContext(AudioPlayerContext)
+}
+
 export function AudioPlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
