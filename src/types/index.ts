@@ -1,4 +1,18 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'money' | 'calendar' | 'people' | 'nutrition' | 'settings'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'english' | 'money' | 'calendar' | 'people' | 'nutrition' | 'settings'
+
+export type EnglishKind = 'WORD' | 'SENTENCE'
+
+/** Một thẻ học tiếng Anh: từ hoặc câu, kèm nghĩa, ví dụ và tag. */
+export type EnglishItem = {
+  id: string
+  kind: EnglishKind
+  term: string
+  meaning: string
+  example?: string | null
+  tags: string[]
+  created_at?: string
+  deleted_at?: string | null
+}
 
 export type NutritionLog = {
   id: string
