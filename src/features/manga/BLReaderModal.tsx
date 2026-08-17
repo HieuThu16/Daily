@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
-import type { BLManga } from '../../types/manga';
-import { saveReadingProgress } from './mangaService';
+import type { BLManga, ChapterImage } from '../../types/manga';
+import { fetchBLChapterImages, saveReadingProgress } from './mangaService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 
 interface Props {
@@ -125,7 +125,21 @@ export const BLReaderModal: React.FC<Props> = ({
     }
   };
 
-  const images = currentChapter?.images || [];
+  // Danh sách truyện không kèm URL ảnh (file quá to để deploy), nên nạp riêng theo truyện.
+  const [lazyImages, setLazyImages] = useState<Record<string, ChapterImage[]>>({});
+  useEffect(() => {
+    if (!currentChapter || (currentChapter.images?.length ?? 0) > 0) return;
+    let alive = true;
+    void fetchBLChapterImages(manga.slug).then((byChapter) => {
+      if (alive) setLazyImages(byChapter);
+    });
+    return () => { alive = false; };
+  }, [manga.slug, currentChapter]);
+
+  const images =
+    currentChapter?.images?.length
+      ? currentChapter.images
+      : lazyImages[String(currentChapter?.number ?? '')] || [];
 
   return (
     <div className="bl-reader-overlay">

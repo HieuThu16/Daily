@@ -6,6 +6,7 @@ dist
 prepared_books.json
 extracted_covers/
 public/data/bl_manga.json
+public/data/bl/
 public/data/ngontinh_manga.json
 src/data/bl_manga.json
 src/data/ngontinh_manga.json

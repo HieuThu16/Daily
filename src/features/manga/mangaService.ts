@@ -1,4 +1,5 @@
-import type { BLManga, ReadingProgress, MangaChapter, HotMangaData } from '../../types/manga';
+import type { BLManga, ChapterImage, ReadingProgress, MangaChapter, HotMangaData } from '../../types/manga';
+import { blShardOf, blShardPath } from './blShards';
 
 const FAVORITES_KEY = 'daily_bl_favorites';
 const HISTORY_KEY = 'daily_bl_history';
@@ -7,8 +8,18 @@ const HISTORY_KEY = 'daily_bl_history';
  * Fetch BL Manga list from DuaLeo database
  */
 export async function fetchDuaLeoMangaList(): Promise<BLManga[]> {
+  // /data/bl/list.json là bản đã tách URL ảnh ra file mảnh (npm run split:bl).
+  // /data/bl_manga.json là bản gốc kèm ảnh, chỉ còn dùng khi chạy máy cục bộ.
+  for (const url of ['/data/bl/list.json', '/data/bl_manga.json']) {
+    const list = await fetchMangaArray(url);
+    if (list.length > 0) return list;
+  }
+  return [];
+}
+
+async function fetchMangaArray(url: string): Promise<BLManga[]> {
   try {
-    const res = await fetch('/data/bl_manga.json');
+    const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -20,12 +31,29 @@ export async function fetchDuaLeoMangaList(): Promise<BLManga[]> {
       }
     }
   } catch (err) {
-    console.warn('Could not load /data/bl_manga.json, trying fallback import', err);
+    console.warn(`Could not load ${url}`, err);
   }
-
-  // Không nhúng src/data/bl_manga.json vào bundle: file ~112MB, vượt giới hạn
-  // 100MB/file của Vercel nên không deploy được. Dữ liệu chỉ đến từ /data/bl_manga.json.
   return [];
+}
+
+/**
+ * URL ảnh của truyện BL nằm trong file mảnh riêng (npm run split:bl) để mỗi file
+ * dưới 100MB — giới hạn cứng của Vercel. Trả về map: số chương → danh sách ảnh.
+ */
+const shardCache = new Map<number, Promise<Record<string, Record<string, ChapterImage[]>>>>();
+
+export async function fetchBLChapterImages(slug: string): Promise<Record<string, ChapterImage[]>> {
+  const shard = blShardOf(slug);
+  if (!shardCache.has(shard)) {
+    shardCache.set(
+      shard,
+      fetch(blShardPath(slug))
+        .then((res) => (res.ok ? res.json() : {}))
+        .catch(() => ({})),
+    );
+  }
+  const data = await shardCache.get(shard)!;
+  return data[slug] ?? {};
 }
 
 /**
