@@ -3,11 +3,18 @@
 //   - public/data/bl/img-<n>.json   URL ảnh, chia theo mảnh để mỗi file đủ nhỏ
 // Lý do: Vercel chặn cứng 100MB/file nên file gốc không deploy được.
 // Chạy: npm run split:bl
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { BL_SHARD_COUNT, blShardOf } from './src/features/manga/blShards.ts'
 
 const SRC = 'public/data/bl_manga.json'
 const OUT_DIR = 'public/data/bl'
+
+// Chạy tự động trước mỗi lần build. Trên máy build của Vercel không có file gốc
+// (đã loại trong .vercelignore vì quá 100MB) — lúc đó dùng luôn mảnh đã sinh sẵn.
+if (!existsSync(SRC)) {
+  console.log(`Không thấy ${SRC} — giữ nguyên ${OUT_DIR} đã có sẵn.`)
+  process.exit(0)
+}
 
 const mangas = JSON.parse(readFileSync(SRC, 'utf8'))
 mkdirSync(OUT_DIR, { recursive: true })
