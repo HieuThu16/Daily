@@ -430,15 +430,6 @@ export const BLMangaDetailPage: React.FC = () => {
 
       {/* 5 Quick Actions Row */}
       <div className="bl-quick-actions-row">
-        {/* Action 1: Start read from chapter 1 */}
-        <button className="bl-quick-action-card" onClick={() => handleReadChapter(firstChapterNum)}>
-          <Play size={19} className="bl-qa-icon bl-icon-start" fill="currentColor" />
-          <div className="bl-qa-text">
-            <span className="bl-qa-title">Bắt đầu đọc</span>
-            <span className="bl-qa-subtitle">Chapter {firstChapterNum}</span>
-          </div>
-        </button>
-
         {/* Action 2: Resume read */}
         <button className="bl-quick-action-card" onClick={handleStartRead}>
           <Clock size={19} className="bl-qa-icon" />

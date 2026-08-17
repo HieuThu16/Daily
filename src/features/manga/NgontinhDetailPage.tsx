@@ -406,15 +406,6 @@ export const NgontinhDetailPage: React.FC = () => {
 
       {/* 5 Quick Actions Row */}
       <div className="ngontinh-quick-actions-row">
-        {/* Action 1: Start read from chapter 1 */}
-        <button className="ngontinh-quick-action-card" onClick={() => handleReadChapter(firstChapterNum)}>
-          <Play size={19} className="ngontinh-qa-icon ngontinh-icon-start" fill="currentColor" />
-          <div className="ngontinh-qa-text">
-            <span className="ngontinh-qa-title">Bắt đầu đọc</span>
-            <span className="ngontinh-qa-subtitle">Chapter {firstChapterNum}</span>
-          </div>
-        </button>
-
         {/* Action 2: Resume read */}
         <button className="ngontinh-quick-action-card" onClick={handleStartRead}>
           <Clock size={19} className="ngontinh-qa-icon" />
