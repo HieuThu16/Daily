@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ExternalLink, Bookmark, ArrowUp, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
-import { saveNgontinhProgress } from './ngontinhService';
+import { saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 
 interface Props {
@@ -21,6 +21,8 @@ export const NgontinhReaderModal: React.FC<Props> = ({
 }) => {
   const startNum = initialChapterNumber ?? initialChapterNum ?? 1;
   const [currentChapterNum, setCurrentChapterNum] = useState<number>(startNum);
+  const [fetchingChapterImages, setFetchingChapterImages] = useState<boolean>(false);
+  const [dynamicChapterImages, setDynamicChapterImages] = useState<Record<number, any[]>>({});
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
@@ -36,15 +38,44 @@ export const NgontinhReaderModal: React.FC<Props> = ({
     setCurrentChapterNum(initialChapterNumber ?? initialChapterNum ?? 1);
   }, [initialChapterNumber, initialChapterNum]);
 
+  // Dynamically fetch images if chapter has no images
+  useEffect(() => {
+    let isMounted = true;
+    const loadImagesIfNeeded = async () => {
+      if (!manga || !currentChapter) return;
+      const cachedImages = currentChapter.images || [];
+      const dynamic = dynamicChapterImages[currentChapterNum];
+
+      if (cachedImages.length === 0 && (!dynamic || dynamic.length === 0)) {
+        setFetchingChapterImages(true);
+        try {
+          const fetched = await fetchNgontinhChapterImages(manga.slug, currentChapterNum);
+          if (isMounted && fetched.length > 0) {
+            setDynamicChapterImages(prev => ({ ...prev, [currentChapterNum]: fetched }));
+          }
+        } finally {
+          if (isMounted) setFetchingChapterImages(false);
+        }
+      }
+    };
+
+    loadImagesIfNeeded();
+    return () => { isMounted = false; };
+  }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
+
   useEffect(() => {
     if (currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const currentImgs = (currentChapter.images && currentChapter.images.length > 0)
+        ? currentChapter.images
+        : (dynamicChapterImages[chNum] || []);
+
       saveNgontinhProgress({
         slug: manga.slug,
         chapterNumber: chNum,
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
-        totalImages: currentChapter.images?.length || 0,
+        totalImages: currentImgs.length,
       });
 
       recordMangaReading({
@@ -64,7 +95,7 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       }
       setImageErrors({});
     }
-  }, [currentChapter, currentChapterNum, manga.slug, manga.title]);
+  }, [currentChapter, currentChapterNum, manga.slug, manga.title, dynamicChapterImages]);
 
   // Track scrolling to mark chapter as completed when reached the end
   useEffect(() => {
@@ -139,7 +170,9 @@ export const NgontinhReaderModal: React.FC<Props> = ({
     }
   };
 
-  const images = currentChapter?.images || [];
+  const images = (currentChapter?.images && currentChapter.images.length > 0)
+    ? currentChapter.images
+    : (dynamicChapterImages[currentChapterNum] || []);
 
   return (
     <div className="ngontinh-reader-overlay">
@@ -205,7 +238,13 @@ export const NgontinhReaderModal: React.FC<Props> = ({
 
       {/* Reader Body */}
       <main ref={mainRef} className="ngontinh-reader-body">
-        {images.length > 0 ? (
+        {fetchingChapterImages ? (
+          <div className="ngontinh-reader-empty" style={{ padding: '60px 20px' }}>
+            <Sparkles className="animate-spin" size={36} color="#f43f5e" style={{ margin: '0 auto 12px auto' }} />
+            <h3>Đang tải ảnh chương {currentChapterNum}...</h3>
+            <p>Vui lòng đợi giây lát để hệ thống kết nối máy chủ ảnh.</p>
+          </div>
+        ) : images.length > 0 ? (
           <div className="ngontinh-reader-image-stream">
             {images.map((img, idx) => {
               const imgUrl = typeof img === 'string' ? img : (img.url || '');

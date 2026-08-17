@@ -13,6 +13,7 @@ import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
 import { ReviewSeriesView } from './features/library/ReviewSeriesView'
+import { TvShowView } from './features/tvshow/TvShowView'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
@@ -484,7 +485,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/daily" element={<DailyPage />} />
                       <Route path="/tasks" element={<TasksPage />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
-                      <Route path="/tvshow" element={<LibraryPage defaultType="YOUTUBE" />} />
+                      <Route path="/tvshow" element={<TvShowView />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
                       <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
                       <Route path="/reviews" element={<ReviewSeriesView />} />

@@ -101,3 +101,39 @@ export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number 
   );
 }
 
+const otruyenChapterCache = new Map<string, any[]>();
+
+export async function fetchNgontinhChapterImages(slug: string, chapterNum: number): Promise<any[]> {
+  const cacheKey = `${slug}:${chapterNum}`;
+  if (otruyenChapterCache.has(cacheKey)) {
+    return otruyenChapterCache.get(cacheKey) || [];
+  }
+
+  try {
+    const res = await fetch(`https://otruyenapi.com/v1/api/truyen-tranh/${slug}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const serverData = data?.data?.item?.chapters?.[0]?.server_data || [];
+    const chMatch = serverData.find((c: any) => parseFloat(c.chapter_name) === chapterNum);
+    if (!chMatch?.chapter_api_data) return [];
+
+    const chRes = await fetch(chMatch.chapter_api_data);
+    if (!chRes.ok) return [];
+    const chData = await chRes.json();
+    const domain = chData?.data?.domain_cdn || '';
+    const chPath = chData?.data?.item?.chapter_path || '';
+    const imgs = chData?.data?.item?.chapter_image || [];
+    const result = imgs.map((img: any, idx: number) => ({
+      url: `${domain}/${chPath}/${img.image_file}`,
+      alt: `Trang ${idx + 1}`,
+      index: idx + 1,
+    }));
+    otruyenChapterCache.set(cacheKey, result);
+    return result;
+  } catch (err) {
+    console.warn('Could not dynamically fetch chapter images from OTruyen', err);
+    return [];
+  }
+}
+
+

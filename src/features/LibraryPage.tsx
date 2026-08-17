@@ -20,6 +20,7 @@ import { shareMusicToAll } from '../lib/musicShare'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
 import { ReviewSeriesView } from './library/ReviewSeriesView'
+import { TvShowView } from './tvshow/TvShowView'
 import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
@@ -1216,7 +1217,9 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       )}
 
       {/* VIEW 1b: TỔNG THỂ của một thư viện cụ thể — danh sách mục */}
-      {subView === 'overview' && selectedType !== 'ALL' && (
+      {subView === 'overview' && selectedType === 'YOUTUBE' && <TvShowView />}
+
+      {subView === 'overview' && selectedType !== 'ALL' && selectedType !== 'YOUTUBE' && (
         <div className="card" style={{ padding: 10, margin: 0 }}>
           {/* SEARCH & STATUS SEGMENT BAR */}
           <div className="library-controls">

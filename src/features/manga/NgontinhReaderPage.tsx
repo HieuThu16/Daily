@@ -5,7 +5,7 @@ import {
   ExternalLink, Bookmark, ArrowUp, Layout, RefreshCw, Sparkles, BookOpen 
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
-import { fetchNgontinhList, saveNgontinhProgress } from './ngontinhService';
+import { fetchNgontinhList, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhReader.css';
@@ -19,6 +19,8 @@ export const NgontinhReaderPage: React.FC = () => {
 
   const [manga, setManga] = useState<NgontinhManga | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [fetchingChapterImages, setFetchingChapterImages] = useState<boolean>(false);
+  const [dynamicChapterImages, setDynamicChapterImages] = useState<Record<number, any[]>>({});
   const [fitMode, setFitMode] = useState<'standard' | 'wide' | 'full'>('standard');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [scrollProgress, setScrollProgress] = useState<number>(0);
@@ -60,16 +62,45 @@ export const NgontinhReaderPage: React.FC = () => {
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
+  // Dynamically fetch images if chapter has no images
+  useEffect(() => {
+    let isMounted = true;
+    const loadImagesIfNeeded = async () => {
+      if (!manga || !currentChapter) return;
+      const cachedImages = currentChapter.images || [];
+      const dynamic = dynamicChapterImages[currentChapterNum];
+
+      if (cachedImages.length === 0 && (!dynamic || dynamic.length === 0)) {
+        setFetchingChapterImages(true);
+        try {
+          const fetched = await fetchNgontinhChapterImages(manga.slug, currentChapterNum);
+          if (isMounted && fetched.length > 0) {
+            setDynamicChapterImages(prev => ({ ...prev, [currentChapterNum]: fetched }));
+          }
+        } finally {
+          if (isMounted) setFetchingChapterImages(false);
+        }
+      }
+    };
+
+    loadImagesIfNeeded();
+    return () => { isMounted = false; };
+  }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
+
   // Save reading progress & scroll to top on change
   useEffect(() => {
     if (manga && currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const currentImgs = (currentChapter.images && currentChapter.images.length > 0) 
+        ? currentChapter.images 
+        : (dynamicChapterImages[chNum] || []);
+
       saveNgontinhProgress({
         slug: manga.slug,
         chapterNumber: chNum,
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
-        totalImages: currentChapter.images?.length || 0,
+        totalImages: currentImgs.length,
       });
 
       recordMangaReading({
@@ -84,7 +115,7 @@ export const NgontinhReaderPage: React.FC = () => {
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
       setImageErrors({});
     }
-  }, [manga, currentChapter, currentChapterNum]);
+  }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
 
   // Track scroll progress & mark completed when scrolling near bottom
   useEffect(() => {
@@ -194,7 +225,9 @@ export const NgontinhReaderPage: React.FC = () => {
     );
   }
 
-  const images = currentChapter?.images || [];
+  const images = (currentChapter?.images && currentChapter.images.length > 0)
+    ? currentChapter.images
+    : (dynamicChapterImages[currentChapterNum] || []);
 
   return (
     <div className="ngontinh-reader-page">
@@ -276,7 +309,13 @@ export const NgontinhReaderPage: React.FC = () => {
 
       {/* Image Stream */}
       <main className={`ngontinh-reader-main-stream fit-${fitMode}`}>
-        {images.length > 0 ? (
+        {fetchingChapterImages ? (
+          <div className="ngontinh-reader-source-notice" style={{ padding: '60px 20px' }}>
+            <Sparkles className="animate-spin" size={36} color="#f43f5e" style={{ margin: '0 auto 12px auto' }} />
+            <h3>Đang tải ảnh chương {currentChapterNum}...</h3>
+            <p>Vui lòng đợi giây lát để hệ thống kết nối máy chủ ảnh.</p>
+          </div>
+        ) : images.length > 0 ? (
           images.map((img, idx) => {
             const imgUrl = typeof img === 'string' ? img : (img.url || '');
             const imgAlt = (typeof img === 'object' && img.alt) ? img.alt : `Trang ${idx + 1}`;

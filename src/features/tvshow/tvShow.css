@@ -1,0 +1,607 @@
+/* =========================================================
+ * TV Show / Kênh YouTube — 1 Kênh = 1 Card & Trình phát Video
+ * ======================================================= */
+
+.tv-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding-bottom: 24px;
+}
+
+/* --- Toolbar ------------------------------------------------------------ */
+
+.tv-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tv-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.tv-search-box:focus-within {
+  border-color: var(--amber, #f59e0b);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.tv-search {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.tv-search::placeholder {
+  color: var(--text-muted);
+}
+
+.tv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tv-btn:hover {
+  background: var(--bg-main);
+  border-color: var(--text-muted);
+}
+
+.tv-btn.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.28);
+}
+
+.tv-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.38);
+}
+
+.tv-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* --- Lưới thẻ Kênh (1 Kênh = 1 Card) ------------------------------------ */
+
+.tv-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.tv-channel-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.tv-channel-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.tv-channel-cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-main);
+  overflow: hidden;
+}
+
+.tv-channel-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.tv-channel-card:hover .tv-channel-cover img {
+  transform: scale(1.03);
+}
+
+.tv-channel-cover-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.tv-badge-live {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fbbf24;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+}
+
+.tv-count-pill {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+
+.tv-seen-pill {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+
+.tv-seen-pill.done {
+  background: var(--green, #16a34a);
+}
+
+.tv-channel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 14px 16px;
+  flex: 1;
+}
+
+.tv-channel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tv-channel-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--text-main);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tv-channel-sub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.tv-channel-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tv-channel-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.tv-channel-progress-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--card-border);
+  overflow: hidden;
+}
+
+.tv-channel-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #10b981);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.tv-empty {
+  display: grid;
+  place-items: center;
+  padding: 56px 20px;
+  border: 1px dashed var(--card-border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* --- Màn xem Kênh & Danh sách Video (Image 2 style) ---------------------- */
+
+.tv-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.tv-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tv-detail-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tv-detail-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 920px) {
+  .tv-detail-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tv-player-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  padding: 14px;
+  box-shadow: var(--card-shadow);
+}
+
+.tv-player-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+}
+
+.tv-player-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.tv-player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tv-player-title {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+
+.tv-player-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-border);
+}
+
+/* Khung danh sách Video (Đồng bộ theo hình ảnh Image 2) */
+
+.tv-episodes-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  padding: 14px;
+  box-shadow: var(--card-shadow);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.tv-episodes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.tv-episodes-head-title {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.tv-episodes-head-stat {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--amber, #f59e0b);
+}
+
+.tv-ep-filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tv-ep-filter-btn {
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tv-ep-filter-btn.active {
+  background: var(--amber, #f59e0b);
+  border-color: var(--amber, #f59e0b);
+  color: #fff;
+}
+
+.tv-ep-search {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 0.78rem;
+  outline: none;
+  width: 100%;
+}
+
+.tv-episodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Item video chuẩn mẫu Image 2 */
+.tv-episode-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.tv-episode-item:hover {
+  background: var(--bg-main);
+  border-color: var(--amber, #f59e0b);
+}
+
+/* Active video - nổi bật viền cam và nền cam nhạt */
+.tv-episode-item.playing {
+  background: rgba(245, 158, 11, 0.09);
+  border: 1.5px solid var(--amber, #f59e0b);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.14);
+}
+
+.tv-ep-thumb {
+  width: 80px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--bg-main);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.tv-ep-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tv-ep-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tv-ep-watch-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.tv-ep-watch-btn:hover {
+  color: var(--green, #16a34a);
+  transform: scale(1.15);
+}
+
+.tv-ep-watch-btn.watched {
+  color: var(--green, #16a34a);
+}
+
+/* --- Progress & Modal ---------------------------------------------------- */
+
+.tv-progress-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--card-border);
+  margin-top: 10px;
+}
+
+.tv-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.tv-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--card-border);
+  overflow: hidden;
+}
+
+.tv-progress-fill {
+  height: 100%;
+  background: var(--amber, #f59e0b);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.tv-links-input {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.tv-links-input:focus {
+  border-color: var(--amber, #f59e0b);
+}
+
+.tv-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.tv-bad {
+  color: var(--rose, #e11d48);
+}
+
+.tv-order {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.tv-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg-main);
+  border: 1px solid var(--card-border);
+  font-size: 0.76rem;
+}
+
+.tv-run-ok {
+  color: var(--green, #16a34a);
+  font-weight: 700;
+}
+
+.tv-run-bad {
+  color: var(--rose, #e11d48);
+  font-weight: 700;
+}
+
+.tv-run-wait {
+  color: var(--amber, #f59e0b);
+  font-weight: 700;
+}
