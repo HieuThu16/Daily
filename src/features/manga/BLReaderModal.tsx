@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
 import type { BLManga, ChapterImage } from '../../types/manga';
 import { fetchBLChapterImages, saveReadingProgress } from './mangaService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
@@ -151,10 +151,6 @@ export const BLReaderModal: React.FC<Props> = ({
           <button className="bl-reader-back-btn" onClick={onClose} title="Trở về">
             <ArrowLeft size={18} />
           </button>
-          <div className="bl-reader-info-compact">
-            <span className="bl-reader-manga-title">{manga.title}</span>
-            <span className="bl-reader-chapter-sub">{currentChapter?.name || `Chương ${currentChapterNum}`}</span>
-          </div>
         </div>
 
         <div className="bl-reader-header-right">
@@ -191,14 +187,6 @@ export const BLReaderModal: React.FC<Props> = ({
             title="Chương sau"
           >
             <ChevronRight size={18} />
-          </button>
-
-          <button
-            className="bl-reader-nav-icon-btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
       </header>

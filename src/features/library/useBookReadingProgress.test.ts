@@ -146,4 +146,27 @@ describe('useBookReadingProgress', () => {
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
+
+  it('không ghi tiến độ hoặc nhật ký đọc khi enabled = false (chế độ tìm kiếm)', async () => {
+    const { result, unmount } = renderHook(() => useBookReadingProgress({ ...options, enabled: false }))
+
+    act(() => result.current.report(spot))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11_000)
+    })
+
+    expect(saveProgress).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.flush()
+    })
+    expect(saveProgress).not.toHaveBeenCalled()
+
+    await act(async () => {
+      unmount()
+      await Promise.resolve()
+    })
+    expect(saveProgress).not.toHaveBeenCalled()
+    expect(reportPagesRead).not.toHaveBeenCalled()
+  })
 })

@@ -52,13 +52,15 @@ vi.mock('./ToastContext', () => ({
 }))
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-08-14T08:00:00.000Z'))
   seedTodos.length = 0
   seedTodos.push(
     {
       id: 'todo-1',
       title: 'Viết báo cáo tuần',
       completed: false,
-      due_date: localDate(),
+      due_date: '2026-08-14',
       due_time: '18:30',
       difficulty: 'NORMAL',
       priority: 'NORMAL',
@@ -70,7 +72,7 @@ beforeEach(() => {
       id: 'todo-2',
       title: 'Gọi điện cho nha sĩ',
       completed: true,
-      due_date: localDate(),
+      due_date: '2026-08-14',
       due_time: null,
       difficulty: 'EASY',
       priority: 'NORMAL',
@@ -85,7 +87,10 @@ beforeEach(() => {
   dbState.updateError = null
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('TasksPage layout', () => {
   it('splits pending and finished tasks into two filter tabs', async () => {

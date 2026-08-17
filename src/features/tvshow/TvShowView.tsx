@@ -3,11 +3,13 @@ import {
   ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
   Youtube, Clock, Settings, Gauge, Zap, Sliders, Bookmark, Bell, MoreVertical, 
-  Copy, Check, ChevronRight, ArrowUpDown, SlidersHorizontal, Moon
+  Copy, Check, ChevronRight, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
+  Download, Loader2, Sparkles, AlertCircle, Save
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
+import { useHideHeader } from '../HeaderAction'
 import './tvShow.css'
 
 const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
@@ -350,6 +352,8 @@ function ChannelDetailView({
   channel: ChannelItem
   onBack: () => void
 }) {
+  useHideHeader(true)
+
   const [videos, setVideos] = useState<VideoRow[]>([])
   const [watched, setWatched] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -999,12 +1003,47 @@ function ChannelDetailView({
   )
 }
 
-/** Modal cào kênh YouTube */
+function formatVideoDuration(sec: number | null | undefined): string {
+  if (!sec || isNaN(sec)) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  const h = Math.floor(m / 60)
+  const remM = m % 60
+  if (h > 0) {
+    return `${h}:${String(remM).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+  return `${remM}:${String(s).padStart(2, '0')}`
+}
+
+type DiscoveredTvVideo = {
+  videoId: string
+  title: string
+  thumbnail: string | null
+  duration: number | null
+  publishedAt: string
+  playlistName: string | null
+  channelName: string
+  creatorId: string
+  canonicalUrl: string
+  embedUrl: string
+  description: string
+  position?: number | null
+  isKnown?: boolean
+  rawMetadata?: any
+  part?: any
+}
+
+/** Modal cào kênh YouTube TV Show (với danh sách tích chọn video) */
 function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced: () => void }) {
   const [text, setText] = useState('')
-  const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null)
-  const [rows, setRows] = useState<{ url: string; status: 'chờ' | 'đang chạy' | 'xong' | 'lỗi' | 'dừng'; note: string }[]>([])
+  const [scanState, setScanState] = useState<'idle' | 'scanning' | 'paused' | 'scanned' | 'saving' | 'saved'>('idle')
+  const [discoveredVideos, setDiscoveredVideos] = useState<DiscoveredTvVideo[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [activePlan, setActivePlan] = useState<any>(null)
+  const [activeJob, setActiveJob] = useState<{ channelName: string; sectionName: string; percent: number } | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterType, setFilterType] = useState<'all' | 'fresh' | 'known'>('all')
+  const [savingProgress, setSavingProgress] = useState<{ current: number; total: number } | null>(null)
   const stopRef = useRef(false)
 
   const post = async (body: any) => {
@@ -1035,9 +1074,9 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
   const valid = useMemo(() => urls.filter(isChannelUrl), [urls])
   const invalid = useMemo(() => urls.filter((u) => !isChannelUrl(u)), [urls])
 
-  const runChannel = async (url: string, at: number) => {
+  const runScanChannel = async (url: string) => {
     const { plan } = await post({ action: 'plan', creatorUrl: url })
-    let saved = 0
+    setActivePlan(plan)
     let pages = 0
 
     for (let entryIndex = 0; entryIndex < plan.entries.length; entryIndex++) {
@@ -1045,17 +1084,40 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
       let pageToken: string | undefined
 
       do {
-        if (stopRef.current) return { saved, pages, stopped: true }
+        if (stopRef.current) return { stopped: true }
 
-        const { outcome } = await post({ action: 'page', plan, cursor: { entryIndex, pageToken } })
-        saved += outcome.saved
+        const { outcome } = await post({ action: 'page', plan, cursor: { entryIndex, pageToken }, dryRun: true })
         pages++
 
-        setProgress({ done: pages, total: Math.max(plan.totalPages, pages), label: entry.name })
-        setRows((prev) =>
-          prev.map((r, k) => (k === at ? { ...r, note: `${plan.channelName} — đã lưu ${saved} video mới` } : r)),
-        )
-        if (outcome.saved > 0) onSynced()
+        const pageVideos: DiscoveredTvVideo[] = (outcome.videos || []).map((v: any) => ({
+          ...v,
+          channelName: plan.channelName,
+          creatorId: plan.channelId,
+        }))
+
+        if (pageVideos.length > 0) {
+          setDiscoveredVideos((prev) => {
+            const seen = new Set(prev.map((item) => item.videoId))
+            const newItems = pageVideos.filter((item) => !seen.has(item.videoId))
+            return [...prev, ...newItems]
+          })
+
+          setSelectedIds((prev) => {
+            const next = new Set(prev)
+            pageVideos.forEach((v) => {
+              // Mặc định tích chọn video mới
+              if (!v.isKnown) next.add(v.videoId)
+            })
+            return next
+          })
+        }
+
+        const calculatedPercent = plan.totalPages > 0 ? Math.min(100, Math.round((pages / plan.totalPages) * 100)) : 50
+        setActiveJob({
+          channelName: plan.channelName,
+          sectionName: entry.name,
+          percent: calculatedPercent,
+        })
 
         if (entry.isUploads && outcome.allKnown && pages > 1) break
 
@@ -1063,106 +1125,393 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
       } while (pageToken)
     }
 
-    await post({ action: 'finish', creatorUrl: url, saved, pages })
-    return { saved, pages, stopped: false }
+    return { stopped: false }
   }
 
-  const run = async () => {
+  const startScan = async () => {
     stopRef.current = false
-    setRunning(true)
-    setRows(valid.map((url) => ({ url, status: 'chờ', note: '' })))
+    setScanState('scanning')
+    setDiscoveredVideos([])
+    setSelectedIds(new Set())
 
     for (let i = 0; i < valid.length; i++) {
       if (stopRef.current) {
-        setRows((prev) => prev.map((r, k) => (k >= i ? { ...r, status: 'dừng' } : r)))
-        break
+        setScanState('paused')
+        return
       }
-      setRows((prev) => prev.map((r, k) => (k === i ? { ...r, status: 'đang chạy' } : r)))
+
       try {
-        const { saved, stopped } = await runChannel(valid[i], i)
-        setRows((prev) =>
-          prev.map((r, k) =>
-            k === i ? { ...r, status: stopped ? 'dừng' : 'xong', note: `đã lưu ${saved} video mới` } : r,
-          ),
-        )
+        const { stopped } = await runScanChannel(valid[i])
+        if (stopped) {
+          setScanState('paused')
+          return
+        }
       } catch (error: any) {
-        setRows((prev) =>
-          prev.map((r, k) => (k === i ? { ...r, status: 'lỗi', note: String(error?.message ?? error) } : r)),
-        )
+        console.error('Scan channel error:', error)
       }
     }
 
-    setProgress(null)
-    setRunning(false)
-    onSynced()
+    setScanState('scanned')
   }
 
+  const handlePauseScan = () => {
+    stopRef.current = true
+    setScanState('paused')
+  }
+
+  const handleResumeScan = () => {
+    startScan()
+  }
+
+  const toggleSelectVideo = (videoId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(videoId)) next.delete(videoId)
+      else next.add(videoId)
+      return next
+    })
+  }
+
+  const filteredVideos = useMemo(() => {
+    return discoveredVideos.filter((v) => {
+      const matchSearch = !searchTerm.trim() || v.title.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchFilter =
+        filterType === 'all' ||
+        (filterType === 'fresh' && !v.isKnown) ||
+        (filterType === 'known' && Boolean(v.isKnown))
+      return matchSearch && matchFilter
+    })
+  }, [discoveredVideos, searchTerm, filterType])
+
+  const selectAllFiltered = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      filteredVideos.forEach((v) => next.add(v.videoId))
+      return next
+    })
+  }
+
+  const deselectAllFiltered = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      filteredVideos.forEach((v) => next.delete(v.videoId))
+      return next
+    })
+  }
+
+  const selectOnlyFresh = () => {
+    setSelectedIds(new Set(discoveredVideos.filter((v) => !v.isKnown).map((v) => v.videoId)))
+  }
+
+  const handleSaveSelected = async () => {
+    const selectedVideos = discoveredVideos.filter((v) => selectedIds.has(v.videoId))
+    if (selectedVideos.length === 0) return
+
+    stopRef.current = true
+    setScanState('saving')
+    setSavingProgress({ current: 0, total: selectedVideos.length })
+
+    try {
+      // Lưu theo từng mẻ 50 video để ổn định
+      const chunkSize = 50
+      for (let i = 0; i < selectedVideos.length; i += chunkSize) {
+        const chunk = selectedVideos.slice(i, i + chunkSize)
+        await post({
+          action: 'save_selected',
+          plan: activePlan || { creatorUrl: valid[0], channelName: chunk[0]?.channelName || 'Kênh YouTube' },
+          videos: chunk,
+        })
+        setSavingProgress({ current: Math.min(i + chunkSize, selectedVideos.length), total: selectedVideos.length })
+      }
+
+      setScanState('saved')
+      onSynced()
+      setTimeout(() => {
+        onClose()
+      }, 1000)
+    } catch (err: any) {
+      alert(`Lỗi khi lưu video: ${err.message || err}`)
+      setScanState('scanned')
+    }
+  }
+
+  const freshCount = discoveredVideos.filter((v) => !v.isKnown).length
+  const knownCount = discoveredVideos.filter((v) => v.isKnown).length
+
   return (
-    <Modal title="📡 Thêm kênh YouTube" onClose={onClose}>
-      <textarea
-        className="tv-links-input"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        disabled={running}
-        placeholder={'Dán link kênh, mỗi dòng một kênh:\nhttps://www.youtube.com/@web5ngay\nhttps://www.youtube.com/@tri_ky_cam_xuc'}
-      />
-
-      <div className="tv-hint">
-        Nhận được <strong>{valid.length}</strong> link kênh. Server sẽ cào toàn bộ video & playlist của kênh và gom thành một thẻ Kênh.
-        {invalid.length > 0 && (
+    <Modal
+      title="📡 Thêm kênh YouTube"
+      onClose={scanState === 'scanning' ? handlePauseScan : onClose}
+    >
+      <div className="tv-sync-container">
+        {scanState === 'idle' ? (
           <>
-            {' '}
-            <span className="tv-bad">{invalid.length} dòng không phải link kênh YouTube:</span> {invalid.slice(0, 3).join(', ')}
-            {invalid.length > 3 ? '…' : ''}
-          </>
-        )}
-      </div>
-
-      {progress && (
-        <div className="tv-progress-box">
-          <div className="tv-progress-head">
-            <span>{progress.label}</span>
-            <span>
-              trang {progress.done}/{progress.total}
-            </span>
-          </div>
-          <div className="tv-progress-track">
-            <div
-              className="tv-progress-fill"
-              style={{ width: `${Math.min(100, Math.round((progress.done / progress.total) * 100))}%` }}
+            <textarea
+              className="tv-links-input"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={'Dán link kênh, mỗi dòng một kênh:\nhttps://www.youtube.com/@web5ngay\nhttps://www.youtube.com/@tri_ky_cam_xuc'}
             />
-          </div>
-        </div>
-      )}
 
-      {rows.length > 0 && (
-        <div className="tv-order">
-          {rows.map((r) => (
-            <div key={r.url} className="tv-order-row">
-              <span className={`tv-run-${r.status === 'lỗi' ? 'bad' : r.status === 'xong' ? 'ok' : 'wait'}`}>
-                {r.status}
-              </span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                {r.url}
-                {r.note && ` · ${r.note}`}
-              </span>
+            <div className="tv-sync-sample-bar">
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Mẫu nhanh:</span>
+              <button
+                type="button"
+                className="tv-sync-sample-pill"
+                onClick={() =>
+                  setText((prev) =>
+                    prev.includes('@web5ngay')
+                      ? prev
+                      : (prev.trim() ? prev + '\n' : '') + 'https://www.youtube.com/@web5ngay',
+                  )
+                }
+              >
+                + @web5ngay
+              </button>
+              <button
+                type="button"
+                className="tv-sync-sample-pill"
+                onClick={() =>
+                  setText((prev) =>
+                    prev.includes('@tri_ky_cam_xuc')
+                      ? prev
+                      : (prev.trim() ? prev + '\n' : '') + 'https://www.youtube.com/@tri_ky_cam_xuc',
+                  )
+                }
+              >
+                + @tri_ky_cam_xuc
+              </button>
             </div>
-          ))}
-        </div>
-      )}
 
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-        <button className="tv-btn" onClick={onClose} disabled={running}>
-          Đóng
-        </button>
-        {running ? (
-          <button className="tv-btn" onClick={() => (stopRef.current = true)}>
-            <Pause size={13} /> Tạm dừng
-          </button>
+            <div className="tv-sync-badge-summary">
+              <span className="tv-sync-pill-valid">
+                <Check size={12} /> {valid.length} link kênh hợp lệ
+              </span>
+              {invalid.length > 0 && (
+                <span className="tv-sync-pill-invalid">
+                  <AlertCircle size={12} /> {invalid.length} link sai định dạng
+                </span>
+              )}
+            </div>
+
+            <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Hệ thống sẽ quét toàn bộ danh sách video của kênh, bạn có thể tự do xem và tích chọn các video muốn thêm vào Thư viện.
+            </div>
+
+            <div className="tv-sync-actions">
+              <button type="button" className="tv-btn-action secondary" onClick={onClose}>
+                Đóng
+              </button>
+              <button
+                type="button"
+                className="tv-btn-action primary"
+                onClick={() => void startScan()}
+                disabled={!valid.length}
+              >
+                <Search size={15} /> Quét danh sách video
+              </button>
+            </div>
+          </>
         ) : (
-          <button className="tv-btn primary" onClick={() => void run()} disabled={!valid.length}>
-            {rows.some((r) => r.status === 'dừng') ? 'Chạy tiếp' : `Tải ${valid.length} kênh`}
-          </button>
+          <>
+            {/* Thanh tiến trình quét */}
+            <div className="tv-sync-dashboard" style={{ padding: '10px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', fontWeight: 700 }}>
+                  {scanState === 'scanning' ? (
+                    <>
+                      <div className="tv-sync-pulse-dot" />
+                      <span>Đang quét: {activeJob?.channelName || 'YouTube...'}</span>
+                    </>
+                  ) : scanState === 'paused' ? (
+                    <>
+                      <div className="tv-sync-pulse-dot paused" />
+                      <span style={{ color: '#f59e0b' }}>Đã tạm dừng quét</span>
+                    </>
+                  ) : scanState === 'saving' ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" color="#10b981" />
+                      <span style={{ color: '#10b981' }}>Đang lưu {savingProgress?.current}/{savingProgress?.total} video...</span>
+                    </>
+                  ) : scanState === 'saved' ? (
+                    <>
+                      <CheckCircle2 size={16} color="#10b981" />
+                      <span style={{ color: '#10b981' }}>Đã lưu thành công {selectedIds.size} video!</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} color="#10b981" />
+                      <span>Đã quét xong: {discoveredVideos.length} video tìm thấy</span>
+                    </>
+                  )}
+                </div>
+
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>
+                  Đã chọn {selectedIds.size} / {discoveredVideos.length} video
+                </div>
+              </div>
+
+              {scanState === 'scanning' && (
+                <div className="tv-sync-progress-bar" style={{ marginTop: 6 }}>
+                  <div
+                    className="tv-sync-progress-fill running"
+                    style={{ width: `${activeJob ? activeJob.percent : 30}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Thanh tìm kiếm & Trợ giúp chọn nhanh */}
+            <div className="tv-sync-video-toolbar">
+              <div className="tv-sync-search-box">
+                <Search size={14} color="var(--text-muted)" />
+                <input
+                  type="text"
+                  placeholder="Lọc video theo tên..."
+                  className="tv-sync-search-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="tv-sync-select-helpers">
+                <button
+                  type="button"
+                  className={`tv-sync-pill-btn ${filterType === 'all' ? 'active' : ''}`}
+                  onClick={() => setFilterType('all')}
+                >
+                  Tất cả ({discoveredVideos.length})
+                </button>
+                <button
+                  type="button"
+                  className={`tv-sync-pill-btn ${filterType === 'fresh' ? 'active' : ''}`}
+                  onClick={() => setFilterType('fresh')}
+                >
+                  Video mới ({freshCount})
+                </button>
+                <button
+                  type="button"
+                  className={`tv-sync-pill-btn ${filterType === 'known' ? 'active' : ''}`}
+                  onClick={() => setFilterType('known')}
+                >
+                  Đã có ({knownCount})
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'flex-end', marginTop: 2 }}>
+                <button type="button" className="tv-sync-pill-btn" onClick={selectAllFiltered}>
+                  Chọn tất cả
+                </button>
+                <button type="button" className="tv-sync-pill-btn" onClick={deselectAllFiltered}>
+                  Bỏ chọn
+                </button>
+                <button type="button" className="tv-sync-pill-btn" onClick={selectOnlyFresh}>
+                  Chỉ chọn video mới
+                </button>
+              </div>
+            </div>
+
+            {/* Danh sách video quét được */}
+            <div className="tv-sync-video-container">
+              {filteredVideos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                  {discoveredVideos.length === 0 ? (
+                    <span>Đang kết nối và lấy dữ liệu video từ YouTube...</span>
+                  ) : (
+                    <span>Không có video nào khớp với bộ lọc tìm kiếm.</span>
+                  )}
+                </div>
+              ) : (
+                filteredVideos.map((v) => {
+                  const isSelected = selectedIds.has(v.videoId)
+                  return (
+                    <div
+                      key={v.videoId}
+                      className={`tv-sync-video-item ${isSelected ? 'selected' : ''} ${v.isKnown ? 'known' : ''}`}
+                      onClick={() => toggleSelectVideo(v.videoId)}
+                    >
+                      {/* Checkbox */}
+                      <div className="tv-sync-checkbox">
+                        {isSelected && <Check size={13} strokeWidth={3} />}
+                      </div>
+
+                      {/* Thumbnail */}
+                      <div className="tv-sync-video-thumb-wrap">
+                        {v.thumbnail ? (
+                          <img src={v.thumbnail} alt={v.title} className="tv-sync-video-thumb" />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', background: '#333' }} />
+                        )}
+                        {v.duration ? (
+                          <span className="tv-sync-video-duration">{formatVideoDuration(v.duration)}</span>
+                        ) : null}
+                      </div>
+
+                      {/* Video Meta */}
+                      <div className="tv-sync-video-meta">
+                        <div className="tv-sync-video-title" title={v.title}>
+                          {v.title}
+                        </div>
+                        <div className="tv-sync-video-sub">
+                          <span>{v.channelName}</span>
+                          {v.playlistName && <span>· {v.playlistName}</span>}
+                          {v.isKnown ? (
+                            <span className="tv-sync-known-badge">Đã có trong thư viện</span>
+                          ) : (
+                            <span className="tv-sync-fresh-badge">Mới</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Nút hành động */}
+            <div className="tv-sync-actions">
+              <button
+                type="button"
+                className="tv-btn-action secondary"
+                onClick={() => {
+                  stopRef.current = true
+                  setScanState('idle')
+                }}
+                disabled={scanState === 'saving'}
+              >
+                Nhập link khác
+              </button>
+
+              {scanState === 'scanning' && (
+                <button type="button" className="tv-btn-action pause" onClick={handlePauseScan}>
+                  <Pause size={15} /> Tạm dừng quét
+                </button>
+              )}
+
+              {scanState === 'paused' && (
+                <button type="button" className="tv-btn-action secondary" onClick={handleResumeScan}>
+                  <Play size={15} /> Quét tiếp
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="tv-btn-action save"
+                onClick={() => void handleSaveSelected()}
+                disabled={selectedIds.size === 0 || scanState === 'saving'}
+              >
+                {scanState === 'saving' ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" /> Đang lưu...
+                  </>
+                ) : (
+                  <>
+                    <Save size={15} /> Thêm {selectedIds.size} video đã chọn
+                  </>
+                )}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </Modal>
@@ -1171,17 +1520,140 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
 
 type DraftPart = ParsedVideo & { title: string; thumbnail: string }
 
-/** Modal thêm video lẻ */
+/** Modal thêm video lẻ TV Show */
 function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [mode, setMode] = useState<'single' | 'batch'>('single')
+  const [url, setUrl] = useState('')
+  const [title, setTitle] = useState('')
+  const [channelName, setChannelName] = useState('')
+  const [status, setStatus] = useState<'UNWATCHED' | 'WATCHED'>('UNWATCHED')
+  const [thumbnail, setThumbnail] = useState<string | null>(null)
+  const [autofilling, setAutofilling] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [existingCreators, setExistingCreators] = useState<Array<{ id: string; name: string }>>([])
+
+  // Chế độ nhiều phần (batch)
   const [step, setStep] = useState<'paste' | 'order'>('paste')
   const [text, setText] = useState('')
   const [movie, setMovie] = useState('')
   const [parts, setParts] = useState<DraftPart[]>([])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
   const boxRef = useRef<HTMLTextAreaElement>(null)
   const { valid, invalid } = useMemo(() => parseVideoLinks(text), [text])
+
+  // Lấy danh sách kênh hiện có để gợi ý datalist
+  useEffect(() => {
+    supabase
+      ?.from('tvshow_creators')
+      .select('id,creator_name')
+      .is('deleted_at', null)
+      .then(({ data }) => {
+        if (data) {
+          setExistingCreators(data.map((c) => ({ id: c.id, name: c.creator_name || '' })).filter((c) => c.name))
+        }
+      })
+  }, [])
+
+  // Khi paste link video đơn, tự động đọc tiêu đề và kênh
+  const handleUrlChange = async (val: string) => {
+    setUrl(val)
+    const videoId = youtubeVideoId(val)
+    if (!videoId) {
+      setThumbnail(null)
+      return
+    }
+
+    const defaultThumb = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    setThumbnail(defaultThumb)
+    setAutofilling(true)
+    setError(null)
+
+    try {
+      const meta = await fetchYouTubeMeta(`https://www.youtube.com/watch?v=${videoId}`)
+      if (meta) {
+        if (!title.trim() || title === 'Video mới') {
+          setTitle(meta.title)
+        }
+        if (!channelName.trim()) {
+          setChannelName(meta.author.replace(/(?:\s*-\s*topic|\s*\bofficial\b|\s*vevo\b|\s*\bchannel\b)+\s*$/i, '').trim() || meta.author)
+        }
+      }
+    } catch {
+      // Bỏ qua lỗi fetch oEmbed
+    } finally {
+      setAutofilling(false)
+    }
+  }
+
+  const handleSaveSingle = async () => {
+    const videoId = youtubeVideoId(url)
+    if (!videoId) return setError('Vui lòng nhập link video YouTube hợp lệ.')
+    if (!title.trim()) return setError('Vui lòng nhập tiêu đề video.')
+    setBusy(true)
+    setError(null)
+
+    const now = new Date().toISOString()
+    const cleanChannel = channelName.trim() || 'Tự thêm'
+
+    // Tìm xem creator đã có chưa
+    const existing = existingCreators.find((c) => c.name.toLowerCase() === cleanChannel.toLowerCase())
+    let creatorId = existing?.id || 'manual'
+
+    // Nếu là tên kênh mới (khác 'Tự thêm'), tạo kênh trong tvshow_creators để hiển thị card riêng
+    if (!existing && cleanChannel !== 'Tự thêm') {
+      const { data: newCreator } = await supabase!
+        .from('tvshow_creators')
+        .insert({
+          platform: 'youtube',
+          creator_url: `https://www.youtube.com/@${cleanChannel.replace(/\s+/g, '')}`,
+          creator_name: cleanChannel,
+          creator_id: `manual_${Date.now()}`,
+          is_active: true,
+        })
+        .select('id,creator_id')
+        .single()
+
+      if (newCreator) {
+        creatorId = newCreator.creator_id || newCreator.id
+      }
+    }
+
+    const { error: videoError } = await supabase!.from('tvshow_videos').upsert(
+      {
+        platform: 'youtube',
+        video_id: videoId,
+        series_key: `manual:${videoId}`,
+        creator_id: creatorId,
+        creator_name: cleanChannel,
+        title: title.trim(),
+        canonical_url: `https://www.youtube.com/watch?v=${videoId}`,
+        embed_url: `https://www.youtube.com/embed/${videoId}`,
+        thumbnail: thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        part_number: 1,
+        total_parts: 1,
+        is_final: true,
+        part_confidence: 1,
+        last_seen_at: now,
+      },
+      { onConflict: 'platform,video_id' },
+    )
+
+    if (videoError) {
+      setBusy(false)
+      return setError(`Không lưu được video: ${videoError.message}`)
+    }
+
+    // Nếu trạng thái là đã xem, ghi nhận vào tvshow_watched
+    if (status === 'WATCHED') {
+      await supabase!.from('tvshow_watched').upsert({ video_id: videoId, watched_at: now }, { onConflict: 'video_id' })
+    } else {
+      await supabase!.from('tvshow_watched').delete().eq('video_id', videoId)
+    }
+
+    setBusy(false)
+    onSaved()
+    onClose()
+  }
 
   const insertNewline = () => {
     const box = boxRef.current
@@ -1194,7 +1666,7 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
     })
   }
 
-  const loadTitles = async () => {
+  const loadBatchTitles = async () => {
     setBusy(true)
     const metas = await Promise.all(valid.map((v) => fetchYouTubeMeta(v.url)))
     const drafts: DraftPart[] = valid.map((v, i) => ({
@@ -1204,18 +1676,22 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
     }))
     setParts(drafts)
     if (!movie.trim() && drafts[0]) setMovie(drafts[0].title)
+    if (!channelName.trim() && metas[0]?.author) {
+      setChannelName(metas[0].author.replace(/(?:\s*-\s*topic|\s*\bofficial\b|\s*vevo\b|\s*\bchannel\b)+\s*$/i, '').trim())
+    }
     setBusy(false)
     setStep('order')
   }
 
-  const save = async () => {
+  const handleSaveBatch = async () => {
     const name = movie.trim()
-    if (!name) return setError('Nhập tên video / chủ đề.')
+    if (!name) return setError('Nhập tên video / danh sách.')
     setBusy(true)
     setError(null)
 
     const now = new Date().toISOString()
     const seriesKey = `manual:${parts[0].videoId}`
+    const cleanChannel = channelName.trim() || 'Tự thêm'
 
     const { error: videoError } = await supabase!.from('tvshow_videos').upsert(
       parts.map((p, i) => ({
@@ -1223,7 +1699,7 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
         video_id: p.videoId,
         series_key: seriesKey,
         creator_id: 'manual',
-        creator_name: 'Tự thêm',
+        creator_name: cleanChannel,
         title: p.title,
         canonical_url: p.url,
         embed_url: `https://www.youtube.com/embed/${p.videoId}`,
@@ -1243,91 +1719,212 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
   }
 
   return (
-    <Modal title="📺 Thêm video lẻ" onClose={onClose}>
-      {step === 'paste' ? (
-        <>
-          <textarea
-            ref={boxRef}
-            className="tv-links-input"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={'Dán link video, mỗi dòng một video:\nhttps://www.youtube.com/watch?v=...\nhttps://youtu.be/...'}
-          />
-          <button className="tv-btn" onClick={insertNewline} style={{ marginTop: 6 }}>
-            <CornerDownLeft size={13} /> Xuống dòng
-          </button>
-          <div className="tv-hint">
-            Nhận được <strong>{valid.length}</strong> link video.
-            {invalid.length > 0 && (
-              <>
-                {' '}
-                <span className="tv-bad">{invalid.length} dòng không phải link YouTube:</span>{' '}
-                {invalid.slice(0, 3).join(', ')}
-                {invalid.length > 3 ? '…' : ''}
-              </>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-            <button className="tv-btn" onClick={onClose}>Huỷ</button>
-            <button className="tv-btn primary" onClick={() => void loadTitles()} disabled={busy || !valid.length}>
-              {busy ? 'Đang đọc tiêu đề…' : `Tiếp — ${valid.length} video`}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <input
-            className="tv-search"
-            style={{ width: '100%', marginBottom: 10 }}
-            value={movie}
-            onChange={(e) => setMovie(e.target.value)}
-            placeholder="Tên video / danh sách…"
-          />
+    <Modal title="📺 Thêm video lẻ TV Show" onClose={onClose}>
+      {/* Nút chuyển chế độ 1 video lẻ / nhiều phần */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, background: 'var(--bg-main)', padding: 3, borderRadius: 8 }}>
+        <button
+          type="button"
+          onClick={() => setMode('single')}
+          style={{
+            flex: 1,
+            padding: '6px 10px',
+            borderRadius: 6,
+            border: 0,
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            background: mode === 'single' ? 'var(--card-bg)' : 'transparent',
+            color: mode === 'single' ? 'var(--amber)' : 'var(--text-muted)',
+            boxShadow: mode === 'single' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            cursor: 'pointer',
+          }}
+        >
+          1 Video lẻ (Tự động điền)
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('batch')}
+          style={{
+            flex: 1,
+            padding: '6px 10px',
+            borderRadius: 6,
+            border: 0,
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            background: mode === 'batch' ? 'var(--card-bg)' : 'transparent',
+            color: mode === 'batch' ? 'var(--amber)' : 'var(--text-muted)',
+            boxShadow: mode === 'batch' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Nhiều video / Playlist
+        </button>
+      </div>
 
-          <div className="tv-order">
-            {parts.map((p, i) => (
-              <div key={p.videoId} className="tv-order-row">
-                <span style={{ fontWeight: 700, color: 'var(--amber)' }}>#{i + 1}</span>
-                <img src={p.thumbnail} alt="" style={{ width: 44, height: 28, borderRadius: 4, objectFit: 'cover' }} loading="lazy" />
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
-                <button
-                  className="tv-btn"
-                  style={{ padding: '3px 6px' }}
-                  onClick={() => setParts((v) => moveItem(v, i, i - 1))}
-                  disabled={i === 0}
-                  title="Lên"
-                >
-                  <ChevronUp size={13} />
-                </button>
-                <button
-                  className="tv-btn"
-                  style={{ padding: '3px 6px' }}
-                  onClick={() => setParts((v) => moveItem(v, i, i + 1))}
-                  disabled={i === parts.length - 1}
-                  title="Xuống"
-                >
-                  <ChevronDown size={13} />
-                </button>
-                <button
-                  className="tv-btn"
-                  style={{ padding: '3px 6px', color: 'var(--rose)' }}
-                  onClick={() => setParts((v) => v.filter((_, k) => k !== i))}
-                  title="Bỏ video này"
-                >
-                  <Trash2 size={13} />
-                </button>
+      {mode === 'single' ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {/* Ô nhập Link YouTube */}
+          <label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Link YouTube</span>
+              {autofilling && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <RefreshCw size={12} className="spin" /> Đang lấy thông tin...
+                </span>
+              )}
+            </div>
+            <input
+              value={url}
+              onChange={(e) => void handleUrlChange(e.target.value)}
+              placeholder="Dán link video (https://www.youtube.com/watch?v=... hoặc https://youtu.be/...)"
+              autoFocus
+            />
+          </label>
+
+          {/* Thumbnail preview nếu có */}
+          {thumbnail && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'var(--bg-main)', padding: 8, borderRadius: 8, border: '1px solid var(--card-border)' }}>
+              <img src={thumbnail} alt="" style={{ width: 80, height: 46, borderRadius: 6, objectFit: 'cover' }} />
+              <div style={{ flex: 1, minWidth: 0, fontSize: '0.78rem' }}>
+                <div style={{ fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {title || 'Đã nhận diện video'}
+                </div>
+                <div style={{ color: 'var(--text-muted)' }}>{channelName || 'YouTube'}</div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {/* Ô Tiêu đề video */}
+          <label>
+            <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Tiêu đề video</span>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Tiêu đề video (tự điền khi dán link)..."
+            />
+          </label>
+
+          {/* Ô Kênh YouTube */}
+          <label>
+            <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Kênh YouTube</span>
+            <input
+              list="tvshow-creators-datalist"
+              value={channelName}
+              onChange={(e) => setChannelName(e.target.value)}
+              placeholder="Tên kênh (tự điền khi dán link hoặc chọn từ danh sách)..."
+            />
+            <datalist id="tvshow-creators-datalist">
+              {existingCreators.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
+          </label>
+
+          {/* Ô Trạng thái xem */}
+          <label>
+            <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Trạng thái xem</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as 'UNWATCHED' | 'WATCHED')}>
+              <option value="UNWATCHED">⏳ Chưa xem (Sẽ xem)</option>
+              <option value="WATCHED">✅ Đã xem</option>
+            </select>
+          </label>
 
           {error && <div className="tv-hint tv-bad">{error}</div>}
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-            <button className="tv-btn" onClick={() => setStep('paste')}>Quay lại</button>
-            <button className="tv-btn primary" onClick={() => void save()} disabled={busy || !parts.length}>
-              {busy ? 'Đang lưu…' : `Lưu ${parts.length} video`}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button className="tv-btn" onClick={onClose}>Huỷ</button>
+            <button className="tv-btn primary" onClick={() => void handleSaveSingle()} disabled={busy || !url.trim()}>
+              {busy ? 'Đang lưu…' : 'Lưu video'}
             </button>
           </div>
+        </div>
+      ) : (
+        <>
+          {step === 'paste' ? (
+            <>
+              <textarea
+                ref={boxRef}
+                className="tv-links-input"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={'Dán link video, mỗi dòng một video:\nhttps://www.youtube.com/watch?v=...\nhttps://youtu.be/...'}
+              />
+              <button className="tv-btn" onClick={insertNewline} style={{ marginTop: 6 }}>
+                <CornerDownLeft size={13} /> Xuống dòng
+              </button>
+              <div className="tv-hint">
+                Nhận được <strong>{valid.length}</strong> link video.
+                {invalid.length > 0 && (
+                  <>
+                    {' '}
+                    <span className="tv-bad">{invalid.length} dòng không phải link YouTube:</span>{' '}
+                    {invalid.slice(0, 3).join(', ')}
+                    {invalid.length > 3 ? '…' : ''}
+                  </>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button className="tv-btn" onClick={onClose}>Huỷ</button>
+                <button className="tv-btn primary" onClick={() => void loadBatchTitles()} disabled={busy || !valid.length}>
+                  {busy ? 'Đang đọc tiêu đề…' : `Tiếp — ${valid.length} video`}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <input
+                className="tv-search"
+                style={{ width: '100%', marginBottom: 10 }}
+                value={movie}
+                onChange={(e) => setMovie(e.target.value)}
+                placeholder="Tên video / danh sách…"
+              />
+
+              <div className="tv-order">
+                {parts.map((p, i) => (
+                  <div key={p.videoId} className="tv-order-row">
+                    <span style={{ fontWeight: 700, color: 'var(--amber)' }}>#{i + 1}</span>
+                    <img src={p.thumbnail} alt="" style={{ width: 44, height: 28, borderRadius: 4, objectFit: 'cover' }} loading="lazy" />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
+                    <button
+                      className="tv-btn"
+                      style={{ padding: '3px 6px' }}
+                      onClick={() => setParts((v) => moveItem(v, i, i - 1))}
+                      disabled={i === 0}
+                      title="Lên"
+                    >
+                      <ChevronUp size={13} />
+                    </button>
+                    <button
+                      className="tv-btn"
+                      style={{ padding: '3px 6px' }}
+                      onClick={() => setParts((v) => moveItem(v, i, i + 1))}
+                      disabled={i === parts.length - 1}
+                      title="Xuống"
+                    >
+                      <ChevronDown size={13} />
+                    </button>
+                    <button
+                      className="tv-btn"
+                      style={{ padding: '3px 6px', color: 'var(--rose)' }}
+                      onClick={() => setParts((v) => v.filter((_, k) => k !== i))}
+                      title="Bỏ video này"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {error && <div className="tv-hint tv-bad">{error}</div>}
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button className="tv-btn" onClick={() => setStep('paste')}>Quay lại</button>
+                <button className="tv-btn primary" onClick={() => void handleSaveBatch()} disabled={busy || !parts.length}>
+                  {busy ? 'Đang lưu…' : `Lưu ${parts.length} video`}
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
     </Modal>

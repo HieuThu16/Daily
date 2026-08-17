@@ -5,17 +5,26 @@ const HISTORY_KEY = 'daily_ngontinh_history';
 
 export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
   try {
-    const [res1, res2] = await Promise.all([
+    const [res1, res2, res3, res4] = await Promise.all([
       fetch('/data/ngontinh_manga_1.json'),
       fetch('/data/ngontinh_manga_2.json'),
+      fetch('/data/ngontinh_manga_3.json'),
+      fetch('/data/ngontinh_manga_4.json'),
     ]);
-    if (res1.ok && res2.ok) {
-      const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
-      const list1 = Array.isArray(d1) ? d1 : [];
-      const list2 = Array.isArray(d2) ? d2 : [];
-      if (list1.length > 0 || list2.length > 0) {
-        return [...list1, ...list2];
-      }
+    const [d1, d2, d3, d4] = await Promise.all([
+      res1.ok ? res1.json().catch(() => []) : [],
+      res2.ok ? res2.json().catch(() => []) : [],
+      res3.ok ? res3.json().catch(() => []) : [],
+      res4.ok ? res4.json().catch(() => []) : [],
+    ]);
+    const list = [
+      ...(Array.isArray(d1) ? d1 : []),
+      ...(Array.isArray(d2) ? d2 : []),
+      ...(Array.isArray(d3) ? d3 : []),
+      ...(Array.isArray(d4) ? d4 : []),
+    ];
+    if (list.length > 0) {
+      return list;
     }
   } catch (err) {
     console.warn('Could not load split ngontinh data', err);

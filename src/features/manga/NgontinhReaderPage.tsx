@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, 
-  ExternalLink, Bookmark, ArrowUp, Layout, RefreshCw, Sparkles, BookOpen 
+  ArrowLeft, ChevronLeft, ChevronRight, 
+  ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles, BookOpen 
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
 import { fetchNgontinhList, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
@@ -241,13 +241,6 @@ export const NgontinhReaderPage: React.FC = () => {
           >
             <ArrowLeft size={18} />
           </button>
-
-          <div className="ngontinh-reader-title-box">
-            <span className="ngontinh-reader-title-text">{manga.title}</span>
-            <span className="ngontinh-reader-chapter-sub">
-              {currentChapter?.name || `Chapter ${currentChapterNum}`}
-            </span>
-          </div>
         </div>
 
         <div className="ngontinh-reader-right">
@@ -282,24 +275,6 @@ export const NgontinhReaderPage: React.FC = () => {
             title="Chương sau (→)"
           >
             <ChevronRight size={18} />
-          </button>
-
-          {/* Fit Mode Switcher */}
-          <button
-            className="ngontinh-reader-btn-icon"
-            onClick={cycleFitMode}
-            title={`Khung đọc: ${fitMode === 'standard' ? 'Vừa vặn (800px)' : fitMode === 'wide' ? 'Rộng (1050px)' : 'Toàn màn hình'}`}
-          >
-            <Layout size={16} />
-          </button>
-
-          {/* Fullscreen Toggle */}
-          <button
-            className="ngontinh-reader-btn-icon"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
       </header>

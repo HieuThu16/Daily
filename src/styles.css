@@ -2877,6 +2877,391 @@ header {
 }
 .book-reader-choices button[aria-pressed='true'] { border-color: var(--primary); color: var(--primary); font-weight: 700; }
 
+/* Book Reader Search Banner (Không lưu tiến trình) */
+.book-reader-search-banner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--reader-bg, #ffffff);
+  color: var(--reader-text, #1f2937);
+  border: 1px solid var(--amber, #f59e0b);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  border-radius: 30px;
+  padding: 8px 14px;
+  max-width: 92vw;
+  animation: slideUpSearchBanner 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpSearchBanner {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.book-reader-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.book-reader-banner-icon {
+  color: var(--amber, #f59e0b);
+  flex-shrink: 0;
+}
+
+.book-reader-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.book-reader-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.book-reader-banner-btn.is-return {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--amber-dark, #b45309);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.book-reader-banner-btn.is-return:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+.book-reader-banner-btn.is-continue {
+  background: var(--primary, #6366f1);
+  color: #ffffff;
+}
+
+.book-reader-banner-btn.is-continue:hover {
+  filter: brightness(1.1);
+}
+
+.book-reader-banner-close {
+  background: transparent;
+  border: none;
+  color: var(--reader-muted, #6b7280);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.book-reader-banner-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--reader-text, #1f2937);
+}
+
+/* Book Search Modal Dialog */
+.book-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px 20px;
+  animation: fadeInSearch 0.2s ease;
+}
+
+@keyframes fadeInSearch {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.book-search-dialog {
+  width: 100%;
+  max-width: 640px;
+  max-height: 84vh;
+  background: var(--card-bg, #ffffff);
+  color: var(--card-text, #1f2937);
+  border-radius: 16px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--card-border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: scaleInSearch 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scaleInSearch {
+  from { opacity: 0; transform: scale(0.96) translateY(-10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.book-search-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.book-search-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--input-bg, #f3f4f6);
+  border: 1px solid var(--input-border, #d1d5db);
+  border-radius: 10px;
+  padding: 8px 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.book-search-input-wrapper:focus-within {
+  border-color: var(--primary, #6366f1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.book-search-icon {
+  color: var(--text-muted, #9ca3af);
+  flex-shrink: 0;
+}
+
+.book-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.94rem;
+}
+
+.book-search-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #9ca3af);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.book-search-clear-btn:hover {
+  color: inherit;
+}
+
+.book-search-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.book-search-close-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+}
+
+.book-search-scope-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--body-bg, #fafafa);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  font-size: 0.78rem;
+}
+
+.book-search-scope-label {
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+
+.book-search-scope-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--card-bg, #ffffff);
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.book-search-scope-btn:hover {
+  border-color: var(--primary, #6366f1);
+  color: var(--primary, #6366f1);
+}
+
+.book-search-scope-btn.active {
+  background: var(--primary-light, #e0e7ff);
+  color: var(--primary, #4338ca);
+  border-color: var(--primary, #6366f1);
+  font-weight: 700;
+}
+
+.book-search-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  padding: 12px 16px;
+}
+
+.book-search-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-muted, #6b7280);
+  gap: 8px;
+}
+
+.book-search-spinner {
+  animation: spin 0.8s linear infinite;
+  color: var(--primary, #6366f1);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.book-search-empty-text {
+  font-weight: 600;
+  margin: 0;
+  color: inherit;
+}
+
+.book-search-empty-hint {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.book-search-count {
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+  margin-bottom: 10px;
+}
+
+.book-search-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.book-search-result-item {
+  width: 100%;
+  text-align: left;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.book-search-result-item:hover {
+  border-color: var(--primary, #6366f1);
+  background: rgba(99, 102, 241, 0.04);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.book-search-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.book-search-item-chapter {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary, #4338ca);
+}
+
+.book-search-item-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-muted, #6b7280);
+}
+
+.book-search-snippet {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--card-text, #374151);
+  word-break: break-word;
+}
+
+.book-search-highlight {
+  background: #fde047;
+  color: #1f2937;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.search-target-hl {
+  background: #fde047 !important;
+  color: #18181b !important;
+  padding: 2px 5px !important;
+  border-radius: 4px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.45) !important;
+  animation: searchGlow 2.5s infinite alternate !important;
+}
+
+@keyframes searchGlow {
+  0% { box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.3); }
+  100% { box-shadow: 0 0 0 6px rgba(234, 179, 8, 0.65); }
+}
+
+.book-search-footer {
+  padding: 10px 16px;
+  background: var(--body-bg, #fafafa);
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.book-search-tip {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+}
+
+
+
 /* ===========================================================================
    TASKS PAGE
    Dựng theo khuôn .library-* : card bo tròn, viền --card-border, shadow mềm,

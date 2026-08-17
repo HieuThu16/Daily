@@ -109,4 +109,18 @@ describe('HomePage', () => {
     }
     expect(screen.getByText('Đều nhất')).toBeInTheDocument()
   })
+
+  it('chuyển đổi qua lại giữa Review ngày và Thống kê ngày', async () => {
+    renderHome()
+    expect(await screen.findByRole('tab', { name: /Review ngày/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Thống kê ngày/i })).toBeInTheDocument()
+
+    // Bấm sang tab Review ngày
+    await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
+    expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()
+
+    // Bấm lại Thống kê ngày
+    await userEvent.click(screen.getByRole('tab', { name: /Thống kê ngày/i }))
+    expect(await screen.findByText('Thói quen')).toBeInTheDocument()
+  })
 })

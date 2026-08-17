@@ -40,6 +40,7 @@ export type PageOutcome = {
   nextPageToken?: string
   /** Cả trang đều là video đã có sẵn trong DB. */
   allKnown: boolean
+  videos?: Array<NormalizedVideo & { isKnown?: boolean }>
 }
 
 const pagesOf = (itemCount: number | null) => (itemCount === null ? 1 : Math.max(1, Math.ceil(itemCount / 50)))
@@ -75,6 +76,7 @@ export async function syncOnePage(
   cursor: PageCursor,
   key: string,
   fetchImpl: typeof fetch = fetch,
+  options?: { dryRun?: boolean },
 ): Promise<PageOutcome> {
   const entry = plan.entries[cursor.entryIndex]
   if (!entry) throw new Error(`Không có mục thứ ${cursor.entryIndex} trong kế hoạch`)
@@ -96,7 +98,7 @@ export async function syncOnePage(
   )
 
   if (videos.length === 0) {
-    return { saved: 0, known: 0, skippedPlaceholders: skipped, nextPageToken, allKnown: true }
+    return { saved: 0, known: 0, skippedPlaceholders: skipped, nextPageToken, allKnown: true, videos: [] }
   }
 
   // Video đã có sẵn thì không ghi lại — đây là chỗ tiết kiệm của lần sync sau.
@@ -109,19 +111,27 @@ export async function syncOnePage(
   const known = new Set(((existing ?? []) as { video_id: string }[]).map((r) => r.video_id))
 
   const fresh = videos.filter((v) => !known.has(v.videoId))
-  if (fresh.length > 0) await writeVideos(db, fresh, entry, plan)
+  if (!options?.dryRun && fresh.length > 0) {
+    await writeVideos(db, fresh, entry, plan)
+  }
+
+  const enrichedVideos = videos.map((v) => ({
+    ...v,
+    isKnown: known.has(v.videoId),
+  }))
 
   return {
-    saved: fresh.length,
+    saved: options?.dryRun ? 0 : fresh.length,
     known: known.size,
     skippedPlaceholders: skipped,
     nextPageToken,
     allKnown: fresh.length === 0,
+    videos: enrichedVideos,
   }
 }
 
 /** Ghi video mới rồi đếm lại số phần của các series bị chạm. */
-async function writeVideos(db: Db, fresh: NormalizedVideo[], entry: PlanEntry, plan: SyncPlan) {
+export async function writeVideos(db: Db, fresh: NormalizedVideo[], entry: PlanEntry, plan: SyncPlan) {
   const now = new Date().toISOString()
   const series = resolveSeries(fresh)
 

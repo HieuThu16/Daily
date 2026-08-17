@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, Minimize2, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
 import { saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
@@ -184,10 +184,6 @@ export const NgontinhReaderModal: React.FC<Props> = ({
           <button className="ngontinh-reader-back-btn" onClick={onClose} title="Trở về danh sách">
             <ArrowLeft size={18} />
           </button>
-          <div className="ngontinh-reader-info-compact">
-            <span className="ngontinh-reader-manga-title">{manga.title}</span>
-            <span className="ngontinh-reader-chapter-sub">{currentChapter?.name || `Chương ${currentChapterNum}`}</span>
-          </div>
         </div>
 
         <div className="ngontinh-reader-header-right">
@@ -224,14 +220,6 @@ export const NgontinhReaderModal: React.FC<Props> = ({
             title="Chương sau (→)"
           >
             <ChevronRight size={18} />
-          </button>
-
-          <button
-            className="ngontinh-reader-nav-icon-btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'}
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
       </header>

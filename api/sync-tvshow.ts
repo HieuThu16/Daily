@@ -9,7 +9,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { startSync, syncOnePage } from '../src/lib/tvshowSeries/pageSync.js'
+import { startSync, syncOnePage, writeVideos } from '../src/lib/tvshowSeries/pageSync.js'
 
 export const config = { maxDuration: 60 }
 
@@ -46,11 +46,38 @@ export default async function handler(req: any, res: any) {
     if (action === 'page') {
       const plan = req.body?.plan
       const cursor = req.body?.cursor
+      const dryRun = Boolean(req.body?.dryRun)
       if (!plan?.entries?.length) return res.status(400).json({ error: 'Thiếu plan' })
       if (typeof cursor?.entryIndex !== 'number') return res.status(400).json({ error: 'Thiếu cursor' })
 
-      const outcome = await syncOnePage(db, plan, cursor, YOUTUBE_API_KEY)
+      const outcome = await syncOnePage(db, plan, cursor, YOUTUBE_API_KEY, fetch, { dryRun })
       return res.status(200).json({ outcome })
+    }
+
+    if (action === 'save_selected') {
+      const plan = req.body?.plan
+      const videos = req.body?.videos
+      if (!Array.isArray(videos) || videos.length === 0) {
+        return res.status(400).json({ error: 'Không có video nào được chọn' })
+      }
+      const entry = plan?.entries?.[0] || { playlistId: '', name: 'Video đã chọn', itemCount: videos.length, isUploads: true }
+      await writeVideos(db, videos, entry, plan)
+
+      const creatorUrl = String(plan?.creatorUrl ?? '').trim()
+      if (creatorUrl) {
+        await db
+          .from('tvshow_creators')
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq('platform', 'youtube')
+          .eq('creator_url', creatorUrl)
+        await db.from('tvshow_sync_runs').insert({
+          platform: 'youtube',
+          creator_url: creatorUrl,
+          found_count: Number(videos.length),
+          series_count: 1,
+        })
+      }
+      return res.status(200).json({ ok: true, savedCount: videos.length })
     }
 
     if (action === 'finish') {

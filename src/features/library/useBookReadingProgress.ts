@@ -18,6 +18,7 @@ type Options = {
   mediaItemId: string
   totalChars: number
   pageCount: number | null
+  enabled?: boolean
 }
 
 const absoluteOffset = (spot: ReadingPosition) => spot.charOffset + spot.ratio * spot.charCount
@@ -27,14 +28,24 @@ const absoluteOffset = (spot: ReadingPosition) => spot.charOffset + spot.ratio *
  * hình, và tự ghi nhật ký đọc của hôm nay sau khi đã đọc đủ 60 giây.
  * Lỗi khi lưu không bao giờ chặn việc đọc.
  */
-export function useBookReadingProgress({ documentId, mediaItemId, totalChars, pageCount }: Options) {
+export function useBookReadingProgress({ documentId, mediaItemId, totalChars, pageCount, enabled = true }: Options) {
   const position = useRef<ReadingPosition | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSavedAt = useRef(0)
   const secondsRead = useRef(0)
   const loggedToday = useRef(false)
+  const enabledRef = useRef(enabled)
+
+  useEffect(() => {
+    enabledRef.current = enabled
+    if (!enabled && debounce.current) {
+      clearTimeout(debounce.current)
+      debounce.current = null
+    }
+  }, [enabled])
 
   const flush = useCallback(async () => {
+    if (!enabledRef.current) return
     const spot = position.current
     if (!documentId || !spot) return
 
@@ -65,6 +76,7 @@ export function useBookReadingProgress({ documentId, mediaItemId, totalChars, pa
 
   const report = useCallback(
     (spot: ReadingPosition) => {
+      if (!enabledRef.current) return
       position.current = spot
       if (!documentId) return
 
@@ -78,10 +90,10 @@ export function useBookReadingProgress({ documentId, mediaItemId, totalChars, pa
 
   // Đếm thời gian đọc thực tế, chỉ tính khi tab đang hiển thị.
   useEffect(() => {
-    if (!documentId) return
+    if (!documentId || !enabled) return
 
     const timer = setInterval(() => {
-      if (document.visibilityState !== 'visible') return
+      if (document.visibilityState !== 'visible' || !enabledRef.current) return
       secondsRead.current += READING_TICK_MS / 1000
       if (loggedToday.current || secondsRead.current < MIN_SECONDS_BEFORE_LOG) return
 
@@ -95,7 +107,7 @@ export function useBookReadingProgress({ documentId, mediaItemId, totalChars, pa
     }, READING_TICK_MS)
 
     return () => clearInterval(timer)
-  }, [documentId, mediaItemId, pageCount, totalChars])
+  }, [documentId, mediaItemId, pageCount, totalChars, enabled])
 
   // Ghi ngay khi ẩn tab, và một lần cuối khi rời màn hình.
   useEffect(() => {

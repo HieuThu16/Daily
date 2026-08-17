@@ -41,16 +41,16 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
+  { id: 'reviews', label: 'Review phim', icon: Clapperboard, colorClass: 'icon-box-purple' },
+  { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
+  { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
   { id: 'books', label: 'Sách', icon: BookOpen, colorClass: 'icon-box-purple' },
   { id: 'bl', label: 'Truyện BL', icon: Heart, colorClass: 'icon-box-rose' },
   { id: 'ngontinh', label: 'Ngôn Tình', icon: HeartHandshake, colorClass: 'icon-box-rose' },
+  { id: 'manga', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald' },
   { id: 'english', label: 'English', icon: Languages, colorClass: 'icon-box-cyan' },
   { id: 'knowledge', label: 'Kiến thức', icon: Lightbulb, colorClass: 'icon-box-purple' },
-  { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
-  { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
-  { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
-  { id: 'reviews', label: 'Review phim', icon: Clapperboard, colorClass: 'icon-box-purple' },
-  { id: 'manga', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald' },
   { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
@@ -60,7 +60,7 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
 
 const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
 const THEME_STORAGE_KEY = 'daily_theme'
-const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'bl', 'ngontinh']
+const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'tvshow', 'reviews']
 const BOTTOM_NAV_SIZE = 5
 
 /** Đưa `ids` lên đầu, đệm cho đủ 5 ô bằng tab mặc định rồi tới phần còn lại. */
@@ -89,8 +89,8 @@ function getSavedRecentTabs(): Tab[] {
 const navGroups: { title: string; ids: Tab[] }[] = [
   { title: 'Tổng quan', ids: ['home', 'calendar'] },
   { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] },
+  { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'music', 'movies', 'manga'] },
   { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh'] },
-  { title: 'Giải trí & Nghệ thuật', ids: ['music', 'tvshow', 'movies', 'reviews', 'manga'] },
   { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
   { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] },
   { title: 'Hệ thống', ids: ['settings'] },

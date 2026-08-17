@@ -1,22 +1,29 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BarChart3, Clock } from 'lucide-react'
 import { localDate } from '../../lib/date'
+import { buildDayReview } from '../../lib/dayReview'
 import { todayCompletion } from '../../lib/homeProgress'
+import { useMangaReadingLogs } from '../../lib/mangaReadingLog'
 import { parseLocalDate, upcomingOccasions } from '../../lib/occasions'
 import { Aside, AsideCard } from '../AsideSlot'
 import { DatePager } from './DatePager'
+import { DayReviewTimeline } from './DayReviewTimeline'
 import { ProgressRing } from './ProgressRing'
 import { ReportDay } from './ReportDay'
 import { ReportWeek } from './ReportWeek'
 import { useHomeData } from './useHomeData'
 
 type ReportTab = 'day' | 'week'
+type DaySubTab = 'review' | 'stats'
 
 export function HomePage() {
   const nav = useNavigate()
   const [tab, setTab] = useState<ReportTab>('day')
+  const [daySubTab, setDaySubTab] = useState<DaySubTab>('stats')
   const [dateKey, setDateKey] = useState(localDate())
   const data = useHomeData(dateKey)
+  const mangaLogs = useMangaReadingLogs()
   const isToday = dateKey === localDate()
 
   const completion = useMemo(
@@ -34,6 +41,19 @@ export function HomePage() {
     [data.occasions, data.people],
   )
 
+  const dayEvents = useMemo(
+    () =>
+      buildDayReview({
+        date: dateKey,
+        entries: data.entries,
+        meals: data.meals,
+        sleeps: data.sleep,
+        todos: [...data.todos, ...data.todosDoneToday],
+        media: data.todayMedia,
+        mangaLogs,
+      }),
+    [dateKey, data.entries, data.meals, data.sleep, data.todos, data.todosDoneToday, data.todayMedia, mangaLogs],
+  )
 
   return (
     <section className="home-page">
@@ -98,22 +118,99 @@ export function HomePage() {
 
       <DatePager dateKey={dateKey} week={data.week} mode={tab} onChange={setDateKey} />
 
+      {tab === 'day' && (
+        <div
+          className="home-day-subtabs"
+          role="tablist"
+          aria-label="Chế độ xem ngày"
+          style={{
+            display: 'grid',
+            gridAutoFlow: 'column',
+            gridAutoColumns: '1fr',
+            gap: 6,
+            marginBottom: 12,
+            padding: 3,
+            background: 'var(--card-bg)',
+            border: '1px solid var(--card-border)',
+            borderRadius: 12,
+          }}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={daySubTab === 'review'}
+            className={daySubTab === 'review' ? 'active' : ''}
+            onClick={() => setDaySubTab('review')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '8px 10px',
+              borderRadius: 9,
+              border: 0,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              background: daySubTab === 'review' ? 'var(--amber)' : 'transparent',
+              color: daySubTab === 'review' ? '#fff' : 'var(--text-muted)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Clock size={14} /> Review ngày {dayEvents.length > 0 ? `(${dayEvents.length})` : ''}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={daySubTab === 'stats'}
+            className={daySubTab === 'stats' ? 'active' : ''}
+            onClick={() => setDaySubTab('stats')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '8px 10px',
+              borderRadius: 9,
+              border: 0,
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              background: daySubTab === 'stats' ? 'var(--primary)' : 'transparent',
+              color: daySubTab === 'stats' ? '#fff' : 'var(--text-muted)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <BarChart3 size={14} /> Thống kê ngày
+          </button>
+        </div>
+      )}
+
       {tab === 'day' ? (
-        <ReportDay
-          completion={completion}
-          habits={data.habits}
-          todayLogs={data.todayLogs}
-          todos={data.todos}
-          todosDoneToday={data.todosDoneToday}
-          entries={data.entries}
-          meals={data.meals}
-          sleep={data.sleep}
-          todayMedia={data.todayMedia}
-          todayReadingLogs={data.todayReadingLogs}
-          isToday={isToday}
-          nextOccasion={nextOccasion}
-          onOpen={nav}
-        />
+        daySubTab === 'review' ? (
+          <DayReviewTimeline
+            events={dayEvents}
+            dateKey={dateKey}
+            isToday={isToday}
+            onOpen={nav}
+          />
+        ) : (
+          <ReportDay
+            completion={completion}
+            habits={data.habits}
+            todayLogs={data.todayLogs}
+            todos={data.todos}
+            todosDoneToday={data.todosDoneToday}
+            entries={data.entries}
+            meals={data.meals}
+            sleep={data.sleep}
+            todayMedia={data.todayMedia}
+            todayReadingLogs={data.todayReadingLogs}
+            isToday={isToday}
+            nextOccasion={nextOccasion}
+            onOpen={nav}
+          />
+        )
       ) : (
         <ReportWeek
           week={data.week}

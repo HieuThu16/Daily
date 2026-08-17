@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, BookOpen, CheckCircle2, Clock, Frown, Heart, ImagePlus, ListPlus, Music, NotebookPen, Pencil, Save, Star, Sunrise, Trash2, UtensilsCrossed } from 'lucide-react'
+import { BarChart3, Clock, Frown, Heart, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
-import { buildDayReview, type DayEvent } from '../lib/dayReview'
-import { useMangaReadingLogs } from '../lib/mangaReadingLog'
-import type { DailyType, Entry, Media, NutritionLog, Person, SleepLog, Todo } from '../types'
+import type { DailyType, Entry, Person } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 
@@ -12,16 +10,6 @@ const categories: Array<{ type: DailyType; title: string; icon: any; color: stri
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
   { type: 'SAD_THING', title: 'Điều buồn', icon: Frown,    color: 'var(--blue)',    bg: 'var(--blue-bg)'    },
 ]
-
-const eventStyles: Record<DayEvent['kind'], { icon: any; color: string; bg: string }> = {
-  WAKE:      { icon: Sunrise,         color: 'var(--amber)',   bg: 'var(--amber-bg)'      },
-  MEAL:      { icon: UtensilsCrossed, color: 'var(--emerald)', bg: 'var(--emerald-bg)'    },
-  DIARY:     { icon: NotebookPen,     color: 'var(--purple)',  bg: 'var(--purple-bg)'     },
-  TASK_ADD:  { icon: ListPlus,        color: 'var(--blue)',    bg: 'var(--blue-bg)'       },
-  TASK_DONE: { icon: CheckCircle2,    color: 'var(--emerald)', bg: 'var(--emerald-bg)'    },
-  MEDIA:     { icon: Music,           color: 'var(--primary)', bg: 'var(--primary-light)' },
-  MANGA:     { icon: BookOpen,        color: '#f43f5e',        bg: 'rgba(244, 63, 94, 0.12)' },
-}
 
 /** 'HH:MM' theo giờ máy, cập nhật mỗi 30 giây. */
 function useClock() {
@@ -33,7 +21,7 @@ function useClock() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 }
 
-type PageTab = 'review' | 'write' | 'stats'
+type PageTab = 'write' | 'stats'
 type StatsPeriod = 'week' | 'month' | 'all'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -70,14 +58,8 @@ export function DailyPage() {
   const { showToast } = useToast()
   const { items, setItems, loading } = useQuery<Entry>('daily_entries')
   const peopleQuery = useQuery<Person>('people', 'name')
-  // Nguồn cho tab review cả ngày.
-  const sleepQuery = useQuery<SleepLog>('sleep_logs')
-  const mealQuery = useQuery<NutritionLog>('nutrition_logs')
-  const todoQuery = useQuery<Todo>('todos')
-  const mediaQuery = useQuery<Media>('media_items')
-  const mangaLogs = useMangaReadingLogs()
 
-  const [pageTab, setPageTab] = useState<PageTab>('review')
+  const [pageTab, setPageTab] = useState<PageTab>('write')
   const clock = useClock()
 
   // Write tab state
@@ -202,11 +184,6 @@ export function DailyPage() {
   const todayEntries = items.filter((i) => i.entry_date === date
     && (filterType === 'ALL' || (filterType === 'FAV' ? i.is_favorite : i.entry_type === filterType)))
 
-  const dayEvents = useMemo(
-    () => buildDayReview({ date, entries: items, meals: mealQuery.items, sleeps: sleepQuery.items, todos: todoQuery.items, media: mediaQuery.items, mangaLogs }),
-    [date, items, mealQuery.items, sleepQuery.items, todoQuery.items, mediaQuery.items, mangaLogs],
-  )
-
   const statsEntries = useMemo(() => {
     const today = new Date()
     let cutoff: string
@@ -241,19 +218,6 @@ export function DailyPage() {
 
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        <button
-          onClick={() => setPageTab('review')}
-          style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
-            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
-            borderColor: pageTab === 'review' ? 'var(--amber)' : 'var(--card-border)',
-            background: pageTab === 'review' ? 'var(--amber)' : 'var(--card-bg)',
-            color: pageTab === 'review' ? 'white' : 'var(--text-main)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          }}
-        >
-          <Clock size={13} /> Review ngày
-        </button>
         <button
           onClick={() => setPageTab('write')}
           style={{
@@ -432,45 +396,6 @@ export function DailyPage() {
             )}
           </div>
         </>
-      )}
-
-      {/* ════════════════ REVIEW TAB ═══════════════════════════════════════ */}
-      {pageTab === 'review' && (
-        <div className="card" style={{ padding: 12, margin: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <h2 style={{ margin: 0, fontSize: '0.88rem', color: 'var(--amber)' }}>
-              <Clock size={15} /> Cả ngày ({dayEvents.length} mốc)
-            </h2>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} />
-          </div>
-
-          {dayEvents.length === 0 ? (
-            <Empty icon={Clock} colorClass="icon-box-amber">
-              Ngày này chưa có hoạt động nào được ghi giờ.
-            </Empty>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8, borderLeft: '2px solid var(--card-border)', overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
-              {dayEvents.map((ev, i) => {
-                const style = eventStyles[ev.kind]
-                const Icon = style.icon
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                    <span style={{ fontSize: '0.74rem', fontWeight: 800, color: style.color, width: 38, flexShrink: 0, marginTop: 2 }}>
-                      {ev.time || '--:--'}
-                    </span>
-                    <div className="icon-box icon-box-sm" style={{ background: style.bg, color: style.color, width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>
-                      <Icon size={11} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.62rem', fontWeight: 700, color: style.color }}>{ev.label}</div>
-                      <div style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: 1.4, wordBreak: 'break-word' }}>{ev.detail}</div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
       )}
 
       {/* ════════════════ STATS TAB ════════════════════════════════════════ */}

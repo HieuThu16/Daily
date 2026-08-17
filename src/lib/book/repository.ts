@@ -89,6 +89,86 @@ export async function loadChapterContent(chapterId: string): Promise<string> {
   return (data as { content: string }).content
 }
 
+export type BookSearchResult = {
+  chapterIdx: number
+  chapterTitle: string
+  chapterId: string
+  matchIndex: number
+  snippetBefore: string
+  matchText: string
+  snippetAfter: string
+  fullMatchText: string
+  chapterContent?: string
+}
+
+/**
+ * Tìm kiếm văn bản trong các chương của cuốn sách.
+ */
+export async function searchBookContent(
+  documentId: string,
+  query: string,
+  chapterIdx?: number | null,
+): Promise<BookSearchResult[]> {
+  const trimmed = query.trim()
+  if (!trimmed || !supabase) return []
+
+  // Escape special PostgreSQL LIKE characters if necessary
+  const sanitized = trimmed.replace(/[%_]/g, '')
+  if (!sanitized) return []
+
+  let queryBuilder = client()
+    .from('book_chapters')
+    .select('id, idx, title, content')
+    .eq('document_id', documentId)
+
+  if (chapterIdx !== undefined && chapterIdx !== null) {
+    queryBuilder = queryBuilder.eq('idx', chapterIdx)
+  }
+
+  const { data, error } = await queryBuilder
+    .ilike('content', `%${sanitized}%`)
+    .order('idx', { ascending: true })
+
+  if (error || !data) return []
+
+  const results: BookSearchResult[] = []
+  const lowerQ = trimmed.toLowerCase()
+
+  for (const chapter of data as { id: string; idx: number; title: string; content: string }[]) {
+    const content = chapter.content || ''
+    const lowerContent = content.toLowerCase()
+    let pos = 0
+    let matchIdx = 0
+
+    while ((pos = lowerContent.indexOf(lowerQ, pos)) !== -1) {
+      matchIdx++
+      const start = Math.max(0, pos - 45)
+      const end = Math.min(content.length, pos + trimmed.length + 55)
+      const before = (start > 0 ? '…' : '') + content.slice(start, pos)
+      const matchText = content.slice(pos, pos + trimmed.length)
+      const after = content.slice(pos + trimmed.length, end) + (end < content.length ? '…' : '')
+
+      results.push({
+        chapterIdx: chapter.idx,
+        chapterTitle: chapter.title,
+        chapterId: chapter.id,
+        matchIndex: matchIdx,
+        snippetBefore: before,
+        matchText,
+        snippetAfter: after,
+        fullMatchText: content.slice(Math.max(0, pos - 20), Math.min(content.length, pos + trimmed.length + 20)),
+        chapterContent: content,
+      })
+
+      pos += Math.max(1, trimmed.length)
+      if (matchIdx >= 40) break // Giới hạn 40 kết quả mỗi chương để tránh quá tải
+    }
+  }
+
+  return results
+}
+
+
 export type ProgressPatch = {
   last_chapter_idx: number
   last_scroll_ratio: number

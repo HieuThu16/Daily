@@ -18,3 +18,5 @@ src/data/ngontinh_manga.json
 # Dữ liệu crawl ~137MB/file, vượt giới hạn 100MB của GitHub.
 public/data/romance_manga.json
 src/data/romance_manga.json
+public/data/school_life_manga.json
+src/data/school_life_manga.json

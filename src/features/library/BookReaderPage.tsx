@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Highlighter, List, Quote, Type } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Highlighter, List, Quote, RotateCcw, Search, Type, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal } from '../../lib/persistence'
 import { loadBookDocument, loadChapterContent, loadChapterList } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument } from '../../types'
 import { useBookReadingProgress } from './useBookReadingProgress'
 import { useToast } from '../ToastContext'
+import { BookSearchModal } from './BookSearchModal'
 
 type ReaderTheme = 'light' | 'sepia' | 'dark'
 type ReaderFont = 'sans' | 'serif'
@@ -47,9 +48,15 @@ export function BookReaderPage() {
   const [percent, setPercent] = useState(0)
   const [tocOpen, setTocOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [settings, setSettings] = useState<ReaderSettings>(() => loadLocal(SETTINGS_KEY, DEFAULT_SETTINGS))
   const [targetHighlight, setTargetHighlight] = useState<string | null>(requestedTargetText || requestedHlText || null)
+
+  // Quản lý chế độ xem kết quả tìm kiếm (KHÔNG LƯU TIẾN TRÌNH ĐỌC)
+  const [isSearchPreview, setIsSearchPreview] = useState(false)
+  const [lastSearchQuery, setLastSearchQuery] = useState('')
+  const [originalReadingPos, setOriginalReadingPos] = useState<{ chapterIdx: number; ratio: number } | null>(null)
 
   const activeChapter = chapters[activeIdx]
   const content = contentByIdx[activeIdx]
@@ -59,6 +66,7 @@ export function BookReaderPage() {
     mediaItemId,
     totalChars: bookDocument?.total_chars ?? 0,
     pageCount: bookDocument?.page_count ?? null,
+    enabled: !isSearchPreview,
   })
 
   useEffect(() => {
@@ -138,6 +146,18 @@ export function BookReaderPage() {
     if (chapters.length > 0 && contentByIdx[activeIdx] === undefined) void fetchChapter(activeIdx)
   }, [activeIdx, chapters, contentByIdx, fetchChapter])
 
+  // Lắng nghe phím tắt Ctrl+F / Cmd+F để mở tìm kiếm nhanh
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   // Khôi phục vị trí cuộn sau khi nội dung chương đã render hoặc cuộn tới đoạn trích dẫn/highlight.
   useEffect(() => {
     if (!content) return
@@ -189,17 +209,22 @@ export function BookReaderPage() {
     setPercent(bookDocument.total_chars > 0 ? Math.min(100, (offset / bookDocument.total_chars) * 100) : 0)
     setCompleted(activeIdx === chapters.length - 1 && ratio > COMPLETED_RATIO)
 
-    report({
-      chapterIdx: activeIdx,
-      charOffset: activeChapter.char_offset,
-      charCount: activeChapter.char_count,
-      ratio,
-    })
+    // Khi đang xem kết quả tìm kiếm (chưa xác nhận tiếp tục đọc), không lưu tiến trình
+    if (!isSearchPreview) {
+      report({
+        chapterIdx: activeIdx,
+        charOffset: activeChapter.char_offset,
+        charCount: activeChapter.char_count,
+        ratio,
+      })
+    }
   }
 
   const goToChapter = (idx: number) => {
     if (idx < 0 || idx >= chapters.length) return
-    void flush()
+    if (!isSearchPreview) {
+      void flush()
+    }
     setActiveIdx(idx)
     setTocOpen(false)
     setCompleted(false)
@@ -208,7 +233,9 @@ export function BookReaderPage() {
   }
 
   const leave = () => {
-    void flush()
+    if (!isSearchPreview) {
+      void flush()
+    }
     nav('/library')
   }
 
@@ -217,7 +244,108 @@ export function BookReaderPage() {
     nav('/library')
   }
 
+  // Xử lý khi nhấn vào kết quả tìm kiếm (KHÔNG LƯU TIẾN TRÌNH ĐỌC)
+  const onSelectSearchResult = (result: {
+    chapterIdx: number
+    matchText: string
+    snippet: string
+    chapterContent?: string
+  }) => {
+    // Lưu lại vị trí đọc trước đó để người dùng có thể quay lại bất cứ lúc nào
+    if (!isSearchPreview && originalReadingPos === null) {
+      const node = scroller.current
+      const scrollable = node ? Math.max(1, node.scrollHeight - node.clientHeight) : 1
+      const ratio = node ? Math.min(1, Math.max(0, node.scrollTop / scrollable)) : 0
+      setOriginalReadingPos({ chapterIdx: activeIdx, ratio })
+    }
+
+    setIsSearchPreview(true)
+    setLastSearchQuery(result.matchText)
+
+    if (result.chapterContent && contentByIdx[result.chapterIdx] === undefined) {
+      setContentByIdx((prev) => ({ ...prev, [result.chapterIdx]: result.chapterContent! }))
+    }
+
+    setActiveIdx(result.chapterIdx)
+    setTargetHighlight(result.matchText)
+    setTocOpen(false)
+    setCompleted(false)
+  }
+
+  const restoreOriginalReadingPos = () => {
+    if (!originalReadingPos) return
+    setActiveIdx(originalReadingPos.chapterIdx)
+    pendingRatio.current = originalReadingPos.ratio
+    setIsSearchPreview(false)
+    setTargetHighlight(null)
+    setOriginalReadingPos(null)
+    showToast('↩ Đã quay lại vị trí đọc trước đó')
+  }
+
+  const resumeProgressFromHere = () => {
+    setIsSearchPreview(false)
+    setOriginalReadingPos(null)
+    showToast('✓ Đã kích hoạt lưu tiến trình từ đây')
+  }
+
   const paragraphs = useMemo(() => (content ? content.split('\n\n') : []), [content])
+
+  const renderParagraph = (paragraph: string, index: number) => {
+    if (!targetHighlight || !targetHighlight.trim()) {
+      return <p key={index}>{paragraph}</p>
+    }
+
+    const hl = targetHighlight.trim()
+    const lowerPara = paragraph.toLowerCase()
+    const lowerHl = hl.toLowerCase()
+
+    const matchIdx = lowerPara.indexOf(lowerHl)
+    if (matchIdx === -1) {
+      const shorterHl = hl.slice(0, 35).toLowerCase()
+      const shorterIdx = lowerPara.indexOf(shorterHl)
+      if (shorterIdx === -1) {
+        return <p key={index}>{paragraph}</p>
+      }
+      const before = paragraph.slice(0, shorterIdx)
+      const matched = paragraph.slice(shorterIdx, shorterIdx + shorterHl.length)
+      const after = paragraph.slice(shorterIdx + shorterHl.length)
+      return (
+        <p key={index}>
+          {before}
+          <mark className="reader-hl target-reader-hl search-target-hl">
+            {matched}
+          </mark>
+          {after}
+        </p>
+      )
+    }
+
+    const parts: (string | JSX.Element)[] = []
+    let cursor = 0
+    let occurrence = 0
+
+    while (cursor < paragraph.length) {
+      const idx = lowerPara.indexOf(lowerHl, cursor)
+      if (idx === -1) {
+        parts.push(paragraph.slice(cursor))
+        break
+      }
+      if (idx > cursor) {
+        parts.push(paragraph.slice(cursor, idx))
+      }
+      parts.push(
+        <mark
+          key={`hl-${index}-${occurrence++}`}
+          className="reader-hl target-reader-hl search-target-hl"
+        >
+          {paragraph.slice(idx, idx + hl.length)}
+        </mark>,
+      )
+      cursor = idx + hl.length
+    }
+
+    return <p key={index}>{parts}</p>
+  }
 
   // Bôi đen trong nội dung -> ghi lại đoạn để hiện nút lưu trích dẫn.
   const captureSelection = () => {
@@ -318,6 +446,13 @@ export function BookReaderPage() {
           <ArrowLeft size={20} />
         </button>
         <span className="book-reader-title">{bookName}</span>
+        <button
+          aria-label="Tìm kiếm trong sách"
+          title="Tìm kiếm văn bản trong sách (Ctrl+F)"
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search size={20} />
+        </button>
         <button aria-label="Xem trích dẫn" title="Xem trích dẫn" onClick={() => nav(`/quotes/${mediaItemId}?tab=quotes`)}>
           <Quote size={20} />
         </button>
@@ -335,6 +470,46 @@ export function BookReaderPage() {
       <div className="book-reader-progress">
         <div style={{ width: `${percent.toFixed(1)}%` }} />
       </div>
+
+      {/* Banner thông báo đang xem kết quả tìm kiếm (không lưu tiến trình) */}
+      {isSearchPreview && (
+        <div className="book-reader-search-banner">
+          <div className="book-reader-banner-info">
+            <Search size={15} className="book-reader-banner-icon" />
+            <span>
+              Đang xem kết quả {lastSearchQuery ? <strong>&ldquo;{lastSearchQuery}&rdquo;</strong> : ''} — <em>Không lưu tiến trình đọc</em>
+            </span>
+          </div>
+          <div className="book-reader-banner-actions">
+            {originalReadingPos !== null && (
+              <button
+                type="button"
+                className="book-reader-banner-btn is-return"
+                onClick={restoreOriginalReadingPos}
+                title="Quay lại vị trí và chương đang đọc dở"
+              >
+                <RotateCcw size={13} /> Vị trí cũ (Chương {originalReadingPos.chapterIdx + 1})
+              </button>
+            )}
+            <button
+              type="button"
+              className="book-reader-banner-btn is-continue"
+              onClick={resumeProgressFromHere}
+              title="Kích hoạt lưu tiến trình đọc từ vị trí này"
+            >
+              Lưu từ đây
+            </button>
+            <button
+              type="button"
+              className="book-reader-banner-close"
+              onClick={() => setIsSearchPreview(false)}
+              aria-label="Đóng thông báo"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && (
         <div className="book-reader-settings">
@@ -401,6 +576,16 @@ export function BookReaderPage() {
         </div>
       )}
 
+      <BookSearchModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        documentId={bookDocument?.id ?? null}
+        chapters={chapters}
+        activeChapterIdx={activeIdx}
+        currentChapterContent={content}
+        onSelectResult={onSelectSearchResult}
+      />
+
       <div
         className="book-reader-content"
         ref={scroller}
@@ -424,30 +609,7 @@ export function BookReaderPage() {
 
           {content === undefined && !loadError && <p style={{ opacity: 0.6 }}>Đang tải chương…</p>}
 
-          {paragraphs.map((paragraph, index) => {
-            if (targetHighlight && paragraph.toLowerCase().includes(targetHighlight.toLowerCase().slice(0, 40))) {
-              const targetSnippet = targetHighlight.trim()
-              const lowerPara = paragraph.toLowerCase()
-              const lowerSnippet = targetSnippet.toLowerCase()
-              const matchIdx = lowerPara.indexOf(lowerSnippet)
-
-              if (matchIdx !== -1) {
-                const before = paragraph.slice(0, matchIdx)
-                const matched = paragraph.slice(matchIdx, matchIdx + targetSnippet.length)
-                const after = paragraph.slice(matchIdx + targetSnippet.length)
-                return (
-                  <p key={index}>
-                    {before}
-                    <mark className="reader-hl target-reader-hl" style={{ background: 'var(--amber-bg, #fde68a)', color: 'inherit', padding: '2px 4px', borderRadius: 4 }}>
-                      {matched}
-                    </mark>
-                    {after}
-                  </p>
-                )
-              }
-            }
-            return <p key={index}>{paragraph}</p>
-          })}
+          {paragraphs.map((paragraph, index) => renderParagraph(paragraph, index))}
 
           {completed && (
             <div className="book-reader-finished">
@@ -493,3 +655,4 @@ export function BookReaderPage() {
     </div>
   )
 }
+
