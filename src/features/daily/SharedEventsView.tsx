@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
+import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import type { SharedEvent, SharedPartner } from '../../types'

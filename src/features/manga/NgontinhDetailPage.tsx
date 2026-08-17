@@ -7,7 +7,7 @@ import {
   Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
   Layers
 } from 'lucide-react';
-import type { NgontinhManga } from '../../types/manga';
+import type { MangaChapter, NgontinhManga } from '../../types/manga';
 import { 
   fetchNgontinhList, fetchNgontinhHotData, 
   getNgontinhFavorites, toggleNgontinhFavorite, 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ImagePlus, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { fileToUploadableJpeg } from '../../lib/photo'
 import type { PersonDailyPhoto } from '../../types'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
@@ -40,9 +41,14 @@ export function DailyLogPhotos({ personId, date }: Props) {
     const added: PersonDailyPhoto[] = []
 
     for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      // Ảnh HEIC chụp thẳng từ máy ảnh không hiển thị được trên web -> luôn đưa về JPEG.
+      const jpeg = await fileToUploadableJpeg(file)
+      const body = jpeg ?? file
+      const ext = jpeg ? 'jpg' : file.name.split('.').pop()?.toLowerCase() || 'jpg'
       const path = `${personId}/${date}/${crypto.randomUUID()}.${ext}`
-      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file)
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, body, { contentType: jpeg ? 'image/jpeg' : file.type || undefined })
       if (uploadError) {
         showToast('Tải ảnh lên thất bại')
         continue
