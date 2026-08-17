@@ -14,6 +14,7 @@ import {
   getNgontinhHistory,
   getNgontinhFollows, toggleNgontinhFollow
 } from './ngontinhService';
+import { notifyFollowsChanged } from './MangaNotificationBell';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhDetail.css';
@@ -104,6 +105,7 @@ export const NgontinhDetailPage: React.FC = () => {
     if (!slug) return;
     const added = toggleNgontinhFollow(slug);
     setFollows(getNgontinhFollows());
+    notifyFollowsChanged();
     showToast(added ? '🔔 Đang theo dõi truyện này! Sẽ nhận thông báo khi có chap mới' : '🔕 Đã hủy theo dõi truyện');
   };
 

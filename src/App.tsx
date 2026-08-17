@@ -31,6 +31,7 @@ import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { TaskNotificationBell } from './features/TaskNotificationBell'
+import { MangaNotificationBell } from './features/manga/MangaNotificationBell'
 import { ToastProvider } from './features/ToastContext'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -339,6 +340,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
           </div>
           <div className="header-actions">
             <TaskNotificationBell />
+            <MangaNotificationBell />
             {headerAction && (
               <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
                 <Plus size={20} />

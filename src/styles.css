@@ -2148,13 +2148,50 @@ header {
   margin: 0 auto;
 }
 
+.library-book-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.library-book-topbar h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-book-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.library-book-round:hover {
+  background: var(--purple-bg);
+  color: var(--purple);
+}
+
 .library-book-detail-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   padding: 16px;
   border: 1px solid var(--card-border);
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--card-bg);
 }
 
@@ -2162,6 +2199,65 @@ header {
   display: flex;
   gap: 14px;
   align-items: flex-start;
+}
+
+/* Dải chỉ số: chương · số chữ · % đã đọc. */
+.library-book-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+}
+
+.library-book-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  min-width: 0;
+}
+
+.library-book-stats svg {
+  color: var(--purple);
+}
+
+.library-book-stats strong {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.library-book-stats span {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}
+
+.library-book-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+}
+
+.library-book-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 14px;
+  background: var(--purple);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .library-book-heading {
@@ -2203,31 +2299,6 @@ header {
   font-weight: 700;
 }
 
-.library-book-cover-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.library-book-cover-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--card-border);
-  border-radius: 20px;
-  background: var(--card-bg);
-  color: var(--text-soft);
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.library-book-cover-actions button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .library-book-error {
   margin: 6px 0 0;
   color: var(--rose);
@@ -2237,6 +2308,7 @@ header {
 .library-book-progress {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   font-size: 0.76rem;
   font-weight: 700;
@@ -2257,30 +2329,42 @@ header {
   background: var(--purple);
 }
 
+/* Lưới action: icon trên, nhãn dưới — giống hàng nút vuông trong thiết kế. */
 .library-book-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
   gap: 8px;
 }
 
 .library-book-detail-actions button {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
   border: 1px solid var(--card-border);
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--card-bg);
   color: var(--text-main);
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
 }
 
-.library-book-detail-actions button.primary {
-  border-color: transparent;
-  background: var(--purple);
-  color: #fff;
+.library-book-detail-actions button svg {
+  color: var(--purple);
+}
+
+.library-book-detail-actions button:hover:not(:disabled) {
+  background: var(--purple-bg);
+}
+
+.library-book-detail-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .library-book-section h3 {
@@ -2347,14 +2431,19 @@ header {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   color: var(--text-main);
   font-size: 0.79rem;
   text-align: left;
   cursor: pointer;
+}
+
+.library-book-toc-chevron {
+  flex: 0 0 auto;
+  color: var(--text-soft);
 }
 
 .library-book-toc button:hover {
@@ -2369,8 +2458,15 @@ header {
 }
 
 .library-book-toc-index {
-  flex: 0 0 22px;
-  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--purple-bg);
+  color: var(--purple);
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -6706,18 +6802,7 @@ input[type='month'] {
   border-radius: 12px;
 }
 
-/* ---- Chi tiết sách: Đọc tiếp đứng cạnh hai tab Mục lục / Thông tin ---- */
-.library-book-primary-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.library-book-primary-row .primary {
-  flex: 0 0 auto;
-}
-
+/* ---- Chi tiết sách: hai tab Mục lục / Thông tin ---- */
 .library-book-tabs {
   display: flex;
   gap: 3px;
@@ -9432,6 +9517,12 @@ svg.lucide-library {
   font-size: 0.85rem; font-weight: 600; line-height: 1.5;
 }
 .kn-notice code { word-break: break-all; }
+
+/* Ảnh bìa trong chuông thông báo truyện */
+.mn-cover {
+  width: 34px; height: 46px; flex-shrink: 0;
+  border-radius: 6px; object-fit: cover; background: var(--line);
+}
 
 .kn-manage { display: flex; flex-direction: column; gap: 8px; }
 .kn-manage-hint { margin: 0; font-size: 0.78rem; line-height: 1.5; }

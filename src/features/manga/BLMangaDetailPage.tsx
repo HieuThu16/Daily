@@ -15,6 +15,7 @@ import {
   getFollows, toggleFollow
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
+import { notifyFollowsChanged } from './MangaNotificationBell';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './blMangaDetail.css';
@@ -117,6 +118,7 @@ export const BLMangaDetailPage: React.FC = () => {
     if (!manga) return;
     const added = toggleFollow(manga.slug);
     setFollows(getFollows());
+    notifyFollowsChanged();
     showToast(added ? '🔔 Đang theo dõi truyện này! Sẽ nhận thông báo khi có chap mới' : '🔕 Đã hủy theo dõi truyện');
   };
 
