@@ -16,6 +16,8 @@ function fmtDate(iso: string) {
   return new Intl.DateTimeFormat('vi-VN', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso))
 }
 
+const INSTALL_HINT = 'Trình duyệt này chưa cho cài tự động.\n\n• iPhone/iPad (Safari): nút Chia sẻ → "Thêm vào MH chính".\n• Android (Chrome): menu ⋮ → "Cài đặt ứng dụng".\n• Máy tính: biểu tượng cài đặt ở thanh địa chỉ.\n\nNếu đã cài rồi thì mở app từ màn hình chính nhé.'
+
 const TYPE_META: Record<ChangelogEntry['type'], { label: string; color: string }> = {
   feature: { label: 'Tính năng mới', color: 'var(--primary)' },
   improvement: { label: 'Cải tiến', color: '#0891b2' },
@@ -264,17 +266,18 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
                   <ChevronRight size={15} />
                 </button>
 
-                {/* Cài app PWA */}
-                {canInstall && (
-                  <button className="settings-row settings-row--highlight" onClick={onInstallPWA}>
-                    <div className="sr-icon sr-icon--primary"><Download size={16} /></div>
-                    <div className="sr-label-group">
-                      <span className="sr-label">Cài Daily về máy</span>
-                      <span className="sr-sub">Dùng như app thật, không cần trình duyệt</span>
-                    </div>
-                    <ChevronRight size={15} />
-                  </button>
-                )}
+                {/* Cài app PWA — luôn hiện; trình duyệt không hỗ trợ prompt thì chỉ dẫn thủ công */}
+                <button
+                  className="settings-row settings-row--highlight"
+                  onClick={() => (canInstall ? onInstallPWA() : alert(INSTALL_HINT))}
+                >
+                  <div className="sr-icon sr-icon--primary"><Download size={16} /></div>
+                  <div className="sr-label-group">
+                    <span className="sr-label">Cài Daily về máy</span>
+                    <span className="sr-sub">Dùng như app thật, không cần trình duyệt</span>
+                  </div>
+                  <ChevronRight size={15} />
+                </button>
 
               </div>
             </div>

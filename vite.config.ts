@@ -17,7 +17,10 @@ export default defineConfig({
         globIgnores: ['**/book-parsers-*.js', '**/pdf.worker*.mjs', '**/ngontinh_manga-*.js', '**/bl_manga-*.js'],
         importScripts: ['/push-sw.js'],
       },
-      manifest: { name: 'My Space', short_name: 'My Space', theme_color: '#466147', background_color: '#fafaf7', display: 'standalone', icons: [] },
+      manifest: { name: 'My Space', short_name: 'My Space', theme_color: '#466147', background_color: '#fafaf7', display: 'standalone', icons: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ] },
     }),
   ],
   build: {
