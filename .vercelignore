@@ -1,0 +1,8 @@
+# Vercel tự chạy build trên server, không cần upload bản build cục bộ.
+# dist/data/bl_manga.json ~105MB, vượt giới hạn 100MB/file của Vercel.
+dist
+.claude
+
+# Dữ liệu truyện ~112MB/file, vượt giới hạn 100MB/file của Vercel.
+public/data/bl_manga.json
+src/data/bl_manga.json

@@ -23,17 +23,9 @@ export async function fetchDuaLeoMangaList(): Promise<BLManga[]> {
     console.warn('Could not load /data/bl_manga.json, trying fallback import', err);
   }
 
-  try {
-    const fallback = await import('../../data/bl_manga.json');
-    const list = (fallback.default || fallback) as unknown as BLManga[];
-    return list.map(m => ({
-      ...m,
-      source: m.source || 'dualeo',
-      sourceName: m.sourceName || 'Dưa Leo'
-    }));
-  } catch (e) {
-    return [];
-  }
+  // Không nhúng src/data/bl_manga.json vào bundle: file ~112MB, vượt giới hạn
+  // 100MB/file của Vercel nên không deploy được. Dữ liệu chỉ đến từ /data/bl_manga.json.
+  return [];
 }
 
 /**
