@@ -1,4 +1,14 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'english' | 'money' | 'calendar' | 'people' | 'nutrition' | 'settings'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'english' | 'knowledge' | 'money' | 'calendar' | 'people' | 'nutrition' | 'settings'
+
+/** Một thẻ kiến thức: câu hỏi, câu trả lời và thể loại. */
+export type KnowledgeItem = {
+  id: string
+  question: string
+  answer: string
+  category: string
+  created_at?: string
+  deleted_at?: string | null
+}
 
 export type EnglishKind = 'WORD' | 'SENTENCE'
 

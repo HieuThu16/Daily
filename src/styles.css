@@ -9410,9 +9410,67 @@ svg.lucide-library {
 .eng-chip.is-on { background: var(--cyan-bg); color: var(--cyan); border-color: transparent; }
 
 .eng-form { display: flex; flex-direction: column; gap: 8px; }
-.eng-form input {
+.eng-form input,
+.eng-form textarea {
   padding: 10px; border: 1px solid var(--line); border-radius: 10px;
   background: transparent; color: inherit; width: 100%;
+  font: inherit; resize: vertical;
+}
+
+/* Tab Kiến thức: hỏi — đáp dạng gập mở */
+.kn-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px;
+  color: var(--muted);
+}
+.kn-search input {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; outline: none;
+}
+
+.kn-notice {
+  background: var(--amber-bg); color: var(--amber);
+  font-size: 0.85rem; font-weight: 600; line-height: 1.5;
+}
+.kn-notice code { word-break: break-all; }
+
+.kn-list { display: flex; flex-direction: column; gap: 10px; }
+
+.kn-card { padding: 0; overflow: hidden; transition: box-shadow 0.2s; }
+.kn-card.is-open { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); }
+
+.kn-head {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  width: 100%; padding: 14px; border: 0; background: transparent; color: inherit;
+  text-align: left; cursor: pointer; font: inherit;
+}
+
+.kn-cat {
+  padding: 3px 9px; border-radius: 99px;
+  background: var(--purple-bg); color: var(--purple);
+  font-size: 0.68rem; font-weight: 700; white-space: nowrap;
+}
+
+.kn-question { font-weight: 700; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+
+.kn-chevron { color: var(--muted); flex-shrink: 0; transition: transform 0.2s; }
+.kn-card.is-open .kn-chevron { transform: rotate(180deg); }
+
+.kn-body {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  padding: 12px 14px 14px; border-top: 1px solid var(--line);
+}
+.kn-answer { margin: 0; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.kn-del {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: transparent; color: var(--muted); font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+.kn-del:hover { color: #ef4444; border-color: #ef4444; }
+
+@media (max-width: 480px) {
+  .kn-head { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .kn-cat { grid-column: 1 / -1; justify-self: start; }
 }
 
 .eng-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }

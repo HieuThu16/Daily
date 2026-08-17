@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Film, Flame, Heart, HeartHandshake, Home, Languages, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
@@ -24,6 +24,7 @@ import { NgontinhMangaPage } from './features/manga/NgontinhMangaPage'
 import { NgontinhDetailPage } from './features/manga/NgontinhDetailPage'
 import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
 import { EnglishPage } from './features/english/EnglishPage'
+import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
 import { exportBackup } from './lib/backup'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
@@ -41,6 +42,7 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'bl', label: 'Truyện BL', icon: Heart, colorClass: 'icon-box-rose' },
   { id: 'ngontinh', label: 'Ngôn Tình', icon: HeartHandshake, colorClass: 'icon-box-rose' },
   { id: 'english', label: 'English', icon: Languages, colorClass: 'icon-box-cyan' },
+  { id: 'knowledge', label: 'Kiến thức', icon: Lightbulb, colorClass: 'icon-box-purple' },
   { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
   { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
   { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
@@ -83,7 +85,7 @@ const navGroups: { title: string; ids: Tab[] }[] = [
   { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh'] },
   { title: 'Giải trí & Nghệ thuật', ids: ['music', 'tvshow', 'movies', 'manga'] },
   { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
-  { title: 'Kiến thức & con người', ids: ['english', 'people'] },
+  { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] },
   { title: 'Hệ thống', ids: ['settings'] },
 ]
 
@@ -470,6 +472,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
                       <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
                       <Route path="/english" element={<EnglishPage />} />
+                      <Route path="/knowledge" element={<KnowledgePage />} />
                       <Route path="/people" element={<PeoplePage />} />
                       <Route path="/library" element={<Navigate to="/books" replace />} />
                       <Route path="/nutrition" element={<NutritionPage />} />
