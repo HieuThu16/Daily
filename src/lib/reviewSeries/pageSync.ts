@@ -6,9 +6,10 @@
  * nằm trong DB.
  */
 
-import { fetchChannelInfo, fetchPlaylistPage, fetchPlaylists } from './youtube'
-import { resolveSeries } from './seriesResolver'
-import { evaluateCompletion } from './completion'
+// Đuôi .js là bắt buộc: file này chạy cả trong hàm serverless Node ESM.
+import { fetchChannelInfo, fetchPlaylistPage, fetchPlaylists } from './youtube.js'
+import { resolveSeries } from './seriesResolver.js'
+import { evaluateCompletion } from './completion.js'
 import type { NormalizedVideo, PlatformPlaylist } from './types'
 
 type Db = any

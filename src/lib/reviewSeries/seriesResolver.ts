@@ -5,7 +5,7 @@
  * tiêu đề. Playlist là dữ liệu người đăng tự khai, luôn thắng suy đoán chuỗi.
  */
 
-import { detectPart, movieKey } from './partDetector'
+import { detectPart, movieKey } from './partDetector.js'
 import type { MovieMatch, NormalizedVideo, ReviewSeries, SeriesVideo } from './types'
 
 function toSeriesVideo(video: NormalizedVideo): SeriesVideo {

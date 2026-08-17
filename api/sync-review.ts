@@ -12,7 +12,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { startSync, syncOnePage } from '../src/lib/reviewSeries/pageSync'
+// package.json đặt "type": "module" nên hàm chạy dưới Node ESM — đường dẫn
+// tương đối bắt buộc có đuôi, thiếu là ERR_MODULE_NOT_FOUND lúc chạy.
+import { startSync, syncOnePage } from '../src/lib/reviewSeries/pageSync.js'
 
 export const config = { maxDuration: 60 }
 
