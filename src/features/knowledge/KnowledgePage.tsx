@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Plus, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, Plus, Search, Settings2, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHeaderAction } from '../HeaderAction'
 import type { KnowledgeItem } from '../../types'
-import { DEFAULT_CATEGORY, filterKnowledge, normalizeCategory } from './knowledge'
+import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory } from './knowledge'
 
 const EMPTY_FORM = { question: '', answer: '', category: '' }
 
@@ -20,6 +20,7 @@ export function KnowledgePage() {
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({})
   const [form, setForm] = useState(EMPTY_FORM)
   const [adding, setAdding] = useState(false)
+  const [managing, setManaging] = useState(false)
 
   useHeaderAction('Thêm thẻ kiến thức', () => setAdding(true))
 
@@ -36,10 +37,44 @@ export function KnowledgePage() {
     })()
   }, [])
 
-  const categories = useMemo(
-    () => [...new Set(items.map((i) => i.category))].sort((a, b) => a.localeCompare(b, 'vi')),
-    [items],
-  )
+  const stats = useMemo(() => categoryStats(items), [items])
+  const categories = useMemo(() => stats.map((s) => s.name), [stats])
+
+  /** Đổi tên thể loại cho mọi thẻ đang mang tên cũ. Trùng tên đã có thì thành gộp nhóm. */
+  const renameCategory = async (from: string) => {
+    const answer = window.prompt(`Đổi tên thể loại "${from}" thành:`, from)
+    if (answer === null) return
+    const to = normalizeCategory(answer)
+    if (to === from) return
+    const { error } = await supabase!
+      .from('knowledge_items')
+      .update({ category: to })
+      .eq('category', from)
+      .is('deleted_at', null)
+    if (error) {
+      alert('Chưa đổi được tên thể loại — kiểm tra kết nối.')
+      return
+    }
+    setItems((prev) => prev.map((i) => (i.category === from ? { ...i, category: to } : i)))
+    setCategory((prev) => (prev === from ? to : prev))
+  }
+
+  /** Xoá thể loại: chuyển hết thẻ của nó về "Chung", không xoá thẻ nào. */
+  const removeCategory = async (name: string, count: number) => {
+    if (name === DEFAULT_CATEGORY) return
+    if (!window.confirm(`Xoá thể loại "${name}"? ${count} thẻ sẽ chuyển về "${DEFAULT_CATEGORY}".`)) return
+    const { error } = await supabase!
+      .from('knowledge_items')
+      .update({ category: DEFAULT_CATEGORY })
+      .eq('category', name)
+      .is('deleted_at', null)
+    if (error) {
+      alert('Chưa xoá được thể loại — kiểm tra kết nối.')
+      return
+    }
+    setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: DEFAULT_CATEGORY } : i)))
+    setCategory((prev) => (prev === name ? null : prev))
+  }
 
   const visible = useMemo(() => filterKnowledge(items, category, search), [items, category, search])
 
@@ -103,6 +138,38 @@ export function KnowledgePage() {
             >
               {c}
             </button>
+          ))}
+          <button
+            className={`eng-chip ${managing ? 'is-on' : ''}`}
+            onClick={() => setManaging((prev) => !prev)}
+            aria-expanded={managing}
+          >
+            <Settings2 size={13} /> Quản lý thể loại
+          </button>
+        </div>
+      )}
+
+      {managing && (
+        <div className="card kn-manage">
+          <p className="muted kn-manage-hint">
+            Đổi tên trùng với thể loại đã có thì hai nhóm gộp làm một. Xoá thì thẻ chuyển về “{DEFAULT_CATEGORY}”.
+          </p>
+          {stats.map((s) => (
+            <div key={s.name} className="kn-manage-row">
+              <span className="kn-cat">{s.name}</span>
+              <span className="muted kn-manage-count">{s.count} thẻ</span>
+              <button className="kn-manage-btn" onClick={() => void renameCategory(s.name)}>
+                Đổi tên
+              </button>
+              <button
+                className="kn-manage-btn is-danger"
+                onClick={() => void removeCategory(s.name, s.count)}
+                disabled={s.name === DEFAULT_CATEGORY}
+                title={s.name === DEFAULT_CATEGORY ? `Không xoá được thể loại mặc định` : undefined}
+              >
+                Xoá
+              </button>
+            </div>
           ))}
         </div>
       )}

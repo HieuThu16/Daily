@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterKnowledge, normalizeCategory } from './knowledge'
+import { categoryStats, filterKnowledge, normalizeCategory } from './knowledge'
 import type { KnowledgeItem } from '../../types'
 
 const items: KnowledgeItem[] = [
@@ -13,6 +13,19 @@ describe('normalizeCategory', () => {
   })
   it('rỗng thì về Chung', () => {
     expect(normalizeCategory('   ')).toBe('Chung')
+  })
+})
+
+describe('categoryStats', () => {
+  it('đếm số thẻ mỗi thể loại và sắp theo tên', () => {
+    const more = [...items, { id: '3', question: 'Q', answer: 'A', category: 'Database' }]
+    expect(categoryStats(more)).toEqual([
+      { name: 'Database', count: 2 },
+      { name: 'JavaScript', count: 1 },
+    ])
+  })
+  it('danh sách rỗng thì không có thể loại nào', () => {
+    expect(categoryStats([])).toEqual([])
   })
 })
 

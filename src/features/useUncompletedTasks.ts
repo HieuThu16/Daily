@@ -44,15 +44,21 @@ export function useUncompletedTasks() {
   const completeTask = useCallback(async (task: Todo) => {
     // Cập nhật lạc quan (optimistic update)
     setTasks((prev) => prev.filter((t) => t.id !== task.id))
-    notifyTasksChanged()
 
-    if (!supabase) return
+    if (!supabase) {
+      notifyTasksChanged()
+      return
+    }
     const nowIso = new Date().toISOString()
     try {
-      await supabase
+      // Chỉ báo thay đổi SAU khi Supabase ghi xong: báo sớm thì các nơi nghe sự kiện
+      // sẽ đọc lại DB khi task vẫn còn completed = false và việc vừa xong hiện lại.
+      const { error } = await supabase
         .from('todos')
         .update({ completed: true, completed_at: nowIso })
         .eq('id', task.id)
+      if (error) throw error
+      notifyTasksChanged()
     } catch {
       // Nếu lỗi thì hoàn tác
       fetchUncompleted()

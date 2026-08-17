@@ -515,11 +515,12 @@ export function TasksPage() {
     const updateData = { completed: next, completed_at: completedAt }
 
     todos.setItems((prev) => prev.map((i) => (i.id === t.id ? { ...i, ...updateData } : i)))
-    notifyTasksChanged()
     const { error } = await supabase!.from('todos').update(updateData).eq('id', t.id)
     if (error) {
       reportWriteError(error, `todo:${t.id}`, { ...t, ...updateData })
     } else {
+      // Báo sau khi ghi xong, nếu không chuông sẽ đọc lại DB dữ liệu cũ và hiện lại việc.
+      notifyTasksChanged()
       showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
     }
   }

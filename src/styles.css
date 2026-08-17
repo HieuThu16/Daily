@@ -9433,6 +9433,19 @@ svg.lucide-library {
 }
 .kn-notice code { word-break: break-all; }
 
+.kn-manage { display: flex; flex-direction: column; gap: 8px; }
+.kn-manage-hint { margin: 0; font-size: 0.78rem; line-height: 1.5; }
+.kn-manage-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.kn-manage-count { font-size: 0.78rem; margin-right: auto; }
+.kn-manage-btn {
+  padding: 5px 11px; border: 1px solid var(--line); border-radius: 99px;
+  background: transparent; color: var(--muted);
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.kn-manage-btn:hover:not(:disabled) { color: var(--purple); border-color: var(--purple); }
+.kn-manage-btn.is-danger:hover:not(:disabled) { color: #ef4444; border-color: #ef4444; }
+.kn-manage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .kn-list { display: flex; flex-direction: column; gap: 10px; }
 
 .kn-card { padding: 0; overflow: hidden; transition: box-shadow 0.2s; }
