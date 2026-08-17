@@ -101,6 +101,7 @@ create table if not exists public.habits (
   daily_target  integer not null default 1          check (daily_target > 0),
   habit_type    text    not null default 'GOOD'     check (habit_type in ('GOOD','BAD')),
   routine       text             default 'MORNING'  check (routine in ('MORNING','AFTERNOON','EVENING')),
+  position      integer not null default 0,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   deleted_at    timestamptz

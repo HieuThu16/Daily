@@ -7,6 +7,8 @@ dist
 public/data/bl_manga.json
 src/data/bl_manga.json
 
-# Cùng lý do: romance ~138MB/file.
+# Cùng lý do: romance ~138MB/file, ngontinh ~128MB/file.
 public/data/romance_manga.json
 src/data/romance_manga.json
+public/data/ngontinh_manga.json
+src/data/ngontinh_manga.json

@@ -12,6 +12,30 @@ function toSeriesVideo(video: NormalizedVideo): SeriesVideo {
   return { ...video, part: detectPart(video.title, video.description) }
 }
 
+/**
+ * Rút tiêu đề hiển thị sạch sẽ nhưng GIỮ NGUYÊN DẤU TIẾNG VIỆT và chữ hoa/thường gốc.
+ */
+export function cleanDisplayTitle(rawTitle: string): string {
+  if (!rawTitle) return ''
+  let text = rawTitle.replace(/#\S+/g, ' ')
+  text = text.replace(
+    /\b(?:part|phan|phần|tap|tập|ep|episode|p)\s*[.:\-_]?\s*0*(\d{1,3})\b(?:\s*(?:\/\s*|of\s+|trên\s+|tren\s+)0*(\d{1,3})\b)?/gi,
+    ' ',
+  )
+  text = text.replace(/#\s*0*(\d{1,3})\b(?:\s*\/\s*0*(\d{1,3})\b)?/gi, ' ')
+  text = text.replace(/\b0*(\d{1,3})\s*(?:\/\s*|of\s+)0*(\d{1,3})\b/gi, ' ')
+  text = text.replace(
+    /\b(?:part\s*cuối|part\s*cuoi|phan\s*cuoi|phần\s*cuối|tập\s*cuối|tap\s*cuoi|kỳ\s*cuối|ky\s*cuoi|final(?:\s*part)?|finale|the\s*end|ending|kết\s*thúc|ket\s*thuc|hết|het|full\s*review)\b/gi,
+    ' ',
+  )
+  text = text.replace(
+    /\b(?:review|tóm\s*tắt|tom\s*tat|tomtat|full|hd|4k|vietsub|thuyết\s*minh|thuyet\s*minh|phim|movie|series|official|trailer|reaction|spoiler|toàn\s*bộ|toan\s*bo|hay\s*nhất|hay\s*nhat)\b/gi,
+    ' ',
+  )
+  text = text.replace(/[|\-_–—:]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return text || rawTitle.trim()
+}
+
 function movieOf(videos: SeriesVideo[], playlistName: string | null): MovieMatch {
   const evidence: string[] = []
   const keys = videos.map((v) => movieKey(v.title)).filter(Boolean)
@@ -39,9 +63,17 @@ function movieOf(videos: SeriesVideo[], playlistName: string | null): MovieMatch
     }
   }
 
+  // Lấy tiêu đề gốc tiếng Việt có dấu từ video tương ứng
+  const matchingVideo = videos.find((v) => movieKey(v.title) === key)
+  const bestAccentedTitle = matchingVideo
+    ? cleanDisplayTitle(matchingVideo.title)
+    : (videos[0] ? cleanDisplayTitle(videos[0].title) : key)
+
+  const movieTitle = playlistKey ? playlistName!.trim() : (bestAccentedTitle || key)
+
   return {
     movieId: key,
-    movieTitle: playlistKey ? playlistName!.trim() : key,
+    movieTitle,
     confidence: Math.min(confidence, 0.95),
     evidence,
   }

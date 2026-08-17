@@ -1,33 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, Clapperboard, CornerDownLeft, ExternalLink, Film, Pause, Play, Plus, Radio, Search, SkipBack, SkipForward, Trash2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, ExternalLink, Film, Pause, Play, Plus, Radio, Search, SkipBack, SkipForward, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
-import type { CompletionStatus } from '../../lib/reviewSeries/types'
 import './reviewSeries.css'
 
-/** Bảng chưa được tạo trên Supabase — cần chạy migration 20260911000000_review_series.sql. */
 const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
 
-/** Số thẻ mỗi lần tải. Kho có hàng nghìn series nên không thể lấy hết một lượt. */
-const PAGE_SIZE = 48
-
-type SeriesRow = {
-  series_key: string
+type ChannelItem = {
+  id: string
   platform: string
-  creator_name: string | null
-  title: string
-  movie_title: string | null
-  status: CompletionStatus
-  expected_parts: number | null
-  found_parts: number
-  missing_parts: number[]
+  creator_url: string
+  creator_name: string
+  creator_id: string | null
+  videoCount: number
+  watchedCount: number
+  cover: string | null
+  lastSyncedAt: string | null
 }
 
 type VideoRow = {
   id: string
   video_id: string
   series_key: string | null
+  creator_id: string | null
+  creator_name: string | null
   title: string
   canonical_url: string
   embed_url: string
@@ -37,24 +34,8 @@ type VideoRow = {
   unavailable_at: string | null
 }
 
-/** Nhãn tiếng Việt + màu cho từng trạng thái đủ/thiếu phần. */
-const STATUS: Record<CompletionStatus, { label: string; color: string }> = {
-  COMPLETE: { label: 'Đủ phần', color: 'var(--green, #16a34a)' },
-  POSSIBLY_COMPLETE: { label: 'Có thể đủ', color: 'var(--cyan, #0891b2)' },
-  INCOMPLETE: { label: 'Còn thiếu', color: 'var(--amber, #d97706)' },
-  STALLED: { label: 'Ngưng ra', color: 'var(--text-muted)' },
-  UNKNOWN: { label: 'Chưa rõ', color: 'var(--text-muted)' },
-  ERROR: { label: 'Lỗi', color: 'var(--rose, #e11d48)' },
-}
-
-const statusOf = (s: CompletionStatus) => STATUS[s] ?? STATUS.UNKNOWN
-
 export type ParsedVideo = { videoId: string; url: string }
 
-/**
- * Tách ô nhập nhiều dòng thành danh sách video theo đúng thứ tự đã dán —
- * thứ tự dán chính là thứ tự phần, người dùng chỉnh lại được trước khi lưu.
- */
 export function parseVideoLinks(text: string) {
   const seen = new Set<string>()
   const valid: ParsedVideo[] = []
@@ -76,7 +57,6 @@ export function parseVideoLinks(text: string) {
   return { valid, invalid }
 }
 
-/** Đổi chỗ hai phần tử. Dùng cho nút lên/xuống khi sắp thứ tự phần. */
 export function moveItem<T>(items: T[], from: number, to: number): T[] {
   if (to < 0 || to >= items.length || from === to) return items
   const next = [...items]
@@ -85,417 +65,654 @@ export function moveItem<T>(items: T[], from: number, to: number): T[] {
   return next
 }
 
-/** Tab Review phim: lưới thẻ series gom từ YouTube / TikTok, bấm vào xem ngay tại chỗ. */
+/**
+ * Tab Review phim: 1 Kênh = 1 Card.
+ * Gộp toàn bộ video review của kênh vào trong card đó, bấm vào xem toàn bộ video.
+ */
 export function ReviewSeriesView() {
-  const [series, setSeries] = useState<SeriesRow[]>([])
-  const [covers, setCovers] = useState<Record<string, string>>({})
-  const [seenCounts, setSeenCounts] = useState<Record<string, number>>({})
+  const [channels, setChannels] = useState<ChannelItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
-  const [query, setQuery] = useState('')
-  const [openSeries, setOpenSeries] = useState<SeriesRow | null>(null)
-  const [addOpen, setAddOpen] = useState(false)
-  const [channelOpen, setChannelOpen] = useState(false)
-  // Tăng lên sau khi thêm phim để bắt lưới tải lại; đổi `query` không đủ vì
-  // React bỏ qua setState khi giá trị y hệt.
+  const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
+  const [addChannelOpen, setAddChannelOpen] = useState(false)
+  const [addMovieOpen, setAddMovieOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
-  /** Ảnh bìa: lấy video đầu của mỗi series vừa tải, một lượt cho cả trang. */
-  const loadCovers = async (rows: SeriesRow[]) => {
-    const keys = rows.map((r) => r.series_key)
-    if (!keys.length) return
-    const res = await supabase
-      ?.from('review_videos')
-      .select('series_key,thumbnail,part_number')
-      .in('series_key', keys)
-      .not('thumbnail', 'is', null)
-      .order('part_number', { ascending: true, nullsFirst: false })
-    const next: Record<string, string> = {}
-    for (const v of (res?.data ?? []) as { series_key: string; thumbnail: string }[]) {
-      if (!next[v.series_key]) next[v.series_key] = v.thumbnail
-    }
-    setCovers((prev) => ({ ...next, ...prev }))
-  }
-
-  /** Đếm số phần đã xem của từng phim trong trang — một truy vấn cho cả lưới. */
-  const loadSeenCounts = async (rows: SeriesRow[]) => {
-    const keys = rows.map((r) => r.series_key)
-    if (!keys.length) return
-    const res = await supabase?.from('review_watched').select('series_key').in('series_key', keys)
-    const next: Record<string, number> = {}
-    for (const r of (res?.data ?? []) as { series_key: string }[]) {
-      next[r.series_key] = (next[r.series_key] ?? 0) + 1
-    }
-    setSeenCounts((prev) => ({ ...prev, ...next }))
-  }
-
-  const fetchPage = async (from: number, q: string) => {
-    let req = supabase
-      ?.from('review_series')
-      .select('series_key,platform,creator_name,title,movie_title,status,expected_parts,found_parts,missing_parts')
-      .is('deleted_at', null)
-    if (q) req = req?.or(`movie_title.ilike.%${q}%,title.ilike.%${q}%,creator_name.ilike.%${q}%`)
-    const res = await req
-      ?.order('found_parts', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .range(from, from + PAGE_SIZE - 1)
-
-    if (res?.error && MISSING_TABLE_CODES.includes(res.error.code ?? '')) setNeedsMigration(true)
-    const rows = (res?.data ?? []) as SeriesRow[]
-    setHasMore(rows.length === PAGE_SIZE)
-    void loadCovers(rows)
-    void loadSeenCounts(rows)
-    return rows
-  }
-
-  // Gõ xong 300ms mới gọi server, không bắn một request mỗi phím.
-  useEffect(() => {
-    const timer = setTimeout(() => setQuery(search.trim()), 300)
-    return () => clearTimeout(timer)
-  }, [search])
-
+  // Tải danh sách Kênh Review (1 kênh = 1 card)
   useEffect(() => {
     let alive = true
     setLoading(true)
+
     void (async () => {
-      const rows = await fetchPage(0, query)
-      if (!alive) return
-      setSeries(rows)
-      setLoading(false)
+      // 1. Lấy danh sách review creators
+      const creatorsRes = await supabase
+        ?.from('review_creators')
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+
+      if (creatorsRes?.error && MISSING_TABLE_CODES.includes(creatorsRes.error.code ?? '')) {
+        if (alive) {
+          setNeedsMigration(true)
+          setLoading(false)
+        }
+        return
+      }
+
+      const creators = (creatorsRes?.data ?? []) as any[]
+
+      // 2. Lấy danh sách video để tính số lượng, thumbnail và tiến độ cho từng kênh
+      const [videosRes, watchedRes] = await Promise.all([
+        supabase
+          ?.from('review_videos')
+          .select('video_id,creator_id,creator_name,thumbnail,published_at')
+          .is('unavailable_at', null)
+          .order('published_at', { ascending: false }),
+        supabase?.from('review_watched').select('video_id'),
+      ])
+
+      const allVideos = (videosRes?.data ?? []) as any[]
+      const watchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((w) => w.video_id))
+
+      // Gom video theo creator
+      const statsByCreator = new Map<string, { total: number; watched: number; cover: string | null }>()
+
+      for (const v of allVideos) {
+        const key = v.creator_id || v.creator_name || 'manual'
+        const stat = statsByCreator.get(key) ?? { total: 0, watched: 0, cover: null }
+        stat.total += 1
+        if (watchedIds.has(v.video_id)) stat.watched += 1
+        if (!stat.cover && v.thumbnail) stat.cover = v.thumbnail
+        statsByCreator.set(key, stat)
+      }
+
+      // Xây dựng danh sách Channel Cards
+      const channelCards: ChannelItem[] = creators.map((c) => {
+        const key = c.creator_id || c.creator_name || c.id
+        const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, watched: 0, cover: null }
+        return {
+          id: c.id,
+          platform: c.platform,
+          creator_url: c.creator_url,
+          creator_name: c.creator_name || 'Kênh Review Phim',
+          creator_id: c.creator_id,
+          videoCount: stat.total,
+          watchedCount: stat.watched,
+          cover: stat.cover,
+          lastSyncedAt: c.last_synced_at,
+        }
+      })
+
+      // Nếu có phim tự thêm
+      const manualStat = statsByCreator.get('manual')
+      if (manualStat && manualStat.total > 0 && !creators.some((c) => c.creator_id === 'manual')) {
+        channelCards.push({
+          id: 'manual',
+          platform: 'youtube',
+          creator_url: '',
+          creator_name: 'Phim tự thêm',
+          creator_id: 'manual',
+          videoCount: manualStat.total,
+          watchedCount: manualStat.watched,
+          cover: manualStat.cover,
+          lastSyncedAt: null,
+        })
+      }
+
+      if (alive) {
+        setChannels(channelCards)
+        setLoading(false)
+      }
     })()
+
     return () => {
       alive = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, reloadKey])
+  }, [reloadKey])
 
-  const loadMore = async () => {
-    setLoadingMore(true)
-    const rows = await fetchPage(series.length, query)
-    setSeries((prev) => [...prev, ...rows])
-    setLoadingMore(false)
+  const filteredChannels = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return channels
+    return channels.filter((c) => c.creator_name.toLowerCase().includes(q))
+  }, [channels, search])
+
+  const deleteChannel = async (channel: ChannelItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm(`Xoá kênh review "${channel.creator_name}" cùng toàn bộ phim của kênh này?`)) return
+    setLoading(true)
+
+    if (channel.id !== 'manual') {
+      await supabase?.from('review_creators').delete().eq('id', channel.id)
+    }
+
+    if (channel.creator_id) {
+      await supabase?.from('review_videos').delete().eq('creator_id', channel.creator_id)
+      await supabase?.from('review_series').delete().eq('creator_id', channel.creator_id)
+    } else {
+      await supabase?.from('review_videos').delete().eq('creator_name', channel.creator_name)
+      await supabase?.from('review_series').delete().eq('creator_name', channel.creator_name)
+    }
+
+    setReloadKey((k) => k + 1)
   }
 
-  if (openSeries) {
-    return <SeriesDetail series={openSeries} onBack={() => setOpenSeries(null)} />
+  // Mở chi tiết 1 Kênh Review
+  if (selectedChannel) {
+    return (
+      <ReviewChannelDetailView
+        channel={selectedChannel}
+        onBack={() => {
+          setSelectedChannel(null)
+          setReloadKey((k) => k + 1)
+        }}
+      />
+    )
   }
 
   return (
     <section className="rv-page">
+      {/* Toolbar */}
       <div className="rv-bar">
-        <Search size={15} style={{ color: 'var(--text-muted)' }} />
-        <input
-          className="rv-search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm tên phim, kênh…"
-        />
-        <button className="rv-btn" onClick={() => setChannelOpen(true)}>
+        <div className="rv-search-box">
+          <Search size={16} style={{ color: 'var(--text-muted)' }} />
+          <input
+            className="rv-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm kiếm kênh review phim…"
+          />
+        </div>
+        <button className="rv-btn primary" onClick={() => setAddChannelOpen(true)}>
           <Radio size={14} /> Thêm kênh
         </button>
-        <button className="rv-btn primary" onClick={() => setAddOpen(true)}>
-          <Plus size={14} /> Thêm phim
+        <button className="rv-btn" onClick={() => setAddMovieOpen(true)}>
+          <Plus size={14} /> Thêm phim lẻ
         </button>
       </div>
 
       {needsMigration ? (
         <div className="rv-empty">
-          Chưa có bảng review series. Chạy migration <code>20260911000000_review_series.sql</code>.
+          Chưa có bảng review series trên Supabase. Chạy migration <code>20260911000000_review_series.sql</code> trên SQL Editor rồi tải lại trang.
         </div>
       ) : loading ? (
-        <div className="rv-empty">Đang tải…</div>
-      ) : !series.length ? (
+        <div className="rv-empty">Đang tải danh sách kênh review…</div>
+      ) : !filteredChannels.length ? (
         <div className="rv-empty">
-          {query ? `Không có phim nào khớp “${query}”.` : 'Chưa có phim nào. Bấm “Thêm phim” rồi dán link.'}
+          {search
+            ? `Không tìm thấy kênh nào khớp “${search}”.`
+            : 'Chưa có kênh review nào. Bấm “Thêm kênh” rồi dán link YouTube để cào toàn bộ video review.'}
         </div>
       ) : (
-        <>
-          <div className="rv-grid">
-            {series.map((s) => {
-              const st = statusOf(s.status)
-              const cover = covers[s.series_key]
-              const seen = seenCounts[s.series_key] ?? 0
-              return (
-                <button key={s.series_key} className="rv-card" onClick={() => setOpenSeries(s)}>
-                  <div className="rv-thumb">
-                    {cover ? (
-                      <img src={cover} alt="" loading="lazy" />
-                    ) : (
-                      <div className="rv-thumb-empty">
-                        <Film size={26} />
-                      </div>
-                    )}
-                    <span className="rv-badge" style={{ color: st.color }}>
-                      {st.label}
-                    </span>
-                    <span className="rv-count">
-                      {s.found_parts}
-                      {s.expected_parts ? `/${s.expected_parts}` : ''} phần
-                    </span>
-                    {seen > 0 && (
-                      <span className={`rv-seen-pill${seen >= s.found_parts ? ' done' : ''}`}>
-                        {seen >= s.found_parts ? 'Đã xem xong' : `Đã xem ${seen}/${s.found_parts}`}
-                      </span>
-                    )}
-                  </div>
-                  <div className="rv-card-body">
-                    <span className="rv-card-title">{s.movie_title || s.title}</span>
-                    <span className="rv-card-sub">{s.creator_name || s.platform}</span>
-                    {s.missing_parts?.length > 0 && (
-                      <span className="rv-missing">
-                        Thiếu phần {s.missing_parts.slice(0, 6).join(', ')}
-                        {s.missing_parts.length > 6 ? '…' : ''}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+        <div className="rv-channel-grid">
+          {filteredChannels.map((c) => {
+            const isDone = c.videoCount > 0 && c.watchedCount >= c.videoCount
+            const percent = c.videoCount > 0 ? Math.round((c.watchedCount / c.videoCount) * 100) : 0
 
-          {hasMore && (
-            <button
-              className="rv-btn"
-              onClick={() => void loadMore()}
-              disabled={loadingMore}
-              style={{ alignSelf: 'center' }}
-            >
-              {loadingMore ? 'Đang tải…' : 'Tải thêm'}
-            </button>
-          )}
-        </>
+            return (
+              <div
+                key={c.id}
+                className="rv-channel-card"
+                onClick={() => setSelectedChannel(c)}
+              >
+                <div className="rv-channel-cover">
+                  {c.cover ? (
+                    <img src={c.cover} alt={c.creator_name} loading="lazy" />
+                  ) : (
+                    <div className="rv-channel-cover-empty">
+                      <Film size={36} />
+                    </div>
+                  )}
+
+                  <span className="rv-badge-live">
+                    <Film size={11} /> KÊNH REVIEW
+                  </span>
+
+                  <span className="rv-count-pill">
+                    {c.videoCount} video
+                  </span>
+
+                  {c.watchedCount > 0 && (
+                    <span className={`rv-seen-pill${isDone ? ' done' : ''}`}>
+                      {isDone ? 'Đã xem hết' : `Đã xem ${c.watchedCount}/${c.videoCount}`}
+                    </span>
+                  )}
+                </div>
+
+                <div className="rv-channel-body">
+                  <div className="rv-channel-header">
+                    <div className="rv-channel-title">{c.creator_name}</div>
+                    <button
+                      className="rv-btn"
+                      style={{ padding: '4px 6px', border: 'none', background: 'transparent', color: 'var(--text-muted)' }}
+                      onClick={(e) => void deleteChannel(c, e)}
+                      title="Xoá kênh này"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <span className="rv-channel-sub">
+                    {c.videoCount > 0 ? `Tổng cộng ${c.videoCount} video review` : 'Chưa có video'}
+                  </span>
+
+                  {c.videoCount > 0 && (
+                    <div className="rv-channel-progress">
+                      <div className="rv-channel-progress-head">
+                        <span>Tiến độ xem</span>
+                        <span>{percent}%</span>
+                      </div>
+                      <div className="rv-channel-progress-bar">
+                        <div
+                          className="rv-channel-progress-fill"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
 
-      {addOpen && <AddMovieModal onClose={() => setAddOpen(false)} onSaved={() => setReloadKey((k) => k + 1)} />}
-      {channelOpen && (
-        <AddChannelModal onClose={() => setChannelOpen(false)} onSynced={() => setReloadKey((k) => k + 1)} />
+      {addChannelOpen && (
+        <AddChannelModal
+          onClose={() => setAddChannelOpen(false)}
+          onSynced={() => setReloadKey((k) => k + 1)}
+        />
+      )}
+
+      {addMovieOpen && (
+        <AddMovieModal
+          onClose={() => setAddMovieOpen(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
       )}
     </section>
   )
 }
 
-/** Màn xem: trình phát nhúng bên trái, danh sách phần bên phải. */
-function SeriesDetail({ series, onBack }: { series: SeriesRow; onBack: () => void }) {
+/**
+ * Màn hình xem chi tiết 1 Kênh Review (Gộp toàn bộ video review của kênh vào đây).
+ */
+function ReviewChannelDetailView({
+  channel,
+  onBack,
+}: {
+  channel: ChannelItem
+  onBack: () => void
+}) {
   const [videos, setVideos] = useState<VideoRow[]>([])
   const [watched, setWatched] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [autoplay, setAutoplay] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [playbackRate, setPlaybackRate] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tvshow_playback_rate')
+      return saved ? parseFloat(saved) : 1
+    } catch {
+      return 1
+    }
+  })
+
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const playerBoxRef = useRef<HTMLDivElement>(null)
+
+  const sendYouTubeCommand = (func: string, args: any[] = []) => {
+    if (!iframeRef.current || !iframeRef.current.contentWindow) return
+    iframeRef.current.contentWindow.postMessage(
+      JSON.stringify({
+        event: 'command',
+        func,
+        args,
+      }),
+      '*'
+    )
+  }
+
+  const applyPlaybackRate = (rate: number) => {
+    setPlaybackRate(rate)
+    try {
+      localStorage.setItem('tvshow_playback_rate', String(rate))
+    } catch {}
+    sendYouTubeCommand('setPlaybackRate', [rate])
+  }
 
   useEffect(() => {
     void (async () => {
+      let query = supabase
+        ?.from('review_videos')
+        .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at')
+        .is('unavailable_at', null)
+
+      if (channel.id === 'manual') {
+        query = query?.eq('creator_id', 'manual')
+      } else if (channel.creator_id) {
+        query = query?.or(`creator_id.eq.${channel.creator_id},creator_name.eq.${channel.creator_name}`)
+      } else {
+        query = query?.eq('creator_name', channel.creator_name)
+      }
+
       const [videoRes, watchedRes] = await Promise.all([
-        supabase
-          ?.from('review_videos')
-          .select('id,video_id,series_key,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at')
-          .eq('series_key', series.series_key)
-          .order('part_number', { ascending: true, nullsFirst: false })
-          .order('published_at', { ascending: true }),
-        supabase?.from('review_watched').select('video_id').eq('series_key', series.series_key),
+        query?.order('part_number', { ascending: true, nullsFirst: false }).order('published_at', { ascending: false }),
+        supabase?.from('review_watched').select('video_id'),
       ])
 
       const rows = (videoRes?.data ?? []) as VideoRow[]
-      const seen = new Set((watchedRes?.data ?? []).map((r: { video_id: string }) => r.video_id))
       setVideos(rows)
-      setWatched(seen)
-      // Mở sẵn phần chưa xem đầu tiên; xem hết rồi thì quay về phần đầu.
-      const next = rows.find((v) => !v.unavailable_at && !seen.has(v.video_id))
-      setPlayingId((next ?? rows.find((v) => !v.unavailable_at))?.id ?? null)
+
+      const watchedSet = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
+      setWatched(watchedSet)
+
+      const firstUnwatched = rows.find((r) => !watchedSet.has(r.video_id))
+      setPlayingId(firstUnwatched ? firstUnwatched.video_id : rows[0]?.video_id ?? null)
       setLoading(false)
     })()
-  }, [series.series_key])
+  }, [channel])
 
-  /** Đánh dấu đã xem / bỏ đánh dấu. Cập nhật giao diện trước rồi mới ghi. */
-  const toggleWatched = async (video: VideoRow) => {
-    const isWatched = watched.has(video.video_id)
-    setWatched((prev) => {
-      const next = new Set(prev)
-      if (isWatched) next.delete(video.video_id)
-      else next.add(video.video_id)
-      return next
-    })
+  const filteredVideos = useMemo(() => {
+    let result = videos
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter((v) => v.title.toLowerCase().includes(q))
+    }
+    if (filterMode === 'unwatched') {
+      result = result.filter((v) => !watched.has(v.video_id))
+    } else if (filterMode === 'watched') {
+      result = result.filter((v) => watched.has(v.video_id))
+    }
+    return result
+  }, [videos, search, filterMode, watched])
 
-    const { error } = isWatched
-      ? await supabase!.from('review_watched').delete().eq('platform', 'youtube').eq('video_id', video.video_id)
-      : await supabase!.from('review_watched').upsert(
-          { platform: 'youtube', video_id: video.video_id, series_key: series.series_key },
-          { onConflict: 'user_id,platform,video_id' },
-        )
+  const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
+  const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : filteredVideos[0]
 
-    // Ghi hỏng thì trả giao diện về đúng sự thật, không để người dùng tin nhầm.
-    if (error) {
-      setWatched((prev) => {
-        const next = new Set(prev)
-        if (isWatched) next.add(video.video_id)
-        else next.delete(video.video_id)
-        return next
+  const toggleWatched = async (videoId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const isWatched = watched.has(videoId)
+    const next = new Set(watched)
+    if (isWatched) {
+      next.delete(videoId)
+      setWatched(next)
+      await supabase?.from('review_watched').delete().eq('platform', 'youtube').eq('video_id', videoId)
+    } else {
+      next.add(videoId)
+      setWatched(next)
+      await supabase?.from('review_watched').upsert({
+        platform: 'youtube',
+        video_id: videoId,
+        watched_at: new Date().toISOString(),
       })
     }
   }
 
-  const playing = useMemo(() => videos.find((v) => v.id === playingId) ?? null, [videos, playingId])
-  const st = statusOf(series.status)
-
-  // Chỉ tự chạy khi người dùng tự chọn phần; mở trang mà video tự phát là phiền.
-  const playable = useMemo(() => videos.filter((v) => !v.unavailable_at), [videos])
-  const at = playable.findIndex((v) => v.id === playingId)
-
-  const jump = (step: number) => {
-    const next = playable[at + step]
-    if (!next) return
-    setPlayingId(next.id)
-    setAutoplay(true)
-    if (!watched.has(next.video_id)) void toggleWatched(next)
+  const nextVideo = () => {
+    if (currentIndex < filteredVideos.length - 1) {
+      setPlayingId(filteredVideos[currentIndex + 1].video_id)
+      setAutoplay(true)
+    }
   }
 
+  const prevVideo = () => {
+    if (currentIndex > 0) {
+      setPlayingId(filteredVideos[currentIndex - 1].video_id)
+      setAutoplay(true)
+    }
+  }
+
+  const watchedCountInChannel = useMemo(() => {
+    return videos.filter((v) => watched.has(v.video_id)).length
+  }, [videos, watched])
+
+  const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube-nocookie.com/embed/${currentVideo.video_id}` : '')
+  const embedSrc = embedBase ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=${autoplay ? 1 : 0}&rel=0&enablejsapi=1` : ''
+
   return (
-    <section className="rv-page">
-      <div className="rv-bar">
+    <div className="rv-detail">
+      {/* Top Header */}
+      <div className="rv-detail-bar">
         <button className="rv-btn" onClick={onBack}>
-          <ArrowLeft size={14} /> Quay lại
+          <ArrowLeft size={14} /> Danh sách kênh
         </button>
-        <span style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: '0.92rem' }}>
-          {series.movie_title || series.title}
-        </span>
-        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: st.color }}>{st.label}</span>
+        <div className="rv-detail-title-wrap">
+          <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+            🎬 {channel.creator_name}
+          </span>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            ({videos.length} video)
+          </span>
+        </div>
       </div>
 
-      <div className="rv-detail">
-        <div>
-          <div className="rv-player-wrap">
-            {playing ? (
-              <iframe
-                key={playing.id}
-                src={autoplay ? `${playing.embed_url}?autoplay=1` : playing.embed_url}
-                title={playing.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
-              <div className="rv-thumb-empty">
-                <Clapperboard size={30} />
+      {loading ? (
+        <div className="rv-empty">Đang tải video review…</div>
+      ) : !videos.length ? (
+        <div className="rv-empty">Kênh này chưa có video nào.</div>
+      ) : (
+        <div className="rv-detail-layout">
+          {/* Cột trái: Trình phát YouTube */}
+          <div ref={playerBoxRef} className="rv-player-box">
+            <div className="rv-player-frame">
+              {currentVideo && embedSrc ? (
+                <iframe
+                  ref={iframeRef}
+                  src={embedSrc}
+                  title={currentVideo.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  onLoad={() => {
+                    if (playbackRate !== 1) {
+                      setTimeout(() => sendYouTubeCommand('setPlaybackRate', [playbackRate]), 400)
+                      setTimeout(() => sendYouTubeCommand('setPlaybackRate', [playbackRate]), 1200)
+                    }
+                  }}
+                />
+              ) : (
+                <div className="rv-channel-cover-empty">Chọn một video để phát</div>
+              )}
+            </div>
+
+            {currentVideo && (
+              <div className="rv-player-info">
+                <div className="rv-player-title">{currentVideo.title}</div>
+                <div className="rv-player-actions">
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      className="rv-btn"
+                      onClick={prevVideo}
+                      disabled={currentIndex <= 0}
+                      title="Video trước"
+                    >
+                      <SkipBack size={13} />
+                    </button>
+                    <button
+                      className="rv-btn"
+                      onClick={nextVideo}
+                      disabled={currentIndex >= filteredVideos.length - 1}
+                      title="Video tiếp theo"
+                    >
+                      <SkipForward size={13} />
+                    </button>
+                    <button
+                      className={`rv-btn ${watched.has(currentVideo.video_id) ? 'primary' : ''}`}
+                      onClick={() => void toggleWatched(currentVideo.video_id)}
+                    >
+                      {watched.has(currentVideo.video_id) ? (
+                        <>
+                          <CheckCircle2 size={14} /> Đã xem
+                        </>
+                      ) : (
+                        <>
+                          <Circle size={14} /> Đánh dấu đã xem
+                        </>
+                      )}
+                    </button>
+
+                    {/* Nút bật/tắt nhanh 2x */}
+                    <button
+                      type="button"
+                      className={`rv-btn ${playbackRate === 2 ? 'primary' : ''}`}
+                      onClick={() => applyPlaybackRate(playbackRate === 2 ? 1 : 2)}
+                      title="Chuyển đổi nhanh tốc độ 2x"
+                      style={{ fontWeight: 800 }}
+                    >
+                      ⚡ {playbackRate === 2 ? 'Đang 2x' : 'Chế độ 2x'}
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Bảng chọn tốc độ phát */}
+                    <div className="rv-speed-group" title="Chọn tốc độ phát">
+                      {[1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                        <button
+                          key={rate}
+                          type="button"
+                          className={`rv-speed-btn ${rate === 2 ? 'is-2x' : ''} ${playbackRate === rate ? 'active' : ''}`}
+                          onClick={() => applyPlaybackRate(rate)}
+                        >
+                          {rate}x
+                        </button>
+                      ))}
+                    </div>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={autoplay}
+                        onChange={(e) => setAutoplay(e.target.checked)}
+                      />
+                      Tự phát tiếp
+                    </label>
+                    <a
+                      href={currentVideo.canonical_url || `https://www.youtube.com/watch?v=${currentVideo.video_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rv-btn"
+                      title="Mở trên YouTube"
+                    >
+                      <ExternalLink size={13} /> YouTube
+                    </a>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
-          {playing && (
-            <>
-              <div style={{ marginTop: 8, fontSize: '0.86rem', fontWeight: 700, lineHeight: 1.35 }}>
-                {playing.title}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                <button className="rv-btn" onClick={() => jump(-1)} disabled={at <= 0}>
-                  <SkipBack size={13} /> Phần trước
-                </button>
-                <button className="rv-btn" onClick={() => jump(1)} disabled={at < 0 || at >= playable.length - 1}>
-                  Phần sau <SkipForward size={13} />
-                </button>
-                <span style={{ flex: 1 }} />
-                <a className="rv-btn" href={playing.canonical_url} target="_blank" rel="noreferrer">
-                  <ExternalLink size={13} /> Mở trên YouTube
-                </a>
-              </div>
-            </>
-          )}
+          {/* Cột phải: Danh sách video */}
+          <div className="rv-episodes-box">
+            <div className="rv-episodes-head">
+              <span className="rv-episodes-head-title">
+                Danh sách video ({filteredVideos.length})
+              </span>
+              <span className="rv-episodes-head-stat">
+                Đã xem {watchedCountInChannel}/{videos.length}
+              </span>
+            </div>
 
-          <div className="rv-hint">
-            {series.creator_name || series.platform} · {series.found_parts}
-            {series.expected_parts ? `/${series.expected_parts}` : ''} phần
-            {videos.length > 0 && ` · đã xem ${watched.size}/${videos.length}`}
-            {series.missing_parts?.length ? ` · thiếu phần ${series.missing_parts.join(', ')}` : ''}
+            <input
+              className="rv-ep-search"
+              placeholder="Tìm video review trong kênh…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+
+            <div className="rv-ep-filters">
+              <button
+                className={`rv-ep-filter-btn ${filterMode === 'all' ? 'active' : ''}`}
+                onClick={() => setFilterMode('all')}
+              >
+                Tất cả ({videos.length})
+              </button>
+              <button
+                className={`rv-ep-filter-btn ${filterMode === 'unwatched' ? 'active' : ''}`}
+                onClick={() => setFilterMode('unwatched')}
+              >
+                Chưa xem ({videos.length - watchedCountInChannel})
+              </button>
+              <button
+                className={`tv-ep-filter-btn ${filterMode === 'watched' ? 'active' : ''}`}
+                onClick={() => setFilterMode('watched')}
+              >
+                Đã xem ({watchedCountInChannel})
+              </button>
+            </div>
+
+            <div className="rv-episodes-list">
+              {filteredVideos.map((v, i) => {
+                const isPlaying = v.video_id === playingId
+                const isWatched = watched.has(v.video_id)
+                return (
+                  <div
+                    key={v.video_id}
+                    className={`rv-episode-item ${isPlaying ? 'playing' : ''}`}
+                    onClick={() => {
+                      setPlayingId(v.video_id)
+                      setAutoplay(true)
+                      playerBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    }}
+                  >
+                    <img
+                      src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                      alt=""
+                      className="rv-ep-thumb"
+                      loading="lazy"
+                    />
+                    <div className="tv-ep-text">
+                      <span className="rv-ep-name">
+                        #{i + 1}. {v.title}
+                      </span>
+                    </div>
+                    <button
+                      className={`rv-ep-watch-btn ${isWatched ? 'watched' : ''}`}
+                      onClick={(e) => void toggleWatched(v.video_id, e)}
+                      title={isWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+                    >
+                      {isWatched ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
-
-        <div className="rv-episodes">
-          {loading ? (
-            <div className="rv-hint" style={{ padding: 8 }}>
-              Đang tải…
-            </div>
-          ) : (
-            videos.map((v) => {
-              const seen = watched.has(v.video_id)
-              return (
-                <div
-                  key={v.id}
-                  className={`rv-episode${v.id === playingId ? ' active' : ''}${v.unavailable_at ? ' gone' : ''}${seen ? ' seen' : ''}`}
-                >
-                  <button
-                    className="rv-episode-main"
-                    onClick={() => {
-                      if (v.unavailable_at) return
-                      setPlayingId(v.id)
-                      setAutoplay(true)
-                      // Bấm xem là coi như đã xem; bỏ đánh dấu bằng nút bên phải.
-                      if (!seen) void toggleWatched(v)
-                    }}
-                    title={v.unavailable_at ? 'Video đã bị gỡ khỏi nền tảng' : v.title}
-                  >
-                    {v.thumbnail ? <img src={v.thumbnail} alt="" loading="lazy" /> : <Play size={14} />}
-                    <span className="rv-episode-title">
-                      {v.part_number ? `#${v.part_number} · ` : ''}
-                      {v.title}
-                    </span>
-                  </button>
-                  <button
-                    className="rv-seen-btn"
-                    onClick={() => void toggleWatched(v)}
-                    aria-pressed={seen}
-                    title={seen ? 'Bỏ đánh dấu đã xem' : 'Đánh dấu đã xem'}
-                  >
-                    {seen ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-                  </button>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </div>
-    </section>
+      )}
+    </div>
   )
 }
 
-/** Nhận ra link kênh YouTube: /@handle, /channel/UC…, /c/…, /user/… */
-export function isChannelUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url.trim())
-    const host = parsed.hostname.replace(/^www\./, '')
-    if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return false
-    return /^\/(@[^/]+|channel\/UC[\w-]+|c\/[^/]+|user\/[^/]+)/.test(parsed.pathname)
-  } catch {
-    return false
-  }
-}
-
-type ChannelState = { url: string; status: 'chờ' | 'đang chạy' | 'xong' | 'dừng' | 'lỗi'; note: string }
-
-const post = async (body: unknown) => {
-  const res = await fetch('/api/sync-review', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-  return data
-}
-
-/**
- * Dán link kênh, server tải hết video rồi tự gom thành series theo phim.
- *
- * Chạy tuần tự từng kênh: quota YouTube tính theo lượt gọi, bắn song song chỉ
- * làm cạn quota nhanh hơn chứ không nhanh hơn bao nhiêu.
- */
+/** Modal cào kênh YouTube cho Review Phim */
 function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced: () => void }) {
   const [text, setText] = useState('')
-  const [rows, setRows] = useState<ChannelState[]>([])
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null)
-  // Cờ dừng đọc ngay trong vòng lặp nên phải là ref — state cập nhật bất đồng bộ,
-  // vòng lặp sẽ chạy thêm cả trang nữa mới thấy.
+  const [rows, setRows] = useState<{ url: string; status: 'chờ' | 'đang chạy' | 'xong' | 'lỗi' | 'dừng'; note: string }[]>([])
   const stopRef = useRef(false)
+
+  const post = async (body: any) => {
+    const res = await fetch('/api/sync-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+    return json
+  }
+
+  const isChannelUrl = (raw: string) => {
+    try {
+      const u = new URL(raw.trim())
+      const host = u.hostname.replace(/^www\./, '')
+      return host === 'youtube.com' || host.endsWith('.youtube.com')
+    } catch {
+      return false
+    }
+  }
 
   const urls = useMemo(
     () => [...new Set(text.split(/[\n,\s]+/).map((s) => s.trim()).filter(Boolean))],
@@ -504,7 +721,6 @@ function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced:
   const valid = useMemo(() => urls.filter(isChannelUrl), [urls])
   const invalid = useMemo(() => urls.filter((u) => !isChannelUrl(u)), [urls])
 
-  /** Tải một kênh, trang một, ghi ngay từng trang. Trả số video đã lưu. */
   const runChannel = async (url: string, at: number) => {
     const { plan } = await post({ action: 'plan', creatorUrl: url })
     let saved = 0
@@ -527,8 +743,6 @@ function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced:
         )
         if (outcome.saved > 0) onSynced()
 
-        // Uploads xếp mới nhất trước: gặp nguyên trang toàn video đã có nghĩa là
-        // phần còn lại cũng đã có, khỏi duyệt tiếp cho tốn quota.
         if (entry.isUploads && outcome.allKnown && pages > 1) break
 
         pageToken = outcome.nextPageToken
@@ -576,11 +790,11 @@ function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced:
         value={text}
         onChange={(e) => setText(e.target.value)}
         disabled={running}
-        placeholder={'Dán link kênh, mỗi dòng một kênh:\nhttps://www.youtube.com/@Cúckickreview\nhttps://www.youtube.com/@phephim'}
+        placeholder={'Dán link kênh, mỗi dòng một kênh:\nhttps://www.youtube.com/@Cuckickreview\nhttps://www.youtube.com/@phephim'}
       />
 
       <div className="rv-hint">
-        Nhận được <strong>{valid.length}</strong> link kênh. Server sẽ tải video rồi tự gom thành từng phim.
+        Nhận được <strong>{valid.length}</strong> link kênh. Server sẽ cào toàn bộ video review của kênh và gom thành một thẻ Kênh.
         {invalid.length > 0 && (
           <>
             {' '}
@@ -614,7 +828,7 @@ function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced:
               <span className={`rv-run-${r.status === 'lỗi' ? 'bad' : r.status === 'xong' ? 'ok' : 'wait'}`}>
                 {r.status}
               </span>
-              <span className="rv-episode-title">
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                 {r.url}
                 {r.note && ` · ${r.note}`}
               </span>
@@ -622,11 +836,6 @@ function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced:
           ))}
         </div>
       )}
-
-      <div className="rv-hint">
-        Mỗi lần bấm lấy khoảng <strong>300 video mới nhất</strong> mỗi playlist — serverless bị cắt sau 60 giây. Muốn
-        vét sạch kênh vài nghìn video thì chạy <code>npm run crawl:reviews</code> ở máy.
-      </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
         <button className="rv-btn" onClick={onClose} disabled={running}>
@@ -648,12 +857,7 @@ function AddChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced:
 
 type DraftPart = ParsedVideo & { title: string; thumbnail: string }
 
-/**
- * Thêm một phim: dán một hoặc nhiều link video, sắp thứ tự phần rồi lưu.
- *
- * Tiêu đề lấy qua oEmbed công khai nên không cần API key — link hỏng hay video
- * riêng tư thì vẫn lưu được, chỉ là để tạm tên theo số phần.
- */
+/** Modal thêm phim lẻ thủ công */
 function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [step, setStep] = useState<'paste' | 'order'>('paste')
   const [text, setText] = useState('')
@@ -663,23 +867,19 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [error, setError] = useState<string | null>(null)
 
   const boxRef = useRef<HTMLTextAreaElement>(null)
-
   const { valid, invalid } = useMemo(() => parseVideoLinks(text), [text])
 
-  /** Chèn xuống dòng ngay tại con trỏ — bàn phím điện thoại hay thiếu phím này. */
   const insertNewline = () => {
     const box = boxRef.current
     const at = box?.selectionStart ?? text.length
     const end = box?.selectionEnd ?? at
     setText(text.slice(0, at) + '\n' + text.slice(end))
-    // Đặt lại con trỏ sau khi React vẽ xong, nếu không nó nhảy về cuối ô.
     requestAnimationFrame(() => {
       box?.focus()
       box?.setSelectionRange(at + 1, at + 1)
     })
   }
 
-  /** Đọc tiêu đề từng video rồi sang bước sắp thứ tự. */
   const loadTitles = async () => {
     setBusy(true)
     const metas = await Promise.all(valid.map((v) => fetchYouTubeMeta(v.url)))
@@ -714,7 +914,6 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         movie_title: name,
         movie_confidence: 1,
         movie_evidence: ['nhập tay'],
-        // Người dùng tự khai đủ danh sách nên đây là bằng chứng cứng nhất.
         status: 'COMPLETE',
         expected_parts: parts.length,
         found_parts: parts.length,
@@ -756,7 +955,7 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   }
 
   return (
-    <Modal title="🎬 Thêm phim" onClose={onClose}>
+    <Modal title="🎬 Thêm phim lẻ" onClose={onClose}>
       {step === 'paste' ? (
         <>
           <textarea
@@ -770,7 +969,7 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
             <CornerDownLeft size={13} /> Xuống dòng
           </button>
           <div className="rv-hint">
-            Nhận được <strong>{valid.length}</strong> link. Một link cũng được — khi đó phim chỉ có một phần.
+            Nhận được <strong>{valid.length}</strong> link.
             {invalid.length > 0 && (
               <>
                 {' '}
@@ -800,11 +999,12 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           <div className="rv-order">
             {parts.map((p, i) => (
               <div key={p.videoId} className="rv-order-row">
-                <span className="rv-order-num">#{i + 1}</span>
-                <img src={p.thumbnail} alt="" loading="lazy" />
-                <span className="rv-episode-title">{p.title}</span>
+                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>#{i + 1}</span>
+                <img src={p.thumbnail} alt="" style={{ width: 44, height: 28, borderRadius: 4, objectFit: 'cover' }} loading="lazy" />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
                 <button
-                  className="rv-btn rv-icon"
+                  className="rv-btn"
+                  style={{ padding: '3px 6px' }}
                   onClick={() => setParts((v) => moveItem(v, i, i - 1))}
                   disabled={i === 0}
                   title="Lên"
@@ -812,7 +1012,8 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                   <ChevronUp size={13} />
                 </button>
                 <button
-                  className="rv-btn rv-icon"
+                  className="rv-btn"
+                  style={{ padding: '3px 6px' }}
                   onClick={() => setParts((v) => moveItem(v, i, i + 1))}
                   disabled={i === parts.length - 1}
                   title="Xuống"
@@ -820,7 +1021,8 @@ function AddMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                   <ChevronDown size={13} />
                 </button>
                 <button
-                  className="rv-btn rv-icon"
+                  className="rv-btn"
+                  style={{ padding: '3px 6px', color: 'var(--rose)' }}
                   onClick={() => setParts((v) => v.filter((_, k) => k !== i))}
                   title="Bỏ phần này"
                 >

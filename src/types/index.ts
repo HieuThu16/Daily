@@ -55,6 +55,7 @@ export type Habit = {
   habit_type?: 'GOOD' | 'BAD'
   routine?: 'MORNING' | 'AFTERNOON' | 'EVENING'
   daily_target?: number
+  position?: number
 }
 
 export type HabitCategory = { id: string; name: string; color: string }

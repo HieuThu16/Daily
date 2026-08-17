@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, ExternalLink, Film, Pause, Play, Plus, Radio, Search, SkipBack, SkipForward, Trash2, Tv, Video } from 'lucide-react'
+import { 
+  ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
+  ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
+  Youtube, Clock, Settings, Gauge, Zap, Sliders, Bookmark, Bell, MoreVertical, 
+  Copy, Check, ChevronRight, ArrowUpDown, SlidersHorizontal, Moon
+} from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
@@ -335,8 +340,8 @@ export function TvShowView() {
 }
 
 /**
- * Màn hình xem chi tiết 1 Kênh (Gộp toàn bộ video của kênh vào đây).
- * Thiết kế giao diện khớp chuẩn mẫu (Image 2) của người dùng.
+ * Màn hình xem chi tiết 1 Kênh (Gộp toàn bộ video của kênh).
+ * Thiết kế giao diện khớp chuẩn 100% hình ảnh (Header, Player, 4 Nút Hành Động, Playlist).
  */
 function ChannelDetailView({
   channel,
@@ -349,9 +354,61 @@ function ChannelDetailView({
   const [watched, setWatched] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
-  const [autoplay, setAutoplay] = useState(false)
+  const [isPlayerActive, setIsPlayerActive] = useState(false)
+  const [autoplay, setAutoplay] = useState(true)
   const [search, setSearch] = useState('')
   const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [playbackRate, setPlaybackRate] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tvshow_playback_rate')
+      return saved ? parseFloat(saved) : 1
+    } catch {
+      return 1
+    }
+  })
+
+  // Modals state
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showSpeedModal, setShowSpeedModal] = useState(false)
+  const [showTimerModal, setShowTimerModal] = useState(false)
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
+  const [selectedVideoForMenu, setSelectedVideoForMenu] = useState<VideoRow | null>(null)
+
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const playerBoxRef = useRef<HTMLDivElement>(null)
+
+  const sendYouTubeCommand = (func: string, args: any[] = []) => {
+    if (!iframeRef.current || !iframeRef.current.contentWindow) return
+    iframeRef.current.contentWindow.postMessage(
+      JSON.stringify({
+        event: 'command',
+        func,
+        args,
+      }),
+      '*'
+    )
+  }
+
+  const applyPlaybackRate = (rate: number) => {
+    setPlaybackRate(rate)
+    try {
+      localStorage.setItem('tvshow_playback_rate', String(rate))
+    } catch {}
+    sendYouTubeCommand('setPlaybackRate', [rate])
+  }
+
+  // Sleep timer handler
+  useEffect(() => {
+    if (!sleepTimerMinutes) return
+    const timer = setTimeout(() => {
+      sendYouTubeCommand('pauseVideo')
+      setSleepTimerMinutes(null)
+      alert('⏱️ Đã hết giờ hẹn! Trình phát video đã tạm dừng.')
+    }, sleepTimerMinutes * 60 * 1000)
+
+    return () => clearTimeout(timer)
+  }, [sleepTimerMinutes])
 
   useEffect(() => {
     void (async () => {
@@ -379,7 +436,7 @@ function ChannelDetailView({
       const watchedSet = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
       setWatched(watchedSet)
 
-      // Mặc định phát video chưa xem đầu tiên
+      // Mặc định chọn video chưa xem đầu tiên
       const firstUnwatched = rows.find((r) => !watchedSet.has(r.video_id))
       setPlayingId(firstUnwatched ? firstUnwatched.video_id : rows[0]?.video_id ?? null)
       setLoading(false)
@@ -387,7 +444,7 @@ function ChannelDetailView({
   }, [channel])
 
   const filteredVideos = useMemo(() => {
-    let result = videos
+    let result = [...videos]
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       result = result.filter((v) => v.title.toLowerCase().includes(q))
@@ -397,11 +454,15 @@ function ChannelDetailView({
     } else if (filterMode === 'watched') {
       result = result.filter((v) => watched.has(v.video_id))
     }
+
+    if (sortOrder === 'asc') {
+      result.reverse()
+    }
     return result
-  }, [videos, search, filterMode, watched])
+  }, [videos, search, filterMode, watched, sortOrder])
 
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
-  const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : filteredVideos[0]
+  const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find(v => v.video_id === playingId) || videos[0])
 
   const toggleWatched = async (videoId: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
@@ -422,197 +483,517 @@ function ChannelDetailView({
     }
   }
 
-  const nextVideo = () => {
-    if (currentIndex < filteredVideos.length - 1) {
-      setPlayingId(filteredVideos[currentIndex + 1].video_id)
-    }
-  }
-
-  const prevVideo = () => {
-    if (currentIndex > 0) {
-      setPlayingId(filteredVideos[currentIndex - 1].video_id)
-    }
-  }
-
   const watchedCountInChannel = useMemo(() => {
     return videos.filter((v) => watched.has(v.video_id)).length
   }, [videos, watched])
 
+  const currentIsWatched = currentVideo ? watched.has(currentVideo.video_id) : false
+  const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube-nocookie.com/embed/${currentVideo.video_id}` : '')
+  const embedSrc = embedBase ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1` : ''
+
   return (
     <div className="tv-detail">
-      {/* Top Header */}
+      {/* 1. Header Top Bar (Quay lại < | TV Show | Chuông thông báo 3 | Bookmark) */}
       <div className="tv-detail-bar">
-        <button className="tv-btn" onClick={onBack}>
-          <ArrowLeft size={14} /> Danh sách kênh
+        <button 
+          type="button" 
+          className="tv-back-circle-btn" 
+          onClick={onBack} 
+          aria-label="Quay lại danh sách kênh"
+        >
+          <ArrowLeft size={18} />
         </button>
+
         <div className="tv-detail-title-wrap">
-          <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>
-            📺 {channel.creator_name}
-          </span>
-          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            ({videos.length} video)
-          </span>
+          <Tv size={20} color="#f59e0b" />
+          <span className="tv-header-title-text">TV Show</span>
+        </div>
+
+        <div className="tv-header-right-actions">
+          <button 
+            type="button" 
+            className="tv-header-icon-btn" 
+            title="Thông báo"
+            onClick={() => alert('Bạn không có thông báo mới.')}
+          >
+            <Bell size={18} />
+            <span className="tv-header-badge">3</span>
+          </button>
+          <button 
+            type="button" 
+            className="tv-header-icon-btn" 
+            title="Lưu kênh"
+            onClick={() => alert('Đã lưu kênh vào danh sách yêu thích!')}
+          >
+            <Bookmark size={18} />
+          </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="tv-empty">Đang tải video…</div>
+        <div className="tv-empty">Đang tải danh sách video…</div>
       ) : !videos.length ? (
         <div className="tv-empty">Kênh này chưa có video nào.</div>
       ) : (
-        <div className="tv-detail-layout">
-          {/* Cột trái: Trình phát YouTube */}
-          <div className="tv-player-box">
-            <div className="tv-player-frame">
-              {currentVideo ? (
+        <>
+          {/* 2. Main Player Card (Player + Meta + 4 NÚT HÀNG NGANG) */}
+          <div ref={playerBoxRef} className="tv-main-player-card">
+            {/* Khung video / Poster */}
+            <div className="tv-player-frame-wrapper">
+              {isPlayerActive && currentVideo && embedSrc ? (
                 <iframe
-                  src={`${currentVideo.embed_url}?autoplay=${autoplay ? 1 : 0}&rel=0`}
+                  ref={iframeRef}
+                  src={embedSrc}
                   title={currentVideo.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
+                  onLoad={() => {
+                    if (playbackRate !== 1) {
+                      setTimeout(() => sendYouTubeCommand('setPlaybackRate', [playbackRate]), 400)
+                      setTimeout(() => sendYouTubeCommand('setPlaybackRate', [playbackRate]), 1200)
+                    }
+                  }}
                 />
+              ) : currentVideo ? (
+                <button
+                  type="button"
+                  className="tv-player-poster-btn"
+                  onClick={() => setIsPlayerActive(true)}
+                  title="Nhấn để phát video"
+                >
+                  <img
+                    src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/hqdefault.jpg`}
+                    alt={currentVideo.title}
+                  />
+                  <div className="tv-player-play-overlay">
+                    <Play size={28} fill="#ffffff" style={{ marginLeft: 3 }} />
+                  </div>
+                </button>
               ) : (
-                <div className="tv-channel-cover-empty">Chọn một video để phát</div>
+                <div className="tv-channel-cover-empty">Chưa có video</div>
               )}
             </div>
 
+            {/* Tiêu đề & Kênh */}
             {currentVideo && (
-              <div className="tv-player-info">
-                <div className="tv-player-title">{currentVideo.title}</div>
-                <div className="tv-player-actions">
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <button
-                      className="tv-btn"
-                      onClick={prevVideo}
-                      disabled={currentIndex <= 0}
-                      title="Video trước"
-                    >
-                      <SkipBack size={13} />
-                    </button>
-                    <button
-                      className="tv-btn"
-                      onClick={nextVideo}
-                      disabled={currentIndex >= filteredVideos.length - 1}
-                      title="Video tiếp theo"
-                    >
-                      <SkipForward size={13} />
-                    </button>
-                    <button
-                      className={`tv-btn ${watched.has(currentVideo.video_id) ? 'primary' : ''}`}
-                      onClick={() => void toggleWatched(currentVideo.video_id)}
-                    >
-                      {watched.has(currentVideo.video_id) ? (
-                        <>
-                          <CheckCircle2 size={14} /> Đã xem
-                        </>
-                      ) : (
-                        <>
-                          <Circle size={14} /> Đánh dấu đã xem
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={autoplay}
-                        onChange={(e) => setAutoplay(e.target.checked)}
-                      />
-                      Tự phát tiếp
-                    </label>
-                    <a
-                      href={currentVideo.canonical_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="tv-btn"
-                      title="Mở trên YouTube"
-                    >
-                      <ExternalLink size={13} /> YouTube
-                    </a>
-                  </div>
+              <div className="tv-video-info-block">
+                <div className="tv-video-title-main">{currentVideo.title}</div>
+                <div className="tv-video-creator-link">
+                  {channel.creator_name} <ChevronRight size={14} />
                 </div>
               </div>
             )}
+
+            {/* 3. BẢNG 4 NÚT HÀNG NGANG: Đánh dấu | Tốc độ | Hẹn giờ | Cài đặt */}
+            <div className="tv-action-grid-4">
+              {/* Nút 1: Đánh dấu đã xem */}
+              <button
+                type="button"
+                className={`tv-action-card-btn ${currentIsWatched ? 'active is-watched' : ''}`}
+                onClick={() => currentVideo && void toggleWatched(currentVideo.video_id)}
+                title={currentIsWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+              >
+                <div className="tv-action-icon-box">
+                  {currentIsWatched ? <CheckCircle2 size={22} color="#10b981" /> : <Circle size={22} />}
+                </div>
+                <span className="tv-action-label-title">Đánh dấu</span>
+                <span className={`tv-action-label-sub ${currentIsWatched ? 'is-green' : ''}`}>
+                  {currentIsWatched ? 'đã xem' : 'chưa xem'}
+                </span>
+              </button>
+
+              {/* Nút 2: Tốc độ */}
+              <button
+                type="button"
+                className={`tv-action-card-btn ${playbackRate !== 1 ? 'active' : ''}`}
+                onClick={() => setShowSpeedModal(true)}
+                title="Thay đổi tốc độ phát"
+              >
+                <div className="tv-action-icon-box">
+                  <Gauge size={22} />
+                </div>
+                <span className="tv-action-label-title">Tốc độ</span>
+                <span className={`tv-action-label-sub ${playbackRate === 2 ? 'highlight' : ''}`}>
+                  {playbackRate}x
+                </span>
+              </button>
+
+              {/* Nút 3: Hẹn giờ */}
+              <button
+                type="button"
+                className={`tv-action-card-btn ${sleepTimerMinutes ? 'active' : ''}`}
+                onClick={() => setShowTimerModal(true)}
+                title="Hẹn giờ tự tắt video"
+              >
+                <div className="tv-action-icon-box">
+                  <Clock size={22} />
+                </div>
+                <span className="tv-action-label-title">Hẹn giờ</span>
+                <span className={`tv-action-label-sub ${sleepTimerMinutes ? 'highlight' : ''}`}>
+                  {sleepTimerMinutes ? `${sleepTimerMinutes}p` : 'Tắt'}
+                </span>
+              </button>
+
+              {/* Nút 4: Cài đặt (Chứa Mở trên YouTube & Tự phát tiếp) */}
+              <button
+                type="button"
+                className={`tv-action-card-btn ${showSettingsModal ? 'active' : ''}`}
+                onClick={() => setShowSettingsModal(true)}
+                title="Cài đặt & Tùy chọn"
+              >
+                <div className="tv-action-icon-box">
+                  <Settings size={22} />
+                </div>
+                <span className="tv-action-label-title">Cài đặt</span>
+                <span className="tv-action-label-sub">Tùy chọn</span>
+              </button>
+            </div>
           </div>
 
-          {/* Cột phải: Danh sách video (Khớp 100% style Image 2) */}
-          <div className="tv-episodes-box">
-            {/* Header: Danh sách video (X) | Đã xem Y/X */}
-            <div className="tv-episodes-head">
-              <span className="tv-episodes-head-title">
+          {/* 4. Section Danh sách video */}
+          <div className="tv-playlist-section">
+            {/* Header: Danh sách video (664) | Đã xem 0/664 */}
+            <div className="tv-playlist-head">
+              <span className="tv-playlist-title">
                 Danh sách video ({filteredVideos.length})
               </span>
-              <span className="tv-episodes-head-stat">
+              <span className="tv-playlist-stat">
                 Đã xem {watchedCountInChannel}/{videos.length}
               </span>
             </div>
 
-            {/* Ô tìm kiếm & lọc */}
-            <input
-              className="tv-ep-search"
-              placeholder="Tìm video trong kênh…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            {/* Ô tìm kiếm */}
+            <div className="tv-search-input-wrapper">
+              <input
+                className="tv-search-field"
+                placeholder="Tìm video trong kênh..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <Search className="tv-search-icon-inside" size={16} />
+            </div>
 
-            <div className="tv-ep-filters">
+            {/* Filter Pills & Nút Sort */}
+            <div className="tv-filter-sort-row">
+              <div className="tv-filter-pills-wrap">
+                <button
+                  type="button"
+                  className={`tv-filter-pill-btn ${filterMode === 'all' ? 'active' : ''}`}
+                  onClick={() => setFilterMode('all')}
+                >
+                  Tất cả ({videos.length})
+                </button>
+                <button
+                  type="button"
+                  className={`tv-filter-pill-btn ${filterMode === 'unwatched' ? 'active' : ''}`}
+                  onClick={() => setFilterMode('unwatched')}
+                >
+                  Chưa xem ({videos.length - watchedCountInChannel})
+                </button>
+                <button
+                  type="button"
+                  className={`tv-filter-pill-btn ${filterMode === 'watched' ? 'active' : ''}`}
+                  onClick={() => setFilterMode('watched')}
+                >
+                  Đã xem ({watchedCountInChannel})
+                </button>
+              </div>
+
               <button
-                className={`tv-ep-filter-btn ${filterMode === 'all' ? 'active' : ''}`}
-                onClick={() => setFilterMode('all')}
+                type="button"
+                className="tv-sort-toggle-btn"
+                onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                title="Đổi thứ tự hiển thị"
               >
-                Tất cả ({videos.length})
-              </button>
-              <button
-                className={`tv-ep-filter-btn ${filterMode === 'unwatched' ? 'active' : ''}`}
-                onClick={() => setFilterMode('unwatched')}
-              >
-                Chưa xem ({videos.length - watchedCountInChannel})
-              </button>
-              <button
-                className={`tv-ep-filter-btn ${filterMode === 'watched' ? 'active' : ''}`}
-                onClick={() => setFilterMode('watched')}
-              >
-                Đã xem ({watchedCountInChannel})
+                <ArrowUpDown size={13} />
+                {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
               </button>
             </div>
 
-            {/* List các item video */}
-            <div className="tv-episodes-list">
+            {/* Danh sách video items */}
+            <div className="tv-video-card-list">
               {filteredVideos.map((v, i) => {
                 const isPlaying = v.video_id === playingId
                 const isWatched = watched.has(v.video_id)
+                const indexNum = sortOrder === 'desc' ? i + 1 : videos.length - i
                 return (
                   <div
                     key={v.video_id}
-                    className={`tv-episode-item ${isPlaying ? 'playing' : ''}`}
-                    onClick={() => setPlayingId(v.video_id)}
+                    className={`tv-video-card-item ${isPlaying ? 'playing' : ''}`}
+                    onClick={() => {
+                      setPlayingId(v.video_id)
+                      setIsPlayerActive(true)
+                      playerBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    }}
                   >
-                    <img
-                      src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
-                      alt=""
-                      className="tv-ep-thumb"
-                      loading="lazy"
-                    />
-                    <div className="tv-ep-text">
-                      <span className="tv-ep-name">
-                        #{i + 1}. {v.title}
+                    {/* Thumbnail + badge thời lượng */}
+                    <div className="tv-video-thumb-container">
+                      <img
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        alt=""
+                        loading="lazy"
+                      />
+                      <span className="tv-video-duration-pill">
+                        {v.part_number ? `P.${v.part_number}` : 'Video'}
                       </span>
                     </div>
-                    <button
-                      className={`tv-ep-watch-btn ${isWatched ? 'watched' : ''}`}
-                      onClick={(e) => void toggleWatched(v.video_id, e)}
-                      title={isWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
-                    >
-                      {isWatched ? <CheckCircle2 size={18} /> : <Circle size={18} />}
-                    </button>
+
+                    {/* Tiêu đề & Kênh */}
+                    <div className="tv-video-meta-content">
+                      <div className="tv-video-item-title">
+                        #{indexNum}. {v.title}
+                      </div>
+                      <div className="tv-video-item-sub">
+                        {channel.creator_name}
+                      </div>
+                    </div>
+
+                    {/* Nút check xem & Nút 3 chấm */}
+                    <div className="tv-video-right-tools">
+                      <button
+                        type="button"
+                        className={`tv-video-watch-circle-btn ${isWatched ? 'watched' : ''}`}
+                        onClick={(e) => void toggleWatched(v.video_id, e)}
+                        title={isWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+                      >
+                        {isWatched ? <CheckCircle2 size={20} color="#10b981" /> : <Circle size={20} />}
+                      </button>
+                      <button
+                        type="button"
+                        className="tv-video-more-dots-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedVideoForMenu(v)
+                        }}
+                        title="Tùy chọn khác"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                    </div>
                   </div>
                 )
               })}
             </div>
           </div>
-        </div>
+        </>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 1: CÀI ĐẶT (Chứa Mở trên YouTube & Tự phát tiếp)  */}
+      {/* ======================================================== */}
+      {showSettingsModal && (
+        <Modal title="⚙️ Cài đặt trình phát" onClose={() => setShowSettingsModal(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '6px 0' }}>
+            {/* 1. Mở trên YouTube */}
+            {currentVideo && (
+              <a
+                href={currentVideo.canonical_url || `https://www.youtube.com/watch?v=${currentVideo.video_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tv-setting-item-row"
+                onClick={() => setShowSettingsModal(false)}
+              >
+                <div className="tv-setting-item-left">
+                  <div className="tv-setting-item-icon youtube">
+                    <Youtube size={22} />
+                  </div>
+                  <div className="tv-setting-item-text">
+                    <span className="tv-setting-item-title">Mở trên YouTube</span>
+                    <span className="tv-setting-item-desc">Xem video gốc trực tiếp trên ứng dụng YouTube</span>
+                  </div>
+                </div>
+                <ExternalLink size={16} color="var(--text-muted)" />
+              </a>
+            )}
+
+            {/* 2. Tự phát tiếp */}
+            <div className="tv-setting-item-row" onClick={() => setAutoplay((prev) => !prev)}>
+              <div className="tv-setting-item-left">
+                <div className="tv-setting-item-icon">
+                  <Zap size={22} />
+                </div>
+                <div className="tv-setting-item-text">
+                  <span className="tv-setting-item-title">Tự phát tiếp</span>
+                  <span className="tv-setting-item-desc">Tự động chuyển sang video tiếp theo sau khi phát xong</span>
+                </div>
+              </div>
+              <label className="tv-toggle-switch" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={autoplay}
+                  onChange={(e) => setAutoplay(e.target.checked)}
+                />
+                <span className="tv-toggle-slider" />
+              </label>
+            </div>
+
+            {/* 3. Tùy chọn phím tắt 2x nhanh */}
+            <div className="tv-setting-item-row" onClick={() => applyPlaybackRate(playbackRate === 2 ? 1 : 2)}>
+              <div className="tv-setting-item-left">
+                <div className="tv-setting-item-icon">
+                  <Gauge size={22} />
+                </div>
+                <div className="tv-setting-item-text">
+                  <span className="tv-setting-item-title">Chế độ 2x nhanh</span>
+                  <span className="tv-setting-item-desc">Chuyển đổi tức thì tốc độ 2.0x</span>
+                </div>
+              </div>
+              <label className="tv-toggle-switch" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={playbackRate === 2}
+                  onChange={(e) => applyPlaybackRate(e.target.checked ? 2 : 1)}
+                />
+                <span className="tv-toggle-slider" />
+              </label>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 2: TỐC ĐỘ PHÁT                                    */}
+      {/* ======================================================== */}
+      {showSpeedModal && (
+        <Modal title="⚡ Tốc độ phát video" onClose={() => setShowSpeedModal(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+              Chọn tốc độ phát phù hợp để thưởng thức nội dung nhanh chóng:
+            </p>
+            <div className="tv-speed-modal-grid">
+              {[0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  className={`tv-speed-modal-btn ${playbackRate === rate ? 'active' : ''}`}
+                  onClick={() => {
+                    applyPlaybackRate(rate)
+                    setShowSpeedModal(false)
+                  }}
+                >
+                  <span style={{ fontSize: '1.1rem' }}>{rate}x</span>
+                  <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>
+                    {rate === 1 ? 'Chuẩn' : rate === 2 ? 'Siêu tốc' : 'Nhanh'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 3: HẸN GIỜ TẮT VIDEO                              */}
+      {/* ======================================================== */}
+      {showTimerModal && (
+        <Modal title="⏱️ Hẹn giờ tắt video" onClose={() => setShowTimerModal(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+              Video sẽ tự động tạm dừng sau khoảng thời gian được chọn:
+            </p>
+            <div className="tv-timer-modal-grid">
+              {[
+                { min: null, label: 'Tắt hẹn giờ' },
+                { min: 15, label: '15 phút' },
+                { min: 30, label: '30 phút' },
+                { min: 45, label: '45 phút' },
+                { min: 60, label: '60 phút (1h)' },
+                { min: 90, label: '90 phút (1.5h)' },
+              ].map((item) => {
+                const isActive = sleepTimerMinutes === item.min
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className={`tv-timer-modal-btn ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      setSleepTimerMinutes(item.min)
+                      setShowTimerModal(false)
+                    }}
+                  >
+                    <Clock size={16} />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 4: MENU 3 CHẤM CỦA MỖI VIDEO                       */}
+      {/* ======================================================== */}
+      {selectedVideoForMenu && (
+        <Modal 
+          title={`🎬 ${selectedVideoForMenu.title}`} 
+          onClose={() => setSelectedVideoForMenu(null)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Phát video này */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                setPlayingId(selectedVideoForMenu.video_id)
+                setIsPlayerActive(true)
+                setSelectedVideoForMenu(null)
+                playerBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+              }}
+            >
+              <Play size={16} /> Phát video này ngay
+            </button>
+
+            {/* Đánh dấu đã xem / chưa xem */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                void toggleWatched(selectedVideoForMenu.video_id)
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              {watched.has(selectedVideoForMenu.video_id) ? (
+                <>
+                  <Circle size={16} /> Đánh dấu là chưa xem
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} color="#10b981" /> Đánh dấu là đã xem
+                </>
+              )}
+            </button>
+
+            {/* Mở trên YouTube */}
+            <a
+              href={selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px', textDecoration: 'none' }}
+              onClick={() => setSelectedVideoForMenu(null)}
+            >
+              <Youtube size={16} color="#ef4444" /> Mở trên YouTube
+            </a>
+
+            {/* Sao chép link */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                const url = selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`
+                navigator.clipboard.writeText(url)
+                alert('Đã sao chép liên kết video vào bộ nhớ tạm!')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Copy size={16} /> Sao chép liên kết video
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )

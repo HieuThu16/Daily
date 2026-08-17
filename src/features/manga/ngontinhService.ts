@@ -5,6 +5,23 @@ const HISTORY_KEY = 'daily_ngontinh_history';
 
 export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
   try {
+    const [res1, res2] = await Promise.all([
+      fetch('/data/ngontinh_manga_1.json'),
+      fetch('/data/ngontinh_manga_2.json'),
+    ]);
+    if (res1.ok && res2.ok) {
+      const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
+      const list1 = Array.isArray(d1) ? d1 : [];
+      const list2 = Array.isArray(d2) ? d2 : [];
+      if (list1.length > 0 || list2.length > 0) {
+        return [...list1, ...list2];
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load split ngontinh data', err);
+  }
+
+  try {
     const res = await fetch('/data/ngontinh_manga.json');
     if (res.ok) {
       const data = await res.json();
@@ -16,8 +33,6 @@ export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
     console.warn('Could not load /data/ngontinh_manga.json from public', err);
   }
 
-  // Trước đây có nhánh `import('../../data/ngontinh_manga.json')` dự phòng: nó kéo 49MB
-  // vào bundle, mà chính file đó nằm trong .gitignore nên clone sạch là build gãy.
   return [];
 }
 

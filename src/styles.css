@@ -3877,17 +3877,110 @@ input, select, textarea, button {
   gap: 8px;
 }
 
+.habit-reorder-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
 /* --- Một dòng thói quen --- */
 .habit-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--card-border);
   border-radius: 14px;
   background: var(--card-bg);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  position: relative;
+  user-select: none;
+}
+
+.habit-item.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+  border-style: dashed;
+  border-color: var(--primary);
+  background: var(--bg-main);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.habit-item.drag-over-top {
+  border-top: 2px solid var(--primary);
+  box-shadow: 0 -3px 0 0 var(--primary);
+}
+
+.habit-item.drag-over-bottom {
+  border-bottom: 2px solid var(--primary);
+  box-shadow: 0 3px 0 0 var(--primary);
+}
+
+.habit-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 32px;
+  color: var(--text-muted);
+  cursor: grab;
+  flex: 0 0 22px;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  touch-action: none;
+}
+
+.habit-drag-handle:hover,
+.habit-item:hover .habit-drag-handle {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.habit-drag-handle:active {
+  cursor: grabbing;
+}
+
+.habit-item-reorder-btns {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+  .habit-item-reorder-btns {
+    display: flex;
+  }
+}
+
+.habit-reorder-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: var(--bg-main);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.habit-reorder-btn:hover:not(:disabled) {
+  background: var(--card-border);
+  color: var(--text-main);
+}
+
+.habit-reorder-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
 }
 
 .habit-item.is-tappable {

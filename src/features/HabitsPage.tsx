@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
-import { Calendar, Check, ChevronLeft, ChevronRight, Flame, FolderCog, LayoutGrid, List, Minus, MoreVertical, Pencil, Plus } from 'lucide-react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
+import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Flame, FolderCog, GripVertical, LayoutGrid, List, Minus, MoreVertical, Pencil, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import type { Habit, HabitCategory, HabitLog } from '../types'
@@ -14,7 +14,7 @@ import { ProgressRing } from './home/ProgressRing'
 
 type Tab = 'today' | 'categories' | 'history'
 /** Bộ lọc dạng chip của tab "Hôm nay". */
-type Filter = 'ALL' | 'CHECK' | 'COUNT' | 'GOOD' | 'BAD' | 'MORNING' | 'AFTERNOON' | 'EVENING'
+type Filter = 'ALL' | 'CHECK' | 'COUNT' | 'GOOD' | 'BAD'
 
 const FILTER_CHIPS: Array<{ key: Filter; label: string }> = [
   { key: 'ALL', label: 'Tất cả' },
@@ -22,19 +22,33 @@ const FILTER_CHIPS: Array<{ key: Filter; label: string }> = [
   { key: 'COUNT', label: 'Số liệu' },
   { key: 'GOOD', label: 'Tốt' },
   { key: 'BAD', label: 'Cần hạn chế' },
-  { key: 'MORNING', label: '🌅 Sáng' },
-  { key: 'AFTERNOON', label: '☀️ Trưa' },
-  { key: 'EVENING', label: '🌙 Tối' },
 ]
+
+const HABIT_ORDER_STORAGE_KEY = 'daily_habit_priority_order'
 
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
 const now = new Date()
 const pad = (n: number) => String(n).padStart(2, '0')
 const month = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`
 
+function getStoredOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(HABIT_ORDER_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveStoredOrder(ids: string[]) {
+  try {
+    localStorage.setItem(HABIT_ORDER_STORAGE_KEY, JSON.stringify(ids))
+  } catch {}
+}
+
 export function HabitsPage() {
   const { showToast, showSaveToast } = useToast()
-  const habits = useQuery<Habit>('habits', 'name')
+  const habits = useQuery<Habit>('habits', 'created_at')
   const categories = useQuery<HabitCategory>('habit_categories', 'name')
 
   const [logs, setLogs] = useState<HabitLog[]>([])
@@ -55,9 +69,40 @@ export function HabitsPage() {
   const [categoryId, setCategoryId] = useState('')
   const [habitType, setHabitType] = useState<'GOOD' | 'BAD'>('GOOD')
   const [trackingType, setTrackingType] = useState<'CHECK' | 'COUNT'>('CHECK')
-  const [routineSlot, setRoutineSlot] = useState<'MORNING' | 'AFTERNOON' | 'EVENING'>('MORNING')
   const [newCategory, setNewCategory] = useState('')
   const [categoryName, setCategoryName] = useState('')
+
+  // Drag and drop & Touch reorder states
+  const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null)
+  const [dragOverHabitId, setDragOverHabitId] = useState<string | null>(null)
+  const [dragOverPosition, setDragOverPosition] = useState<'top' | 'bottom' | null>(null)
+  const touchStartY = useRef<number>(0)
+  const touchCurrentTargetId = useRef<string | null>(null)
+
+  /** Sắp xếp danh sách thói quen theo thứ tự ưu tiên (position hoặc localStorage order). */
+  const sortedHabits = useMemo(() => {
+    const storedOrder = getStoredOrder()
+    const orderMap = new Map<string, number>()
+    storedOrder.forEach((id, idx) => orderMap.set(id, idx))
+
+    return [...habits.items].sort((a, b) => {
+      // 1. Ưu tiên theo position số lưu trong DB nếu có
+      if (typeof a.position === 'number' && typeof b.position === 'number') {
+        if (a.position !== b.position) return a.position - b.position
+      } else if (typeof a.position === 'number') {
+        return -1
+      } else if (typeof b.position === 'number') {
+        return 1
+      }
+
+      // 2. Theo thứ tự đã lưu trong localStorage
+      const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999999
+      const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999999
+      if (orderA !== orderB) return orderA - orderB
+
+      return (a.name || '').localeCompare(b.name || '')
+    })
+  }, [habits.items])
 
   /** Ngày hiển thị ở tab Lịch sử: cả tuần (T2→CN) hoặc cả tháng đang chọn. */
   const historyDates = useMemo(
@@ -68,8 +113,6 @@ export function HabitsPage() {
   const atCurrentPeriod = isCurrentPeriod(anchor, historyRange)
 
   /** Tải log phủ cả kỳ đang xem lẫn tháng hiện tại (tab "Hôm nay" cần ngày hôm nay). */
-  // Khoảng tải phải phủ cả kỳ lịch sử, tháng hiện tại lẫn ngày đang ghi nhận
-  // (ngày đó có thể nằm ngoài tháng này khi người dùng lùi lịch).
   const fetchFrom = [historyDates[0], `${month}-01`, logDate].sort()[0]
   const fetchTo = [historyDates[historyDates.length - 1], `${month}-31`, logDate].sort().pop()!
 
@@ -86,45 +129,105 @@ export function HabitsPage() {
   const completed = new Set(logs.filter((l) => l.date === logDate && l.completed).map((l) => l.habit_id))
   const category = (h: Habit) => categories.items.find((c) => c.id === h.category_id)
 
-  const checkHabits = useMemo(() => habits.items.filter((h) => (h.tracking_type ?? 'CHECK') === 'CHECK'), [habits.items])
-  const countHabits = useMemo(() => habits.items.filter((h) => h.tracking_type === 'COUNT'), [habits.items])
+  const checkHabits = useMemo(() => sortedHabits.filter((h) => (h.tracking_type ?? 'CHECK') === 'CHECK'), [sortedHabits])
+  const countHabits = useMemo(() => sortedHabits.filter((h) => h.tracking_type === 'COUNT'), [sortedHabits])
 
-  const goodHabits = useMemo(() => habits.items.filter((h) => h.habit_type !== 'BAD'), [habits.items])
-  const badHabits  = useMemo(() => habits.items.filter((h) => h.habit_type === 'BAD'),  [habits.items])
-
-  const SLOTS = [
-    { key: 'MORNING',   label: '🌅 Sáng',  color: 'var(--amber)',   bg: 'var(--amber-bg)'   },
-    { key: 'AFTERNOON', label: '☀️ Trưa',  color: '#f97316',       bg: 'rgba(249,115,22,0.1)' },
-    { key: 'EVENING',   label: '🌙 Tối',   color: 'var(--purple)', bg: 'var(--purple-bg)' },
-  ] as const
-
-  const routineGroups = useMemo(() =>
-    SLOTS.map((s) => ({ ...s, habits: habits.items.filter((h) => (h.routine ?? 'MORNING') === s.key) }))
-  , [habits.items])
+  const goodHabits = useMemo(() => sortedHabits.filter((h) => h.habit_type !== 'BAD'), [sortedHabits])
+  const badHabits  = useMemo(() => sortedHabits.filter((h) => h.habit_type === 'BAD'),  [sortedHabits])
 
   /** Nhóm hiển thị của tab "Hôm nay", suy ra từ chip lọc đang chọn. */
+  const filteredHabits = useMemo(() => {
+    if (filter === 'CHECK') return checkHabits
+    if (filter === 'COUNT') return countHabits
+    if (filter === 'GOOD') return goodHabits
+    if (filter === 'BAD') return badHabits
+    return sortedHabits
+  }, [filter, sortedHabits, checkHabits, countHabits, goodHabits, badHabits])
+
   const sections = useMemo(() => {
-    const check = { key: 'CHECK', title: 'Thói quen tích cực', color: 'var(--emerald)', habits: checkHabits }
-    const count = { key: 'COUNT', title: 'Theo dõi số liệu', color: 'var(--primary)', habits: countHabits }
-    const bySlot = (slotKey: string) => {
-      const slot = routineGroups.find((s) => s.key === slotKey)
-      return slot ? [{ key: slot.key, title: slot.label, color: slot.color, habits: slot.habits }] : []
+    if (filter === 'ALL') {
+      const check = { key: 'CHECK', title: 'Thói quen tích cực', color: 'var(--emerald)', habits: checkHabits }
+      const count = { key: 'COUNT', title: 'Theo dõi số liệu', color: 'var(--primary)', habits: countHabits }
+      return [check, count].filter((s) => s.habits.length > 0)
     }
-    const picked =
-      filter === 'CHECK' ? [check]
-      : filter === 'COUNT' ? [count]
-      : filter === 'GOOD' ? [{ key: 'GOOD', title: 'Thói quen tốt', color: 'var(--emerald)', habits: goodHabits }]
-      : filter === 'BAD' ? [{ key: 'BAD', title: 'Cần hạn chế', color: 'var(--rose)', habits: badHabits }]
-      : filter === 'ALL' ? [check, count]
-      : bySlot(filter)
-    return picked.filter((s) => s.habits.length > 0)
-  }, [filter, checkHabits, countHabits, goodHabits, badHabits, routineGroups])
+    const title =
+      filter === 'CHECK' ? 'Thói quen Tích'
+      : filter === 'COUNT' ? 'Theo dõi số liệu'
+      : filter === 'GOOD' ? 'Thói quen tốt'
+      : 'Cần hạn chế'
+    const color =
+      filter === 'BAD' ? 'var(--rose)'
+      : filter === 'COUNT' ? 'var(--primary)'
+      : 'var(--emerald)'
+    return [{ key: filter, title, color, habits: filteredHabits }]
+  }, [filter, checkHabits, countHabits, filteredHabits])
 
   const groups = useMemo(() => {
-    const result: Array<[HabitCategory | null, Habit[]]> = categories.items.map((c) => [c, habits.items.filter((h) => h.category_id === c.id)])
-    result.push([null, habits.items.filter((h) => !h.category_id)])
+    const result: Array<[HabitCategory | null, Habit[]]> = categories.items.map((c) => [c, sortedHabits.filter((h) => h.category_id === c.id)])
+    result.push([null, sortedHabits.filter((h) => !h.category_id)])
     return result.filter(([, hs]) => hs.length)
-  }, [habits.items, categories.items])
+  }, [sortedHabits, categories.items])
+
+  /** Xử lý cập nhật thứ tự ưu tiên mới sau khi kéo thả / di chuyển */
+  const persistReorderedHabits = async (newOrderedList: Habit[]) => {
+    // 1. Cập nhật vị trí cục bộ và position index
+    const withPosition = newOrderedList.map((h, idx) => ({ ...h, position: idx }))
+    habits.setItems(withPosition)
+
+    // 2. Lưu vào localStorage để không bao giờ mất thứ tự
+    const newIds = withPosition.map((h) => h.id)
+    saveStoredOrder(newIds)
+
+    // 3. Cập nhật lên Supabase (nếu có kết nối)
+    if (supabase) {
+      try {
+        const promises = withPosition.map((h) =>
+          supabase!.from('habits').update({ position: h.position }).eq('id', h.id),
+        )
+        await Promise.all(promises)
+      } catch {
+        // Fallback: nếu database chưa có cột position thì localStorage đã lưu
+      }
+    }
+    showSaveToast(true, 'thứ tự ưu tiên thói quen')
+  }
+
+  /** Di chuyển habit từ vị trí nguồn đến trước/sau vị trí đích */
+  const moveHabit = (sourceId: string, targetId: string, place: 'top' | 'bottom' = 'top') => {
+    if (sourceId === targetId) return
+    const currentList = [...sortedHabits]
+    const sourceIndex = currentList.findIndex((h) => h.id === sourceId)
+    if (sourceIndex === -1) return
+
+    const [moved] = currentList.splice(sourceIndex, 1)
+    const targetIndex = currentList.findIndex((h) => h.id === targetId)
+    if (targetIndex === -1) {
+      currentList.push(moved)
+    } else {
+      const insertAt = place === 'top' ? targetIndex : targetIndex + 1
+      currentList.splice(insertAt, 0, moved)
+    }
+
+    void persistReorderedHabits(currentList)
+  }
+
+  /** Di chuyển habit lên trên 1 bậc */
+  const moveHabitUp = (habitId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const index = sortedHabits.findIndex((h) => h.id === habitId)
+    if (index <= 0) return
+    const target = sortedHabits[index - 1]
+    moveHabit(habitId, target.id, 'top')
+  }
+
+  /** Di chuyển habit xuống dưới 1 bậc */
+  const moveHabitDown = (habitId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const index = sortedHabits.findIndex((h) => h.id === habitId)
+    if (index === -1 || index >= sortedHabits.length - 1) return
+    const target = sortedHabits[index + 1]
+    moveHabit(habitId, target.id, 'bottom')
+  }
 
   const toggle = async (h: Habit) => {
     const done = !completed.has(h.id)
@@ -165,17 +268,27 @@ export function HabitsPage() {
 
   const create = async () => {
     if (!name.trim()) return
-    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType, routine: routineSlot }
+    const nextPosition = sortedHabits.length
+    const payload = {
+      name: name.trim(),
+      category_id: categoryId || null,
+      tracking_type: trackingType,
+      habit_type: habitType,
+      position: nextPosition,
+    }
 
     let { data, error } = await supabase!.from('habits').insert(payload).select().single()
 
     if (!error && data) {
-      habits.setItems((x) => [{ ...(data as Habit), habit_type: habitType, routine: routineSlot }, ...x])
+      const created = { ...(data as Habit), habit_type: habitType, position: nextPosition }
+      habits.setItems((x) => [...x, created])
+      const newOrder = [...getStoredOrder(), created.id]
+      saveStoredOrder(newOrder)
       showSaveToast(true, `thói quen "${payload.name}"`)
     } else {
       const fallback = await supabase!
         .from('habits')
-        .insert({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type, routine: payload.routine })
+        .insert({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type })
         .select()
         .single()
 
@@ -184,7 +297,9 @@ export function HabitsPage() {
         ...payload,
         is_active: true,
       }
-      habits.setItems((x) => [finalHabit, ...x])
+      habits.setItems((x) => [...x, finalHabit])
+      const newOrder = [...getStoredOrder(), finalHabit.id]
+      saveStoredOrder(newOrder)
       showSaveToast(false, `thói quen "${payload.name}"`)
     }
 
@@ -192,13 +307,12 @@ export function HabitsPage() {
     setCategoryId('')
     setHabitType('GOOD')
     setTrackingType('CHECK')
-    setRoutineSlot('MORNING')
     setAddModal(false)
   }
 
   const save = async () => {
     if (!editing || !name.trim()) return
-    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType, routine: routineSlot }
+    const payload = { name: name.trim(), category_id: categoryId || null, tracking_type: trackingType, habit_type: habitType }
 
     // Update local state immediately (Optimistic Persistence)
     habits.setItems((xs) => xs.map((h) => (h.id === editing.id ? { ...h, ...payload } : h)))
@@ -208,7 +322,7 @@ export function HabitsPage() {
     if (!error) {
       showSaveToast(true, `cập nhật thói quen "${payload.name}"`)
     } else {
-      await supabase!.from('habits').update({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type, routine: payload.routine }).eq('id', editing.id)
+      await supabase!.from('habits').update({ name: payload.name, category_id: payload.category_id, tracking_type: payload.tracking_type }).eq('id', editing.id)
       showSaveToast(false, `cập nhật thói quen "${payload.name}"`)
     }
   }
@@ -217,6 +331,7 @@ export function HabitsPage() {
     if (!editing) return
     await supabase!.from('habits').update({ deleted_at: new Date().toISOString(), is_active: false }).eq('id', editing.id)
     habits.setItems((xs) => xs.filter((h) => h.id !== editing.id))
+    saveStoredOrder(getStoredOrder().filter((id) => id !== editing.id))
     setEditing(null)
     showToast('🗑️ Đã xóa thói quen', 'delete')
   }
@@ -257,7 +372,6 @@ export function HabitsPage() {
     habits.setItems((xs) => xs.map((h) => (h.category_id === c.id ? { ...h, category_id: null } : h)))
   }
 
-
   // Hai vòng tròn: xanh cho thói quen tốt (càng đầy càng ngon),
   // đỏ cho thói quen xấu (càng TRỐNG càng ngon — trống = hôm nay không lỡ cái nào).
   const goodDone = goodHabits.filter((h) => completed.has(h.id)).length
@@ -267,14 +381,12 @@ export function HabitsPage() {
 
   const todayValue = (habitId: string) => logs.find((l) => l.habit_id === habitId && l.date === logDate)?.value ?? 0
 
-
   // Nút "+" dùng chung ô hành động trên header của app, giống PeoplePage.
   const openAddHabit = useCallback(() => {
     setName('')
     setCategoryId('')
     setHabitType('GOOD')
     setTrackingType('CHECK')
-    setRoutineSlot('MORNING')
     setAddModal(true)
   }, [])
   useHeaderAction('Thêm thói quen', openAddHabit)
@@ -285,26 +397,134 @@ export function HabitsPage() {
     setCategoryId(h.category_id ?? '')
     setHabitType(h.habit_type ?? 'GOOD')
     setTrackingType(h.tracking_type ?? 'CHECK')
-    setRoutineSlot(h.routine ?? 'MORNING')
   }
 
-  const renderHabitItem = (h: Habit) => {
+  // --- Handlers cho Drag and Drop (Mouse / Desktop) ---
+  const handleDragStart = (e: React.DragEvent, habitId: string) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', habitId)
+    setDraggedHabitId(habitId)
+  }
+
+  const handleDragOver = (e: React.DragEvent, habitId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedHabitId && draggedHabitId !== habitId) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const relY = e.clientY - rect.top
+      const pos = relY < rect.height / 2 ? 'top' : 'bottom'
+      setDragOverHabitId(habitId)
+      setDragOverPosition(pos)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Chỉ reset nếu chuột thật sự rời khỏi card
+    const current = e.currentTarget
+    if (!current.contains(e.relatedTarget as Node)) {
+      setDragOverHabitId(null)
+      setDragOverPosition(null)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    const sourceId = draggedHabitId || e.dataTransfer.getData('text/plain')
+    if (sourceId && sourceId !== targetId) {
+      moveHabit(sourceId, targetId, dragOverPosition || 'top')
+    }
+    setDraggedHabitId(null)
+    setDragOverHabitId(null)
+    setDragOverPosition(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedHabitId(null)
+    setDragOverHabitId(null)
+    setDragOverPosition(null)
+  }
+
+  // --- Handlers cho Touch / Long Press Drag (Mobile) ---
+  const handleTouchStart = (e: React.TouchEvent, habitId: string) => {
+    const touch = e.touches[0]
+    touchStartY.current = touch.clientY
+    touchCurrentTargetId.current = habitId
+    setDraggedHabitId(habitId)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!draggedHabitId) return
+    const touch = e.touches[0]
+    const element = document.elementFromPoint(touch.clientX, touch.clientY)
+    const habitItem = element?.closest('[data-habit-id]') as HTMLElement | null
+    if (habitItem && habitItem.dataset.habitId) {
+      const targetId = habitItem.dataset.habitId
+      if (targetId !== draggedHabitId) {
+        const rect = habitItem.getBoundingClientRect()
+        const relY = touch.clientY - rect.top
+        const pos = relY < rect.height / 2 ? 'top' : 'bottom'
+        setDragOverHabitId(targetId)
+        setDragOverPosition(pos)
+        touchCurrentTargetId.current = targetId
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (draggedHabitId && touchCurrentTargetId.current && draggedHabitId !== touchCurrentTargetId.current) {
+      moveHabit(draggedHabitId, touchCurrentTargetId.current, dragOverPosition || 'top')
+    }
+    setDraggedHabitId(null)
+    setDragOverHabitId(null)
+    setDragOverPosition(null)
+    touchCurrentTargetId.current = null
+  }
+
+  const renderHabitItem = (h: Habit, index: number) => {
     const isDone = completed.has(h.id)
     const isBad = h.habit_type === 'BAD'
     const isCount = h.tracking_type === 'COUNT'
     const cat = category(h)
+    const isDragging = draggedHabitId === h.id
+    const isDragOver = dragOverHabitId === h.id
 
-    const routine = h.routine || 'MORNING'
-    const routineIcon = routine === 'MORNING' ? '🌅' : routine === 'AFTERNOON' ? '☀️' : '🌙'
-    const routineColor = routine === 'MORNING' ? 'var(--amber)' : routine === 'AFTERNOON' ? '#f97316' : 'var(--purple)' // using hex for orange since it might not be in css
-    const routineBg = routine === 'MORNING' ? 'var(--amber-bg)' : routine === 'AFTERNOON' ? 'rgba(249, 115, 22, 0.1)' : 'var(--purple-bg)'
+    const canMoveUp = index > 0
+    const canMoveDown = index < sortedHabits.length - 1
 
     return (
       <div
         key={h.id}
-        className={'habit-item' + (isDone ? ' is-done' : '') + (isBad ? ' is-bad' : '') + (isCount ? '' : ' is-tappable')}
+        data-habit-id={h.id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, h.id)}
+        onDragOver={(e) => handleDragOver(e, h.id)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, h.id)}
+        onDragEnd={handleDragEnd}
+        className={
+          'habit-item' +
+          (isDone ? ' is-done' : '') +
+          (isBad ? ' is-bad' : '') +
+          (isCount ? '' : ' is-tappable') +
+          (isDragging ? ' is-dragging' : '') +
+          (isDragOver && dragOverPosition === 'top' ? ' drag-over-top' : '') +
+          (isDragOver && dragOverPosition === 'bottom' ? ' drag-over-bottom' : '')
+        }
         onClick={isCount ? undefined : () => toggle(h)}
       >
+        {/* Nút tay cầm kéo thả (Drag Handle) - Đè vào để di chuyển lên/xuống */}
+        <div
+          className="habit-drag-handle"
+          title="Đè hoặc kéo để đổi thứ tự ưu tiên"
+          aria-label={`Đổi thứ tự cho ${h.name}`}
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => handleTouchStart(e, h.id)}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <GripVertical size={16} />
+        </div>
+
         <button
           className={'habit-tick' + (isDone ? ' is-on' : '')}
           aria-label={`Đánh dấu ${h.name}`}
@@ -324,17 +544,18 @@ export function HabitsPage() {
               </span>
             )}
             <span
-              className="habit-tag"
+              className="habit-tag habit-type-tag"
+              title={isBad ? 'Cần hạn chế' : 'Thói quen tốt'}
+              aria-label={isBad ? 'Cần hạn chế' : 'Thói quen tốt'}
               style={{
                 color: isBad ? 'var(--red)' : 'var(--emerald)',
-                background: isBad ? 'var(--rose-bg)' : 'transparent',
-                borderColor: isBad ? 'transparent' : 'var(--card-border)',
+                background: isBad ? 'var(--rose-bg)' : 'var(--emerald-bg)',
+                borderColor: isBad ? 'transparent' : 'transparent',
+                padding: '2px 6px',
+                fontSize: '0.78rem',
               }}
             >
-              {isBad ? '⚠ Cần hạn chế' : '☀ Thói quen tốt'}
-            </span>
-            <span className="habit-tag" style={{ color: routineColor, background: routineBg, borderColor: 'transparent' }}>
-              {routineIcon} {routine === 'MORNING' ? 'Sáng' : routine === 'AFTERNOON' ? 'Trưa' : 'Tối'}
+              {isBad ? '⚠️' : '🌟'}
             </span>
           </div>
         </div>
@@ -364,6 +585,28 @@ export function HabitsPage() {
           </div>
         )}
 
+        {/* Nút điều hướng nhanh lên/xuống (tiện lợi cho người dùng) */}
+        <div className="habit-item-reorder-btns" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="habit-reorder-btn"
+            disabled={!canMoveUp}
+            title="Di chuyển lên trên"
+            aria-label={`Di chuyển ${h.name} lên trên`}
+            onClick={(e) => moveHabitUp(h.id, e)}
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            className="habit-reorder-btn"
+            disabled={!canMoveDown}
+            title="Di chuyển xuống dưới"
+            aria-label={`Di chuyển ${h.name} xuống dưới`}
+            onClick={(e) => moveHabitDown(h.id, e)}
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
+
         <button
           className="habit-item-menu"
           aria-label={`Sửa ${h.name}`}
@@ -380,7 +623,7 @@ export function HabitsPage() {
 
   return (
     <section className="page-shell">
-      {/* Cột phụ desktop: hai vòng tròn và tiến độ theo buổi luôn nhìn thấy được. */}
+      {/* Cột phụ desktop: hai vòng tròn tiến độ */}
       <Aside>
         <AsideCard title="Hôm nay">
           <div className="aside-ring">
@@ -399,23 +642,27 @@ export function HabitsPage() {
           </div>
         </AsideCard>
 
-        <AsideCard title="Theo buổi">
-          {routineGroups.map((slot) => {
-            const done = slot.habits.filter((h) => completed.has(h.id)).length
-            return (
-              <div className="aside-row" key={slot.key}>
-                <span>{slot.label}</span>
-                <strong style={{ color: slot.color }}>
-                  {done}/{slot.habits.length}
-                </strong>
-              </div>
-            )
-          })}
+        <AsideCard title="Tổng quan">
+          <div className="aside-row">
+            <span>Tổng thói quen</span>
+            <strong>{sortedHabits.length}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Dạng tích hoàn thành</span>
+            <strong>{checkHabits.length}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Dạng nhập số liệu</span>
+            <strong>{countHabits.length}</strong>
+          </div>
+          <div className="aside-row">
+            <span>Đã hoàn thành hôm nay</span>
+            <strong style={{ color: 'var(--emerald)' }}>{completed.size}/{sortedHabits.length}</strong>
+          </div>
         </AsideCard>
       </Aside>
 
-      {/* Tiêu đề "Habits" + nút thêm đã nằm ở header chung của app, nên ở đây
-          chỉ còn hàng tab; nút quản lý thể loại bám vào cuối hàng đó. */}
+      {/* Tiêu đề "Habits" + nút thêm đã nằm ở header chung của app */}
       <div className="habit-top-bar">
         <div className="habit-sub-tabs">
           <button className={activeTab === 'today' ? 'active' : ''} onClick={() => setActiveTab('today')}>
@@ -445,7 +692,7 @@ export function HabitsPage() {
             )}
           </div>
 
-          {habits.items.length > 0 && (
+          {sortedHabits.length > 0 && (
             <div className="habit-progress-card">
               <div className="habit-progress-rings">
                 {goodHabits.length > 0 && (
@@ -470,7 +717,7 @@ export function HabitsPage() {
             </div>
           )}
 
-          {!habits.items.length ? (
+          {!sortedHabits.length ? (
             <div className="card" style={{ padding: 14, margin: 0 }}>
               <Empty icon={Flame} colorClass="icon-box-amber">
                 Chưa có thói quen nào. Bấm "+" để tạo mới nhé!
@@ -492,6 +739,12 @@ export function HabitsPage() {
                 ))}
               </div>
 
+              {/* Hướng dẫn kéo thả nhẹ nhàng */}
+              <div className="habit-reorder-hint">
+                <GripVertical size={13} />
+                <span>Đè giữ hoặc kéo thẻ để sắp xếp thứ tự ưu tiên</span>
+              </div>
+
               <div style={{ display: 'grid', gap: 12 }}>
                 {sections.length === 0 ? (
                   <div className="card" style={{ padding: 14, margin: 0 }}>
@@ -511,7 +764,9 @@ export function HabitsPage() {
                           {section.habits.filter((h) => completed.has(h.id)).length}/{section.habits.length}
                         </span>
                       </div>
-                      <div className="habit-section-list">{section.habits.map(renderHabitItem)}</div>
+                      <div className="habit-section-list">
+                        {section.habits.map((h, idx) => renderHabitItem(h, idx))}
+                      </div>
                     </div>
                   ))
                 )}
@@ -534,7 +789,7 @@ export function HabitsPage() {
               <div style={{ display: 'grid', gap: 4 }}>
                 {list.map((h) => (
                   <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '5px 8px', borderRadius: 6, fontSize: '0.78rem' }}>
-                    <span style={{ fontWeight: 600 }}>{h.name} <small style={{ color: h.habit_type === 'BAD' ? 'var(--rose)' : 'var(--emerald)' }}>({h.habit_type === 'BAD' ? 'Bad' : 'Good'})</small></span>
+                    <span style={{ fontWeight: 600 }}>{h.name} <small style={{ color: h.habit_type === 'BAD' ? 'var(--rose)' : 'var(--emerald)' }}>({h.habit_type === 'BAD' ? '⚠️' : '🌟'})</small></span>
                     <button
                       className="icon small"
                       onClick={() => {
@@ -543,7 +798,6 @@ export function HabitsPage() {
                         setCategoryId(h.category_id ?? '')
                         setHabitType(h.habit_type ?? 'GOOD')
                         setTrackingType(h.tracking_type ?? 'CHECK')
-                        setRoutineSlot(h.routine ?? 'MORNING')
                       }}
                       style={{ padding: 2 }}
                     >
@@ -636,32 +890,6 @@ export function HabitsPage() {
             </button>
           </label>
           <label>
-            Buổi thực hiện
-            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              <button
-                type="button"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'MORNING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
-                onClick={() => setRoutineSlot('MORNING')}
-              >
-                🌅 Sáng
-              </button>
-              <button
-                type="button"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'AFTERNOON' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
-                onClick={() => setRoutineSlot('AFTERNOON')}
-              >
-                ☀️ Trưa
-              </button>
-              <button
-                type="button"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'EVENING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
-                onClick={() => setRoutineSlot('EVENING')}
-              >
-                🌙 Tối
-              </button>
-            </div>
-          </label>
-          <label>
             Kiểu theo dõi
             <select value={trackingType} onChange={(e) => setTrackingType(e.target.value as 'CHECK' | 'COUNT')}>
               <option value="CHECK">Tích hoàn thành (Checkmark)</option>
@@ -703,32 +931,6 @@ export function HabitsPage() {
             <button type="button" className="icon small" onClick={() => setManage(true)} title="Quản lý thể loại" aria-label="Quản lý thể loại" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--primary)' }}>
               <FolderCog size={14} /> Quản lý thể loại
             </button>
-          </label>
-          <label>
-            Buổi thực hiện
-            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              <button
-                type="button"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'MORNING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'MORNING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
-                onClick={() => setRoutineSlot('MORNING')}
-              >
-                🌅 Sáng
-              </button>
-              <button
-                type="button"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'AFTERNOON' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'AFTERNOON' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
-                onClick={() => setRoutineSlot('AFTERNOON')}
-              >
-                ☀️ Trưa
-              </button>
-              <button
-                type="button"
-                style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--bg-main)', color: routineSlot === 'EVENING' ? 'white' : 'var(--text-main)', border: '1px solid', borderColor: routineSlot === 'EVENING' ? 'var(--primary)' : 'var(--card-border)', borderRadius: 6 }}
-                onClick={() => setRoutineSlot('EVENING')}
-              >
-                🌙 Tối
-              </button>
-            </div>
           </label>
           <label>
             Kiểu theo dõi

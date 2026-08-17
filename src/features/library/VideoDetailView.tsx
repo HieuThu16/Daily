@@ -30,8 +30,38 @@ export const thumbnailUrl = (videoId: string) => `https://i.ytimg.com/vi/${video
  */
 export function VideoDetailView({ item, onBack, onEdit, onStatusChange }: Props) {
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [playing, setPlaying] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tvshow_playback_rate')
+      return saved ? parseFloat(saved) : 1
+    } catch {
+      return 1
+    }
+  })
+
   const videoId = youtubeVideoId(item.youtube_url ?? '')
+
+  const sendYouTubeCommand = (func: string, args: any[] = []) => {
+    if (!iframeRef.current || !iframeRef.current.contentWindow) return
+    iframeRef.current.contentWindow.postMessage(
+      JSON.stringify({
+        event: 'command',
+        func,
+        args,
+      }),
+      '*'
+    )
+  }
+
+  const applyPlaybackRate = (rate: number) => {
+    setPlaybackRate(rate)
+    try {
+      localStorage.setItem('tvshow_playback_rate', String(rate))
+    } catch {}
+    sendYouTubeCommand('setPlaybackRate', [rate])
+  }
 
   useEffect(() => {
     headingRef.current?.focus()
@@ -46,15 +76,21 @@ export function VideoDetailView({ item, onBack, onEdit, onStatusChange }: Props)
       </button>
 
       <div className="video-detail-card">
-        {/* Chỉ nhúng iframe sau khi bấm xem: nhúng sẵn thì mỗi lần mở chi tiết là
-            tải vài trăm KB của YouTube dù người dùng chưa định xem. */}
+        {/* Chỉ nhúng iframe sau khi bấm xem */}
         <div className="video-detail-stage">
           {playing && videoId ? (
             <iframe
-              src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
+              ref={iframeRef}
+              src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&rel=0`}
               title={item.name}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
+              onLoad={() => {
+                if (playbackRate !== 1) {
+                  setTimeout(() => sendYouTubeCommand('setPlaybackRate', [playbackRate]), 400)
+                  setTimeout(() => sendYouTubeCommand('setPlaybackRate', [playbackRate]), 1200)
+                }
+              }}
             />
           ) : videoId ? (
             <button type="button" className="video-detail-poster" aria-label={`Xem ${item.name}`} onClick={() => setPlaying(true)}>
@@ -70,6 +106,37 @@ export function VideoDetailView({ item, onBack, onEdit, onStatusChange }: Props)
             </div>
           )}
         </div>
+
+        {/* Speed Controls when playing */}
+        {playing && videoId && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, padding: '10px 14px', background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 12 }}>
+            <div className="tv-speed-group" title="Tốc độ phát">
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0 4px', color: 'var(--text-muted)' }}>
+                ⚡ Tốc độ:
+              </span>
+              {[1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  className={`tv-speed-btn ${rate === 2 ? 'is-2x' : ''} ${playbackRate === rate ? 'active' : ''}`}
+                  onClick={() => applyPlaybackRate(rate)}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className={`tv-btn ${playbackRate === 2 ? 'primary' : ''}`}
+              onClick={() => applyPlaybackRate(playbackRate === 2 ? 1 : 2)}
+              title="Bật/Tắt tốc độ 2x"
+              style={{ fontWeight: 800, fontSize: '0.78rem' }}
+            >
+              ⚡ {playbackRate === 2 ? 'Đang 2x' : 'Chế độ 2x'}
+            </button>
+          </div>
+        )}
 
         <div className="video-detail-heading">
           <span>TV Show</span>
@@ -129,3 +196,4 @@ export function VideoDetailView({ item, onBack, onEdit, onStatusChange }: Props)
     </section>
   )
 }
+

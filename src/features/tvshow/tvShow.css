@@ -266,23 +266,46 @@
   line-height: 1.6;
 }
 
-/* --- Màn xem Kênh & Danh sách Video (Image 2 style) ---------------------- */
+/* --- Màn xem Kênh & Danh sách Video (Khớp chuẩn 100% Mobile UI) ---------------------- */
 
 .tv-detail {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  max-width: 1280px;
+  gap: 16px;
+  max-width: 860px;
   margin: 0 auto;
   width: 100%;
+  padding: 0 4px 32px;
 }
 
+/* Header Top Bar */
 .tv-detail-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.tv-back-circle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.tv-back-circle-btn:hover {
+  background: var(--bg-main);
+  border-color: #8b5cf6;
+  transform: scale(1.05);
 }
 
 .tv-detail-title-wrap {
@@ -291,191 +314,414 @@
   gap: 8px;
 }
 
-.tv-detail-layout {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 16px;
-  align-items: start;
+.tv-header-title-text {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
 }
 
-@media (max-width: 920px) {
-  .tv-detail-layout {
-    grid-template-columns: 1fr;
-  }
+.tv-header-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.tv-player-box {
+.tv-header-icon-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tv-header-icon-btn:hover {
+  background: var(--bg-main);
+  color: #7c3aed;
+}
+
+.tv-header-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--card-bg);
+}
+
+/* Main Top Card containing Player + Meta + 4-Button Grid */
+.tv-main-player-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  background: var(--card-bg);
-  padding: 14px;
-  box-shadow: var(--card-shadow);
+  gap: 14px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--card-border, #e2e8f0);
+  border-radius: 24px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
-.tv-player-frame {
+.tv-player-frame-wrapper {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 14px;
+  border-radius: 18px;
   overflow: hidden;
-  background: #000;
+  background: #000000;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
-.tv-player-frame iframe {
+.tv-player-frame-wrapper iframe {
   width: 100%;
   height: 100%;
   border: none;
 }
 
-.tv-player-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.tv-player-poster-btn {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: block;
 }
 
-.tv-player-title {
-  font-size: 1.08rem;
+.tv-player-poster-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tv-player-play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.tv-player-poster-btn:hover .tv-player-play-overlay {
+  transform: translate(-50%, -50%) scale(1.1);
+  background: #dc2626;
+}
+
+.tv-video-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tv-video-title-main {
+  font-size: 1.15rem;
   font-weight: 800;
   color: var(--text-main);
   line-height: 1.35;
 }
 
-.tv-player-actions {
-  display: flex;
+.tv-video-creator-link {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--card-border);
+  gap: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
-/* Khung danh sách Video (Đồng bộ theo hình ảnh Image 2) */
+/* === 4 NÚT HÀNG NGANG (THE 4-ACTION BAR) === */
+.tv-action-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
 
-.tv-episodes-box {
+.tv-action-card-btn {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  background: var(--card-bg);
-  padding: 14px;
-  box-shadow: var(--card-shadow);
-  max-height: 80vh;
-  overflow-y: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border, #f1f5f9);
+  background: var(--bg-main, #f8fafc);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-align: center;
+  user-select: none;
 }
 
-.tv-episodes-head {
+.tv-action-card-btn:hover {
+  background: var(--card-bg, #ffffff);
+  border-color: #8b5cf6;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.12);
+}
+
+.tv-action-card-btn.active {
+  background: rgba(124, 58, 237, 0.08);
+  border-color: #7c3aed;
+}
+
+.tv-action-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.tv-action-card-btn.active .tv-action-icon-box {
+  color: #7c3aed;
+}
+
+.tv-action-card-btn.is-watched .tv-action-icon-box {
+  color: #10b981;
+}
+
+.tv-action-label-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.15;
+}
+
+.tv-action-label-sub {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.15;
+}
+
+.tv-action-label-sub.highlight {
+  color: #7c3aed;
+  font-weight: 700;
+}
+
+.tv-action-label-sub.is-green {
+  color: #10b981;
+  font-weight: 700;
+}
+
+/* === SECTION DANH SÁCH VIDEO === */
+.tv-playlist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tv-playlist-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--card-border);
+  padding: 4px 2px;
 }
 
-.tv-episodes-head-title {
-  font-size: 0.96rem;
+.tv-playlist-title {
+  font-size: 1.1rem;
   font-weight: 800;
   color: var(--text-main);
 }
 
-.tv-episodes-head-stat {
-  font-size: 0.82rem;
+.tv-playlist-stat {
+  font-size: 0.88rem;
   font-weight: 700;
-  color: var(--amber, #f59e0b);
+  color: #ea580c;
 }
 
-.tv-ep-filters {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.tv-ep-filter-btn {
-  padding: 3px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--card-border);
-  background: var(--bg-main);
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.tv-ep-filter-btn.active {
-  background: var(--amber, #f59e0b);
-  border-color: var(--amber, #f59e0b);
-  color: #fff;
-}
-
-.tv-ep-search {
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--card-border);
-  background: var(--bg-main);
-  color: var(--text-main);
-  font-size: 0.78rem;
-  outline: none;
+/* Ô tìm kiếm */
+.tv-search-input-wrapper {
+  position: relative;
   width: 100%;
 }
 
-.tv-episodes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.tv-search-field {
+  width: 100%;
+  padding: 10px 40px 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Item video chuẩn mẫu Image 2 */
-.tv-episode-item {
+.tv-search-field:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.tv-search-icon-inside {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Hàng Filter & Sort */
+.tv-filter-sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tv-filter-pills-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.tv-filter-pill-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tv-filter-pill-btn:hover {
+  background: var(--bg-main);
+}
+
+.tv-filter-pill-btn.active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.tv-sort-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tv-sort-toggle-btn:hover {
+  background: var(--bg-main);
+  border-color: #7c3aed;
+}
+
+/* Danh sách Item Video */
+.tv-video-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tv-video-card-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
+  padding: 10px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--card-border, #f1f5f9);
+  background: var(--card-bg, #ffffff);
   cursor: pointer;
-  text-align: left;
-  transition: all 0.15s ease;
-  width: 100%;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
 }
 
-.tv-episode-item:hover {
+.tv-video-card-item:hover {
+  border-color: #7c3aed;
   background: var(--bg-main);
-  border-color: var(--amber, #f59e0b);
+  transform: translateY(-1px);
 }
 
-/* Active video - nổi bật viền cam và nền cam nhạt */
-.tv-episode-item.playing {
-  background: rgba(245, 158, 11, 0.09);
-  border: 1.5px solid var(--amber, #f59e0b);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.14);
+.tv-video-card-item.playing {
+  background: rgba(124, 58, 237, 0.06);
+  border: 1.5px solid #7c3aed;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.14);
 }
 
-.tv-ep-thumb {
-  width: 80px;
+.tv-video-thumb-container {
+  position: relative;
+  width: 96px;
   aspect-ratio: 16 / 9;
-  border-radius: 8px;
-  object-fit: cover;
+  border-radius: 10px;
+  overflow: hidden;
   flex-shrink: 0;
-  background: var(--bg-main);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: #000;
 }
 
-.tv-ep-text {
+.tv-video-thumb-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tv-video-duration-pill {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.tv-video-meta-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   flex: 1;
   min-width: 0;
 }
 
-.tv-ep-name {
-  font-size: 0.82rem;
+.tv-video-item-title {
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.35;
@@ -485,27 +731,236 @@
   overflow: hidden;
 }
 
-.tv-ep-watch-btn {
+.tv-video-item-sub {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.tv-video-right-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tv-video-watch-circle-btn {
   border: none;
   background: transparent;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 999px;
+  padding: 6px;
+  border-radius: 50%;
   color: var(--text-muted);
-  flex-shrink: 0;
   display: grid;
   place-items: center;
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition: all 0.15s ease;
 }
 
-.tv-ep-watch-btn:hover {
-  color: var(--green, #16a34a);
+.tv-video-watch-circle-btn:hover {
+  color: #10b981;
   transform: scale(1.15);
 }
 
-.tv-ep-watch-btn.watched {
-  color: var(--green, #16a34a);
+.tv-video-watch-circle-btn.watched {
+  color: #10b981;
 }
+
+.tv-video-more-dots-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+
+.tv-video-more-dots-btn:hover {
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* === MODAL CÀI ĐẶT / TỐC ĐỘ / HẸN GIỜ === */
+.tv-setting-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--text-main);
+  transition: all 0.15s ease;
+}
+
+.tv-setting-item-row:hover {
+  border-color: #7c3aed;
+  background: var(--bg-main);
+}
+
+.tv-setting-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tv-setting-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.1);
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+.tv-setting-item-icon.youtube {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.tv-setting-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tv-setting-item-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.tv-setting-item-desc {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* Toggle Switch */
+.tv-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.tv-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.tv-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--card-border, #cbd5e1);
+  transition: 0.25s;
+  border-radius: 999px;
+}
+
+.tv-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.25s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.tv-toggle-switch input:checked + .tv-toggle-slider {
+  background-color: #7c3aed;
+}
+
+.tv-toggle-switch input:checked + .tv-toggle-slider:before {
+  transform: translateX(20px);
+}
+
+/* Speed Options Grid */
+.tv-speed-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.tv-speed-modal-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 700;
+}
+
+.tv-speed-modal-btn:hover {
+  border-color: #7c3aed;
+  background: var(--bg-main);
+}
+
+.tv-speed-modal-btn.active {
+  border-color: #7c3aed;
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+}
+
+/* Sleep Timer Grid */
+.tv-timer-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.tv-timer-modal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.tv-timer-modal-btn:hover {
+  border-color: #7c3aed;
+  background: var(--bg-main);
+}
+
+.tv-timer-modal-btn.active {
+  border-color: #7c3aed;
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+}
+
 
 /* --- Progress & Modal ---------------------------------------------------- */
 

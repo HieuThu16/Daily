@@ -103,13 +103,15 @@ describe('HabitsPage', () => {
     expect(await screen.findByText('Sửa thói quen')).toBeInTheDocument()
   })
 
-  it('hiện nhãn thể loại, loại thói quen và buổi trên từng dòng', async () => {
+  it('hiện nhãn thể loại, loại thói quen và tay cầm kéo thả thứ tự ưu tiên trên từng dòng', async () => {
     render(<HabitsPage />)
     const title = await screen.findByText('Tắm')
     const row = title.closest('.habit-item') as HTMLElement
 
     expect(within(row).getByText('Cuộc sống')).toBeInTheDocument()
-    expect(within(row).getByText(/Thói quen tốt/)).toBeInTheDocument()
-    expect(within(row).getByText(/Sáng/)).toBeInTheDocument()
+    expect(within(row).getByLabelText('Thói quen tốt')).toBeInTheDocument()
+    expect(within(row).getByText('🌟')).toBeInTheDocument()
+    expect(within(row).getByLabelText('Đổi thứ tự cho Tắm')).toBeInTheDocument()
+    expect(within(row).getByLabelText('Di chuyển Tắm xuống dưới')).toBeInTheDocument()
   })
 })

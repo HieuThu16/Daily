@@ -76,10 +76,11 @@ WHERE type = 'BOOK'
   AND (user_id = auth.uid() OR is_public = true);
 
 -- =====================================================================
--- ✅ HOÀN THÀNH!
--- 
--- Sau khi chạy script này:
--- 1. Reload trang web của bạn
--- 2. Vào trang Library → Books
--- 3. Bạn sẽ thấy tất cả sách công khai (is_public = true)
+-- BƯỚC 4 (MỚI): Thêm cột position vào bảng habits để lưu thứ tự ưu tiên
 -- =====================================================================
+ALTER TABLE public.habits 
+  ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS habits_user_position_idx 
+  ON public.habits(user_id, position) 
+  WHERE deleted_at IS NULL;

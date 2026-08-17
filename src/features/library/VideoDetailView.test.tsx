@@ -41,7 +41,7 @@ describe('VideoDetailView', () => {
 
     expect(container.querySelector('iframe')).toHaveAttribute(
       'src',
-      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1',
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&enablejsapi=1&rel=0',
     )
   })
 
