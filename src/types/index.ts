@@ -12,7 +12,7 @@ export type KnowledgeItem = {
 
 export type EnglishKind = 'WORD' | 'SENTENCE'
 
-/** Một thẻ học tiếng Anh: từ hoặc câu, kèm nghĩa, ví dụ và tag. */
+/** Một thẻ học tiếng Anh: từ hoặc câu, kèm nghĩa, ví dụ, tag, trạng thái đã học và màu/cover. */
 export type EnglishItem = {
   id: string
   kind: EnglishKind
@@ -20,6 +20,9 @@ export type EnglishItem = {
   meaning: string
   example?: string | null
   tags: string[]
+  is_learned?: boolean
+  color?: string | null
+  cover_url?: string | null
   created_at?: string
   deleted_at?: string | null
 }

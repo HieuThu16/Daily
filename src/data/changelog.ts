@@ -4,7 +4,7 @@
  */
 export type ChangelogEntry = {
   id: string
-  date: string       // ISO date string, e.g. '2026-08-15'
+  date: string       // ISO date string, e.g. '2026-08-18'
   version?: string
   title: string
   description: string
@@ -13,6 +13,22 @@ export type ChangelogEntry = {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    id: 'v2.0-categories-review-super-update',
+    date: '2026-08-18',
+    version: '2.0',
+    title: 'Xem Video Theo Thể Loại & Tự Động Phân Loại Thông Minh',
+    description: 'Nâng cấp lớn v2.0 mang đến tính năng xem Video theo Thể Loại & Kênh, tự động gom nhóm video theo tiêu đề (Học tập, Tự tin, Giao tiếp, Phim Hành động, Hàn Quốc, Mỹ, Kinh dị, Anime...), cùng hàng loạt tối ưu hóa cho Thư viện Truyện, Sách và Flashcard Tiếng Anh.',
+    highlights: [
+      'TV Show & Review Phim: Bổ sung 2 chế độ xem — Xem theo Kênh và Xem theo Thể loại',
+      'Tự động phân loại thể loại video dựa vào tiêu đề: Học tập, Tự tin, Giao tiếp, Kinh doanh, Phim Hành động, Hàn Quốc, Mỹ, Trung Quốc, Kinh dị, Viễn tưởng, Anime...',
+      'Trình phát video nâng cấp: Chỉnh tốc độ 0.75x–2x, hẹn giờ tắt ngủ, tự chuyển tập liên tục, đánh dấu đã xem',
+      'Thư viện Truyện BL & Ngôn Tình: Tải dữ liệu siêu tốc, giao diện đọc hiện đại và chuông thông báo chương mới',
+      'Tab Tiếng Anh & Kiến thức: Flashcard lật mặt học từ vựng/mẫu câu và bộ thẻ hỏi đáp kiến thức đa chủ đề',
+      'Tìm kiếm sách & bộ lọc nâng cao: Tìm kiếm nhanh theo tựa đề/tác giả/thể loại với ngăn kéo bộ lọc tiện lợi',
+    ],
+    type: 'feature',
+  },
   {
     id: 'v1.9-comic-detail-redesign',
     date: '2026-08-16',
@@ -148,19 +164,29 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
 ]
 
-export const CHANGELOG_SEEN_KEY = 'daily_changelog_seen'
+const SEEN_STORAGE_KEY = 'daily_changelog_seen'
 
-/** Trả về id cập nhật mới nhất mà người dùng chưa đọc. null nếu đã đọc hết. */
+/** Trả về bản cập nhật mới nhất nếu người dùng chưa xem, hoặc null. */
 export function getUnseenLatest(): ChangelogEntry | null {
-  const seen = localStorage.getItem(CHANGELOG_SEEN_KEY)
-  const latest = CHANGELOG[0]
-  if (!latest) return null
-  if (seen === latest.id) return null
-  return latest
+  try {
+    const seenId = localStorage.getItem(SEEN_STORAGE_KEY)
+    const latest = CHANGELOG[0]
+    if (!latest) return null
+    if (seenId !== latest.id) return latest
+  } catch (error) {
+    console.warn('Không đọc được trạng thái changelog:', error)
+  }
+  return null
 }
 
-/** Đánh dấu đã xem thông báo mới nhất. */
+/** Đánh dấu người dùng đã xem bản cập nhật mới nhất. */
 export function markLatestSeen(): void {
-  const latest = CHANGELOG[0]
-  if (latest) localStorage.setItem(CHANGELOG_SEEN_KEY, latest.id)
+  try {
+    const latest = CHANGELOG[0]
+    if (latest) {
+      localStorage.setItem(SEEN_STORAGE_KEY, latest.id)
+    }
+  } catch (error) {
+    console.warn('Không lưu được trạng thái changelog:', error)
+  }
 }

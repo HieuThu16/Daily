@@ -76,7 +76,7 @@ WHERE type = 'BOOK'
   AND (user_id = auth.uid() OR is_public = true);
 
 -- =====================================================================
--- BƯỚC 4 (MỚI): Thêm cột position vào bảng habits để lưu thứ tự ưu tiên
+-- BƯỚC 4: Thêm cột position vào bảng habits để lưu thứ tự ưu tiên
 -- =====================================================================
 ALTER TABLE public.habits 
   ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
@@ -84,3 +84,16 @@ ALTER TABLE public.habits
 CREATE INDEX IF NOT EXISTS habits_user_position_idx 
   ON public.habits(user_id, position) 
   WHERE deleted_at IS NULL;
+
+-- =====================================================================
+-- BƯỚC 5: Thêm cột đánh dấu đã học (is_learned), màu thẻ (color), ảnh cover (cover_url)
+-- =====================================================================
+ALTER TABLE public.english_items
+  ADD COLUMN IF NOT EXISTS is_learned boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS color text,
+  ADD COLUMN IF NOT EXISTS cover_url text;
+
+CREATE INDEX IF NOT EXISTS english_items_user_learned_idx
+  on public.english_items(user_id, is_learned, created_at desc) 
+  WHERE deleted_at IS NULL;
+

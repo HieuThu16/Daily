@@ -4,12 +4,18 @@ import {
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
   Youtube, Clock, Settings, Gauge, Zap, Sliders, Bookmark, Bell, MoreVertical, 
   Copy, Check, ChevronRight, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
-  Clapperboard, Download, Loader2, Sparkles, AlertCircle, Save
+  Clapperboard, Download, Loader2, Sparkles, AlertCircle, Save, Layers
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
 import { useHideHeader } from '../HeaderAction'
+import { 
+  CategorizedGroup, 
+  detectVideoCategory, 
+  groupVideosByCategory 
+} from '../../lib/videoCategorizer'
+import { CategoryDetailView } from '../tvshow/CategoryDetailView'
 import '../tvshow/tvShow.css'
 
 const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
@@ -73,20 +79,24 @@ export function moveItem<T>(items: T[], from: number, to: number): T[] {
 }
 
 /**
- * Tab Review phim: 1 Kênh = 1 Card.
- * Gộp toàn bộ video review của kênh vào trong card đó, bấm vào xem toàn bộ video.
+ * Tab Review phim:
+ * Hỗ trợ 2 chế độ xem: Xem theo Kênh và Xem theo Thể Loại (Hành động, Hàn, Mỹ, Trung, Kinh dị, Anime, Viễn tưởng...).
  */
 export function ReviewSeriesView() {
   const [channels, setChannels] = useState<ChannelItem[]>([])
+  const [allVideos, setAllVideos] = useState<VideoRow[]>([])
+  const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
+  const [viewMode, setViewMode] = useState<'channel' | 'category'>('channel')
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<CategorizedGroup<VideoRow> | null>(null)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [addMovieOpen, setAddMovieOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
-  // Tải danh sách Kênh Review (1 kênh = 1 card) kèm thống kê video & tiến độ đã xem
+  // Tải danh sách Kênh Review & Toàn bộ video Review Phim
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -109,23 +119,23 @@ export function ReviewSeriesView() {
 
       const creators = (creatorsRes?.data ?? []) as any[]
 
-      // 2. Lấy danh sách video để tính số lượng, thumbnail và tiến độ cho từng kênh
+      // 2. Lấy danh sách video
       const [videosRes, watchedRes] = await Promise.all([
         supabase
           ?.from('review_videos')
-          .select('video_id,creator_id,creator_name,thumbnail,published_at')
+          .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at')
           .is('unavailable_at', null)
           .order('published_at', { ascending: false }),
         supabase?.from('review_watched').select('video_id'),
       ])
 
-      const allVideos = (videosRes?.data ?? []) as any[]
+      const videos = (videosRes?.data ?? []) as VideoRow[]
       const watchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((w) => w.video_id))
 
       // Gom video theo creator
       const statsByCreator = new Map<string, { total: number; watched: number; cover: string | null }>()
 
-      for (const v of allVideos) {
+      for (const v of videos) {
         const key = v.creator_id || v.creator_name || 'manual'
         const stat = statsByCreator.get(key) ?? { total: 0, watched: 0, cover: null }
         stat.total += 1
@@ -169,6 +179,8 @@ export function ReviewSeriesView() {
 
       if (alive) {
         setChannels(channelCards)
+        setAllVideos(videos)
+        setWatchedSet(watchedIds)
         setLoading(false)
       }
     })()
@@ -178,11 +190,29 @@ export function ReviewSeriesView() {
     }
   }, [reloadKey])
 
+  // Gom nhóm video theo Thể Loại tự động dựa vào tiêu đề phim
+  const categoryGroups = useMemo(() => {
+    return groupVideosByCategory(allVideos, 'review', watchedSet)
+  }, [allVideos, watchedSet])
+
+  // Lọc kênh theo tìm kiếm
   const filteredChannels = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return channels
     return channels.filter((c) => c.creator_name.toLowerCase().includes(q))
   }, [channels, search])
+
+  // Lọc thể loại theo tìm kiếm
+  const filteredCategories = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return categoryGroups
+    return categoryGroups.filter(
+      (g) =>
+        g.category.name.toLowerCase().includes(q) ||
+        g.category.description.toLowerCase().includes(q) ||
+        g.videos.some((v) => v.title.toLowerCase().includes(q))
+    )
+  }, [categoryGroups, search])
 
   const deleteChannel = async (channel: ChannelItem, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -204,6 +234,20 @@ export function ReviewSeriesView() {
     setReloadKey((k) => k + 1)
   }
 
+  // Nếu đang mở chi tiết 1 Thể loại phim
+  if (selectedCategory) {
+    return (
+      <CategoryDetailView
+        group={selectedCategory}
+        type="review"
+        onBack={() => {
+          setSelectedCategory(null)
+          setReloadKey((k) => k + 1)
+        }}
+      />
+    )
+  }
+
   // Nếu đang mở chi tiết 1 kênh
   if (selectedChannel) {
     return (
@@ -219,17 +263,42 @@ export function ReviewSeriesView() {
 
   return (
     <section className="tv-page">
-      {/* Toolbar */}
+      {/* Toolbar & Switch Chế độ */}
       <div className="tv-bar">
+        {/* Toggle Kênh / Thể loại */}
+        <div className="tv-view-mode-toggle">
+          <button
+            type="button"
+            className={`tv-mode-btn ${viewMode === 'channel' ? 'active review-active' : ''}`}
+            onClick={() => setViewMode('channel')}
+          >
+            <Radio size={14} /> Theo kênh ({channels.length})
+          </button>
+          <button
+            type="button"
+            className={`tv-mode-btn ${viewMode === 'category' ? 'active review-active' : ''}`}
+            onClick={() => setViewMode('category')}
+          >
+            <Layers size={14} /> Theo thể loại ({categoryGroups.length})
+          </button>
+        </div>
+
+        {/* Ô Tìm kiếm */}
         <div className="tv-search-box">
           <Search size={16} style={{ color: 'var(--text-muted)' }} />
           <input
             className="tv-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm kiếm kênh review phim…"
+            placeholder={
+              viewMode === 'channel'
+                ? 'Tìm kiếm kênh review phim…'
+                : 'Tìm thể loại phim (hành động, hàn, mỹ, kinh dị, anime…)'
+            }
           />
         </div>
+
+        {/* Nút hành động */}
         <button className="tv-btn primary" onClick={() => setAddChannelOpen(true)}>
           <Radio size={14} /> Thêm kênh
         </button>
@@ -243,85 +312,159 @@ export function ReviewSeriesView() {
           Chưa có bảng review series trên Supabase. Chạy migration <code>20260911000000_review_series.sql</code> trên SQL Editor rồi tải lại trang.
         </div>
       ) : loading ? (
-        <div className="tv-empty">Đang tải danh sách kênh review…</div>
-      ) : !filteredChannels.length ? (
-        <div className="tv-empty">
-          {search
-            ? `Không tìm thấy kênh review nào khớp “${search}”.`
-            : 'Chưa có kênh review nào. Bấm “Thêm kênh” rồi dán link YouTube để cào toàn bộ video về.'}
-        </div>
-      ) : (
-        <div className="tv-channel-grid">
-          {filteredChannels.map((c) => {
-            const isDone = c.videoCount > 0 && c.watchedCount >= c.videoCount
-            const percent = c.videoCount > 0 ? Math.round((c.watchedCount / c.videoCount) * 100) : 0
+        <div className="tv-empty">Đang tải danh sách video review & kênh…</div>
+      ) : viewMode === 'category' ? (
+        /* CHẾ ĐỘ XEM THEO THỂ LOẠI (Hành Động, Hàn Quốc, Mỹ, Kinh Dị, Anime...) */
+        !filteredCategories.length ? (
+          <div className="tv-empty">
+            {search
+              ? `Không tìm thấy thể loại phim nào khớp “${search}”.`
+              : 'Chưa có video review nào để phân loại thể loại.'}
+          </div>
+        ) : (
+          <div className="tv-category-grid">
+            {filteredCategories.map((g) => {
+              const isDone = g.totalCount > 0 && g.watchedCount >= g.totalCount
+              const percent = g.totalCount > 0 ? Math.round((g.watchedCount / g.totalCount) * 100) : 0
 
-            return (
-              <div
-                key={c.id}
-                className="tv-channel-card"
-                onClick={() => setSelectedChannel(c)}
-              >
-                <div className="tv-channel-cover">
-                  {c.cover ? (
-                    <img src={c.cover} alt={c.creator_name} loading="lazy" />
-                  ) : (
-                    <div className="tv-channel-cover-empty">
-                      <Film size={36} />
-                    </div>
-                  )}
+              return (
+                <div
+                  key={g.category.id}
+                  className="tv-category-card"
+                  onClick={() => setSelectedCategory(g)}
+                >
+                  <div className="tv-category-cover">
+                    {g.cover ? (
+                      <img src={g.cover} alt={g.category.name} loading="lazy" />
+                    ) : (
+                      <div className="tv-category-cover-fallback">
+                        {g.category.icon}
+                      </div>
+                    )}
 
-                  <span className="tv-badge-live">
-                    <Film size={11} /> KÊNH REVIEW
-                  </span>
-
-                  <span className="tv-count-pill">
-                    {c.videoCount} video
-                  </span>
-
-                  {c.watchedCount > 0 && (
-                    <span className={`tv-seen-pill${isDone ? ' done' : ''}`}>
-                      {isDone ? 'Đã xem hết' : `Đã xem ${c.watchedCount}/${c.videoCount}`}
+                    <span className="tv-category-icon-pill">
+                      <span>{g.category.icon}</span> THỂ LOẠI PHIM
                     </span>
-                  )}
-                </div>
 
-                <div className="tv-channel-body">
-                  <div className="tv-channel-header">
-                    <div className="tv-channel-title">{c.creator_name}</div>
-                    <button
-                      className="tv-btn"
-                      style={{ padding: '4px 6px', border: 'none', background: 'transparent', color: 'var(--text-muted)' }}
-                      onClick={(e) => void deleteChannel(c, e)}
-                      title="Xoá kênh này"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <span className="tv-count-pill">
+                      {g.totalCount} video
+                    </span>
+
+                    {g.watchedCount > 0 && (
+                      <span className={`tv-seen-pill${isDone ? ' done' : ''}`}>
+                        {isDone ? 'Đã xem hết' : `Đã xem ${g.watchedCount}/${g.totalCount}`}
+                      </span>
+                    )}
                   </div>
 
-                  <span className="tv-channel-sub">
-                    {c.videoCount > 0 ? `Tổng cộng ${c.videoCount} video review` : 'Chưa có video'}
-                  </span>
+                  <div className="tv-category-body">
+                    <div className="tv-category-title">{g.category.name}</div>
+                    <div className="tv-category-desc">{g.category.description}</div>
 
-                  {c.videoCount > 0 && (
-                    <div className="tv-channel-progress">
-                      <div className="tv-channel-progress-head">
-                        <span>Tiến độ xem</span>
-                        <span>{percent}%</span>
+                    {g.totalCount > 0 && (
+                      <div className="tv-channel-progress" style={{ marginTop: 4 }}>
+                        <div className="tv-channel-progress-head">
+                          <span>Tiến độ xem</span>
+                          <span>{percent}%</span>
+                        </div>
+                        <div className="tv-channel-progress-bar">
+                          <div
+                            className="tv-channel-progress-fill"
+                            style={{
+                              width: `${percent}%`,
+                              background: g.category.color || 'var(--primary)',
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="tv-channel-progress-bar">
-                        <div
-                          className="tv-channel-progress-fill"
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )
+      ) : (
+        /* CHẾ ĐỘ XEM THEO KÊNH (1 Kênh = 1 Card) */
+        !filteredChannels.length ? (
+          <div className="tv-empty">
+            {search
+              ? `Không tìm thấy kênh review nào khớp “${search}”.`
+              : 'Chưa có kênh review nào. Bấm “Thêm kênh” rồi dán link YouTube để cào toàn bộ video về.'}
+          </div>
+        ) : (
+          <div className="tv-channel-grid">
+            {filteredChannels.map((c) => {
+              const isDone = c.videoCount > 0 && c.watchedCount >= c.videoCount
+              const percent = c.videoCount > 0 ? Math.round((c.watchedCount / c.videoCount) * 100) : 0
+
+              return (
+                <div
+                  key={c.id}
+                  className="tv-channel-card"
+                  onClick={() => setSelectedChannel(c)}
+                >
+                  <div className="tv-channel-cover">
+                    {c.cover ? (
+                      <img src={c.cover} alt={c.creator_name} loading="lazy" />
+                    ) : (
+                      <div className="tv-channel-cover-empty">
+                        <Film size={36} />
+                      </div>
+                    )}
+
+                    <span className="tv-badge-live">
+                      <Film size={11} /> KÊNH REVIEW
+                    </span>
+
+                    <span className="tv-count-pill">
+                      {c.videoCount} video
+                    </span>
+
+                    {c.watchedCount > 0 && (
+                      <span className={`tv-seen-pill${isDone ? ' done' : ''}`}>
+                        {isDone ? 'Đã xem hết' : `Đã xem ${c.watchedCount}/${c.videoCount}`}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="tv-channel-body">
+                    <div className="tv-channel-header">
+                      <div className="tv-channel-title">{c.creator_name}</div>
+                      <button
+                        className="tv-btn"
+                        style={{ padding: '4px 6px', border: 'none', background: 'transparent', color: 'var(--text-muted)' }}
+                        onClick={(e) => void deleteChannel(c, e)}
+                        title="Xoá kênh này"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    <span className="tv-channel-sub">
+                      {c.videoCount > 0 ? `Tổng cộng ${c.videoCount} video review` : 'Chưa có video'}
+                    </span>
+
+                    {c.videoCount > 0 && (
+                      <div className="tv-channel-progress">
+                        <div className="tv-channel-progress-head">
+                          <span>Tiến độ xem</span>
+                          <span>{percent}%</span>
+                        </div>
+                        <div className="tv-channel-progress-bar">
+                          <div
+                            className="tv-channel-progress-fill"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
       )}
 
       {addChannelOpen && (
@@ -747,8 +890,16 @@ function ReviewChannelDetailView({
                       <div className="tv-video-item-title">
                         #{indexNum}. {v.title}
                       </div>
-                      <div className="tv-video-item-sub">
-                        {channel.creator_name}
+                      <div className="tv-video-item-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{channel.creator_name}</span>
+                        {(() => {
+                          const cat = detectVideoCategory(v.title, 'review')
+                          return (
+                            <span className="tv-video-category-tag review">
+                              {cat.icon} {cat.name}
+                            </span>
+                          )
+                        })()}
                       </div>
                     </div>
 

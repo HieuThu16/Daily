@@ -225,38 +225,21 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
         </div>
 
         <div className="settings-page-body">
-
-            {/* Thông tin cá nhân */}
-            <div className="settings-section">
-              <div className="settings-section-label">Cá nhân</div>
-              <div className="settings-group">
-                <div className="settings-profile-card-inline">
-                  <div className="spc-avatar">
-                    {user.avatar_url ? (
-                      <img src={user.avatar_url} alt={displayName} referrerPolicy="no-referrer" />
-                    ) : (
-                      <span>{displayName[0]?.toUpperCase() ?? '?'}</span>
-                    )}
-                  </div>
-                  <div className="spc-info">
-                    <div className="spc-name">{displayName}</div>
-                    {user.email && <div className="spc-email">{user.email}</div>}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Lịch sử cập nhật */}
+            {/* Lịch sử & Thông tin cập nhật */}
             <div className="settings-section">
               <div className="settings-section-label">Cập nhật ứng dụng</div>
               <div className="settings-group">
                 <button className="settings-row" onClick={() => setShowChangelog(true)}>
                   <div className="sr-icon sr-icon--emerald"><History size={16} /></div>
-                  <span className="sr-label">Lịch sử cập nhật</span>
+                  <div className="sr-label-group">
+                    <span className="sr-label">Bản cập nhật v2.0 mới nhất</span>
+                    <span className="sr-sub">Xem các tính năng & cải tiến mới</span>
+                  </div>
                   <ChevronRight size={15} />
                 </button>
               </div>
             </div>
+
 
             {/* Dữ liệu & Tải về */}
             <div className="settings-section">
