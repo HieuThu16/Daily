@@ -12,6 +12,7 @@
     "crawl:ngontinh": "node crawl_ngontinh.js",
     "crawl:teamsany": "node crawl_teamsany.js",
     "crawl:bl": "node crawl_all_bl.js",
+    "crawl:reviews": "node --import tsx crawl_review_series.mjs",
     "import:books": "node --import tsx import_books_full_v2.mjs",
     "import:metadata": "node create_books_simple.cjs"
   },
