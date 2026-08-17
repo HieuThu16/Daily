@@ -72,6 +72,18 @@ export function parseDuration(value: string | undefined): number | null {
   return Number(d ?? 0) * 86400 + Number(h ?? 0) * 3600 + Number(min ?? 0) * 60 + Number(s ?? 0)
 }
 
+/**
+ * Video riêng tư / đã xoá vẫn nằm trong playlistItems, nhưng YouTube thay tiêu
+ * đề bằng đúng mấy chữ này. Giữ lại thì vừa không xem được, vừa phá việc gom
+ * nhóm: cả trăm mục cùng tên "Private video" trông như một phim trăm phần.
+ */
+const PLACEHOLDER_TITLES = new Set(['private video', 'deleted video'])
+
+export function isPlaceholderItem(item: any): boolean {
+  const title = String(item?.snippet?.title ?? '').trim().toLowerCase()
+  return PLACEHOLDER_TITLES.has(title)
+}
+
 function normalize(item: any, playlist: PlatformPlaylist | null, channelId: string, channelName: string): NormalizedVideo {
   const snippet = item.snippet ?? {}
   const videoId: string = snippet.resourceId?.videoId ?? item.contentDetails?.videoId ?? item.id?.videoId ?? item.id
@@ -92,6 +104,81 @@ function normalize(item: any, playlist: PlatformPlaylist | null, channelId: stri
     position: typeof snippet.position === 'number' ? snippet.position : null,
     rawMetadata: item,
   }
+}
+
+/** Thông tin kênh + id playlist "uploads" chứa mọi video đã đăng. */
+export async function fetchChannelInfo(
+  creatorUrl: string,
+  key: string,
+  fetchImpl: Fetch = fetch,
+): Promise<{ channelId: string; channelName: string; uploadsId: string }> {
+  const channelId = await resolveChannelId(creatorUrl, key, fetchImpl)
+  const channel = await api('channels', { part: 'snippet,contentDetails', id: channelId }, key, fetchImpl)
+  const info = channel.items?.[0]
+  if (!info) throw new Error(`Không đọc được kênh ${channelId}`)
+  return {
+    channelId,
+    channelName: info.snippet?.title ?? '',
+    uploadsId: info.contentDetails?.relatedPlaylists?.uploads,
+  }
+}
+
+/** Danh sách playlist của kênh (không kèm video). */
+export async function fetchPlaylists(
+  channelId: string,
+  key: string,
+  fetchImpl: Fetch = fetch,
+): Promise<PlatformPlaylist[]> {
+  const raw = await paginate('playlists', { part: 'snippet,contentDetails', channelId }, key, fetchImpl)
+  return raw.map((p) => ({
+    platform: 'youtube' as const,
+    playlistId: p.id,
+    name: p.snippet?.title ?? '',
+    itemCount: typeof p.contentDetails?.itemCount === 'number' ? p.contentDetails.itemCount : null,
+  }))
+}
+
+/**
+ * Đúng MỘT trang playlistItems (tối đa 50 video).
+ *
+ * Đây là đơn vị công việc nhỏ nhất để sync có thể tạm dừng: mỗi trang tải xong
+ * là ghi được ngay, dừng giữa chừng không mất gì.
+ */
+export async function fetchPlaylistPage(
+  args: {
+    playlistId: string
+    channelId: string
+    channelName: string
+    playlist?: PlatformPlaylist | null
+    pageToken?: string
+  },
+  key: string,
+  fetchImpl: Fetch = fetch,
+): Promise<{ videos: NormalizedVideo[]; nextPageToken?: string; skipped: number }> {
+  const page = await api(
+    'playlistItems',
+    {
+      part: 'snippet,contentDetails',
+      playlistId: args.playlistId,
+      maxResults: '50',
+      ...(args.pageToken ? { pageToken: args.pageToken } : {}),
+    },
+    key,
+    fetchImpl,
+  )
+
+  const videos: NormalizedVideo[] = []
+  let skipped = 0
+  for (const item of page.items ?? []) {
+    if (isPlaceholderItem(item)) {
+      skipped++
+      continue
+    }
+    const v = normalize(item, args.playlist ?? null, args.channelId, args.channelName)
+    if (v.videoId) videos.push(v)
+  }
+
+  return { videos, nextPageToken: page.nextPageToken, skipped }
 }
 
 /**
@@ -116,6 +203,7 @@ export async function fetchCreatorVideos(
 
   const uploads = await paginate('playlistItems', { part: 'snippet,contentDetails', playlistId: uploadsId }, key, fetchImpl)
   for (const item of uploads) {
+    if (isPlaceholderItem(item)) continue
     const v = normalize(item, null, channelId, channelName)
     if (v.videoId) byId.set(v.videoId, v)
   }
@@ -135,9 +223,20 @@ export async function fetchCreatorVideos(
       key,
       fetchImpl,
     )
+    let dropped = 0
     for (const item of items) {
+      if (isPlaceholderItem(item)) {
+        dropped++
+        continue
+      }
       const v = normalize(item, playlist, channelId, channelName)
       if (v.videoId) byId.set(v.videoId, v)
+    }
+
+    // itemCount của YouTube tính cả video riêng tư. Đã bỏ chúng khỏi feed thì
+    // phải trừ đi, nếu không series nào cũng "thiếu" đúng bằng số video đã ẩn.
+    if (dropped > 0 && playlist.itemCount !== null) {
+      playlist.itemCount = Math.max(0, playlist.itemCount - dropped)
     }
   }
 

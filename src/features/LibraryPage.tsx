@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clock, Download, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, Play, Plus, RefreshCw, Search, Share2, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clapperboard, Clock, Download, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, Play, Plus, RefreshCw, Search, Share2, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
 import type { BookAuthor, BookFormat, BookGenre, BookReadingLog, Media, MovieGenre, MusicArtist, MusicGenre, YouTubeChannel } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
+import { MetadataManagerModal } from './library/MetadataManagerModal'
 import { findDuplicateByName } from '../lib/duplicateName'
 import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
@@ -18,6 +19,7 @@ import { normalizeStorageUrl } from '../lib/storageUrl'
 import { shareMusicToAll } from '../lib/musicShare'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
+import { ReviewSeriesView } from './library/ReviewSeriesView'
 import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
@@ -93,7 +95,7 @@ const artGradient = (id: string) => {
 }
 
 export type Kind = (typeof categories)[number]['id']
-type SubView = 'overview' | 'favorites' | 'queue' | 'stats'
+type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats'
 type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
 
 function getCurrentTimeString() {
@@ -214,12 +216,6 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const [manageMusicGenresModal, setManageMusicGenresModal] = useState(false)
 
   // New Management Item Input Values
-  const [newAuthorName, setNewAuthorName] = useState('')
-  const [newBookGenreName, setNewBookGenreName] = useState('')
-  const [newChannelName, setNewChannelName] = useState('')
-  const [newArtistName, setNewArtistName] = useState('')
-  const [newGenreName, setNewGenreName] = useState('')
-  const [newMusicGenreName, setNewMusicGenreName] = useState('')
   const [musicGenreVal, setMusicGenreVal] = useState('')
   const [bookGenreVal, setBookGenreVal] = useState('')
 
@@ -629,177 +625,18 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   }
 
   // 1. Book Authors Manager Functions
-  const addBookAuthor = async () => {
-    if (!newAuthorName.trim()) return
-    const name = newAuthorName.trim()
-    const tempId = Date.now().toString()
-    bookAuthorsQuery.setItems((prev) => [...prev.filter((a) => a.name !== name), { id: tempId, name }])
-    setNewAuthorName('')
-    showToast('➕ Đã thêm tác giả mới!')
+  /** Nhãn đếm cho modal quản lý metadata; 0 thì không hiện gì. */
+  const countLabel = (count: number, unit: string) => (count > 0 ? `${count} ${unit}` : null)
 
-    const { data } = await supabase!.from('book_authors').insert({ name }).select().single()
-    if (data) bookAuthorsQuery.setItems((prev) => prev.map((a) => (a.id === tempId ? (data as BookAuthor) : a)))
-  }
-
-  const renameBookAuthor = async (a: BookAuthor) => {
-    const val = prompt('Tên tác giả mới:', a.name)?.trim()
-    if (!val || val === a.name) return
-    bookAuthorsQuery.setItems((prev) => prev.map((item) => (item.id === a.id ? { ...item, name: val } : item)))
-    await supabase!.from('book_authors').update({ name: val }).eq('id', a.id)
-    setItems((prev) => prev.map((i) => (i.type === 'BOOK' && i.author === a.name ? { ...i, author: val } : i)))
-    await supabase!.from('media_items').update({ author: val }).eq('type', 'BOOK').eq('author', a.name)
-    showToast('✏️ Đã sửa tên tác giả!')
-  }
-
-  const deleteBookAuthor = async (a: BookAuthor) => {
-    bookAuthorsQuery.setItems((prev) => prev.filter((item) => item.id !== a.id))
-    await supabase!.from('book_authors').update({ deleted_at: new Date().toISOString() }).eq('id', a.id)
-    showToast('🗑️ Đã xóa tác giả', 'delete')
-  }
-
-  // 1b. Book Genres Manager Functions
-  const addBookGenre = async () => {
-    if (!newBookGenreName.trim()) return
-    const name = newBookGenreName.trim()
-    const tempId = Date.now().toString()
-    bookGenresQuery.setItems((prev) => [...prev.filter((g) => g.name !== name), { id: tempId, name }])
-    setNewBookGenreName('')
-    showToast('➕ Đã thêm thể loại sách mới!')
-
-    const { data } = await supabase!.from('book_genres').insert({ name }).select().single()
-    if (data) bookGenresQuery.setItems((prev) => prev.map((g) => (g.id === tempId ? (data as BookGenre) : g)))
-  }
-
-  const renameBookGenre = async (oldGenre: string) => {
-    const val = prompt('Tên thể loại sách mới:', oldGenre)?.trim()
-    if (!val || val === oldGenre) return
-    const found = bookGenresQuery.items.find((g) => g.name === oldGenre)
-    if (found) {
-      bookGenresQuery.setItems((prev) => prev.map((g) => (g.id === found.id ? { ...g, name: val } : g)))
-      await supabase!.from('book_genres').update({ name: val }).eq('id', found.id)
-    }
-    setItems((prev) => prev.map((i) => (i.type === 'BOOK' && i.genre === oldGenre ? { ...i, genre: val } : i)))
-    await supabase!.from('media_items').update({ genre: val }).eq('type', 'BOOK').eq('genre', oldGenre)
-    showToast('✏️ Đã sửa tên thể loại sách!')
-  }
-
-  const deleteBookGenre = async (oldGenre: string) => {
-    const found = bookGenresQuery.items.find((g) => g.name === oldGenre)
-    if (found) {
-      bookGenresQuery.setItems((prev) => prev.filter((item) => item.id !== found.id))
-      await supabase!.from('book_genres').update({ deleted_at: new Date().toISOString() }).eq('id', found.id)
-    }
-    setItems((prev) => prev.map((i) => (i.type === 'BOOK' && i.genre === oldGenre ? { ...i, genre: null } : i)))
-    await supabase!.from('media_items').update({ genre: null }).eq('type', 'BOOK').eq('genre', oldGenre)
-    showToast('🗑️ Đã xóa thể loại sách', 'delete')
-  }
-
-  // 2. YouTube Channels Manager Functions
-  const addYouTubeChannel = async () => {
-    if (!newChannelName.trim()) return
-    const name = newChannelName.trim()
-    const tempId = Date.now().toString()
-    youtubeChannelsQuery.setItems((prev) => [...prev.filter((c) => c.name !== name), { id: tempId, name }])
-    setNewChannelName('')
-    showToast('➕ Đã thêm kênh mới!')
-
-    const { data } = await supabase!.from('youtube_channels').insert({ name }).select().single()
-    if (data) youtubeChannelsQuery.setItems((prev) => prev.map((c) => (c.id === tempId ? (data as YouTubeChannel) : c)))
-  }
-
-  const renameYouTubeChannel = async (c: YouTubeChannel) => {
-    const val = prompt('Tên kênh mới:', c.name)?.trim()
-    if (!val || val === c.name) return
-    youtubeChannelsQuery.setItems((prev) => prev.map((item) => (item.id === c.id ? { ...item, name: val } : item)))
-    await supabase!.from('youtube_channels').update({ name: val }).eq('id', c.id)
-    showToast('✏️ Đã sửa tên kênh!')
-  }
-
-  const deleteYouTubeChannel = async (c: YouTubeChannel) => {
-    youtubeChannelsQuery.setItems((prev) => prev.filter((item) => item.id !== c.id))
-    await supabase!.from('youtube_channels').update({ deleted_at: new Date().toISOString() }).eq('id', c.id)
-    showToast('🗑️ Đã xóa kênh', 'delete')
-  }
-
-  // 3. Music Artists Manager Functions
-  const addMusicArtist = async () => {
-    if (!newArtistName.trim()) return
-    const name = newArtistName.trim()
-    const tempId = Date.now().toString()
-    musicArtistsQuery.setItems((prev) => [...prev.filter((art) => art.name !== name), { id: tempId, name }])
-    setNewArtistName('')
-    showToast('➕ Đã thêm ca sĩ mới!')
-
-    const { data } = await supabase!.from('music_artists').insert({ name }).select().single()
-    if (data) musicArtistsQuery.setItems((prev) => prev.map((art) => (art.id === tempId ? (data as MusicArtist) : art)))
-  }
-
-  const renameMusicArtist = async (art: MusicArtist) => {
-    const val = prompt('Tên ca sĩ mới:', art.name)?.trim()
-    if (!val || val === art.name) return
-    musicArtistsQuery.setItems((prev) => prev.map((item) => (item.id === art.id ? { ...item, name: val } : item)))
-    await supabase!.from('music_artists').update({ name: val }).eq('id', art.id)
-    showToast('✏️ Đã sửa tên ca sĩ!')
-  }
-
-  const deleteMusicArtist = async (art: MusicArtist) => {
-    musicArtistsQuery.setItems((prev) => prev.filter((item) => item.id !== art.id))
-    await supabase!.from('music_artists').update({ deleted_at: new Date().toISOString() }).eq('id', art.id)
-    showToast('🗑️ Đã xóa ca sĩ', 'delete')
-  }
-
-  // 5. Music Genres Manager Functions
-  const addMusicGenre = async () => {
-    if (!newMusicGenreName.trim()) return
-    const name = newMusicGenreName.trim()
-    const tempId = Date.now().toString()
-    musicGenresQuery.setItems((prev) => [...prev.filter((g) => g.name !== name), { id: tempId, name }])
-    setNewMusicGenreName('')
-    showToast('➕ Đã thêm thể loại nhạc mới!')
-
-    const { data } = await supabase!.from('music_genres').insert({ name }).select().single()
-    if (data) musicGenresQuery.setItems((prev) => prev.map((g) => (g.id === tempId ? (data as MusicGenre) : g)))
-  }
-
-  const renameMusicGenre = async (g: MusicGenre) => {
-    const val = prompt('Tên thể loại nhạc mới:', g.name)?.trim()
-    if (!val || val === g.name) return
-    musicGenresQuery.setItems((prev) => prev.map((item) => (item.id === g.id ? { ...item, name: val } : item)))
-    await supabase!.from('music_genres').update({ name: val }).eq('id', g.id)
-    showToast('✏️ Đã sửa tên thể loại nhạc!')
-  }
-
-  const deleteMusicGenre = async (g: MusicGenre) => {
-    musicGenresQuery.setItems((prev) => prev.filter((item) => item.id !== g.id))
-    await supabase!.from('music_genres').update({ deleted_at: new Date().toISOString() }).eq('id', g.id)
-    showToast('🗑️ Đã xóa thể loại nhạc', 'delete')
-  }
-
-  // 4. Movie Genres Manager Functions
-  const addMovieGenre = async () => {
-    if (!newGenreName.trim()) return
-    const name = newGenreName.trim()
-    const tempId = Date.now().toString()
-    movieGenresQuery.setItems((prev) => [...prev.filter((g) => g.name !== name), { id: tempId, name }])
-    setNewGenreName('')
-    showToast('➕ Đã thêm thể loại phim mới!')
-
-    const { data } = await supabase!.from('movie_genres').insert({ name }).select().single()
-    if (data) movieGenresQuery.setItems((prev) => prev.map((g) => (g.id === tempId ? (data as MovieGenre) : g)))
-  }
-
-  const renameMovieGenre = async (g: MovieGenre) => {
-    const val = prompt('Tên thể loại phim mới:', g.name)?.trim()
-    if (!val || val === g.name) return
-    movieGenresQuery.setItems((prev) => prev.map((item) => (item.id === g.id ? { ...item, name: val } : item)))
-    await supabase!.from('movie_genres').update({ name: val }).eq('id', g.id)
-    showToast('✏️ Đã sửa tên thể loại phim!')
-  }
-
-  const deleteMovieGenre = async (g: MovieGenre) => {
-    movieGenresQuery.setItems((prev) => prev.filter((item) => item.id !== g.id))
-    await supabase!.from('movie_genres').update({ deleted_at: new Date().toISOString() }).eq('id', g.id)
-    showToast('🗑️ Đã xóa thể loại phim', 'delete')
+  /** Đổi tên (hoặc xoá, khi `to` là null) một giá trị metadata trên chính các mục thư viện. */
+  const cascadeToMedia = async (
+    column: 'author' | 'genre',
+    types: Media['type'][],
+    from: string,
+    to: string | null,
+  ) => {
+    setItems((prev) => prev.map((i) => (types.includes(i.type) && i[column] === from ? { ...i, [column]: to } : i)))
+    await supabase!.from('media_items').update({ [column]: to }).in('type', types).eq(column, from)
   }
 
   const patchStatusOrFavorite = async (id: string, patch: Partial<Media>) => {
@@ -1217,9 +1054,6 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           setSelectedBookItemId(null)
           openEdit(item)
         }}
-        onCoverChange={(mediaItemId, coverUrl) => {
-          setItems((prev) => prev.map((row) => (row.id === mediaItemId ? { ...row, cover_url: coverUrl } : row)))
-        }}
         onStatusChange={(item, status) => patchStatusOrFavorite(item.id, { status })}
         onLogProgress={(item) => {
           setSelectedBookItemId(null)
@@ -1297,6 +1131,15 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           <span className="library-stat-head"><ListMusic size={13} style={{ color: 'var(--cyan)' }} /> Nghe liên tục</span>
           <strong>{audioItems.length}</strong>
           <small>có MP3</small>
+        </button>
+        <button
+          role="tab"
+          aria-selected={subView === 'review'}
+          className={subView === 'review' ? 'active' : ''}
+          onClick={() => setSubView('review')}
+        >
+          <span className="library-stat-head"><Clapperboard size={13} style={{ color: 'var(--primary)' }} /> Review phim</span>
+          <span className="library-stat-link">Xem series ›</span>
         </button>
         <button
           role="tab"
@@ -1621,6 +1464,9 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           />
         </div>
       )}
+
+      {/* VIEW 3b: REVIEW PHIM — series gom từ YouTube / TikTok. */}
+      {subView === 'review' && <ReviewSeriesView />}
 
       {/* VIEW 4: THỐNG KÊ (STATISTICS DASHBOARD WITH DAILY FILTERING) */}
       {subView === 'stats' && (
@@ -2265,223 +2111,86 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         )
       })()}
 
-      {/* 1. Book Authors Manager Modal */}
       {manageAuthorsModal && (
-        <Modal title="📖 Quản lý tác giả sách" onClose={() => setManageAuthorsModal(false)}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            <input
-              value={newAuthorName}
-              onChange={(e) => setNewAuthorName(e.target.value)}
-              placeholder="Tên tác giả mới…"
-              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
-              onKeyDown={(e) => e.key === 'Enter' && addBookAuthor()}
-            />
-            <button className="primary" onClick={addBookAuthor} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-              Thêm
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6, maxHeight: '260px', overflowY: 'auto' }}>
-            {authors.map((authorName) => {
-              const authorObj = bookAuthorsQuery.items.find((a) => a.name === authorName)
-              const count = items.filter((i) => (i.type === 'BOOK' || i.type === 'MANGA') && i.author === authorName).length
-              return (
-                <div key={authorName} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
-                    <span style={{ fontSize: '0.86rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{authorName}</span>
-                    {count > 0 && (
-                      <span style={{ fontSize: '0.72rem', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '1px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
-                        {count} cuốn
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    <button
-                      className="icon small"
-                      aria-label="Sửa tác giả"
-                      onClick={() => renameBookAuthor(authorObj || { id: authorName, name: authorName })}
-                      style={{ padding: 3 }}
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <DeleteButton onDelete={() => deleteBookAuthor(authorObj || { id: authorName, name: authorName })} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Modal>
+        <MetadataManagerModal
+          title="📖 Quản lý tác giả sách"
+          table="book_authors"
+          noun="tác giả"
+          placeholder="Tên tác giả mới…"
+          rows={bookAuthorsQuery.items}
+          setRows={bookAuthorsQuery.setItems}
+          names={authors}
+          countOf={(n) => countLabel(items.filter((i) => (i.type === 'BOOK' || i.type === 'MANGA') && i.author === n).length, 'cuốn')}
+          onRenamed={(from, to) => cascadeToMedia('author', ['BOOK'], from, to)}
+          onDeleted={(name) => cascadeToMedia('author', ['BOOK'], name, null)}
+          onClose={() => setManageAuthorsModal(false)}
+        />
       )}
 
-      {/* 1b. Book Genres Manager Modal */}
       {manageBookGenresModal && (
-        <Modal title="📚 Quản lý thể loại sách" onClose={() => setManageBookGenresModal(false)}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            <input
-              value={newBookGenreName}
-              onChange={(e) => setNewBookGenreName(e.target.value)}
-              placeholder="Tên thể loại mới… (Trinh thám, Tiểu thuyết…)"
-              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
-              onKeyDown={(e) => e.key === 'Enter' && addBookGenre()}
-            />
-            <button className="primary" onClick={addBookGenre} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-              Thêm
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6, maxHeight: '260px', overflowY: 'auto' }}>
-            {bookGenres.map((g) => {
-              const count = items.filter((i) => i.type === 'BOOK' && i.genre === g).length
-              return (
-                <div key={g} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
-                    <span style={{ fontSize: '0.86rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g}</span>
-                    {count > 0 && (
-                      <span style={{ fontSize: '0.72rem', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '1px 6px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>
-                        {count} cuốn
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    <button className="icon small" aria-label="Sửa thể loại" onClick={() => renameBookGenre(g)} style={{ padding: 3 }}>
-                      <Pencil size={13} />
-                    </button>
-                    <DeleteButton onDelete={() => deleteBookGenre(g)} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Modal>
+        <MetadataManagerModal
+          title="📚 Quản lý thể loại sách"
+          table="book_genres"
+          noun="thể loại sách"
+          placeholder="Tên thể loại mới… (Trinh thám, Tiểu thuyết…)"
+          rows={bookGenresQuery.items}
+          setRows={bookGenresQuery.setItems}
+          names={bookGenres}
+          countOf={(n) => countLabel(items.filter((i) => i.type === 'BOOK' && i.genre === n).length, 'cuốn')}
+          onRenamed={(from, to) => cascadeToMedia('genre', ['BOOK'], from, to)}
+          onDeleted={(name) => cascadeToMedia('genre', ['BOOK'], name, null)}
+          onClose={() => setManageBookGenresModal(false)}
+        />
       )}
 
-      {/* 2. YouTube Channels Manager Modal */}
       {manageChannelsModal && (
-        <Modal title="📺 Quản lý kênh YouTube" onClose={() => setManageChannelsModal(false)}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            <input
-              value={newChannelName}
-              onChange={(e) => setNewChannelName(e.target.value)}
-              placeholder="Tên kênh YouTube mới…"
-              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
-            />
-            <button className="primary" onClick={addYouTubeChannel} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-              Thêm
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
-            {youtubeChannelsQuery.items.map((c) => (
-              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>{c.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="icon small" aria-label="Sửa kênh" onClick={() => renameYouTubeChannel(c)} style={{ padding: 3 }}>
-                    <Pencil size={13} />
-                  </button>
-                  <DeleteButton onDelete={() => deleteYouTubeChannel(c)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Modal>
+        <MetadataManagerModal
+          title="📺 Quản lý kênh YouTube"
+          table="youtube_channels"
+          noun="kênh"
+          placeholder="Tên kênh YouTube mới…"
+          rows={youtubeChannelsQuery.items}
+          setRows={youtubeChannelsQuery.setItems}
+          onClose={() => setManageChannelsModal(false)}
+        />
       )}
 
-      {/* 3. Music Artists Manager Modal */}
       {manageArtistsModal && (
-        <Modal title="🎵 Quản lý ca sĩ / nhạc sĩ" onClose={() => setManageArtistsModal(false)}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            <input
-              value={newArtistName}
-              onChange={(e) => setNewArtistName(e.target.value)}
-              placeholder="Tên ca sĩ / nhạc sĩ mới…"
-              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
-            />
-            <button className="primary" onClick={addMusicArtist} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-              Thêm
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
-            {musicArtistsQuery.items.map((art) => (
-              <div key={art.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>{art.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="icon small" aria-label="Sửa ca sĩ" onClick={() => renameMusicArtist(art)} style={{ padding: 3 }}>
-                    <Pencil size={13} />
-                  </button>
-                  <DeleteButton onDelete={() => deleteMusicArtist(art)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Modal>
+        <MetadataManagerModal
+          title="🎤 Quản lý ca sĩ"
+          table="music_artists"
+          noun="ca sĩ"
+          placeholder="Tên ca sĩ mới…"
+          rows={musicArtistsQuery.items}
+          setRows={musicArtistsQuery.setItems}
+          onClose={() => setManageArtistsModal(false)}
+        />
       )}
 
-      {/* 4. Movie Genres Manager Modal */}
       {manageGenresModal && (
-        <Modal title="🎬 Quản lý thể loại phim" onClose={() => setManageGenresModal(false)}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            <input
-              value={newGenreName}
-              onChange={(e) => setNewGenreName(e.target.value)}
-              placeholder="Tên thể loại phim mới…"
-              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
-            />
-            <button className="primary" onClick={addMovieGenre} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-              Thêm
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
-            {movieGenresQuery.items.map((g) => (
-              <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>{g.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="icon small" aria-label="Sửa thể loại" onClick={() => renameMovieGenre(g)} style={{ padding: 3 }}>
-                    <Pencil size={13} />
-                  </button>
-                  <DeleteButton onDelete={() => deleteMovieGenre(g)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Modal>
+        <MetadataManagerModal
+          title="🎬 Quản lý thể loại phim"
+          table="movie_genres"
+          noun="thể loại phim"
+          placeholder="Tên thể loại phim mới…"
+          rows={movieGenresQuery.items}
+          setRows={movieGenresQuery.setItems}
+          onClose={() => setManageGenresModal(false)}
+        />
       )}
 
-      {/* 5. Music Genres Manager Modal */}
       {manageMusicGenresModal && (
-        <Modal title="🎼 Quản lý thể loại nhạc" onClose={() => setManageMusicGenresModal(false)}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            <input
-              value={newMusicGenreName}
-              onChange={(e) => setNewMusicGenreName(e.target.value)}
-              placeholder="Thể loại nhạc mới… (Pop, Rock, Jazz…)"
-              style={{ flex: 1, padding: '8px 12px', fontSize: '0.86rem' }}
-              onKeyDown={(e) => e.key === 'Enter' && addMusicGenre()}
-            />
-            <button className="primary" onClick={addMusicGenre} style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-              Thêm
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6, maxHeight: '200px', overflowY: 'auto' }}>
-            {musicGenresQuery.items.length === 0 && (
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>Chưa có thể loại nhạc nào. Nhập tên và bấm Thêm!</p>
-            )}
-            {musicGenresQuery.items.map((g) => (
-              <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: 8 }}>
-                <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>🎵 {g.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="icon small" aria-label="Sửa thể loại nhạc" onClick={() => renameMusicGenre(g)} style={{ padding: 3 }}>
-                    <Pencil size={13} />
-                  </button>
-                  <DeleteButton onDelete={() => deleteMusicGenre(g)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Modal>
+        <MetadataManagerModal
+          title="🎼 Quản lý thể loại nhạc"
+          table="music_genres"
+          noun="thể loại nhạc"
+          placeholder="Thể loại nhạc mới… (Pop, Rock, Jazz…)"
+          rows={musicGenresQuery.items}
+          setRows={musicGenresQuery.setItems}
+          onClose={() => setManageMusicGenresModal(false)}
+        />
       )}
+
 
       {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} onClose={() => setBookStatsOpen(false)} />}
 

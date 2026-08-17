@@ -19,10 +19,19 @@ export type CompletionInput = {
 
 const DAY = 86_400_000
 
-/** Số phần bị thiếu trong dãy 1..expected. */
-function gaps(found: number[], expected: number | null): number[] {
+/**
+ * Số phần bị thiếu.
+ *
+ * `expected` chỉ được dùng làm trần khi MỌI video đều dò ra số phần — lúc đó
+ * "5 phần mà mới có 3" thật sự là thiếu 4 và 5. Còn khi phần lớn video không
+ * đánh số (đa số kênh review là vậy), lấy expected làm trần sẽ biến "148 video,
+ * đúng 1 video có chữ phần 1" thành "thiếu 2..148" — nên chỉ soi lỗ hổng bên
+ * trong dãy số đã dò được: có 1, 2, 5 thì thiếu 3 và 4.
+ */
+function gaps(found: number[], expected: number | null, fullyNumbered: boolean): number[] {
+  if (found.length === 0) return []
+  const top = fullyNumbered && expected !== null ? Math.max(expected, ...found) : Math.max(...found)
   const have = new Set(found)
-  const top = expected ?? (found.length ? Math.max(...found) : 0)
   const missing: number[] = []
   for (let i = 1; i <= top; i++) if (!have.has(i)) missing.push(i)
   return missing
@@ -51,7 +60,7 @@ export function evaluateCompletion(input: CompletionInput): CompletionResult {
     evidence.push('declared total in title')
   }
 
-  const missingParts = gaps(parts, expected)
+  const missingParts = gaps(parts, expected, parts.length === found)
   const hasFinal = videos.some((v) => v.part.isFinal)
   const sequential = parts.length > 0 && missingParts.length === 0
 

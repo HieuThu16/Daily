@@ -1,0 +1,439 @@
+/* =========================================================
+ * Review phim — lưới thẻ series + màn xem nhúng
+ * ======================================================= */
+
+.rv-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.rv-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rv-search {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.82rem;
+}
+
+.rv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.rv-btn:hover {
+  background: var(--bg-main);
+}
+
+.rv-btn.primary {
+  border-color: transparent;
+  background: var(--primary);
+  color: #fff;
+}
+
+.rv-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --- Lưới thẻ ------------------------------------------------------------ */
+
+.rv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.rv-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rv-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgb(15 23 42 / 12%);
+}
+
+.rv-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-main);
+  overflow: hidden;
+}
+
+.rv-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Ô trống khi video không có ảnh — vẫn giữ đúng khung 16:9 để lưới không lệch. */
+.rv-thumb-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.rv-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 78%);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.rv-count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 78%);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.rv-seen-pill {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 78%);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.rv-seen-pill.done {
+  background: var(--green, #16a34a);
+}
+
+.rv-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px 11px;
+}
+
+.rv-card-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-main);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rv-card-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rv-missing {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--amber, #d97706);
+}
+
+/* --- Màn xem ------------------------------------------------------------- */
+
+.rv-player-wrap {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #000;
+}
+
+.rv-player-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.rv-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (width <= 860px) {
+  .rv-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rv-episodes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: var(--card-bg);
+}
+
+.rv-episode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.76rem;
+}
+
+/* Phần bấm để xem chiếm gần hết dòng; nút đánh dấu tách riêng bên phải để bỏ
+   đánh dấu không làm nhảy video đang phát. */
+.rv-episode-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rv-seen-btn {
+  display: grid;
+  place-items: center;
+  padding: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rv-seen-btn[aria-pressed='true'] {
+  color: var(--green, #16a34a);
+}
+
+.rv-episode.seen .rv-episode-title {
+  color: var(--text-muted);
+}
+
+.rv-episode:hover {
+  background: var(--bg-main);
+}
+
+.rv-episode.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.rv-episode img {
+  width: 56px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.rv-episode-title {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Video đã bị gỡ khỏi nền tảng: vẫn hiện để thấy series hụt phần. */
+.rv-episode.gone .rv-episode-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.rv-empty {
+  padding: 28px 14px;
+  border: 1px dashed var(--card-border);
+  border-radius: 16px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* --- Sắp thứ tự phần trước khi lưu --------------------------------------- */
+
+.rv-order {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--bg-main);
+}
+
+.rv-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  font-size: 0.76rem;
+}
+
+.rv-order-row img {
+  width: 56px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.rv-order-num {
+  min-width: 26px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.rv-progress-box {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+}
+
+.rv-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.rv-progress-head span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-main);
+  overflow: hidden;
+}
+
+.rv-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.25s ease;
+}
+
+.rv-run-wait,
+.rv-run-ok,
+.rv-run-bad {
+  min-width: 64px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.rv-run-wait { color: var(--text-muted); }
+.rv-run-ok { color: var(--green, #16a34a); }
+.rv-run-bad { color: var(--rose, #e11d48); }
+
+.rv-btn.rv-icon {
+  padding: 5px 6px;
+  flex-shrink: 0;
+}
+
+.rv-links-input {
+  width: 100%;
+  min-height: 128px;
+  padding: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.rv-hint {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.rv-bad {
+  color: var(--rose, #e11d48);
+  font-weight: 700;
+}

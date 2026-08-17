@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
@@ -12,6 +12,7 @@ import { HabitsPage } from './features/HabitsPage'
 import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
+import { ReviewSeriesView } from './features/library/ReviewSeriesView'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
@@ -32,7 +33,7 @@ import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { TaskNotificationBell } from './features/TaskNotificationBell'
 import { MangaNotificationBell } from './features/manga/MangaNotificationBell'
-import { ToastProvider } from './features/ToastContext'
+import { ToastProvider, useToast } from './features/ToastContext'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -47,6 +48,7 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
   { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
   { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
+  { id: 'reviews', label: 'Review phim', icon: Clapperboard, colorClass: 'icon-box-purple' },
   { id: 'manga', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald' },
   { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
@@ -56,27 +58,30 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
 ]
 
 const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
+const THEME_STORAGE_KEY = 'daily_theme'
 const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'bl', 'ngontinh']
+const BOTTOM_NAV_SIZE = 5
+
+/** Đưa `ids` lên đầu, đệm cho đủ 5 ô bằng tab mặc định rồi tới phần còn lại. */
+function padRecentTabs(ids: Tab[]): Tab[] {
+  const combined = [...ids]
+  for (const tab of [...DEFAULT_PRIMARY_TABS, ...navigation.map((n) => n.id)]) {
+    if (!combined.includes(tab)) combined.push(tab)
+  }
+  return combined.slice(0, BOTTOM_NAV_SIZE)
+}
 
 function getSavedRecentTabs(): Tab[] {
   try {
-    const raw = localStorage.getItem(RECENT_TABS_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const validIds = new Set(navigation.map((n) => n.id))
-        const filtered = parsed.filter((id): id is Tab => validIds.has(id))
-        if (filtered.length > 0) {
-          const combined = [...filtered]
-          for (const item of DEFAULT_PRIMARY_TABS) {
-            if (!combined.includes(item)) combined.push(item)
-          }
-          return combined.slice(0, 5)
-        }
-      }
+    const parsed = JSON.parse(localStorage.getItem(RECENT_TABS_STORAGE_KEY) ?? 'null')
+    if (Array.isArray(parsed)) {
+      const validIds = new Set<string>(navigation.map((n) => n.id))
+      return padRecentTabs(parsed.filter((id): id is Tab => validIds.has(id)))
     }
-  } catch {}
-  return DEFAULT_PRIMARY_TABS
+  } catch (error) {
+    console.warn('Không đọc được tab gần đây đã lưu:', error)
+  }
+  return padRecentTabs([])
 }
 
 // Ngăn kéo chia theo nhóm lớn, bấm vào mới xổ các mục con.
@@ -84,7 +89,7 @@ const navGroups: { title: string; ids: Tab[] }[] = [
   { title: 'Tổng quan', ids: ['home', 'calendar'] },
   { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] },
   { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh'] },
-  { title: 'Giải trí & Nghệ thuật', ids: ['music', 'tvshow', 'movies', 'manga'] },
+  { title: 'Giải trí & Nghệ thuật', ids: ['music', 'tvshow', 'movies', 'reviews', 'manga'] },
   { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
   { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] },
   { title: 'Hệ thống', ids: ['settings'] },
@@ -148,9 +153,19 @@ function Login({ user }: { user: unknown }) {
 }
 
 function Shell({ children, user }: { children: React.ReactNode; user: unknown }) {
+  const { showToast } = useToast()
   const nav = useNavigate()
   const path = useLocation().pathname
-  const [dark, setDark] = useState(false)
+  // Chế độ tối phải sống qua lần tải lại, nếu không mỗi lần mở app lại về sáng.
+  const [dark, setDark] = useState(() => {
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY)
+      if (saved) return saved === 'dark'
+    } catch (error) {
+      console.warn('Không đọc được giao diện đã lưu:', error)
+    }
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  })
   const headerAction = useHeaderActionSlot()
   const isHeaderHidden = useIsHeaderHidden()
   const asideRef = useAsideRef()
@@ -178,13 +193,17 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
       deferredPrompt.current = e as typeof deferredPrompt.current
       setCanInstall(true)
     }
-    window.addEventListener('beforeinstallprompt', handler)
-    window.addEventListener('appinstalled', () => {
+    const onInstalled = () => {
       setInstalled(true)
       setCanInstall(false)
       deferredPrompt.current = null
-    })
-    return () => window.removeEventListener('beforeinstallprompt', handler)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    window.addEventListener('appinstalled', onInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler)
+      window.removeEventListener('appinstalled', onInstalled)
+    }
   }, [])
 
   const handleInstallPWA = async () => {
@@ -216,7 +235,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
         setPushOn(true)
       }
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Không bật được thông báo.')
+      showToast(`❌ ${error instanceof Error ? error.message : 'Không bật được thông báo.'}`, 'delete')
     } finally {
       setPushBusy(false)
     }
@@ -232,17 +251,12 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     const currentTabId = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/'))?.id
     if (currentTabId) {
       setRecentTabs((prev) => {
-        const updated = [currentTabId, ...prev.filter((id) => id !== currentTabId)]
-        const combined = [...updated]
-        for (const defaultTab of navigation.map((n) => n.id)) {
-          if (!combined.includes(defaultTab)) {
-            combined.push(defaultTab)
-          }
-        }
-        const top5 = combined.slice(0, 5)
+        const top5 = padRecentTabs([currentTabId, ...prev.filter((id) => id !== currentTabId)])
         try {
           localStorage.setItem(RECENT_TABS_STORAGE_KEY, JSON.stringify(top5))
-        } catch {}
+        } catch (error) {
+          console.warn('Không lưu được tab gần đây:', error)
+        }
         return top5
       })
     }
@@ -261,15 +275,21 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     setBackingUp(true)
     try {
       const backup = await exportBackup()
-      if (backup.failed.length) alert(`Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`)
+      if (backup.failed.length) showToast(`⚠️ Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`, 'info')
+      else showToast('☁️ Đã tải bản sao lưu.')
     } catch {
-      alert('Chưa sao lưu được — kiểm tra kết nối Supabase.')
+      showToast('❌ Chưa sao lưu được — kiểm tra kết nối Supabase.', 'delete')
     }
     setBackingUp(false)
   }
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, dark ? 'dark' : 'light')
+    } catch (error) {
+      console.warn('Không lưu được giao diện:', error)
+    }
   }, [dark])
 
   return (
@@ -467,6 +487,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/tvshow" element={<LibraryPage defaultType="YOUTUBE" />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
                       <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
+                      <Route path="/reviews" element={<ReviewSeriesView />} />
                       <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
                       <Route path="/bl" element={<BLMangaPage />} />
                       <Route path="/bl/:slug" element={<BLMangaDetailPage />} />

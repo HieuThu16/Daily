@@ -52,16 +52,37 @@ function movieOf(videos: SeriesVideo[], playlistName: string | null): MovieMatch
  * không thuộc playlist nào thì bỏ qua — thà thiếu còn hơn gom bừa.
  */
 export function resolveSeries(videos: NormalizedVideo[]): ReviewSeries[] {
-  const buckets = new Map<string, SeriesVideo[]>()
+  const byPlaylist = new Map<string, SeriesVideo[]>()
 
   for (const raw of videos) {
     if (!raw.title.trim()) continue
     const video = toSeriesVideo(raw)
     const key = video.playlistId ? `pl:${video.playlistId}` : `mv:${movieKey(video.title)}`
     if (key === 'mv:') continue
-    const bucket = buckets.get(key)
+    const bucket = byPlaylist.get(key)
     if (bucket) bucket.push(video)
-    else buckets.set(key, [video])
+    else byPlaylist.set(key, [video])
+  }
+
+  // Playlist chỉ đáng tin khi nó là playlist CỦA MỘT PHIM. Nhiều kênh dồn mọi
+  // phim vào một playlist tổng ("Review Phim Bộ") — giữ nguyên thì cả trăm phim
+  // dính thành một series vô nghĩa, nên tách lại theo tên phim.
+  const buckets = new Map<string, SeriesVideo[]>()
+  for (const [key, bucketVideos] of byPlaylist) {
+    if (!key.startsWith('pl:') || isSingleMoviePlaylist(bucketVideos)) {
+      buckets.set(key, bucketVideos)
+      continue
+    }
+    for (const video of bucketVideos) {
+      const movie = movieKey(video.title)
+      if (!movie) continue
+      // Gỡ nhãn playlist, nếu không movieOf() lại lấy tên playlist tổng làm tên
+      // phim cho từng mảnh vừa tách.
+      const detached = { ...video, playlistId: null, playlistName: null }
+      const split = buckets.get(`mv:${movie}`)
+      if (split) split.push(detached)
+      else buckets.set(`mv:${movie}`, [detached])
+    }
   }
 
   const series: ReviewSeries[] = []
@@ -83,6 +104,28 @@ export function resolveSeries(videos: NormalizedVideo[]): ReviewSeries[] {
   }
 
   return series
+}
+
+/**
+ * Playlist có phải của đúng một phim không.
+ *
+ * Đo bằng tên phim rút từ tiêu đề: playlist nhiều phần của một phim thì các
+ * video cùng ra một khoá, còn playlist tổng thì mỗi video một khoá khác nhau.
+ * Ngưỡng nửa số video — quá bán là đủ để tin, dưới thì thà tách ra còn hơn dính
+ * cả trăm phim vào một thẻ.
+ */
+function isSingleMoviePlaylist(videos: SeriesVideo[]): boolean {
+  if (videos.length <= 1) return true
+
+  const tally = new Map<string, number>()
+  for (const v of videos) {
+    const key = movieKey(v.title)
+    if (key) tally.set(key, (tally.get(key) ?? 0) + 1)
+  }
+  if (tally.size === 0) return true
+
+  const top = Math.max(...tally.values())
+  return top * 2 >= videos.length
 }
 
 /** Sắp theo số phần; thiếu số phần thì theo position rồi ngày đăng. */

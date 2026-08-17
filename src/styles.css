@@ -6348,7 +6348,7 @@ input[type='month'] {
 /* ---- Bảng số liệu kiêm tab ---- */
 .library-stat-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0;
   margin-bottom: 10px;
   padding: 4px;
@@ -9585,14 +9585,14 @@ svg.lucide-library {
   background-size: 200% 200%;
   transition: transform 0.25s var(--ease-out-soft), box-shadow 0.25s, background-position 0.6s;
 }
-.kn-card::after {
-  /* Quầng sáng mờ phía sau, chỉ hiện khi hover hoặc đang mở. */
-  content: ''; position: absolute; inset: 6px; z-index: -1;
-  border-radius: 18px; background: inherit; filter: blur(14px);
-  opacity: 0; transition: opacity 0.25s;
+.kn-card:hover, .kn-card.is-open {
+  transform: translateY(-2px); background-position: 100% 50%;
+  /* Quầng sáng: dùng box-shadow, không dùng ::after z-index:-1 vì transform tạo stacking context nên bị nền thẻ che. */
+  box-shadow: 0 8px 24px -6px color-mix(in srgb, var(--purple) 55%, transparent);
 }
-.kn-card:hover, .kn-card.is-open { transform: translateY(-2px); background-position: 100% 50%; }
-.kn-card:hover::after, .kn-card.is-open::after { opacity: 0.45; }
+@media (prefers-reduced-motion: reduce) {
+  .kn-card, .kn-card:hover, .kn-card.is-open { transform: none; transition: none; }
+}
 
 .kn-card-inner {
   border-radius: 16px; overflow: hidden;
@@ -9609,11 +9609,21 @@ svg.lucide-library {
   padding: 3px 9px; border-radius: 99px;
   background: var(--purple-bg); color: var(--purple);
   font-size: 0.68rem; font-weight: 700; white-space: nowrap;
+  text-transform: uppercase; letter-spacing: 0.04em;
 }
 
-.kn-question { font-weight: 700; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+.kn-question {
+  font-weight: 700; line-height: 1.35; min-width: 0; overflow-wrap: anywhere;
+  font-size: 1.05rem;
+}
 
-.kn-chevron { color: var(--muted); flex-shrink: 0; transition: transform 0.2s; }
+/* Chevron nằm trong nút tròn để đầu thẻ có điểm nhấn thay vì icon trơ. */
+.kn-chevron {
+  box-sizing: content-box; flex-shrink: 0;
+  padding: 6px; border-radius: 99px;
+  background: var(--purple-bg); color: var(--purple);
+  transition: transform 0.2s, background 0.2s;
+}
 .kn-card.is-open .kn-chevron { transform: rotate(180deg); }
 
 .kn-body {

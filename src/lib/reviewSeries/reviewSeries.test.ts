@@ -84,6 +84,29 @@ describe('resolveSeries', () => {
     expect(series.find((s) => s.movie.movieId === 'harry potter')?.videos).toHaveLength(2)
   })
 
+  it('playlist tổng gộp nhiều phim thì tách ra, không dính thành một series', () => {
+    // Kênh thật hay dồn mọi phim vào một playlist "Review Phim Bộ".
+    const series = resolveSeries(
+      ['Harry Potter review', 'Interstellar review', 'Titanic review', 'Joker review'].map((title, i) =>
+        video({ videoId: `v${i}`, title, playlistId: 'PLALL', playlistName: 'Review Phim Bộ', position: i }),
+      ),
+    )
+    expect(series).toHaveLength(4)
+    // Tên playlist tổng không được leo lên làm tên phim.
+    expect(series.every((s) => s.playlistId === null)).toBe(true)
+    expect(series.every((s) => s.movie.movieTitle !== 'Review Phim Bộ')).toBe(true)
+  })
+
+  it('playlist của đúng một phim thì vẫn giữ nguyên', () => {
+    const series = resolveSeries(
+      ['Harry Potter phần 1', 'Harry Potter phần 2', 'Harry Potter phần 3'].map((title, i) =>
+        video({ videoId: `v${i}`, title, playlistId: 'PLHP', playlistName: 'Harry Potter Review', position: i }),
+      ),
+    )
+    expect(series).toHaveLength(1)
+    expect(series[0].playlistId).toBe('PLHP')
+  })
+
   it('sắp video theo số phần', () => {
     const series = resolveSeries([
       video({ videoId: 'b', title: 'Harry Potter phần 2' }),

@@ -11,3 +11,6 @@ public/data/ngontinh_manga.json
 src/data/bl_manga.json
 src/data/ngontinh_manga.json
 *.log
+
+# Ảnh chụp của Playwright MCP, không thuộc mã nguồn
+.playwright-mcp/
