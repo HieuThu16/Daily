@@ -5,7 +5,7 @@ import {
   Search, ArrowUpDown, ChevronRight,
   CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
   Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
-  Layers
+  Layers, Bell
 } from 'lucide-react';
 import type { MangaChapter, NgontinhManga } from '../../types/manga';
 import { 
@@ -472,6 +472,24 @@ export const NgontinhDetailPage: React.FC = () => {
           <div className="ngontinh-qa-text">
             <span className="ngontinh-qa-title">{isFav ? 'Đã thích' : 'Yêu thích'}</span>
             <span className="ngontinh-qa-subtitle">{isFav ? 'Đã lưu' : 'Tủ truyện'}</span>
+          </div>
+        </button>
+
+        {/* Action 6: Theo dõi để được báo khi có chương mới */}
+        <button
+          className={`ngontinh-quick-action-card ${isFollowed ? 'favorited' : ''}`}
+          onClick={handleToggleFollow}
+          aria-pressed={isFollowed}
+        >
+          <Bell
+            size={19}
+            fill={isFollowed ? '#f43f5e' : 'none'}
+            color={isFollowed ? '#f43f5e' : 'currentColor'}
+            className="ngontinh-qa-icon"
+          />
+          <div className="ngontinh-qa-text">
+            <span className="ngontinh-qa-title">{isFollowed ? 'Đang theo dõi' : 'Theo dõi'}</span>
+            <span className="ngontinh-qa-subtitle">{isFollowed ? 'Báo chương mới' : 'Nhận báo mới'}</span>
           </div>
         </button>
       </div>

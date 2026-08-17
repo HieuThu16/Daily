@@ -5,7 +5,7 @@ import {
   Search, ArrowUpDown, ChevronRight,
   CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
   Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
-  Layers, CheckCircle
+  Layers, CheckCircle, Bell
 } from 'lucide-react';
 import type { BLManga, MangaChapter } from '../../types/manga';
 import { 
@@ -496,6 +496,24 @@ export const BLMangaDetailPage: React.FC = () => {
           <div className="bl-qa-text">
             <span className="bl-qa-title">{isFav ? 'Đã thích' : 'Yêu thích'}</span>
             <span className="bl-qa-subtitle">{isFav ? 'Đã lưu' : 'Tủ truyện'}</span>
+          </div>
+        </button>
+
+        {/* Action 6: Theo dõi để được báo khi có chương mới */}
+        <button
+          className={`bl-quick-action-card ${isFollowed ? 'favorited' : ''}`}
+          onClick={handleToggleFollow}
+          aria-pressed={isFollowed}
+        >
+          <Bell
+            size={19}
+            fill={isFollowed ? '#ef4444' : 'none'}
+            color={isFollowed ? '#ef4444' : 'currentColor'}
+            className="bl-qa-icon"
+          />
+          <div className="bl-qa-text">
+            <span className="bl-qa-title">{isFollowed ? 'Đang theo dõi' : 'Theo dõi'}</span>
+            <span className="bl-qa-subtitle">{isFollowed ? 'Báo chương mới' : 'Nhận báo mới'}</span>
           </div>
         </button>
       </div>
