@@ -3,22 +3,73 @@ import {
   ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
   Youtube, Clock, Settings, Gauge, Zap, Sliders, Bookmark, Bell, MoreVertical, 
-  Copy, Check, ChevronRight, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
-  Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers
+  Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
+  Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers, BookOpen
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
-import { useHideHeader } from '../HeaderAction'
+import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { 
   CategorizedGroup, 
   detectVideoCategory, 
+  resolveVideoCategories,
+  CategoryOverrides,
   groupVideosByCategory 
 } from '../../lib/videoCategorizer'
+import { CategoryEditModal } from './CategoryEditModal'
 import { CategoryDetailView } from './CategoryDetailView'
+import { summarizeVideo, toKnowledgeRows } from '../../lib/videoLesson'
 import './tvShow.css'
 
 const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
+
+/** Xem lại các thẻ bài học đã lưu của một video. Đọc trực tiếp từ knowledge_items. */
+function LessonViewModal({ videoId, title, onClose }: { videoId: string; title: string; onClose: () => void }) {
+  const [cards, setCards] = useState<{ question: string; answer: string }[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase!
+        .from('knowledge_items')
+        .select('question, answer')
+        .eq('source_video_id', videoId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+      if (error) setError(error.message)
+      else setCards(data ?? [])
+    })()
+  }, [videoId])
+
+  return (
+    <Modal title="📚 Bài học từ video" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{title}</div>
+        {error && <div style={{ color: '#ef4444', fontSize: '0.85rem' }}>{error}</div>}
+        {!cards && !error && <Loader2 size={18} className="tv-spin" />}
+        {cards?.length === 0 && (
+          <div style={{ fontSize: '0.85rem' }}>Video này chưa có thẻ bài học nào.</div>
+        )}
+        {cards?.map((c, i) => (
+          <div
+            key={i}
+            style={{
+              border: '1px solid var(--card-border)',
+              background: 'var(--card-bg)',
+              borderRadius: 12,
+              padding: '12px 14px',
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 6 }}>{c.question}</div>
+            <div style={{ fontSize: '0.85rem', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{c.answer}</div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  )
+}
 
 type ChannelItem = {
   id: string
@@ -45,6 +96,7 @@ type VideoRow = {
   part_number: number | null
   published_at: string | null
   unavailable_at: string | null
+  duration: number | null
 }
 
 export type ParsedVideo = { videoId: string; url: string }
@@ -89,12 +141,25 @@ export function TvShowView() {
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'channel' | 'category'>('channel')
+  const [viewMode, setViewMode] = useState<'video' | 'channel' | 'category'>('video')
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
+  const [categoryOverrides, setCategoryOverrides] = useState<CategoryOverrides>({})
+  const [editingCategoryVideos, setEditingCategoryVideos] = useState<{ video_id: string; title: string }[] | null>(null)
+  const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [sortMode, setSortMode] = useState<'default' | 'newest' | 'channel' | 'unwatched'>('default')
+  const [activeCatId, setActiveCatId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<CategorizedGroup<VideoRow> | null>(null)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [addVideoOpen, setAddVideoOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+
+  // 2 nút thêm nằm trên header chung, cạnh nút thông báo
+  useHeaderActions([
+    { label: 'Thêm kênh', icon: 'radio', onClick: () => setAddChannelOpen(true) },
+    { label: 'Thêm video lẻ', icon: 'plus', onClick: () => setAddVideoOpen(true) },
+  ])
 
   // Tải danh sách Kênh & Toàn bộ video TV Show
   useEffect(() => {
@@ -123,7 +188,7 @@ export function TvShowView() {
       const [videosRes, watchedRes] = await Promise.all([
         supabase
           ?.from('tvshow_videos')
-          .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at')
+          .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration')
           .is('unavailable_at', null)
           .order('published_at', { ascending: false }),
         supabase?.from('tvshow_watched').select('video_id'),
@@ -190,10 +255,30 @@ export function TvShowView() {
     }
   }, [reloadKey])
 
+  // Tải bản sửa tay thể loại (nếu chưa chạy migration thì bỏ qua, dùng tự động)
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const res = await supabase
+        ?.from('video_category_overrides')
+        .select('video_id, category_ids')
+        .eq('type', 'tvshow')
+      if (!alive || res?.error) return
+      const map: CategoryOverrides = {}
+      for (const r of (res?.data ?? []) as { video_id: string; category_ids: string[] }[]) {
+        map[r.video_id] = r.category_ids ?? []
+      }
+      setCategoryOverrides(map)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [reloadKey])
+
   // Gom nhóm video theo Thể Loại tự động dựa vào tiêu đề
   const categoryGroups = useMemo(() => {
-    return groupVideosByCategory(allVideos, 'tvshow', watchedSet)
-  }, [allVideos, watchedSet])
+    return groupVideosByCategory(allVideos, 'tvshow', watchedSet, categoryOverrides)
+  }, [allVideos, watchedSet, categoryOverrides])
 
   // Lọc kênh theo tìm kiếm
   const filteredChannels = useMemo(() => {
@@ -214,6 +299,52 @@ export function TvShowView() {
     )
   }, [categoryGroups, search])
 
+  // Lọc + sắp xếp video: tìm kiếm, chip thể loại, trạng thái đã xem, thứ tự
+  const filteredVideos = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let result = allVideos.filter((v) => {
+      const cats = resolveVideoCategories(v.video_id, v.title, 'tvshow', categoryOverrides)
+      if (activeCatId && !cats.some((c) => c.id === activeCatId)) return false
+      if (watchFilter === 'watched' && !watchedSet.has(v.video_id)) return false
+      if (watchFilter === 'unwatched' && watchedSet.has(v.video_id)) return false
+      if (!q) return true
+      return (
+        v.title.toLowerCase().includes(q) ||
+        (v.creator_name || '').toLowerCase().includes(q) ||
+        cats.some((c) => c.name.toLowerCase().includes(q))
+      )
+    })
+
+    if (sortMode === 'newest') {
+      result = [...result].sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''))
+    } else if (sortMode === 'channel') {
+      result = [...result].sort(
+        (a, b) =>
+          (a.creator_name || '').localeCompare(b.creator_name || '') ||
+          (b.published_at || '').localeCompare(a.published_at || '')
+      )
+    } else if (sortMode === 'unwatched') {
+      result = [...result].sort(
+        (a, b) => Number(watchedSet.has(a.video_id)) - Number(watchedSet.has(b.video_id))
+      )
+    }
+    return result
+  }, [allVideos, search, categoryOverrides, activeCatId, watchFilter, sortMode, watchedSet])
+
+  // Số video theo từng thể loại, để hiện trên chip lọc
+  const catChips = useMemo(
+    () => categoryGroups.map((g) => ({ cat: g.category, count: g.totalCount })),
+    [categoryGroups]
+  )
+
+  const toggleSelected = (videoId: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(videoId)) next.delete(videoId)
+      else next.add(videoId)
+      return next
+    })
+
   const deleteChannel = async (channel: ChannelItem, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!window.confirm(`Xoá kênh "${channel.creator_name}" cùng toàn bộ video của kênh này?`)) return
@@ -232,6 +363,30 @@ export function TvShowView() {
     }
 
     setReloadKey((k) => k + 1)
+  }
+
+  // Nếu đang phát 1 video từ danh sách tổng
+  if (playingVideoId) {
+    return (
+      <CategoryDetailView
+        group={{
+          category: {
+            id: 'all', name: 'Tất cả video', icon: '🎬', color: '#3b82f6',
+            gradient: '', description: 'Toàn bộ video TV Show', keywords: [],
+          },
+          videos: filteredVideos,
+          totalCount: filteredVideos.length,
+          watchedCount: filteredVideos.filter((v) => watchedSet.has(v.video_id)).length,
+          cover: filteredVideos[0]?.thumbnail ?? null,
+        }}
+        type="tvshow"
+        initialVideoId={playingVideoId}
+        onBack={() => {
+          setPlayingVideoId(null)
+          setReloadKey((k) => k + 1)
+        }}
+      />
+    )
   }
 
   // Nếu đang mở chi tiết 1 Thể loại
@@ -269,6 +424,13 @@ export function TvShowView() {
         <div className="tv-view-mode-toggle">
           <button
             type="button"
+            className={`tv-mode-btn ${viewMode === 'video' ? 'active' : ''}`}
+            onClick={() => setViewMode('video')}
+          >
+            <Play size={14} /> Tất cả video ({allVideos.length})
+          </button>
+          <button
+            type="button"
             className={`tv-mode-btn ${viewMode === 'channel' ? 'active' : ''}`}
             onClick={() => setViewMode('channel')}
           >
@@ -293,18 +455,13 @@ export function TvShowView() {
             placeholder={
               viewMode === 'channel'
                 ? 'Tìm kiếm kênh YouTube…'
-                : 'Tìm thể loại, kỹ năng (học tập, tự tin, giao tiếp…)'
+                : viewMode === 'category'
+                  ? 'Tìm thể loại, kỹ năng (học tập, tự tin, giao tiếp…)'
+                  : 'Tìm video theo tên, kênh hoặc thể loại…'
             }
           />
         </div>
 
-        {/* Nút hành động */}
-        <button className="tv-btn primary" onClick={() => setAddChannelOpen(true)}>
-          <Radio size={14} /> Thêm kênh
-        </button>
-        <button className="tv-btn" onClick={() => setAddVideoOpen(true)}>
-          <Plus size={14} /> Thêm video lẻ
-        </button>
       </div>
 
       {needsMigration ? (
@@ -313,6 +470,166 @@ export function TvShowView() {
         </div>
       ) : loading ? (
         <div className="tv-empty">Đang tải danh sách video & kênh…</div>
+      ) : viewMode === 'video' ? (
+        /* CHẾ ĐỘ MẶC ĐỊNH: DANH SÁCH TOÀN BỘ VIDEO */
+        <>
+          {/* Thanh lọc gọn: chip thể loại + trạng thái xem + sắp xếp + chọn nhiều */}
+          <div className="tv-vfilter">
+            <div className="tv-vfilter-chips">
+              <button
+                type="button"
+                className={`tv-category-chip${!activeCatId ? ' active' : ''}`}
+                onClick={() => setActiveCatId(null)}
+              >
+                Tất cả ({allVideos.length})
+              </button>
+              {catChips.map(({ cat, count }) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`tv-category-chip${activeCatId === cat.id ? ' active' : ''}`}
+                  onClick={() => setActiveCatId(activeCatId === cat.id ? null : cat.id)}
+                >
+                  {cat.icon} {cat.name} ({count})
+                </button>
+              ))}
+            </div>
+
+            <div className="tv-vfilter-tools">
+              <select
+                className="tv-vfilter-select"
+                value={watchFilter}
+                onChange={(e) => setWatchFilter(e.target.value as typeof watchFilter)}
+                title="Lọc theo trạng thái xem"
+              >
+                <option value="all">Tất cả</option>
+                <option value="unwatched">Chưa xem</option>
+                <option value="watched">Đã xem</option>
+              </select>
+              <select
+                className="tv-vfilter-select"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+                title="Sắp xếp"
+              >
+                <option value="default">Mặc định</option>
+                <option value="newest">Mới nhất</option>
+                <option value="channel">Theo kênh</option>
+                <option value="unwatched">Chưa xem trước</option>
+              </select>
+              <button
+                type="button"
+                className={`tv-btn${selectedIds.size ? ' primary' : ''}`}
+                onClick={() =>
+                  selectedIds.size
+                    ? setSelectedIds(new Set())
+                    : setSelectedIds(new Set(filteredVideos.map((v) => v.video_id)))
+                }
+                title="Chọn nhiều video để gán thể loại"
+              >
+                <CheckCircle2 size={14} /> {selectedIds.size ? `Bỏ chọn (${selectedIds.size})` : 'Chọn tất cả'}
+              </button>
+            </div>
+          </div>
+
+          {/* Thanh hành động hàng loạt */}
+          {selectedIds.size > 0 && (
+            <div className="tv-bulk-bar">
+              <span>
+                Đã chọn <b>{selectedIds.size}</b> video
+              </span>
+              <button
+                type="button"
+                className="tv-btn primary"
+                onClick={() =>
+                  setEditingCategoryVideos(
+                    allVideos
+                      .filter((v) => selectedIds.has(v.video_id))
+                      .map((v) => ({ video_id: v.video_id, title: v.title }))
+                  )
+                }
+              >
+                <Tag size={14} /> Gán thể loại
+              </button>
+            </div>
+          )}
+
+          {!filteredVideos.length ? (
+            <div className="tv-empty">
+              {search || activeCatId || watchFilter !== 'all'
+                ? 'Không có video nào khớp bộ lọc hiện tại.'
+                : 'Chưa có video nào. Bấm “Thêm kênh” để cào video về.'}
+            </div>
+          ) : (
+            <div className="tv-video-card-list">
+              {filteredVideos.map((v) => {
+                const picked = selectedIds.has(v.video_id)
+                return (
+                  <div
+                    key={v.video_id}
+                    className={`tv-video-card-item${picked ? ' picked' : ''}`}
+                    onClick={() =>
+                      selectedIds.size ? toggleSelected(v.video_id) : setPlayingVideoId(v.video_id)
+                    }
+                  >
+                    <button
+                      type="button"
+                      className={`tv-video-pick-btn${picked ? ' on' : ''}`}
+                      title="Chọn video"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleSelected(v.video_id)
+                      }}
+                    >
+                      {picked ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                    </button>
+
+                    <div className="tv-video-thumb-container">
+                      <img
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        alt=""
+                        loading="lazy"
+                      />
+                      <span className="tv-video-duration-pill">
+                        {v.part_number ? `P.${v.part_number}` : 'Video'}
+                      </span>
+                    </div>
+
+                    <div className="tv-video-meta-content">
+                      <div className="tv-video-item-title">{v.title}</div>
+                      <div
+                        className="tv-video-item-sub"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+                      >
+                        <span>{v.creator_name || 'Video lẻ'}</span>
+                        {resolveVideoCategories(v.video_id, v.title, 'tvshow', categoryOverrides).map((cat) => (
+                          <span key={cat.id} className="tv-video-category-tag">
+                            {cat.icon} {cat.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="tv-video-right-tools">
+                      {watchedSet.has(v.video_id) && <CheckCircle2 size={20} color="#10b981" />}
+                      <button
+                        type="button"
+                        className="tv-video-cat-edit-btn"
+                        title="Sửa thể loại"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingCategoryVideos([{ video_id: v.video_id, title: v.title }])
+                        }}
+                      >
+                        <Tag size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       ) : viewMode === 'category' ? (
         /* CHẾ ĐỘ XEM THEO THỂ LOẠI (Học tập, Tự tin, Giao tiếp, Kinh doanh,...) */
         !filteredCategories.length ? (
@@ -333,26 +650,20 @@ export function TvShowView() {
                   className="tv-category-card"
                   onClick={() => setSelectedCategory(g)}
                 >
-                  <div className="tv-category-cover">
-                    {g.cover ? (
-                      <img src={g.cover} alt={g.category.name} loading="lazy" />
-                    ) : (
-                      <div className="tv-category-cover-fallback">
-                        {g.category.icon}
-                      </div>
-                    )}
-
-                    <span className="tv-category-icon-pill">
-                      <span>{g.category.icon}</span> THỂ LOẠI
+                  <div
+                    className="tv-category-head"
+                    style={{ background: g.category.gradient || undefined }}
+                  >
+                    <span
+                      className="tv-category-head-icon"
+                      style={{ borderColor: g.category.color }}
+                    >
+                      {g.category.icon}
                     </span>
-
-                    <span className="tv-count-pill">
-                      {g.totalCount} video
-                    </span>
-
+                    <span className="tv-category-head-count">{g.totalCount} video</span>
                     {g.watchedCount > 0 && (
-                      <span className={`tv-seen-pill${isDone ? ' done' : ''}`}>
-                        {isDone ? 'Đã xem hết' : `Đã xem ${g.watchedCount}/${g.totalCount}`}
+                      <span className={`tv-seen-pill${isDone ? ' done' : ''}`} style={{ position: 'static' }}>
+                        {isDone ? 'Đã xem hết' : `${g.watchedCount}/${g.totalCount}`}
                       </span>
                     )}
                   </div>
@@ -467,6 +778,26 @@ export function TvShowView() {
         )
       )}
 
+      {editingCategoryVideos && (
+        <CategoryEditModal
+          videos={editingCategoryVideos}
+          type="tvshow"
+          overrides={categoryOverrides}
+          onClose={() => setEditingCategoryVideos(null)}
+          onSaved={(videoIds, ids) => {
+            setCategoryOverrides((prev) => {
+              const next = { ...prev }
+              for (const id of videoIds) {
+                if (ids === null) delete next[id]
+                else next[id] = ids
+              }
+              return next
+            })
+            setSelectedIds(new Set())
+          }}
+        />
+      )}
+
       {addChannelOpen && (
         <AddTvShowChannelModal
           onClose={() => setAddChannelOpen(false)}
@@ -521,6 +852,10 @@ function ChannelDetailView({
   const [showTimerModal, setShowTimerModal] = useState(false)
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
   const [selectedVideoForMenu, setSelectedVideoForMenu] = useState<VideoRow | null>(null)
+  /** video_id đã có thẻ kiến thức — dùng để biết video nào còn cần AI. */
+  const [lessonDone, setLessonDone] = useState<Set<string>>(new Set())
+  const [lessonView, setLessonView] = useState<{ videoId: string; title: string } | null>(null)
+  const [lessonBusy, setLessonBusy] = useState<string | null>(null)
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const playerBoxRef = useRef<HTMLDivElement>(null)
@@ -561,7 +896,7 @@ function ChannelDetailView({
     void (async () => {
       let query = supabase
         ?.from('tvshow_videos')
-        .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at')
+        .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration')
         .is('unavailable_at', null)
 
       if (channel.id === 'manual') {
@@ -579,6 +914,13 @@ function ChannelDetailView({
 
       const rows = (videoRes?.data ?? []) as VideoRow[]
       setVideos(rows)
+      const lessonRes = await supabase
+        ?.from('knowledge_items')
+        .select('source_video_id')
+        .not('source_video_id', 'is', null)
+        .is('deleted_at', null)
+      setLessonDone(new Set(((lessonRes?.data ?? []) as { source_video_id: string }[]).map((r) => r.source_video_id)))
+
 
       const watchedSet = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
       setWatched(watchedSet)
@@ -589,6 +931,27 @@ function ChannelDetailView({
       setLoading(false)
     })()
   }, [channel])
+
+  /** Rút thẻ kiến thức của một video rồi lưu. Trả về null nếu xong, hoặc thông điệp lỗi. */
+  const makeLesson = async (v: VideoRow) => {
+    try {
+      const cards = await summarizeVideo(v.video_id, v.duration)
+      const rows = toKnowledgeRows({ videoId: v.video_id, title: v.title }, cards, channel.creator_name)
+      if (!rows.length) throw new Error('Không có thẻ nào')
+      // Tóm tắt lại thì bỏ thẻ cũ của video đi, tránh nhân đôi.
+      await supabase!
+        .from('knowledge_items')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('source_video_id', v.video_id)
+        .is('deleted_at', null)
+      const { error } = await supabase!.from('knowledge_items').insert(rows)
+      if (error) throw error
+      setLessonDone((prev) => new Set(prev).add(v.video_id))
+      return null
+    } catch (e) {
+      return (e as Error)?.message || 'Lỗi không rõ'
+    }
+  }
 
   const filteredVideos = useMemo(() => {
     let result = [...videos]
@@ -731,7 +1094,8 @@ function ChannelDetailView({
               </div>
             )}
 
-            {/* 3. BẢNG 4 NÚT HÀNG NGANG: Đánh dấu | Tốc độ | Hẹn giờ | Cài đặt */}
+            {/* 3. BẢNG 3 NÚT HÀNG NGANG: Đánh dấu | Kiến thức | Cài đặt.
+                Tốc độ và Hẹn giờ dời vào Cài đặt cho đỡ chật. */}
             <div className="tv-action-grid-4">
               {/* Nút 1: Đánh dấu đã xem */}
               <button
@@ -741,7 +1105,7 @@ function ChannelDetailView({
                 title={currentIsWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
               >
                 <div className="tv-action-icon-box">
-                  {currentIsWatched ? <CheckCircle2 size={22} color="#10b981" /> : <Circle size={22} />}
+                  {currentIsWatched ? <CheckCircle2 size={18} color="#10b981" /> : <Circle size={18} />}
                 </div>
                 <span className="tv-action-label-title">Đánh dấu</span>
                 <span className={`tv-action-label-sub ${currentIsWatched ? 'is-green' : ''}`}>
@@ -749,39 +1113,60 @@ function ChannelDetailView({
                 </span>
               </button>
 
-              {/* Nút 2: Tốc độ */}
+              {/* Nút 2: Tạo kiến thức từ video này */}
               <button
                 type="button"
-                className={`tv-action-card-btn ${playbackRate !== 1 ? 'active' : ''}`}
-                onClick={() => setShowSpeedModal(true)}
-                title="Thay đổi tốc độ phát"
+                className={`tv-action-card-btn ${currentVideo && lessonDone.has(currentVideo.video_id) ? 'active' : ''}`}
+                disabled={!currentVideo || lessonBusy === currentVideo.video_id}
+                onClick={() => {
+                  const v = currentVideo
+                  if (!v) return
+                  setLessonBusy(v.video_id)
+                  void makeLesson(v).then((err) => {
+                    setLessonBusy(null)
+                    alert(err ? `Chưa rút được kiến thức:
+${err}` : 'Đã lưu thẻ kiến thức từ video này.')
+                  })
+                }}
+                title="Dùng AI rút thẻ kiến thức từ video đang phát"
               >
                 <div className="tv-action-icon-box">
-                  <Gauge size={22} />
+                  {currentVideo && lessonBusy === currentVideo.video_id ? (
+                    <Loader2 size={18} className="tv-spin" />
+                  ) : (
+                    <Sparkles size={18} />
+                  )}
                 </div>
-                <span className="tv-action-label-title">Tốc độ</span>
-                <span className={`tv-action-label-sub ${playbackRate === 2 ? 'highlight' : ''}`}>
-                  {playbackRate}x
+                <span className="tv-action-label-title">Kiến thức</span>
+                <span className="tv-action-label-sub">
+                  {currentVideo && lessonBusy === currentVideo.video_id
+                    ? 'đang tạo…'
+                    : currentVideo && lessonDone.has(currentVideo.video_id)
+                      ? 'đã tạo'
+                      : 'tạo từ video'}
                 </span>
               </button>
 
-              {/* Nút 3: Hẹn giờ */}
+              {/* Nút 3: Cài đặt (Chứa Mở trên YouTube & Tự phát tiếp) */}
+              {/* Nút 3: Xem lại bài học đã tạo của video này */}
               <button
                 type="button"
-                className={`tv-action-card-btn ${sleepTimerMinutes ? 'active' : ''}`}
-                onClick={() => setShowTimerModal(true)}
-                title="Hẹn giờ tự tắt video"
+                className="tv-action-card-btn"
+                disabled={!currentVideo || !lessonDone.has(currentVideo.video_id)}
+                onClick={() =>
+                  currentVideo && setLessonView({ videoId: currentVideo.video_id, title: currentVideo.title })
+                }
+                title="Xem các thẻ bài học đã tạo từ video này"
               >
                 <div className="tv-action-icon-box">
-                  <Clock size={22} />
+                  <BookOpen size={18} />
                 </div>
-                <span className="tv-action-label-title">Hẹn giờ</span>
-                <span className={`tv-action-label-sub ${sleepTimerMinutes ? 'highlight' : ''}`}>
-                  {sleepTimerMinutes ? `${sleepTimerMinutes}p` : 'Tắt'}
+                <span className="tv-action-label-title">Bài học</span>
+                <span className="tv-action-label-sub">
+                  {currentVideo && lessonDone.has(currentVideo.video_id) ? 'xem lại' : 'chưa có'}
                 </span>
               </button>
 
-              {/* Nút 4: Cài đặt (Chứa Mở trên YouTube & Tự phát tiếp) */}
               <button
                 type="button"
                 className={`tv-action-card-btn ${showSettingsModal ? 'active' : ''}`}
@@ -789,7 +1174,7 @@ function ChannelDetailView({
                 title="Cài đặt & Tùy chọn"
               >
                 <div className="tv-action-icon-box">
-                  <Settings size={22} />
+                  <Settings size={18} />
                 </div>
                 <span className="tv-action-label-title">Cài đặt</span>
                 <span className="tv-action-label-sub">Tùy chọn</span>
@@ -809,18 +1194,29 @@ function ChannelDetailView({
               </span>
             </div>
 
-            {/* Ô tìm kiếm */}
-            <div className="tv-search-input-wrapper">
-              <input
-                className="tv-search-field"
-                placeholder="Tìm video trong kênh..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <Search className="tv-search-icon-inside" size={16} />
+            {/* Ô tìm kiếm + nút sắp xếp */}
+            <div className="tv-search-sort-row">
+              <div className="tv-search-input-wrapper">
+                <input
+                  className="tv-search-field"
+                  placeholder="Tìm video trong kênh..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <Search className="tv-search-icon-inside" size={16} />
+              </div>
+              <button
+                type="button"
+                className="tv-sort-toggle-btn"
+                onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                title="Đổi thứ tự hiển thị"
+              >
+                <ArrowUpDown size={13} />
+                {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
+              </button>
             </div>
 
-            {/* Filter Pills & Nút Sort */}
+            {/* Filter Pills */}
             <div className="tv-filter-sort-row">
               <div className="tv-filter-pills-wrap">
                 <button
@@ -845,16 +1241,6 @@ function ChannelDetailView({
                   Đã xem ({watchedCountInChannel})
                 </button>
               </div>
-
-              <button
-                type="button"
-                className="tv-sort-toggle-btn"
-                onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-                title="Đổi thứ tự hiển thị"
-              >
-                <ArrowUpDown size={13} />
-                {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
-              </button>
             </div>
 
             {/* Danh sách video items */}
@@ -936,6 +1322,14 @@ function ChannelDetailView({
       {/* ======================================================== */}
       {/* MODAL 1: CÀI ĐẶT (Chứa Mở trên YouTube & Tự phát tiếp)  */}
       {/* ======================================================== */}
+      {lessonView && (
+        <LessonViewModal
+          videoId={lessonView.videoId}
+          title={lessonView.title}
+          onClose={() => setLessonView(null)}
+        />
+      )}
+
       {showSettingsModal && (
         <Modal title="⚙️ Cài đặt trình phát" onClose={() => setShowSettingsModal(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '6px 0' }}>
@@ -961,7 +1355,47 @@ function ChannelDetailView({
               </a>
             )}
 
-            {/* 2. Tự phát tiếp */}
+            {/* 2. Tốc độ phát */}
+            <div
+              className="tv-setting-item-row"
+              onClick={() => {
+                setShowSettingsModal(false)
+                setShowSpeedModal(true)
+              }}
+            >
+              <div className="tv-setting-item-left">
+                <div className="tv-setting-item-icon">
+                  <Gauge size={22} />
+                </div>
+                <div className="tv-setting-item-text">
+                  <span className="tv-setting-item-title">Tốc độ phát</span>
+                  <span className="tv-setting-item-desc">Đang ở {playbackRate}x</span>
+                </div>
+              </div>
+              <ChevronRight size={16} color="var(--text-muted)" />
+            </div>
+
+            {/* 3. Hẹn giờ tắt */}
+            <div
+              className="tv-setting-item-row"
+              onClick={() => {
+                setShowSettingsModal(false)
+                setShowTimerModal(true)
+              }}
+            >
+              <div className="tv-setting-item-left">
+                <div className="tv-setting-item-icon">
+                  <Clock size={22} />
+                </div>
+                <div className="tv-setting-item-text">
+                  <span className="tv-setting-item-title">Hẹn giờ tắt</span>
+                  <span className="tv-setting-item-desc">{sleepTimerMinutes ? `Còn ${sleepTimerMinutes} phút` : 'Đang tắt'}</span>
+                </div>
+              </div>
+              <ChevronRight size={16} color="var(--text-muted)" />
+            </div>
+
+            {/* 4. Tự phát tiếp */}
             <div className="tv-setting-item-row" onClick={() => setAutoplay((prev) => !prev)}>
               <div className="tv-setting-item-left">
                 <div className="tv-setting-item-icon">
@@ -982,7 +1416,7 @@ function ChannelDetailView({
               </label>
             </div>
 
-            {/* 3. Tùy chọn phím tắt 2x nhanh */}
+            {/* 5. Tùy chọn phím tắt 2x nhanh */}
             <div className="tv-setting-item-row" onClick={() => applyPlaybackRate(playbackRate === 2 ? 1 : 2)}>
               <div className="tv-setting-item-left">
                 <div className="tv-setting-item-icon">
@@ -1119,6 +1553,27 @@ function ChannelDetailView({
                   <CheckCircle2 size={16} color="#10b981" /> Đánh dấu là đã xem
                 </>
               )}
+            </button>
+
+            {/* Tóm tắt kiến thức chính & bài học */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              disabled={lessonBusy === selectedVideoForMenu.video_id}
+              onClick={() => {
+                const v = selectedVideoForMenu
+                setLessonBusy(v.video_id)
+                void makeLesson(v).then((err) => {
+                  setLessonBusy(null)
+                  setSelectedVideoForMenu(null)
+                  alert(err ? `Chưa rút được kiến thức:
+${err}` : 'Đã lưu thẻ kiến thức vào tab Kiến thức.')
+                })
+              }}
+            >
+              {lessonBusy === selectedVideoForMenu.video_id ? <Loader2 size={16} className="tv-spin" /> : <Sparkles size={16} />}
+              {lessonDone.has(selectedVideoForMenu.video_id) ? 'Rút lại thẻ kiến thức' : 'Rút thẻ kiến thức & bài học'}
             </button>
 
             {/* Mở trên YouTube */}
@@ -1363,17 +1818,22 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
     setSavingProgress({ current: 0, total: selectedVideos.length })
 
     try {
-      // Lưu theo từng mẻ 50 video để ổn định
-      const chunkSize = 50
-      for (let i = 0; i < selectedVideos.length; i += chunkSize) {
-        const chunk = selectedVideos.slice(i, i + chunkSize)
-        await post({
-          action: 'save_selected',
-          plan: activePlan || { creatorUrl: valid[0], channelName: chunk[0]?.channelName || 'Kênh YouTube' },
-          videos: chunk,
-        })
-        setSavingProgress({ current: Math.min(i + chunkSize, selectedVideos.length), total: selectedVideos.length })
-      }
+      // Lưu từng video một để thanh tiến độ nhích theo đúng từng cái;
+      // chạy song song vài việc để không chậm hơn cách gửi cả mẻ 50.
+      await mapWithProgress(
+        selectedVideos,
+        async (video) => {
+          await post({
+            action: 'save_selected',
+            plan: activePlan || { creatorUrl: valid[0], channelName: video.channelName || 'Kênh YouTube' },
+            videos: [video],
+          })
+        },
+        {
+          concurrency: 5,
+          onProgress: (current, total) => setSavingProgress({ current, total }),
+        },
+      )
 
       setScanState('saved')
       onSynced()
@@ -1472,7 +1932,11 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
                   {scanState === 'scanning' ? (
                     <>
                       <div className="tv-sync-pulse-dot" />
-                      <span>Đang quét: {activeJob?.channelName || 'YouTube...'}</span>
+                      <span>
+                        Đang quét: {activeJob?.channelName || 'YouTube...'}
+                        {activeJob?.sectionName ? ` · ${activeJob.sectionName}` : ''} — đã tìm{' '}
+                        {discoveredVideos.length} video
+                      </span>
                     </>
                   ) : scanState === 'paused' ? (
                     <>

@@ -1080,3 +1080,14 @@
     padding-bottom: 4px;
   }
 }
+
+a.bl-btn-external {
+  gap: 5px;
+  text-decoration: none;
+  color: var(--text-secondary, #64748b);
+}
+
+a.bl-btn-external:hover {
+  background: var(--surface-hover, #e2e8f0);
+  color: var(--text-primary, #0f172a);
+}

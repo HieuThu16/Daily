@@ -15,6 +15,7 @@
     "crawl:bl": "node crawl_all_bl.js",
     "crawl:reviews": "node --import tsx crawl_review_series.mjs",
     "crawl:tvshow": "node --import tsx crawl_tvshow_channels.mjs",
+    "backfill:durations": "node backfill_video_durations.mjs",
     "split:bl": "node --import tsx split_bl_data.mjs",
     "split:ngontinh": "node --import tsx split_ngontinh_data.mjs",
     "import:books": "node --import tsx import_books_full_v2.mjs",

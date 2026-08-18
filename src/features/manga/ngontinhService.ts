@@ -24,9 +24,10 @@ export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
       ...(Array.isArray(d3) ? d3 : []),
       ...(Array.isArray(d4) ? d4 : []),
       ...(await fetchExtraList()),
+      ...(await fetchOtruyenGenreList('/data/school_life_list.json')),
     ];
     if (list.length > 0) {
-      return list;
+      return dedupeBySlug(list);
     }
   } catch (err) {
     console.warn('Could not load split ngontinh data', err);
@@ -59,6 +60,27 @@ async function fetchExtraList(): Promise<NgontinhManga[]> {
     }
   } catch (err) {
     console.warn('Could not load /data/extra_manga.json', err);
+  }
+  return [];
+}
+
+function dedupeBySlug(list: NgontinhManga[]): NgontinhManga[] {
+  const seen = new Map<string, NgontinhManga>();
+  for (const item of list) if (!seen.has(item.slug)) seen.set(item.slug, item);
+  return [...seen.values()];
+}
+
+// Danh sách quét theo thể loại từ otruyen (npm run crawl:genre): chỉ có mục lục
+// chương, ảnh từng trang tải khi mở chương qua fetchNgontinhChapterImages.
+export async function fetchOtruyenGenreList(url: string): Promise<NgontinhManga[]> {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch (err) {
+    console.warn(`Could not load ${url}`, err);
   }
   return [];
 }
@@ -139,6 +161,8 @@ export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number;
   if (!manga) return false;
   // Truyện MangaDex chưa cào sẵn chương, chương và ảnh tải khi mở truyện.
   if (isMangadexManga(manga)) return true;
+  // Truyện otruyen chỉ lưu mục lục, ảnh tải theo chương khi mở.
+  if (manga.source === 'otruyen') return (manga.chapters?.length ?? 0) > 0;
   if (!manga.chapters || manga.chapters.length === 0) return false;
   return manga.chapters.some(
     (c) => (c.images && c.images.length > 0) || (c.imageCount && c.imageCount > 0)

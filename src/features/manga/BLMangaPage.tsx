@@ -4,7 +4,8 @@ import {
   Search, Heart, BookOpen, Clock, Play, 
   X, Bookmark, ChevronRight,
   Flame, Trophy, Zap, Calendar, Sparkles, Loader2,
-  Layers, Check
+  Layers, Check,
+  ExternalLink,
 } from 'lucide-react';
 import type { BLManga, HotMangaData } from '../../types/manga';
 import { 
@@ -146,6 +147,17 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
               <Play size={13} fill="currentColor" />
               {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
             </button>
+          ) : manga.url ? (
+            <a
+              className="bl-nodata-label bl-btn-external"
+              href={manga.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink size={13} />
+              Đọc ở nguồn gốc
+            </a>
           ) : (
             <span className="bl-nodata-label">Chưa có dữ liệu</span>
           )}

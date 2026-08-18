@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { detectVideoCategory, groupVideosByCategory } from './videoCategorizer'
+import {
+  detectVideoCategory,
+  detectVideoCategories,
+  groupVideosByCategory,
+  resolveVideoCategories,
+} from './videoCategorizer'
 
 describe('videoCategorizer', () => {
   describe('TV Show Categories', () => {
@@ -113,6 +118,90 @@ describe('videoCategorizer', () => {
       expect(confGroup).toBeDefined()
       expect(confGroup?.totalCount).toBe(1)
       expect(confGroup?.watchedCount).toBe(1)
+    })
+  })
+
+  describe('detectVideoCategories - 1 video nhiều thể loại', () => {
+    it('gán nhiều thể loại khi tiêu đề khớp nhiều nhóm', () => {
+      const cats = detectVideoCategories('Review phim kinh dị Hàn Quốc: sát nhân bí ẩn ám ảnh', 'review')
+      const ids = cats.map((c) => c.id)
+      expect(ids.length).toBeGreaterThan(1)
+      expect(ids).toContain('horror')
+      expect(ids).toContain('korea')
+    })
+
+    it('tối đa 3 thể loại và luôn có ít nhất 1', () => {
+      expect(detectVideoCategories('', 'review').length).toBe(1)
+      expect(
+        detectVideoCategories('Phim hành động hàn quốc mỹ kinh dị viễn tưởng hài hước', 'review').length
+      ).toBeLessThanOrEqual(3)
+    })
+
+    it('groupVideosByCategory đưa 1 video vào tất cả thể loại khớp', () => {
+      const v = [{ title: 'Review phim kinh dị Hàn Quốc ám ảnh', video_id: 'x1', thumbnail: null }]
+      const groups = groupVideosByCategory(v, 'review')
+      const withVideo = groups.filter((g) => g.videos.length > 0).map((g) => g.category.id)
+      expect(withVideo.length).toBeGreaterThan(1)
+    })
+
+    it('detectVideoCategory vẫn trả về thể loại chính', () => {
+      expect(detectVideoCategory('Bí quyết rèn luyện tư duy và ghi nhớ nhanh', 'tvshow').id).toBe('learning')
+    })
+  })
+
+  describe('không để video nào thiếu thể loại', () => {
+    const titles = [
+      'Chàng trai nghèo và bí mật căn biệt thự cuối ngõ',
+      'Cả nhà chết lặng khi biết sự thật về đứa trẻ',
+      'Full 1-20 | Tập cuối cực căng',
+      'Nam chính bị coi thường suốt 10 năm',
+      'Điều gì xảy ra nếu bạn dậy lúc 5h sáng mỗi ngày',
+      'Câu nói khiến ai cũng phải suy ngẫm',
+    ]
+
+    it('review: mọi tiêu đề đều được gắn thể loại thật', () => {
+      for (const t of titles) {
+        const cats = detectVideoCategories(t, 'review')
+        expect(cats.length).toBeGreaterThan(0)
+        expect(cats[0].id).not.toBe('other')
+      }
+    })
+
+    it('tvshow: mọi tiêu đề đều được gắn thể loại thật', () => {
+      for (const t of titles) {
+        expect(detectVideoCategories(t, 'tvshow')[0].id).not.toBe('other')
+      }
+    })
+
+    it('groupVideosByCategory không tạo nhóm Tổng hợp rỗng nghĩa', () => {
+      const vids = titles.map((t, i) => ({ title: t, video_id: 'v' + i, thumbnail: null }))
+      const groups = groupVideosByCategory(vids, 'review')
+      expect(groups.find((g) => g.category.id === 'other')).toBeUndefined()
+    })
+  })
+
+  describe('sửa tay thể loại (overrides)', () => {
+    it('bản sửa tay thắng kết quả tự nhận diện', () => {
+      const ids = resolveVideoCategories('v1', 'Review phim kinh dị ám ảnh', 'review', {
+        v1: ['comedy', 'romance'],
+      }).map((c) => c.id)
+      expect(ids).toEqual(['comedy', 'romance'])
+    })
+
+    it('sửa tay thành mảng rỗng thì về Tổng hợp & Khác', () => {
+      const ids = resolveVideoCategories('v1', 'Review phim kinh dị', 'review', { v1: [] }).map((c) => c.id)
+      expect(ids).toEqual(['other'])
+    })
+
+    it('không có bản sửa tay thì dùng nhận diện tự động', () => {
+      const ids = resolveVideoCategories('v2', 'Review phim kinh dị ám ảnh', 'review', { v1: ['comedy'] })
+      expect(ids[0].id).toBe('horror')
+    })
+
+    it('groupVideosByCategory tôn trọng bản sửa tay', () => {
+      const vids = [{ title: 'Review phim kinh dị ám ảnh', video_id: 'v1', thumbnail: null }]
+      const groups = groupVideosByCategory(vids, 'review', new Set(), { v1: ['comedy'] })
+      expect(groups.map((g) => g.category.id)).toEqual(['comedy'])
     })
   })
 })

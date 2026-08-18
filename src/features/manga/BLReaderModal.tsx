@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
 import type { BLManga, ChapterImage } from '../../types/manga';
 import { fetchBLChapterImages, saveReadingProgress } from './mangaService';
+import { fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 
 interface Props {
@@ -130,11 +131,18 @@ export const BLReaderModal: React.FC<Props> = ({
   useEffect(() => {
     if (!currentChapter || (currentChapter.images?.length ?? 0) > 0) return;
     let alive = true;
-    void fetchBLChapterImages(manga.slug).then((byChapter) => {
-      if (alive) setLazyImages(byChapter);
-    });
+    const key = String(currentChapter.number ?? '');
+    if (manga.source === 'otruyen') {
+      void fetchNgontinhChapterImages(manga.slug, currentChapter.number ?? 0).then((imgs) => {
+        if (alive) setLazyImages((prev) => ({ ...prev, [key]: imgs }));
+      });
+    } else {
+      void fetchBLChapterImages(manga.slug).then((byChapter) => {
+        if (alive) setLazyImages(byChapter);
+      });
+    }
     return () => { alive = false; };
-  }, [manga.slug, currentChapter]);
+  }, [manga.slug, manga.source, currentChapter]);
 
   const images =
     currentChapter?.images?.length

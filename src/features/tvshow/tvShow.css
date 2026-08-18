@@ -462,14 +462,21 @@
   margin-top: 4px;
 }
 
+.tv-action-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .tv-action-card-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 12px 6px;
-  border-radius: 16px;
+  gap: 4px;
+  padding: 9px 6px;
+  border-radius: 14px;
   border: 1px solid var(--card-border, #f1f5f9);
   background: var(--bg-main, #f8fafc);
   color: var(--text-main);
@@ -477,6 +484,11 @@
   transition: all 0.18s ease;
   text-align: center;
   user-select: none;
+}
+
+.tv-action-card-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .tv-action-card-btn:hover {
@@ -508,14 +520,14 @@
 }
 
 .tv-action-label-title {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.15;
 }
 
 .tv-action-label-sub {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   font-weight: 600;
   color: var(--text-muted);
   line-height: 1.15;
@@ -558,9 +570,16 @@
 }
 
 /* Ô tìm kiếm */
+.tv-search-sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .tv-search-input-wrapper {
   position: relative;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .tv-search-field {
@@ -1579,25 +1598,28 @@
 .tv-view-mode-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  padding: 3px;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  padding: 4px;
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .tv-mode-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 9px;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  border-radius: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+  border-radius: 9px;
   cursor: pointer;
   transition: all 0.18s ease;
 }
@@ -1789,3 +1811,160 @@
 }
 
 
+
+/* Vòng xoay cho nút đang gọi AI */
+.tv-spin { animation: tv-spin 1s linear infinite; }
+@keyframes tv-spin { to { transform: rotate(360deg); } }
+
+/* Card Thể loại dạng gọn - không dùng thumbnail */
+.tv-category-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.tv-category-head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 1.35rem;
+  background: var(--card-bg);
+  border: 1.5px solid var(--card-border);
+  flex-shrink: 0;
+}
+
+.tv-category-head-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.tv-category-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* Hộp thoại sửa tay thể loại */
+.tv-cat-edit { display: flex; flex-direction: column; gap: 12px; }
+
+.tv-cat-edit-title { font-weight: 700; font-size: 0.92rem; color: var(--text-main); line-height: 1.35; }
+
+.tv-cat-edit-hint { font-size: 0.78rem; color: var(--text-muted); }
+
+.tv-cat-edit-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.tv-cat-edit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.tv-cat-edit-chip.on { font-weight: 700; }
+
+.tv-cat-edit-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+.tv-video-cat-edit-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+}
+
+.tv-video-cat-edit-btn:hover { color: var(--primary); background: var(--bg-main); }
+
+/* Thanh lọc gọn trên màn hình danh sách video */
+.tv-vfilter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tv-vfilter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 200px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.tv-vfilter-chips .tv-category-chip {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tv-vfilter-chips::-webkit-scrollbar { height: 4px; }
+.tv-vfilter-chips::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 4px; }
+
+.tv-vfilter-tools {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.tv-vfilter-select {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Chọn nhiều video */
+.tv-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-main);
+  font-size: 0.82rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.tv-video-pick-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.tv-video-pick-btn.on { color: var(--primary); }
+
+.tv-video-card-item.picked {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.06);
+}

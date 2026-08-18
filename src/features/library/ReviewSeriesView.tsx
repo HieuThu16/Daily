@@ -3,18 +3,22 @@ import {
   ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
   Youtube, Clock, Settings, Gauge, Zap, Sliders, Bookmark, Bell, MoreVertical, 
-  Copy, Check, ChevronRight, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
+  Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
   Clapperboard, Download, Loader2, Sparkles, AlertCircle, Save, Layers
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
-import { useHideHeader } from '../HeaderAction'
+import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { 
   CategorizedGroup, 
   detectVideoCategory, 
+  resolveVideoCategories,
+  CategoryOverrides,
   groupVideosByCategory 
 } from '../../lib/videoCategorizer'
+import { CategoryEditModal } from '../tvshow/CategoryEditModal'
 import { CategoryDetailView } from '../tvshow/CategoryDetailView'
 import '../tvshow/tvShow.css'
 
@@ -89,12 +93,25 @@ export function ReviewSeriesView() {
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'channel' | 'category'>('channel')
+  const [viewMode, setViewMode] = useState<'video' | 'channel' | 'category'>('video')
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
+  const [categoryOverrides, setCategoryOverrides] = useState<CategoryOverrides>({})
+  const [editingCategoryVideos, setEditingCategoryVideos] = useState<{ video_id: string; title: string }[] | null>(null)
+  const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [sortMode, setSortMode] = useState<'default' | 'newest' | 'channel' | 'unwatched'>('default')
+  const [activeCatId, setActiveCatId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<CategorizedGroup<VideoRow> | null>(null)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [addMovieOpen, setAddMovieOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+
+  // 2 nút thêm nằm trên header chung, cạnh nút thông báo
+  useHeaderActions([
+    { label: 'Thêm kênh', icon: 'radio', onClick: () => setAddChannelOpen(true) },
+    { label: 'Thêm phim lẻ', icon: 'plus', onClick: () => setAddMovieOpen(true) },
+  ])
 
   // Tải danh sách Kênh Review & Toàn bộ video Review Phim
   useEffect(() => {
@@ -190,10 +207,30 @@ export function ReviewSeriesView() {
     }
   }, [reloadKey])
 
+  // Tải bản sửa tay thể loại (nếu chưa chạy migration thì bỏ qua, dùng tự động)
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const res = await supabase
+        ?.from('video_category_overrides')
+        .select('video_id, category_ids')
+        .eq('type', 'review')
+      if (!alive || res?.error) return
+      const map: CategoryOverrides = {}
+      for (const r of (res?.data ?? []) as { video_id: string; category_ids: string[] }[]) {
+        map[r.video_id] = r.category_ids ?? []
+      }
+      setCategoryOverrides(map)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [reloadKey])
+
   // Gom nhóm video theo Thể Loại tự động dựa vào tiêu đề phim
   const categoryGroups = useMemo(() => {
-    return groupVideosByCategory(allVideos, 'review', watchedSet)
-  }, [allVideos, watchedSet])
+    return groupVideosByCategory(allVideos, 'review', watchedSet, categoryOverrides)
+  }, [allVideos, watchedSet, categoryOverrides])
 
   // Lọc kênh theo tìm kiếm
   const filteredChannels = useMemo(() => {
@@ -213,6 +250,52 @@ export function ReviewSeriesView() {
         g.videos.some((v) => v.title.toLowerCase().includes(q))
     )
   }, [categoryGroups, search])
+
+  // Lọc + sắp xếp video: tìm kiếm, chip thể loại, trạng thái đã xem, thứ tự
+  const filteredVideos = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let result = allVideos.filter((v) => {
+      const cats = resolveVideoCategories(v.video_id, v.title, 'review', categoryOverrides)
+      if (activeCatId && !cats.some((c) => c.id === activeCatId)) return false
+      if (watchFilter === 'watched' && !watchedSet.has(v.video_id)) return false
+      if (watchFilter === 'unwatched' && watchedSet.has(v.video_id)) return false
+      if (!q) return true
+      return (
+        v.title.toLowerCase().includes(q) ||
+        (v.creator_name || '').toLowerCase().includes(q) ||
+        cats.some((c) => c.name.toLowerCase().includes(q))
+      )
+    })
+
+    if (sortMode === 'newest') {
+      result = [...result].sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''))
+    } else if (sortMode === 'channel') {
+      result = [...result].sort(
+        (a, b) =>
+          (a.creator_name || '').localeCompare(b.creator_name || '') ||
+          (b.published_at || '').localeCompare(a.published_at || '')
+      )
+    } else if (sortMode === 'unwatched') {
+      result = [...result].sort(
+        (a, b) => Number(watchedSet.has(a.video_id)) - Number(watchedSet.has(b.video_id))
+      )
+    }
+    return result
+  }, [allVideos, search, categoryOverrides, activeCatId, watchFilter, sortMode, watchedSet])
+
+  // Số video theo từng thể loại, để hiện trên chip lọc
+  const catChips = useMemo(
+    () => categoryGroups.map((g) => ({ cat: g.category, count: g.totalCount })),
+    [categoryGroups]
+  )
+
+  const toggleSelected = (videoId: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(videoId)) next.delete(videoId)
+      else next.add(videoId)
+      return next
+    })
 
   const deleteChannel = async (channel: ChannelItem, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -235,6 +318,29 @@ export function ReviewSeriesView() {
   }
 
   // Nếu đang mở chi tiết 1 Thể loại phim
+  if (playingVideoId) {
+    return (
+      <CategoryDetailView
+        group={{
+          category: {
+            id: 'all', name: 'Tất cả phim', icon: '🎬', color: '#f43f5e',
+            gradient: '', description: 'Toàn bộ video review phim', keywords: [],
+          },
+          videos: filteredVideos,
+          totalCount: filteredVideos.length,
+          watchedCount: filteredVideos.filter((v) => watchedSet.has(v.video_id)).length,
+          cover: filteredVideos[0]?.thumbnail ?? null,
+        }}
+        type="review"
+        initialVideoId={playingVideoId}
+        onBack={() => {
+          setPlayingVideoId(null)
+          setReloadKey((k) => k + 1)
+        }}
+      />
+    )
+  }
+
   if (selectedCategory) {
     return (
       <CategoryDetailView
@@ -269,6 +375,13 @@ export function ReviewSeriesView() {
         <div className="tv-view-mode-toggle">
           <button
             type="button"
+            className={`tv-mode-btn ${viewMode === 'video' ? 'active review-active' : ''}`}
+            onClick={() => setViewMode('video')}
+          >
+            <Play size={14} /> Tất cả phim ({allVideos.length})
+          </button>
+          <button
+            type="button"
             className={`tv-mode-btn ${viewMode === 'channel' ? 'active review-active' : ''}`}
             onClick={() => setViewMode('channel')}
           >
@@ -293,18 +406,13 @@ export function ReviewSeriesView() {
             placeholder={
               viewMode === 'channel'
                 ? 'Tìm kiếm kênh review phim…'
-                : 'Tìm thể loại phim (hành động, hàn, mỹ, kinh dị, anime…)'
+                : viewMode === 'category'
+                  ? 'Tìm thể loại phim (hành động, hàn, mỹ, kinh dị, anime…)'
+                  : 'Tìm phim theo tên, kênh hoặc thể loại…'
             }
           />
         </div>
 
-        {/* Nút hành động */}
-        <button className="tv-btn primary" onClick={() => setAddChannelOpen(true)}>
-          <Radio size={14} /> Thêm kênh
-        </button>
-        <button className="tv-btn" onClick={() => setAddMovieOpen(true)}>
-          <Plus size={14} /> Thêm phim lẻ
-        </button>
       </div>
 
       {needsMigration ? (
@@ -313,6 +421,166 @@ export function ReviewSeriesView() {
         </div>
       ) : loading ? (
         <div className="tv-empty">Đang tải danh sách video review & kênh…</div>
+      ) : viewMode === 'video' ? (
+        /* CHẾ ĐỘ MẶC ĐỊNH: DANH SÁCH TOÀN BỘ VIDEO */
+        <>
+          {/* Thanh lọc gọn: chip thể loại + trạng thái xem + sắp xếp + chọn nhiều */}
+          <div className="tv-vfilter">
+            <div className="tv-vfilter-chips">
+              <button
+                type="button"
+                className={`tv-category-chip${!activeCatId ? ' active' : ''}`}
+                onClick={() => setActiveCatId(null)}
+              >
+                Tất cả ({allVideos.length})
+              </button>
+              {catChips.map(({ cat, count }) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`tv-category-chip${activeCatId === cat.id ? ' active' : ''}`}
+                  onClick={() => setActiveCatId(activeCatId === cat.id ? null : cat.id)}
+                >
+                  {cat.icon} {cat.name} ({count})
+                </button>
+              ))}
+            </div>
+
+            <div className="tv-vfilter-tools">
+              <select
+                className="tv-vfilter-select"
+                value={watchFilter}
+                onChange={(e) => setWatchFilter(e.target.value as typeof watchFilter)}
+                title="Lọc theo trạng thái xem"
+              >
+                <option value="all">Tất cả</option>
+                <option value="unwatched">Chưa xem</option>
+                <option value="watched">Đã xem</option>
+              </select>
+              <select
+                className="tv-vfilter-select"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+                title="Sắp xếp"
+              >
+                <option value="default">Mặc định</option>
+                <option value="newest">Mới nhất</option>
+                <option value="channel">Theo kênh</option>
+                <option value="unwatched">Chưa xem trước</option>
+              </select>
+              <button
+                type="button"
+                className={`tv-btn${selectedIds.size ? ' primary' : ''}`}
+                onClick={() =>
+                  selectedIds.size
+                    ? setSelectedIds(new Set())
+                    : setSelectedIds(new Set(filteredVideos.map((v) => v.video_id)))
+                }
+                title="Chọn nhiều video để gán thể loại"
+              >
+                <CheckCircle2 size={14} /> {selectedIds.size ? `Bỏ chọn (${selectedIds.size})` : 'Chọn tất cả'}
+              </button>
+            </div>
+          </div>
+
+          {/* Thanh hành động hàng loạt */}
+          {selectedIds.size > 0 && (
+            <div className="tv-bulk-bar">
+              <span>
+                Đã chọn <b>{selectedIds.size}</b> phim
+              </span>
+              <button
+                type="button"
+                className="tv-btn primary"
+                onClick={() =>
+                  setEditingCategoryVideos(
+                    allVideos
+                      .filter((v) => selectedIds.has(v.video_id))
+                      .map((v) => ({ video_id: v.video_id, title: v.title }))
+                  )
+                }
+              >
+                <Tag size={14} /> Gán thể loại
+              </button>
+            </div>
+          )}
+
+          {!filteredVideos.length ? (
+            <div className="tv-empty">
+              {search || activeCatId || watchFilter !== 'all'
+                ? 'Không có phim nào khớp bộ lọc hiện tại.'
+                : 'Chưa có video nào. Bấm “Thêm kênh” để cào video review về.'}
+            </div>
+          ) : (
+            <div className="tv-video-card-list">
+              {filteredVideos.map((v) => {
+                const picked = selectedIds.has(v.video_id)
+                return (
+                  <div
+                    key={v.video_id}
+                    className={`tv-video-card-item${picked ? ' picked' : ''}`}
+                    onClick={() =>
+                      selectedIds.size ? toggleSelected(v.video_id) : setPlayingVideoId(v.video_id)
+                    }
+                  >
+                    <button
+                      type="button"
+                      className={`tv-video-pick-btn${picked ? ' on' : ''}`}
+                      title="Chọn video"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleSelected(v.video_id)
+                      }}
+                    >
+                      {picked ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                    </button>
+
+                    <div className="tv-video-thumb-container">
+                      <img
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        alt=""
+                        loading="lazy"
+                      />
+                      <span className="tv-video-duration-pill">
+                        {v.part_number ? `P.${v.part_number}` : 'Phim'}
+                      </span>
+                    </div>
+
+                    <div className="tv-video-meta-content">
+                      <div className="tv-video-item-title">{v.title}</div>
+                      <div
+                        className="tv-video-item-sub"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+                      >
+                        <span>{v.creator_name || 'Video lẻ'}</span>
+                        {resolveVideoCategories(v.video_id, v.title, 'review', categoryOverrides).map((cat) => (
+                          <span key={cat.id} className="tv-video-category-tag review">
+                            {cat.icon} {cat.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="tv-video-right-tools">
+                      {watchedSet.has(v.video_id) && <CheckCircle2 size={20} color="#10b981" />}
+                      <button
+                        type="button"
+                        className="tv-video-cat-edit-btn"
+                        title="Sửa thể loại"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingCategoryVideos([{ video_id: v.video_id, title: v.title }])
+                        }}
+                      >
+                        <Tag size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       ) : viewMode === 'category' ? (
         /* CHẾ ĐỘ XEM THEO THỂ LOẠI (Hành Động, Hàn Quốc, Mỹ, Kinh Dị, Anime...) */
         !filteredCategories.length ? (
@@ -333,26 +601,20 @@ export function ReviewSeriesView() {
                   className="tv-category-card"
                   onClick={() => setSelectedCategory(g)}
                 >
-                  <div className="tv-category-cover">
-                    {g.cover ? (
-                      <img src={g.cover} alt={g.category.name} loading="lazy" />
-                    ) : (
-                      <div className="tv-category-cover-fallback">
-                        {g.category.icon}
-                      </div>
-                    )}
-
-                    <span className="tv-category-icon-pill">
-                      <span>{g.category.icon}</span> THỂ LOẠI PHIM
+                  <div
+                    className="tv-category-head"
+                    style={{ background: g.category.gradient || undefined }}
+                  >
+                    <span
+                      className="tv-category-head-icon"
+                      style={{ borderColor: g.category.color }}
+                    >
+                      {g.category.icon}
                     </span>
-
-                    <span className="tv-count-pill">
-                      {g.totalCount} video
-                    </span>
-
+                    <span className="tv-category-head-count">{g.totalCount} video</span>
                     {g.watchedCount > 0 && (
-                      <span className={`tv-seen-pill${isDone ? ' done' : ''}`}>
-                        {isDone ? 'Đã xem hết' : `Đã xem ${g.watchedCount}/${g.totalCount}`}
+                      <span className={`tv-seen-pill${isDone ? ' done' : ''}`} style={{ position: 'static' }}>
+                        {isDone ? 'Đã xem hết' : `${g.watchedCount}/${g.totalCount}`}
                       </span>
                     )}
                   </div>
@@ -465,6 +727,26 @@ export function ReviewSeriesView() {
             })}
           </div>
         )
+      )}
+
+      {editingCategoryVideos && (
+        <CategoryEditModal
+          videos={editingCategoryVideos}
+          type="review"
+          overrides={categoryOverrides}
+          onClose={() => setEditingCategoryVideos(null)}
+          onSaved={(videoIds, ids) => {
+            setCategoryOverrides((prev) => {
+              const next = { ...prev }
+              for (const id of videoIds) {
+                if (ids === null) delete next[id]
+                else next[id] = ids
+              }
+              return next
+            })
+            setSelectedIds(new Set())
+          }}
+        />
       )}
 
       {addChannelOpen && (
@@ -1363,17 +1645,22 @@ function AddReviewChannelModal({ onClose, onSynced }: { onClose: () => void; onS
     setSavingProgress({ current: 0, total: selectedVideos.length })
 
     try {
-      // Lưu theo từng mẻ 50 video để ổn định
-      const chunkSize = 50
-      for (let i = 0; i < selectedVideos.length; i += chunkSize) {
-        const chunk = selectedVideos.slice(i, i + chunkSize)
-        await post({
-          action: 'save_selected',
-          plan: activePlan || { creatorUrl: valid[0], channelName: chunk[0]?.channelName || 'Kênh YouTube' },
-          videos: chunk,
-        })
-        setSavingProgress({ current: Math.min(i + chunkSize, selectedVideos.length), total: selectedVideos.length })
-      }
+      // Lưu từng video một để thanh tiến độ nhích theo đúng từng cái;
+      // chạy song song vài việc để không chậm hơn cách gửi cả mẻ 50.
+      await mapWithProgress(
+        selectedVideos,
+        async (video) => {
+          await post({
+            action: 'save_selected',
+            plan: activePlan || { creatorUrl: valid[0], channelName: video.channelName || 'Kênh YouTube' },
+            videos: [video],
+          })
+        },
+        {
+          concurrency: 5,
+          onProgress: (current, total) => setSavingProgress({ current, total }),
+        },
+      )
 
       setScanState('saved')
       onSynced()
@@ -1472,7 +1759,11 @@ function AddReviewChannelModal({ onClose, onSynced }: { onClose: () => void; onS
                   {scanState === 'scanning' ? (
                     <>
                       <div className="tv-sync-pulse-dot" />
-                      <span>Đang quét: {activeJob?.channelName || 'YouTube...'}</span>
+                      <span>
+                        Đang quét: {activeJob?.channelName || 'YouTube...'}
+                        {activeJob?.sectionName ? ` · ${activeJob.sectionName}` : ''} — đã tìm{' '}
+                        {discoveredVideos.length} video
+                      </span>
                     </>
                   ) : scanState === 'paused' ? (
                     <>

@@ -82,9 +82,10 @@ export async function fetchTeamsanyMangaList(): Promise<BLManga[]> {
  * Fetch combined BL Manga list from all database sources (DuaLeo + Sany Team)
  */
 export async function fetchBLMangaList(): Promise<BLManga[]> {
-  const [dualeoList, sanyList] = await Promise.all([
+  const [dualeoList, sanyList, otruyenList] = await Promise.all([
     fetchDuaLeoMangaList(),
     fetchTeamsanyMangaList(),
+    fetchOtruyenBLList(),
   ]);
 
   const seenSlugs = new Set<string>();
@@ -115,7 +116,27 @@ export async function fetchBLMangaList(): Promise<BLManga[]> {
     });
   }
 
+  // Đam mỹ / shounen ai quét từ otruyen: chỉ có mục lục, ảnh tải khi mở chương.
+  for (const item of otruyenList) {
+    if (seenSlugs.has(item.slug)) continue;
+    seenSlugs.add(item.slug);
+    combined.push({ ...item, source: 'otruyen', sourceName: 'OTruyen' });
+  }
+
   return combined;
+}
+
+async function fetchOtruyenBLList(): Promise<BLManga[]> {
+  try {
+    const res = await fetch('/data/bl_list.json');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch (err) {
+    console.warn('Could not load /data/bl_list.json', err);
+  }
+  return [];
 }
 
 export async function fetchHotMangaData(): Promise<HotMangaData | null> {
@@ -202,8 +223,10 @@ export function getMangaProgress(slug: string): ReadingProgress | null {
   return history[slug] || null;
 }
 
-export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number } | null): boolean {
+export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number; source?: string } | null): boolean {
   if (!manga) return false;
+  // Truyện otruyen chỉ lưu mục lục, ảnh tải theo chương khi mở.
+  if (manga.source === 'otruyen') return (manga.chapters?.length ?? 0) > 0;
   if (!manga.chapters || manga.chapters.length === 0) return false;
   return manga.chapters.some(
     (c) => (c.images && c.images.length > 0) || (c.imageCount && c.imageCount > 0)

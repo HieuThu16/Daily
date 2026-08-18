@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, CheckCircle2, ChevronRight, Circle, ExternalLink,
   Gauge, Clock, Settings, Search, ArrowUpDown, Play, Bookmark, Bell,
-  Copy, Check, MoreVertical, Tv, Film
+  Copy, Check, MoreVertical, Tv, Film, Sparkles, Loader2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHideHeader } from '../HeaderAction'
 import { Modal } from '../shared'
 import { CategorizedGroup, VideoCategoryType } from '../../lib/videoCategorizer'
+import { summarizeVideo, toKnowledgeRows, videosNeedingLesson } from '../../lib/videoLesson'
 import './tvShow.css'
 
 export type CategoryDetailVideoRow = {
@@ -23,15 +24,18 @@ export type CategoryDetailVideoRow = {
   part_number: number | null
   published_at: string | null
   unavailable_at: string | null
+  duration?: number | null
 }
 
 export function CategoryDetailView({
   group,
   type = 'tvshow',
+  initialVideoId,
   onBack,
 }: {
   group: CategorizedGroup<CategoryDetailVideoRow>
   type?: VideoCategoryType
+  initialVideoId?: string | null
   onBack: () => void
 }) {
   useHideHeader(true)
@@ -53,6 +57,11 @@ export function CategoryDetailView({
       return 1
     }
   })
+
+  /** video_id đã có thẻ kiến thức — dùng để biết video nào còn cần AI. */
+  const [lessonDone, setLessonDone] = useState<Set<string>>(new Set())
+  const [lessonBusy, setLessonBusy] = useState<string | null>(null)
+  const [batch, setBatch] = useState<{ done: number; total: number; failed: number } | null>(null)
 
   // Modals state
   const [showSettingsModal, setShowSettingsModal] = useState(false)
@@ -105,11 +114,19 @@ export function CategoryDetailView({
       setWatched(watchedSet)
       setVideos(group.videos)
 
+      const lessonRes = await supabase
+        ?.from('knowledge_items')
+        .select('source_video_id')
+        .not('source_video_id', 'is', null)
+        .is('deleted_at', null)
+      setLessonDone(new Set(((lessonRes?.data ?? []) as { source_video_id: string }[]).map((r) => r.source_video_id)))
+
       const firstUnwatched = group.videos.find((r) => !watchedSet.has(r.video_id))
-      setPlayingId(firstUnwatched ? firstUnwatched.video_id : group.videos[0]?.video_id ?? null)
+      setPlayingId(initialVideoId || (firstUnwatched ? firstUnwatched.video_id : group.videos[0]?.video_id ?? null))
+      if (initialVideoId) setIsPlayerActive(true)
       setLoading(false)
     })()
-  }, [group, watchedTable])
+  }, [group, watchedTable, initialVideoId])
 
   const filteredVideos = useMemo(() => {
     let result = [...videos]
@@ -135,6 +152,43 @@ export function CategoryDetailView({
 
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
   const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find((v) => v.video_id === playingId) || videos[0])
+
+  /** Rút thẻ kiến thức của một video rồi lưu. Trả về null nếu xong, hoặc thông điệp lỗi. */
+  const makeLesson = async (v: CategoryDetailVideoRow) => {
+    try {
+      const cards = await summarizeVideo(v.video_id, v.duration)
+      const rows = toKnowledgeRows({ videoId: v.video_id, title: v.title }, cards, v.creator_name || group.category.name)
+      if (!rows.length) throw new Error('Không có thẻ nào')
+      // Rút lại thì bỏ thẻ cũ của video đi, tránh nhân đôi.
+      await supabase!
+        .from('knowledge_items')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('source_video_id', v.video_id)
+        .is('deleted_at', null)
+      const { error } = await supabase!.from('knowledge_items').insert(rows)
+      if (error) throw error
+      setLessonDone((prev) => new Set(prev).add(v.video_id))
+      return null
+    } catch (e) {
+      return (e as Error)?.message || 'Lỗi không rõ'
+    }
+  }
+
+  const pending = videosNeedingLesson(videos, lessonDone)
+
+  /** Chạy tuần tự — Gemini tính theo lượt, đừng bắn song song. */
+  const makeLessonsBatch = async () => {
+    if (!pending.length || batch) return
+    if (!window.confirm(`Tạo kiến thức cho ${pending.length} video chưa có? Sẽ chạy lần lượt và tốn quota AI.`)) return
+    setBatch({ done: 0, total: pending.length, failed: 0 })
+    let failed = 0
+    for (let i = 0; i < pending.length; i++) {
+      if (await makeLesson(pending[i])) failed++
+      setBatch({ done: i + 1, total: pending.length, failed })
+    }
+    setBatch(null)
+    alert(failed ? `Xong: ${pending.length - failed} video có thẻ, ${failed} video lỗi.` : `Đã tạo kiến thức cho ${pending.length} video.`)
+  }
 
   const toggleWatched = async (videoId: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
@@ -249,8 +303,9 @@ export function CategoryDetailView({
               </div>
             )}
 
-            {/* 3. BẢNG 4 NÚT HÀNG NGANG */}
-            <div className="tv-action-grid-4">
+            {/* 3. BẢNG 3 NÚT HÀNG NGANG: Đánh dấu | Kiến thức | Cài đặt.
+                Tốc độ và Hẹn giờ dời vào Cài đặt cho đỡ chật. */}
+            <div className="tv-action-grid-3">
               {/* Nút 1: Đánh dấu đã xem */}
               <button
                 type="button"
@@ -259,7 +314,7 @@ export function CategoryDetailView({
                 title={currentIsWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
               >
                 <div className="tv-action-icon-box">
-                  {currentIsWatched ? <CheckCircle2 size={22} color="#10b981" /> : <Circle size={22} />}
+                  {currentIsWatched ? <CheckCircle2 size={18} color="#10b981" /> : <Circle size={18} />}
                 </div>
                 <span className="tv-action-label-title">Đánh dấu</span>
                 <span className={`tv-action-label-sub ${currentIsWatched ? 'is-green' : ''}`}>
@@ -267,39 +322,41 @@ export function CategoryDetailView({
                 </span>
               </button>
 
-              {/* Nút 2: Tốc độ */}
+              {/* Nút 2: Tạo kiến thức từ video này */}
               <button
                 type="button"
-                className={`tv-action-card-btn ${playbackRate !== 1 ? 'active' : ''}`}
-                onClick={() => setShowSpeedModal(true)}
-                title="Thay đổi tốc độ phát"
+                className={`tv-action-card-btn ${currentVideo && lessonDone.has(currentVideo.video_id) ? 'active' : ''}`}
+                disabled={!currentVideo || lessonBusy === currentVideo.video_id}
+                onClick={() => {
+                  const v = currentVideo
+                  if (!v) return
+                  setLessonBusy(v.video_id)
+                  void makeLesson(v).then((err) => {
+                    setLessonBusy(null)
+                    alert(err ? `Chưa rút được kiến thức:
+${err}` : 'Đã lưu thẻ kiến thức từ video này.')
+                  })
+                }}
+                title="Dùng AI rút thẻ kiến thức từ video đang phát"
               >
                 <div className="tv-action-icon-box">
-                  <Gauge size={22} />
+                  {currentVideo && lessonBusy === currentVideo.video_id ? (
+                    <Loader2 size={18} className="tv-spin" />
+                  ) : (
+                    <Sparkles size={18} />
+                  )}
                 </div>
-                <span className="tv-action-label-title">Tốc độ</span>
-                <span className={`tv-action-label-sub ${playbackRate === 2 ? 'highlight' : ''}`}>
-                  {playbackRate}x
+                <span className="tv-action-label-title">Kiến thức</span>
+                <span className="tv-action-label-sub">
+                  {currentVideo && lessonBusy === currentVideo.video_id
+                    ? 'đang tạo…'
+                    : currentVideo && lessonDone.has(currentVideo.video_id)
+                      ? 'đã tạo'
+                      : 'tạo từ video'}
                 </span>
               </button>
 
-              {/* Nút 3: Hẹn giờ */}
-              <button
-                type="button"
-                className={`tv-action-card-btn ${sleepTimerMinutes ? 'active' : ''}`}
-                onClick={() => setShowTimerModal(true)}
-                title="Hẹn giờ tự tắt video"
-              >
-                <div className="tv-action-icon-box">
-                  <Clock size={22} />
-                </div>
-                <span className="tv-action-label-title">Hẹn giờ</span>
-                <span className={`tv-action-label-sub ${sleepTimerMinutes ? 'highlight' : ''}`}>
-                  {sleepTimerMinutes ? `${sleepTimerMinutes}p` : 'Tắt'}
-                </span>
-              </button>
-
-              {/* Nút 4: Cài đặt */}
+              {/* Nút 3: Cài đặt */}
               <button
                 type="button"
                 className={`tv-action-card-btn ${showSettingsModal ? 'active' : ''}`}
@@ -307,7 +364,7 @@ export function CategoryDetailView({
                 title="Cài đặt & Tùy chọn"
               >
                 <div className="tv-action-icon-box">
-                  <Settings size={22} />
+                  <Settings size={18} />
                 </div>
                 <span className="tv-action-label-title">Cài đặt</span>
                 <span className="tv-action-label-sub">Tùy chọn</span>
@@ -371,6 +428,17 @@ export function CategoryDetailView({
               >
                 <ArrowUpDown size={13} />
                 {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
+              </button>
+
+              <button
+                type="button"
+                className="tv-btn"
+                disabled={!!batch || pending.length === 0}
+                onClick={() => void makeLessonsBatch()}
+                title="Dùng AI rút thẻ kiến thức cho các video chưa có"
+              >
+                {batch ? <Loader2 size={13} className="tv-spin" /> : <Sparkles size={13} />}
+                {batch ? `Đang tạo ${batch.done}/${batch.total}` : `Tạo kiến thức hàng loạt (${pending.length})`}
               </button>
             </div>
 
@@ -497,6 +565,36 @@ export function CategoryDetailView({
       {showSettingsModal && (
         <Modal title="Cài đặt & Tùy chọn" onClose={() => setShowSettingsModal(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 0' }}>
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'space-between', padding: '12px 14px' }}
+              onClick={() => {
+                setShowSettingsModal(false)
+                setShowSpeedModal(true)
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Gauge size={16} /> Tốc độ phát
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>{playbackRate}x</span>
+            </button>
+
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'space-between', padding: '12px 14px' }}
+              onClick={() => {
+                setShowSettingsModal(false)
+                setShowTimerModal(true)
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={16} /> Hẹn giờ tắt
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>{sleepTimerMinutes ? `${sleepTimerMinutes}p` : 'Tắt'}</span>
+            </button>
+
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
               <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>Tự động phát video kế tiếp</span>
               <input
