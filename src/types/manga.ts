@@ -13,6 +13,8 @@ export interface MangaChapter {
   url: string;
   images?: ChapterImage[];
   imageCount?: number;
+  /** Id chương trên MangaDex, dùng để lấy ảnh khi đọc. */
+  chapterId?: string;
 }
 
 export interface BLManga {
@@ -66,6 +68,9 @@ export interface ReadingProgress {
 
 export interface NgontinhManga {
   slug: string;
+  /** Id MangaDex, chỉ có với truyện nguồn mangadex. */
+  id?: string;
+  source?: string;
   title: string;
   cover: string | null;
   description: string;

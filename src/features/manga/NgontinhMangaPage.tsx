@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Search, Heart, BookOpen, Clock, Play, 
   X, Bookmark, ChevronRight,
-  Flame, Trophy, Zap, Calendar, Sparkles, Loader2
+  Flame, Trophy, Zap, Calendar, Sparkles, Loader2, ExternalLink
 } from 'lucide-react';
 import type { NgontinhManga, HotMangaData } from '../../types/manga';
 import { 
@@ -11,6 +11,7 @@ import {
   getNgontinhFavorites, toggleNgontinhFavorite, 
   getNgontinhHistory, hasMangaData 
 } from './ngontinhService';
+import { hydrateMangadexManga } from './mangadexService';
 import { NgontinhReaderModal } from './NgontinhReaderModal';
 import './ngontinhManga.css';
 
@@ -129,6 +130,17 @@ const NgontinhCardItem: React.FC<CardProps> = React.memo(({
               <Play size={13} fill="currentColor" />
               {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
             </button>
+          ) : manga.url ? (
+            <a
+              className="ngontinh-nodata-label ngontinh-btn-external"
+              href={manga.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink size={13} />
+              Xem ở nguồn
+            </a>
           ) : (
             <span className="ngontinh-nodata-label">Chưa có dữ liệu</span>
           )}
@@ -346,8 +358,19 @@ export const NgontinhMangaPage: React.FC = () => {
     return () => observer.disconnect();
   }, [visibleCount, filteredList.length]);
 
-  const openReader = (manga: NgontinhManga, chapterNum: number) => {
-    setReadingState({ manga, chapterNum });
+  const openReader = async (manga: NgontinhManga, chapterNum: number) => {
+    // Truyện MangaDex chưa có chương trong file dữ liệu, lấy khi bấm đọc.
+    const ready = await hydrateMangadexManga(manga);
+    const chapters = ready.chapters ?? [];
+    // MangaDex gỡ chương của truyện đã mua bản quyền — không còn gì đọc thì mở link nguồn.
+    if (chapters.length === 0 && ready.url) {
+      window.open(ready.url, '_blank', 'noreferrer');
+      return;
+    }
+    const target = chapters.some((c) => c.number === chapterNum)
+      ? chapterNum
+      : chapters[0]?.number ?? chapterNum;
+    setReadingState({ manga: ready, chapterNum: target });
     setHistory(getNgontinhHistory());
   };
 

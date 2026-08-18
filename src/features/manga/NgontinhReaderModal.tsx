@@ -49,7 +49,7 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       if (cachedImages.length === 0 && (!dynamic || dynamic.length === 0)) {
         setFetchingChapterImages(true);
         try {
-          const fetched = await fetchNgontinhChapterImages(manga.slug, currentChapterNum);
+          const fetched = await fetchNgontinhChapterImages(manga, currentChapterNum);
           if (isMounted && fetched.length > 0) {
             setDynamicChapterImages(prev => ({ ...prev, [currentChapterNum]: fetched }));
           }

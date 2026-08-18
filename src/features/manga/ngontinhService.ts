@@ -1,4 +1,5 @@
 import type { NgontinhManga, ReadingProgress, HotMangaData } from '../../types/manga';
+import { fetchMangadexChapterImages, isMangadexManga } from './mangadexService';
 
 const FAVORITES_KEY = 'daily_ngontinh_favorites';
 const HISTORY_KEY = 'daily_ngontinh_history';
@@ -22,6 +23,7 @@ export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
       ...(Array.isArray(d2) ? d2 : []),
       ...(Array.isArray(d3) ? d3 : []),
       ...(Array.isArray(d4) ? d4 : []),
+      ...(await fetchExtraList()),
     ];
     if (list.length > 0) {
       return list;
@@ -42,6 +44,22 @@ export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
     console.warn('Could not load /data/ngontinh_manga.json from public', err);
   }
 
+  return [];
+}
+
+// Các bộ crawl thêm (romance, shoujo, slice of life, shounen ai, đam mỹ) đã gộp và
+// bỏ URL ảnh trong public/data/extra_manga.json (npm run split:extra). Đã lọc trùng slug
+// với ngôn tình từ lúc gộp, ảnh reader tự tải theo slug khi mở chương.
+async function fetchExtraList(): Promise<NgontinhManga[]> {
+  try {
+    const res = await fetch('/data/extra_manga.json');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch (err) {
+    console.warn('Could not load /data/extra_manga.json', err);
+  }
   return [];
 }
 
@@ -117,8 +135,10 @@ export function getNgontinhProgress(slug: string): ReadingProgress | null {
   return history[slug] || null;
 }
 
-export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number } | null): boolean {
+export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number; source?: string } | null): boolean {
   if (!manga) return false;
+  // Truyện MangaDex chưa cào sẵn chương, chương và ảnh tải khi mở truyện.
+  if (isMangadexManga(manga)) return true;
   if (!manga.chapters || manga.chapters.length === 0) return false;
   return manga.chapters.some(
     (c) => (c.images && c.images.length > 0) || (c.imageCount && c.imageCount > 0)
@@ -127,7 +147,16 @@ export function hasMangaData(manga?: { chapters?: any[]; totalChapters?: number 
 
 const otruyenChapterCache = new Map<string, any[]>();
 
-export async function fetchNgontinhChapterImages(slug: string, chapterNum: number): Promise<any[]> {
+export async function fetchNgontinhChapterImages(
+  manga: NgontinhManga | string,
+  chapterNum: number
+): Promise<any[]> {
+  if (typeof manga !== 'string' && isMangadexManga(manga)) {
+    const chapter = manga.chapters?.find((c) => c.number === chapterNum);
+    return chapter?.chapterId ? fetchMangadexChapterImages(chapter.chapterId) : [];
+  }
+
+  const slug = typeof manga === 'string' ? manga : manga.slug;
   const cacheKey = `${slug}:${chapterNum}`;
   if (otruyenChapterCache.has(cacheKey)) {
     return otruyenChapterCache.get(cacheKey) || [];

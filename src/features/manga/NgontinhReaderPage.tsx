@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
 import { fetchNgontinhList, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
+import { hydrateMangadexManga } from './mangadexService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhReader.css';
@@ -39,7 +40,7 @@ export const NgontinhReaderPage: React.FC = () => {
         const list = await fetchNgontinhList();
         if (isMounted && slug) {
           const found = list.find(m => m.slug === slug);
-          if (found) setManga(found);
+          if (found) setManga(await hydrateMangadexManga(found));
         }
       } catch (err) {
         console.error('Failed to load manga for reader', err);
@@ -73,7 +74,7 @@ export const NgontinhReaderPage: React.FC = () => {
       if (cachedImages.length === 0 && (!dynamic || dynamic.length === 0)) {
         setFetchingChapterImages(true);
         try {
-          const fetched = await fetchNgontinhChapterImages(manga.slug, currentChapterNum);
+          const fetched = await fetchNgontinhChapterImages(manga, currentChapterNum);
           if (isMounted && fetched.length > 0) {
             setDynamicChapterImages(prev => ({ ...prev, [currentChapterNum]: fetched }));
           }

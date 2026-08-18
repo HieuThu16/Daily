@@ -14,6 +14,7 @@ import {
   getNgontinhHistory,
   getNgontinhFollows, toggleNgontinhFollow
 } from './ngontinhService';
+import { hydrateMangadexManga } from './mangadexService';
 import { notifyFollowsChanged } from './MangaNotificationBell';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
@@ -49,7 +50,8 @@ export const NgontinhDetailPage: React.FC = () => {
         ]);
 
         if (isMounted && slug) {
-          const found = list.find((m) => m.slug === slug);
+          const match = list.find((m) => m.slug === slug);
+          const found = match ? await hydrateMangadexManga(match) : undefined;
           if (found) {
             if (hot?.hot) {
               const hotItem = hot.hot.find(h => h.slug === slug);
