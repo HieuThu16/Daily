@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Plus, Salad, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, Salad, Search, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
-import { HeaderActionProvider, useHeaderActionSlot, useIsHeaderHidden } from './features/HeaderAction'
+import { HeaderActionProvider, useHeaderActionSlots, useIsHeaderHidden } from './features/HeaderAction'
 import { AsideProvider, useAsideRef } from './features/AsideSlot'
 import { HomePage } from './features/home/HomePage'
 import { HabitsPage } from './features/HabitsPage'
@@ -32,8 +32,8 @@ import { exportBackup } from './lib/backup'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
-import { TaskNotificationBell } from './features/TaskNotificationBell'
-import { MangaNotificationBell } from './features/manga/MangaNotificationBell'
+import { NotificationCenter } from './features/NotificationCenter'
+import { CommandPalette, openCommandPalette } from './features/CommandPalette'
 import { ToastProvider, useToast } from './features/ToastContext'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -59,9 +59,12 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
 ]
 
 const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
+const PINNED_TABS_STORAGE_KEY = 'daily_pinned_tabs'
 const THEME_STORAGE_KEY = 'daily_theme'
 const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'tvshow', 'reviews']
 const BOTTOM_NAV_SIZE = 5
+/** Trần số tab được ghim. Ghim quá thì báo lỗi thay vì âm thầm đẩy cái cũ ra. */
+const MAX_PINNED_TABS = 7
 
 /** Đưa `ids` lên đầu, đệm cho đủ 5 ô bằng tab mặc định rồi tới phần còn lại. */
 function padRecentTabs(ids: Tab[]): Tab[] {
@@ -72,17 +75,26 @@ function padRecentTabs(ids: Tab[]): Tab[] {
   return combined.slice(0, BOTTOM_NAV_SIZE)
 }
 
-function getSavedRecentTabs(): Tab[] {
+function readSavedTabs(storageKey: string): Tab[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(RECENT_TABS_STORAGE_KEY) ?? 'null')
+    const parsed = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
     if (Array.isArray(parsed)) {
       const validIds = new Set<string>(navigation.map((n) => n.id))
-      return padRecentTabs(parsed.filter((id): id is Tab => validIds.has(id)))
+      return parsed.filter((id): id is Tab => validIds.has(id))
     }
   } catch (error) {
-    console.warn('Không đọc được tab gần đây đã lưu:', error)
+    console.warn('Không đọc được tab đã lưu:', error)
   }
-  return padRecentTabs([])
+  return []
+}
+
+/** Tab người dùng tự ghim: luôn đứng đầu bottom nav, không bị MRU đẩy đi. */
+function getPinnedTabs(): Tab[] {
+  return readSavedTabs(PINNED_TABS_STORAGE_KEY).slice(0, MAX_PINNED_TABS)
+}
+
+function getSavedRecentTabs(): Tab[] {
+  return padRecentTabs(readSavedTabs(RECENT_TABS_STORAGE_KEY))
 }
 
 // Ngăn kéo chia theo nhóm lớn, bấm vào mới xổ các mục con.
@@ -167,7 +179,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     }
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
   })
-  const headerAction = useHeaderActionSlot()
+  const headerActions = useHeaderActionSlots()
   const isHeaderHidden = useIsHeaderHidden()
   const asideRef = useAsideRef()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -263,11 +275,31 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     }
   }, [path])
 
+  const [pinnedTabs, setPinnedTabs] = useState<Tab[]>(() => getPinnedTabs())
+
+  const togglePin = (id: Tab) => {
+    if (!pinnedTabs.includes(id) && pinnedTabs.length >= MAX_PINNED_TABS) {
+      alert(`Chỉ ghim được tối đa ${MAX_PINNED_TABS} tab. Bỏ ghim một tab khác trước đã.`)
+      return
+    }
+    setPinnedTabs((prev) => {
+      const next = prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+      try {
+        localStorage.setItem(PINNED_TABS_STORAGE_KEY, JSON.stringify(next))
+      } catch (error) {
+        console.warn('Không lưu được tab đã ghim:', error)
+      }
+      return next
+    })
+  }
+
+  // Tab ghim đứng trước, phần còn lại lấp bằng tab vừa dùng gần đây.
   const dynamicPrimaryNavigation = useMemo(() => {
-    return recentTabs
+    const ids = [...pinnedTabs, ...recentTabs.filter((id) => !pinnedTabs.includes(id))].slice(0, BOTTOM_NAV_SIZE)
+    return ids
       .map((id) => navigation.find((n) => n.id === id))
       .filter((item): item is (typeof navigation)[number] => item !== undefined)
-  }, [recentTabs])
+  }, [recentTabs, pinnedTabs])
 
   useTaskReminders()
 
@@ -306,7 +338,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
         <nav className="side-nav-list">
           {navGroups.map((group) => {
-            const isOpen = !collapsedGroups[group.title]
+            const isOpen = !collapsedGroups[group.title] || group.ids.includes(activeTabItem.id)
             return (
               <div key={group.title} className={`nav-group-section ${isOpen ? 'is-open' : 'is-collapsed'}`}>
                 <button
@@ -360,13 +392,15 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{activeTabItem.label}</span>
           </div>
           <div className="header-actions">
-            <TaskNotificationBell />
-            <MangaNotificationBell />
-            {headerAction && (
-              <button className="header-action" aria-label={headerAction.label} title={headerAction.label} onClick={headerAction.onClick}>
-                <Plus size={20} />
+            <button className="header-action" aria-label="Tìm kiếm (Ctrl+K)" title="Tìm kiếm (Ctrl+K)" onClick={openCommandPalette}>
+              <Search size={20} />
+            </button>
+            <NotificationCenter />
+            {headerActions.map((a) => (
+              <button key={a.label} className="header-action" aria-label={a.label} title={a.label} onClick={a.onClick}>
+                {a.icon === 'radio' ? <Radio size={20} /> : <Plus size={20} />}
               </button>
-            )}
+            ))}
           </div>
         </header>
       )}
@@ -382,7 +416,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             </div>
             <nav className="mobile-drawer-list">
               {navGroups.map((group) => {
-                const isOpen = !collapsedGroups[group.title]
+                const isOpen = !collapsedGroups[group.title] || group.ids.includes(activeTabItem.id)
                 return (
                   <div key={group.title} className={`drawer-group ${isOpen ? 'is-open' : 'is-collapsed'}`}>
                     <button
@@ -401,17 +435,28 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
                           if (!item) return null
                           const Icon = item.icon
                           return (
-                            <button
-                              key={id}
-                              className={path === '/' + id ? 'active' : ''}
-                              onClick={() => {
-                                nav('/' + id)
-                                setMenuOpen(false)
-                              }}
-                            >
-                              <div className={`nav-icon-wrapper ${item.colorClass}`}><Icon size={17} /></div>
-                              <span>{item.label}</span>
-                            </button>
+                            <div key={id} className="drawer-item-row">
+                              <button
+                                className={path === '/' + id ? 'active' : ''}
+                                onClick={() => {
+                                  nav('/' + id)
+                                  setMenuOpen(false)
+                                }}
+                              >
+                                <div className={`nav-icon-wrapper ${item.colorClass}`}><Icon size={17} /></div>
+                                <span>{item.label}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className={`drawer-pin-btn ${pinnedTabs.includes(id) ? 'is-pinned' : ''}`}
+                                onClick={() => togglePin(id)}
+                                aria-pressed={pinnedTabs.includes(id)}
+                                aria-label={pinnedTabs.includes(id) ? `Bỏ ghim ${item.label}` : `Ghim ${item.label} vào thanh dưới`}
+                                title={pinnedTabs.includes(id) ? 'Bỏ ghim khỏi thanh dưới' : 'Ghim vào thanh dưới'}
+                              >
+                                {pinnedTabs.includes(id) ? <Pin size={14} /> : <PinOff size={14} />}
+                              </button>
+                            </div>
                           )
                         })}
                       </div>
@@ -449,6 +494,8 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
       {/* Cột phụ desktop. Luôn dựng, CSS quyết định có hiện hay không. */}
       <aside className="side-rail" ref={asideRef} />
+
+      <CommandPalette tabs={navigation.map((n) => ({ id: n.id, label: n.label, group: navGroups.find((g) => g.ids.includes(n.id))?.title ?? '' }))} />
 
     </div>
   )

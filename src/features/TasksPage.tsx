@@ -12,6 +12,7 @@ import { TasksStatsTab } from './tasks/TasksStatsTab'
 import { Aside, AsideCard } from './AsideSlot'
 import { saveLocal } from '../lib/persistence'
 import { notifyTasksChanged } from './useUncompletedTasks'
+import { SkeletonList } from './Skeleton'
 
 type Tab = 'tasks' | 'ideas' | 'stats'
 type EditState = { kind: 'todo'; item: Todo } | { kind: 'idea'; item: Idea }
@@ -936,7 +937,7 @@ export function TasksPage() {
           </div>
 
           {todos.loading ? (
-            <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải công việc…</p>
+            <SkeletonList rows={5} />
           ) : (
             <div className="task-groups" onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
               {/* Tồn đọng ngày trước */}
@@ -1015,7 +1016,7 @@ export function TasksPage() {
           </div>
 
           {ideas.loading ? (
-            <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải ý tưởng…</p>
+            <SkeletonList rows={3} />
           ) : filteredIdeas.length ? (
             <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 280px)', minHeight: '340px', overflowY: 'auto' }}>
               {filteredIdeas.map((i) => (

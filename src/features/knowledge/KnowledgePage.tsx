@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, Plus, Search, Settings2, Tags, Trash2, HelpCircle, BookOpen } from 'lucide-react'
+import { Brain, Check, ChevronDown, Plus, Search, Settings2, Tags, Trash2, HelpCircle, BookOpen } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHeaderAction } from '../HeaderAction'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import type { KnowledgeItem } from '../../types'
 import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory } from './knowledge'
+import { ReviewSession } from '../study/ReviewSession'
+import { useDeck } from '../study/useDeck'
 
 const EMPTY_FORM = { question: '', answer: '', category: '' }
 
@@ -35,7 +37,11 @@ export function KnowledgePage() {
   const [adding, setAdding] = useState(false)
   const [managing, setManaging] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Cùng cỗ máy ôn tập với tab Tiếng Anh, chỉ khác bảng dữ liệu.
+  const { queue: reviewQueue, stats: srsStats, grade: gradeCard, reload: reloadDeck } = useDeck('knowledge')
 
   useHeaderAction('Thêm thẻ kiến thức', () => setAdding(true))
 
@@ -222,11 +228,38 @@ export function KnowledgePage() {
             )}
           </div>
 
+          <button
+            className="eng-mini-btn"
+            onClick={() => {
+              if (reviewQueue.length === 0) {
+                showToast('Hôm nay không còn thẻ nào tới hạn ôn. Quay lại vào mai nhé!', 'info')
+                return
+              }
+              setReviewing(true)
+            }}
+            title={srsStats.due > 0 ? `${srsStats.due} thẻ tới hạn ôn hôm nay` : 'Hôm nay không còn thẻ tới hạn'}
+          >
+            <Brain size={14} />{' '}
+            <span>Ôn hôm nay{srsStats.due > 0 ? ` (${srsStats.due})` : ''}</span>
+          </button>
+
           <button className="primary eng-mini-btn" onClick={() => setAdding(true)}>
             <Plus size={14} /> <span>Thêm</span>
           </button>
         </div>
       </div>
+
+      {reviewing && (
+        <ReviewSession
+          queue={reviewQueue}
+          deckLabel="Kiến thức"
+          onGrade={gradeCard}
+          onClose={() => {
+            setReviewing(false)
+            void reloadDeck()
+          }}
+        />
+      )}
 
       {managing && (
         <Modal title="Quản lý thể loại" onClose={() => setManaging(false)}>

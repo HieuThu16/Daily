@@ -1,11 +1,14 @@
 import { useMemo, useRef, useState } from 'react'
-import { BookMarked, BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Film, Gift, Music, NotebookPen, Tv, Wallet } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Film, Gift, Music, NotebookPen, Plus, Tv, Wallet, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { localDate } from '../lib/date'
 import { formatMoney } from '../lib/money'
 import { nextOccurrence, parseLocalDate } from '../lib/occasions'
 import type { Entry, Media, MoneyTransaction, PersonOccasion, Todo } from '../types'
 import { useQuery } from './shared'
+import { supabase } from '../lib/supabase'
+import { useToast } from './ToastContext'
+import { notifyTasksChanged } from './useUncompletedTasks'
 
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 
@@ -32,6 +35,79 @@ function monthGrid(year: number, month: number) {
   ]
 }
 
+/** Bảy ngày của tuần chứa `day`, bắt đầu từ thứ Hai. */
+function weekDays(day: string): string[] {
+  const base = parseLocalDate(day)
+  const monday = new Date(base)
+  monday.setDate(base.getDate() - ((base.getDay() + 6) % 7))
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    return dayKey(d)
+  })
+}
+
+const DAY_LABELS = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
+
+type DayBucket = { todos: Todo[]; entries: Entry[]; occasions: PersonOccasion[]; spend: number; media: Media[] }
+
+/** Agenda tuần: bảy ngày xếp dọc, đọc được nội dung từng ngày trên màn hình hẹp. */
+function AgendaWeek({
+  days,
+  dayData,
+  today,
+  selected,
+  onPick,
+  shows,
+}: {
+  days: string[]
+  dayData: Map<string, DayBucket>
+  today: string
+  selected: string
+  onPick: (day: string) => void
+  shows: (id: Layer) => boolean
+}) {
+  return (
+    <div className="cal-agenda">
+      {days.map((day, index) => {
+        const data = dayData.get(day)
+        const items: { key: string; text: string; color: string }[] = [
+          ...(shows('occasions') ? (data?.occasions ?? []).map((o) => ({ key: `o-${o.id}`, text: o.title || 'Dịp đặc biệt', color: '#f59e0b' })) : []),
+          ...(shows('todos') ? (data?.todos ?? []).map((t) => ({ key: `t-${t.id}`, text: `${t.due_time ? t.due_time + ' - ' : ''}${t.title}`, color: t.completed ? '#10b981' : '#8b5cf6' })) : []),
+          ...(shows('entries') ? (data?.entries ?? []).map((e) => ({ key: `e-${e.id}`, text: e.content, color: '#10b981' })) : []),
+          ...(shows('media') ? (data?.media ?? []).map((m) => ({ key: `m-${m.id}`, text: m.name, color: '#06b6d4' })) : []),
+          ...(shows('spend') && data?.spend ? [{ key: `s-${day}`, text: `Đã chi ${formatMoney(data.spend)}`, color: '#ef4444' }] : []),
+        ]
+        return (
+          <button
+            key={day}
+            type="button"
+            className={`cal-agenda-day ${day === today ? 'is-today' : ''} ${day === selected ? 'is-selected' : ''}`}
+            onClick={() => onPick(day)}
+          >
+            <span className="cal-agenda-head">
+              <b>{DAY_LABELS[index]}</b>
+              <small>{day.slice(8)}/{day.slice(5, 7)}</small>
+            </span>
+            {items.length === 0 ? (
+              <span className="cal-agenda-empty">Trống</span>
+            ) : (
+              <span className="cal-agenda-items">
+                {items.map((item) => (
+                  <span key={item.key} className="cal-agenda-item">
+                    <i style={{ background: item.color }} />
+                    {item.text}
+                  </span>
+                ))}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function CalendarPage() {
   const navigate = useNavigate()
   const todos = useQuery<Todo>('todos')
@@ -45,9 +121,22 @@ export function CalendarPage() {
   const [selected, setSelected] = useState(today)
   // Một tag đang xem tại một thời điểm; 'all' là mặc định, xem hết mọi loại.
   const [layer, setLayer] = useState<Layer | 'all'>('all')
+  // Lưới tháng để nhìn tổng thể; agenda tuần để đọc nội dung trên màn hình hẹp.
+  const [view, setView] = useState<'month' | 'week'>('month')
+  const [quickTitle, setQuickTitle] = useState('')
+  const [quickTime, setQuickTime] = useState('')
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const { showToast } = useToast()
   const shows = (id: Layer) => layer === 'all' || layer === id
 
   const cells = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor])
+  const agendaDays = useMemo(() => weekDays(selected), [selected])
+  // Tuần đang xem có thể tràn sang tháng khác, nên dịp phải tính cho cả hai tập ngày.
+  const occasionDays = useMemo(
+    () => [...new Set([...(cells.filter(Boolean) as string[]), ...agendaDays])],
+    [cells, agendaDays],
+  )
 
   const dayData = useMemo(() => {
     const map = new Map<string, { todos: Todo[]; entries: Entry[]; occasions: PersonOccasion[]; spend: number; media: Media[] }>()
@@ -65,15 +154,14 @@ export function CalendarPage() {
       if (d) ensure(d).media.push(m)
     })
     // Dịp lặp hằng năm: rơi vào ngày nào thì lần xảy ra kế tiếp tính từ ngày đó chính là ngày đó.
-    cells.forEach((day) => {
-      if (!day) return
+    occasionDays.forEach((day) => {
       occasions.items.forEach((occasion) => {
         const next = nextOccurrence(occasion, parseLocalDate(day))
         if (next && dayKey(next) === day) ensure(day).occasions.push(occasion)
       })
     })
     return map
-  }, [todos.items, entries.items, occasions.items, transactions.items, media.items, cells])
+  }, [todos.items, entries.items, occasions.items, transactions.items, media.items, occasionDays])
 
   const shift = (direction: -1 | 1) =>
     setCursor(({ year, month }) => {
@@ -103,6 +191,26 @@ export function CalendarPage() {
     spend: shows('spend') ? found.spend : 0,
     media: shows('media') ? found.media : [],
   }
+  /** Thêm việc thẳng vào ngày đang chọn, không phải nhảy sang trang Tasks. */
+  const addQuickTask = async () => {
+    const title = quickTitle.trim()
+    if (!title || !supabase) return
+    setSaving(true)
+    const payload = { title, completed: false, due_date: selected, due_time: quickTime || null }
+    const { data, error } = await supabase.from('todos').insert(payload).select().single()
+    setSaving(false)
+    if (error) {
+      showToast('❌ Chưa thêm được việc — kiểm tra kết nối.', 'delete')
+      return
+    }
+    todos.setItems((prev) => [data as Todo, ...prev])
+    notifyTasksChanged()
+    setQuickTitle('')
+    setQuickTime('')
+    setQuickOpen(false)
+    showToast(`✅ Đã thêm "${title}" vào ngày ${selected.slice(8)}/${selected.slice(5, 7)}`)
+  }
+
   const nothingOnDay = !detail?.occasions.length && !detail?.todos.length && !detail?.entries.length && !detail?.spend && !detail?.media.length
 
   return (
@@ -113,6 +221,16 @@ export function CalendarPage() {
         <button className="icon small" aria-label="Tháng sau" onClick={() => shift(1)}><ChevronRight size={16} /></button>
       </div>
 
+      <div className="cal-view-switch" role="tablist" aria-label="Chế độ xem lịch">
+        <button type="button" role="tab" aria-selected={view === 'month'} className={view === 'month' ? 'on' : ''} onClick={() => setView('month')}>
+          Lưới tháng
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'on' : ''} onClick={() => setView('week')}>
+          Agenda tuần
+        </button>
+      </div>
+
+      {view === 'month' && (
       <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
         {WEEKDAYS.map((label) => (
           <small key={label} style={{ textAlign: 'center', color: 'var(--text-muted)', fontWeight: 700 }}>{label}</small>
@@ -148,6 +266,9 @@ export function CalendarPage() {
           )
         })}
       </div>
+      )}
+
+      {view === 'week' && <AgendaWeek days={agendaDays} dayData={dayData} today={today} selected={selected} onPick={setSelected} shows={shows} />}
 
       {/* Chú thích màu kiêm bộ lọc: chọn một tag để xem riêng loại đó, "Tất cả" để xem hết. */}
       <div className="calendar-legend" role="tablist" aria-label="Lọc theo loại">
@@ -176,7 +297,29 @@ export function CalendarPage() {
       </div>
 
       <div className="nutrition-period-card">
-        <h3>{selected === today ? 'Hôm nay' : `Ngày ${selected.slice(8)}/${selected.slice(5, 7)}`}</h3>
+        <div className="cal-day-head">
+          <h3>{selected === today ? 'Hôm nay' : `Ngày ${selected.slice(8)}/${selected.slice(5, 7)}`}</h3>
+          <button type="button" className="cal-add-btn" onClick={() => setQuickOpen((open) => !open)} aria-expanded={quickOpen}>
+            {quickOpen ? <X size={14} /> : <Plus size={14} />}
+            {quickOpen ? 'Đóng' : 'Thêm việc'}
+          </button>
+        </div>
+
+        {quickOpen && (
+          <form className="cal-quick-add" onSubmit={(e) => { e.preventDefault(); void addQuickTask() }}>
+            <input
+              autoFocus
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.target.value)}
+              placeholder="Việc cần làm trong ngày này…"
+              aria-label="Tên việc"
+            />
+            <input type="time" value={quickTime} onChange={(e) => setQuickTime(e.target.value)} aria-label="Giờ hạn (không bắt buộc)" />
+            <button type="submit" className="primary" disabled={!quickTitle.trim() || saving}>
+              {saving ? 'Đang lưu…' : 'Thêm'}
+            </button>
+          </form>
+        )}
 
         {detail?.occasions.map((occasion) => (
           <div key={occasion.id} className="nutrition-history-row">

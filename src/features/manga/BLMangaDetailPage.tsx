@@ -15,7 +15,7 @@ import {
   getFollows, toggleFollow
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
-import { notifyFollowsChanged } from './MangaNotificationBell';
+import { notifyFollowsChanged } from './mangaUpdates';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './blMangaDetail.css';
@@ -418,14 +418,27 @@ export const BLMangaDetailPage: React.FC = () => {
 
       {/* Big Primary Action CTA Button */}
       <div className="bl-cta-container">
-        <button className="bl-primary-read-btn" onClick={handleStartRead}>
-          <Play size={20} fill="currentColor" />
-          <span>
-            {userProgress 
-              ? `Tiếp tục đọc Chapter ${userProgress.chapterNumber}` 
-              : 'Đọc từ Chapter 1'}
-          </span>
-        </button>
+        {hasData ? (
+          <button className="bl-primary-read-btn" onClick={handleStartRead}>
+            <Play size={20} fill="currentColor" />
+            <span>
+              {userProgress
+                ? `Tiếp tục đọc Chapter ${userProgress.chapterNumber}`
+                : 'Đọc từ Chapter 1'}
+            </span>
+          </button>
+        ) : (
+          // Truyện chưa cào được ảnh: mở reader sẽ trắng trang, dẫn thẳng sang nguồn gốc.
+          <a
+            className="bl-primary-read-btn"
+            href={manga.url}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <ExternalLink size={20} />
+            <span>Đọc ở nguồn gốc ({sourceName})</span>
+          </a>
+        )}
       </div>
 
       {/* 5 Quick Actions Row */}

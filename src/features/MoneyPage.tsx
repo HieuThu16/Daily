@@ -8,6 +8,7 @@ import type { Account, MoneyTransaction, Person } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
+import { SkeletonList } from './Skeleton'
 
 const CATEGORIES: { id: string; label: string; emoji: string }[] = [
   { id: 'FOOD', label: 'Ăn uống', emoji: '🍜' },
@@ -268,7 +269,7 @@ export function MoneyPage() {
 
       {/* Lịch sử giao dịch */}
       {loading ? (
-        <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải…</p>
+        <SkeletonList rows={5} />
       ) : inRange.length ? (
         <div className="nutrition-period-card">
           <h3>🧾 Các khoản đã ghi</h3>

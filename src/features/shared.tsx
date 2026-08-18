@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
+import { loadLocal, saveLocal } from '../lib/persistence'
 import { Plus, Trash2, X, Inbox } from 'lucide-react'
 
 /** Supabase cắt mọi select ở 1000 dòng. App ghi nhật ký hằng ngày nên phải kéo hết từng trang. */
@@ -24,28 +25,47 @@ async function fetchAll<T>(table: string, order: string): Promise<T[]> {
 // Giữ dữ liệu đã tải giữa các lần đổi tab để quay lại không thấy màn hình trống.
 const cache = new Map<string, unknown[]>()
 
+/** Cache còn sống qua cả lần tải lại trang: mất mạng vẫn xem được dữ liệu lần trước. */
+const diskKey = (cacheKey: string) => `daily_cache_${cacheKey}`
+
+function readCache<T>(cacheKey: string): T[] {
+  const inMemory = cache.get(cacheKey)
+  if (inMemory) return inMemory as T[]
+  const onDisk = loadLocal<T[]>(diskKey(cacheKey), [])
+  if (onDisk.length) cache.set(cacheKey, onDisk)
+  return onDisk
+}
+
+function writeCache<T>(cacheKey: string, rows: T[]) {
+  cache.set(cacheKey, rows)
+  // Quá hạn mức localStorage thì bỏ qua — cache chỉ là tiện ích, không phải nguồn sự thật.
+  saveLocal(diskKey(cacheKey), rows)
+}
+
 export function useQuery<T>(table: string, order = 'created_at') {
   const cacheKey = `${table}:${order}`
-  const [items, setItems] = useState<T[]>(() => (cache.get(cacheKey) ?? []) as T[])
-  const [loading, setLoading] = useState(!cache.has(cacheKey))
+  const [items, setItems] = useState<T[]>(() => readCache<T>(cacheKey))
+  // Đã có cache thì hiện ngay, làm mới ngầm — không chớp màn hình trống.
+  const [loading, setLoading] = useState(() => readCache<T>(cacheKey).length === 0)
   const [error, setError] = useState('')
 
   const reload = async () => {
     if (!supabase) return
-    setLoading(true)
+    setLoading(readCache<T>(cacheKey).length === 0)
     try {
       const rows = await fetchAll<T>(table, order)
-      cache.set(cacheKey, rows)
+      writeCache(cacheKey, rows)
       setItems(rows)
       setError('')
     } catch {
-      setError('Chưa tải được dữ liệu. Thử lại nhé.')
+      // Còn cache thì im lặng dùng tiếp; trắng tay mới báo lỗi.
+      setError(readCache<T>(cacheKey).length ? '' : 'Chưa tải được dữ liệu. Thử lại nhé.')
     }
     setLoading(false)
   }
 
   useEffect(() => {
-    setItems((cache.get(cacheKey) ?? []) as T[])
+    setItems(readCache<T>(cacheKey))
     void reload()
   }, [cacheKey])
 
@@ -53,7 +73,7 @@ export function useQuery<T>(table: string, order = 'created_at') {
   const setItemsCached: typeof setItems = (update) => {
     setItems((prev) => {
       const next = typeof update === 'function' ? (update as (p: T[]) => T[])(prev) : update
-      cache.set(cacheKey, next)
+      writeCache(cacheKey, next)
       return next
     })
   }

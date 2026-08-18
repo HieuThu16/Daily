@@ -15,7 +15,7 @@ import {
   getNgontinhFollows, toggleNgontinhFollow
 } from './ngontinhService';
 import { hydrateMangadexManga } from './mangadexService';
-import { notifyFollowsChanged } from './MangaNotificationBell';
+import { notifyFollowsChanged } from './mangaUpdates';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhDetail.css';

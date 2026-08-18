@@ -5,6 +5,7 @@ import { localDate, longDate } from '../lib/date'
 import type { DailyType, Entry, Person } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
+import { SkeletonList } from './Skeleton'
 
 const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
@@ -343,7 +344,7 @@ export function DailyPage() {
             </div>
 
             {loading ? (
-              <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải nhật ký…</p>
+              <SkeletonList rows={3} height={72} />
             ) : todayEntries.length ? (
               <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
                 {todayEntries.map((entry) => {
@@ -467,7 +468,7 @@ export function DailyPage() {
 
           {/* Timeline list */}
           {loading ? (
-            <p className="muted" style={{ textAlign: 'center', padding: 20 }}>Đang tải…</p>
+            <SkeletonList rows={4} />
           ) : statsEntries.length === 0 ? (
             <Empty icon={BarChart3} colorClass="icon-box-emerald">
               Không có bài viết nào trong khoảng thời gian này.

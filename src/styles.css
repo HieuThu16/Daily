@@ -10310,21 +10310,21 @@ svg.lucide-library {
 /* Rectangular 2-Column Grid */
 .eng-rect-2col-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 14px;
   width: 100%;
 }
 
 @media (max-width: 520px) {
   .eng-rect-2col-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 /* Tall Vertical Rectangular Flashcard Container (Hình chữ nhật dài dọc) */
 .eng-rect-card {
   background: transparent;
-  height: 215px;
+  aspect-ratio: 3 / 4.6;
   perspective: 1000px;
   cursor: pointer;
   outline: none;
@@ -10863,3 +10863,479 @@ svg.lucide-library {
 }
 
 
+
+/* ── Khung chờ dùng chung (skeleton) ─────────────────────────────────────── */
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, color-mix(in srgb, var(--bg-subtle) 60%, var(--text-muted) 15%) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+.skeleton-list { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-grid { display: grid; gap: 12px; }
+
+/* ── Tìm kiếm toàn cục (Ctrl+K) ──────────────────────────────────────────── */
+.cmdk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 10vh 16px 16px;
+}
+.cmdk-panel {
+  width: min(620px, 100%);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.3));
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  color: var(--text-muted);
+}
+.cmdk-input-row input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 1rem;
+  color: var(--text-main);
+}
+.cmdk-close { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; padding: 4px; }
+.cmdk-results { overflow-y: auto; padding: 6px; }
+.cmdk-group {
+  padding: 10px 12px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cmdk-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-main);
+}
+.cmdk-item.is-active { background: var(--bg-subtle); }
+.cmdk-item-title { font-weight: 600; font-size: 0.94rem; }
+.cmdk-item-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.cmdk-empty { padding: 20px 14px; color: var(--text-muted); font-size: 0.88rem; text-align: center; }
+.cmdk-foot {
+  display: flex;
+  gap: 14px;
+  padding: 9px 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.cmdk-foot span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Hộp thư thông báo gộp ───────────────────────────────────────────────── */
+.inbox-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.inbox-tabs::-webkit-scrollbar { display: none; }
+.inbox-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.inbox-tab.is-active {
+  background: var(--primary, #3b82f6);
+  border-color: transparent;
+  color: #fff;
+}
+.inbox-tab-count {
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+/* ── Nút ghim tab trong ngăn kéo ─────────────────────────────────────────── */
+.drawer-item-row { display: flex; align-items: center; gap: 2px; }
+
+/* Phải ghi đè `.mobile-drawer button:not(.icon) { width: 100% }`, nếu không
+   nút ghim rộng hết hàng và đè lên nhãn của mục. */
+.mobile-drawer .drawer-item-row > button:first-child {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.mobile-drawer .drawer-item-row > button:first-child span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Chọn cả tên nút để thắng specificity của `.mobile-drawer button:not(.icon)`
+   (2 class + 1 element) — nếu không nút ghim ăn width:100% và bóp mất nhãn. */
+.mobile-drawer .drawer-item-row > button.drawer-pin-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  min-width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mobile-drawer .drawer-item-row > button.drawer-pin-btn.is-pinned { color: var(--primary); }
+
+/* ── Phiên ôn tập lặp lại ngắt quãng ─────────────────────────────────────── */
+.rs-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 16px 28px;
+  background: var(--bg-main);
+  overflow-y: auto;
+}
+
+.rs-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(680px, 100%);
+  flex: 0 0 auto;
+}
+
+.rs-progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.rs-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 220ms ease-out;
+}
+
+.rs-counts { display: flex; gap: 10px; font-size: 0.78rem; font-weight: 600; }
+.rs-count-done, .rs-count-again { display: inline-flex; align-items: center; gap: 4px; }
+.rs-count-done { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rs-count-again { color: var(--amber, #d97706); }
+
+.rs-close {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+/* Thẻ ôn: một khối lớn, bấm đâu cũng lật. */
+.rs-card {
+  width: min(680px, 100%);
+  min-height: 240px;
+  margin-top: 4vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 26px;
+  border: 1px solid var(--card-border, rgba(148, 163, 184, 0.3));
+  border-radius: 20px;
+  background: var(--card-bg, var(--bg-subtle));
+  color: var(--text-main);
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 10px 34px rgba(15, 23, 42, 0.09);
+}
+
+.rs-card-group {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.rs-card-front {
+  font-size: clamp(1.5rem, 5vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.rs-card-divider {
+  width: 44px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  opacity: 0.35;
+}
+
+.rs-card-back { font-size: 1.12rem; line-height: 1.5; text-wrap: balance; }
+.rs-card-extra { font-size: 0.92rem; color: var(--text-muted); font-style: italic; }
+.rs-card-hint { font-size: 0.8rem; color: var(--text-muted); }
+
+.rs-speak {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--card-border, rgba(148, 163, 184, 0.3));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Bốn mức chấm: nhãn to, dưới là mốc "bao giờ gặp lại". */
+.rs-grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: min(680px, 100%);
+  margin-top: auto;
+}
+
+.rs-grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 6px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  color: #fff;
+}
+
+.rs-grade-label { font-size: 0.95rem; font-weight: 700; }
+.rs-grade-when { font-size: 0.7rem; opacity: 0.85; font-variant-numeric: tabular-nums; }
+
+.rs-grade-again { background: #e11d48; }
+.rs-grade-hard { background: #d97706; }
+.rs-grade-good { background: #2563eb; }
+.rs-grade-easy { background: #059669; }
+
+@media (max-width: 420px) {
+  .rs-grade-label { font-size: 0.85rem; }
+  .rs-grade-when { font-size: 0.64rem; }
+}
+
+.rs-finish {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  max-width: 380px;
+}
+
+.rs-finish-icon {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--primary-light, var(--bg-subtle));
+  color: var(--primary);
+}
+
+.rs-finish h2 { margin: 4px 0 0; font-size: 1.3rem; }
+.rs-finish p { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
+
+.rs-finish-btn {
+  margin-top: 8px;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+/* ── Lịch: đổi chế độ xem, agenda tuần, thêm việc tại chỗ ────────────────── */
+.cal-view-switch {
+  display: flex;
+  gap: 6px;
+}
+
+.cal-view-switch button {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--card-border, rgba(148, 163, 184, 0.3));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cal-view-switch button.on {
+  background: var(--primary);
+  border-color: transparent;
+  color: #fff;
+}
+
+.cal-agenda { display: flex; flex-direction: column; gap: 6px; }
+
+.cal-agenda-day {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border, rgba(148, 163, 184, 0.3));
+  border-left: 3px solid transparent;
+  border-radius: 12px;
+  background: var(--card-bg, transparent);
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cal-agenda-day.is-today { border-left-color: var(--primary); }
+.cal-agenda-day.is-selected { background: var(--primary-light); }
+
+.cal-agenda-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.cal-agenda-head small { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cal-agenda-empty { font-size: 0.8rem; color: var(--text-muted); }
+.cal-agenda-items { display: grid; gap: 4px; }
+
+.cal-agenda-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-agenda-item i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.cal-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cal-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border: 1px solid var(--card-border, rgba(148, 163, 184, 0.3));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cal-quick-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.cal-quick-add input[type="text"], .cal-quick-add input:not([type]) { flex: 1 1 160px; min-width: 0; }
+.cal-quick-add input[type="time"] { flex: 0 0 auto; }
+
+.cal-quick-add input {
+  padding: 8px 10px;
+  border: 1px solid var(--card-border, rgba(148, 163, 184, 0.3));
+  border-radius: 10px;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 0.88rem;
+}
+
+.cal-quick-add button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cal-quick-add button:disabled { opacity: 0.5; cursor: not-allowed; }

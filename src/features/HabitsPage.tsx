@@ -785,6 +785,14 @@ export function HabitsPage() {
                 <span style={{ fontWeight: 700, fontSize: '0.82rem', color: cat?.color ?? 'var(--text-muted)' }}>
                   {cat?.name ?? 'Không phân loại'} ({list.length})
                 </span>
+                {cat && (
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="icon small" aria-label="Rename category" title="Sửa tên thể loại" onClick={() => openRenameCategory(cat)} style={{ padding: 3 }}>
+                      <Pencil size={13} />
+                    </button>
+                    <DeleteButton onDelete={() => removeCategory(cat)} />
+                  </div>
+                )}
               </div>
               <div style={{ display: 'grid', gap: 4 }}>
                 {list.map((h) => (

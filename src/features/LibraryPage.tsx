@@ -25,6 +25,7 @@ import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
+import { SkeletonGrid } from './Skeleton'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -1387,7 +1388,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           </div>
 
           {loading ? (
-            <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải thư viện…</p>
+            <SkeletonGrid items={8} />
           ) : filteredOverviewItems.length ? (
             <div className="library-media-list">
               {selectedType === 'BOOK' ? (
@@ -1422,7 +1423,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           </div>
 
           {loading ? (
-            <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải yêu thích…</p>
+            <SkeletonGrid items={4} />
           ) : favoriteItems.length ? (
             <div className="library-media-list">
               {selectedType === 'BOOK' ? (

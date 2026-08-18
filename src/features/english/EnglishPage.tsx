@@ -23,6 +23,8 @@ import { speakEnglish } from '../../lib/tts'
 import { useHeaderAction } from '../HeaderAction'
 import { useToast } from '../ToastContext'
 import type { EnglishItem, EnglishKind } from '../../types'
+import { ReviewSession } from '../study/ReviewSession'
+import { useDeck } from '../study/useDeck'
 
 export const KIND_LABEL: Record<EnglishKind, string> = { WORD: 'Từ', SENTENCE: 'Câu' }
 
@@ -91,10 +93,9 @@ export function EnglishPage() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
 
-  // Practice Modal State
+  // Phiên ôn tập: hàng đợi do thuật toán lặp lại ngắt quãng quyết định, không còn xáo ngẫu nhiên.
   const [practiceOpen, setPracticeOpen] = useState(false)
-  const [practiceIndex, setPracticeIndex] = useState(0)
-  const [practiceFlipped, setPracticeFlipped] = useState(false)
+  const { queue: reviewQueue, stats: srsStats, grade: gradeCard, reload: reloadDeck } = useDeck('english')
 
   useHeaderAction('Thêm thẻ tiếng Anh', () => {
     setForm(EMPTY_FORM)
@@ -287,35 +288,13 @@ export function EnglishPage() {
     await supabase?.from('english_items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
   }
 
-  // Practice mode helpers
-  const currentPracticeItem = visible[practiceIndex] || null
-
   const startPractice = useCallback(() => {
-    if (visible.length === 0) {
-      showToast('Không có thẻ nào để luyện tập', 'info')
+    if (reviewQueue.length === 0) {
+      showToast('Hôm nay không còn thẻ nào tới hạn ôn. Quay lại vào mai nhé!', 'info')
       return
     }
-    setPracticeIndex(0)
-    setPracticeFlipped(false)
     setPracticeOpen(true)
-  }, [visible, showToast])
-
-  const nextPracticeCard = useCallback(() => {
-    if (practiceIndex < visible.length - 1) {
-      setPracticeIndex((prev) => prev + 1)
-      setPracticeFlipped(false)
-    } else {
-      showToast('Đã hoàn thành lượt luyện tập!', 'success')
-      setPracticeOpen(false)
-    }
-  }, [practiceIndex, visible.length, showToast])
-
-  const prevPracticeCard = useCallback(() => {
-    if (practiceIndex > 0) {
-      setPracticeIndex((prev) => prev - 1)
-      setPracticeFlipped(false)
-    }
-  }, [practiceIndex])
+  }, [reviewQueue.length, showToast])
 
   return (
     <section className="eng-page">
@@ -338,10 +317,10 @@ export function EnglishPage() {
             <button
               className="eng-mini-btn"
               onClick={startPractice}
-              title="Luyện tập Flashcard"
-              disabled={visible.length === 0}
+              title={srsStats.due > 0 ? `${srsStats.due} thẻ tới hạn ôn hôm nay` : 'Hôm nay không còn thẻ tới hạn'}
             >
-              <BookOpen size={14} /> <span>Ôn tập</span>
+              <BookOpen size={14} />{' '}
+              <span>Ôn hôm nay{srsStats.due > 0 ? ` (${srsStats.due})` : ''}</span>
             </button>
             <button
               className="eng-mini-btn"
@@ -564,162 +543,19 @@ export function EnglishPage() {
         </div>
       )}
 
-      {/* Practice / Review Modal (Gọn gàng, tối giản) */}
-      {practiceOpen && currentPracticeItem && (
-        <div className="eng-modal-backdrop" onClick={() => setPracticeOpen(false)}>
-          <div className="card eng-compact-practice-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="eng-practice-header">
-              <div className="eng-practice-step">
-                <span>Thẻ <strong>{practiceIndex + 1}</strong> / {visible.length}</span>
-              </div>
-              <button className="eng-icon-btn-close" onClick={() => setPracticeOpen(false)} aria-label="Đóng">
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Rectangular Practice Card */}
-            {(() => {
-              const accent = getCardAccent(currentPracticeItem)
-              return (
-                <div
-                  className={`eng-compact-practice-card ${practiceFlipped ? 'is-flipped' : ''}`}
-                  onClick={() => setPracticeFlipped((prev) => !prev)}
-                >
-                  <div className="eng-compact-practice-card-inner">
-                    {/* Front */}
-                    <div
-                      className="eng-compact-card-side eng-front-side"
-                      style={{ borderLeft: `4px solid ${accent}` }}
-                    >
-                      <div className="eng-card-header-line">
-                        <span className="eng-badge-kind">{KIND_LABEL[currentPracticeItem.kind]}</span>
-                        <div className="eng-card-actions-top">
-                          <button
-                            className="eng-icon-action-btn"
-                            title="Nghe phát âm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              speakEnglish(currentPracticeItem.term)
-                            }}
-                          >
-                            <Volume2 size={16} />
-                          </button>
-                          <button
-                            className={`eng-icon-action-btn ${currentPracticeItem.is_learned ? 'is-learned' : ''}`}
-                            title={currentPracticeItem.is_learned ? 'Đã thuộc' : 'Đang học'}
-                            onClick={(e) => void toggleLearned(currentPracticeItem, e)}
-                          >
-                            {currentPracticeItem.is_learned ? (
-                              <CheckCircle2 size={16} className="eng-check-icon" />
-                            ) : (
-                              <Circle size={16} />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="eng-rect-term-wrap">
-                        {currentPracticeItem.cover_url && (
-                          <img
-                            src={currentPracticeItem.cover_url}
-                            alt=""
-                            className="eng-mini-cover-thumb"
-                          />
-                        )}
-                        <h2 className="eng-rect-term-title">{currentPracticeItem.term}</h2>
-                      </div>
-
-                      <div className="eng-rect-bottom-line">
-                        <span className="eng-hint-flip">Chạm để lật xem nghĩa</span>
-                      </div>
-                    </div>
-
-                    {/* Back */}
-                    <div
-                      className="eng-compact-card-side eng-back-side"
-                      style={{ borderLeft: `4px solid ${accent}` }}
-                    >
-                      <div className="eng-card-header-line">
-                        <span className="eng-badge-kind">Nghĩa</span>
-                        <div className="eng-card-actions-top">
-                          <button
-                            className={`eng-icon-action-btn ${currentPracticeItem.is_learned ? 'is-learned' : ''}`}
-                            onClick={(e) => void toggleLearned(currentPracticeItem, e)}
-                          >
-                            {currentPracticeItem.is_learned ? (
-                              <CheckCircle2 size={16} className="eng-check-icon" />
-                            ) : (
-                              <Circle size={16} />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="eng-rect-meaning-wrap">
-                        <p className="eng-rect-meaning-title">{currentPracticeItem.meaning || '—'}</p>
-                        {currentPracticeItem.example && (
-                          <div
-                            className="eng-rect-example-btn"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              speakEnglish(currentPracticeItem.example!)
-                            }}
-                          >
-                            <Volume2 size={13} />
-                            <span>{currentPracticeItem.example}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="eng-rect-bottom-line">
-                        <span className="eng-hint-flip">Chạm để lật lại từ</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Practice Controls */}
-            <div className="eng-compact-practice-controls">
-              <button
-                className="eng-mini-btn"
-                onClick={prevPracticeCard}
-                disabled={practiceIndex === 0}
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              <button
-                className="eng-mini-btn"
-                onClick={() => setPracticeFlipped((prev) => !prev)}
-              >
-                <RotateCw size={14} /> <span>Lật thẻ</span>
-              </button>
-
-              <button
-                className={`eng-mini-btn ${currentPracticeItem.is_learned ? 'is-learned-btn' : ''}`}
-                onClick={() => {
-                  void toggleLearned(currentPracticeItem)
-                  if (!currentPracticeItem.is_learned && practiceIndex < visible.length - 1) {
-                    setTimeout(() => nextPracticeCard(), 300)
-                  }
-                }}
-              >
-                {currentPracticeItem.is_learned ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-                <span>{currentPracticeItem.is_learned ? 'Đã thuộc' : 'Chưa thuộc'}</span>
-              </button>
-
-              <button
-                className="eng-mini-btn primary"
-                onClick={nextPracticeCard}
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Phiên ôn tập theo lịch lặp lại ngắt quãng, dùng chung với tab Kiến thức. */}
+      {practiceOpen && (
+        <ReviewSession
+          queue={reviewQueue}
+          deckLabel="Tiếng Anh"
+          onGrade={gradeCard}
+          onClose={() => {
+            setPracticeOpen(false)
+            void reloadDeck()
+          }}
+        />
       )}
+
 
       {/* Main Rectangular 2-Column Grid */}
       {loading ? (

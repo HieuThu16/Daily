@@ -14,6 +14,24 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 'v2.1-srs-search-inbox',
+    date: '2026-08-18',
+    version: '2.1',
+    title: 'Học thẻ thông minh, tìm kiếm toàn app và một hộp thư duy nhất',
+    description: 'Bản 2.1 biến tab Tiếng Anh và Kiến thức thành công cụ học thật sự với lịch lặp lại ngắt quãng, gộp hai chuông thông báo thành một hộp thư, thêm tìm kiếm xuyên nghiệp vụ bằng Ctrl+K và cho phép thêm việc ngay trên lịch.',
+    highlights: [
+      'Học theo lịch lặp lại ngắt quãng (SM-2): thẻ nào sắp quên thì hôm nay gặp lại, nhớ chắc thì giãn ra 1 ngày → 3 ngày → 1 tuần → 1 tháng',
+      'Phiên ôn mới: bấm Quên / Khó / Được / Dễ, mỗi nút ghi rõ bao giờ gặp lại. Phím tắt Space để lật, 1–4 để chấm',
+      'Nút “Ôn hôm nay (N)” trên cả hai tab; thẻ bấm Quên sẽ được gặp lại ngay trong phiên',
+      'Một chuông duy nhất gộp 5 nguồn: thẻ tới hạn ôn, việc chưa xong, truyện có chương mới, sinh nhật sắp tới, thói quen hôm nay chưa ghi',
+      'Tìm kiếm toàn app bằng Ctrl+K: gõ không dấu vẫn ra kết quả có dấu, tìm được cả việc, người, thẻ học, sách và nhật ký',
+      'Ghim tab yêu thích vào thanh dưới, không còn bị đẩy đi theo thứ tự vừa dùng',
+      'Lịch: thêm việc thẳng vào ngày đang chọn, và chế độ Agenda tuần đọc được nội dung trên điện thoại',
+      'Mất mạng vẫn xem được dữ liệu lần trước ở hầu hết màn hình, kèm khung chờ thay cho màn hình trắng',
+    ],
+    type: 'feature',
+  },
+  {
     id: 'v2.0-categories-review-super-update',
     date: '2026-08-18',
     version: '2.0',

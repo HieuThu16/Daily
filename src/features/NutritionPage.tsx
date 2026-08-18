@@ -16,6 +16,7 @@ import {
   type PeriodMode,
   type SleepLog,
 } from './nutrition/periodData'
+import { SkeletonList } from './Skeleton'
 
 type SubTab = 'food' | 'sleep'
 
@@ -344,7 +345,7 @@ export function NutritionPage() {
         <button type="button" className="icon" aria-label="Khoảng sau" onClick={() => setCurrentDate(shiftPeriodAnchor(currentDate, periodMode, 1))}>›</button>
       </div>
 
-      {loading ? <p className="muted" style={{ textAlign: 'center', padding: 24 }}>Đang tải…</p> : (
+      {loading ? <SkeletonList rows={4} /> : (
         <>
           {tab === 'food' && periodMode === 'day' && (
             <>
