@@ -6,6 +6,7 @@ import { POSTPONE_PRESETS, formatDeadline, formatMinutes, isOverdue, postponeTo,
 import { BulbIcon } from './BulbIcon'
 import type { Goal, Idea, TaskCategory, TaskDifficulty, TaskPostpone, TaskPriority, Todo } from '../types'
 import { nextDueDate, parseNaturalTask, REPEAT_LABELS, type RepeatRule } from '../lib/naturalTask'
+import { queueWrite } from '../lib/offlineQueue'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
@@ -487,6 +488,11 @@ export function TasksPage() {
     showToast('➕ Đã thêm công việc mới!')
 
     const { data, error } = await supabase!.from('todos').insert(payload).select().single()
+    if (error && !navigator.onLine) {
+      queueWrite({ table: 'todos', op: 'insert', payload })
+      showToast('📴 Đã lưu việc offline, sẽ tự đồng bộ khi có mạng.', 'local')
+      return
+    }
     if (!error && data) {
       todos.setItems((prev) => prev.map((item) => (item.id === tempTodo.id ? (data as Todo) : item)))
       notifyTasksChanged()

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, Clock, Frown, Heart, History, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
+import { queueWrite } from '../lib/offlineQueue'
 import type { DailyType, Entry, Person } from '../types'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
@@ -94,6 +95,16 @@ export function DailyPage() {
     const currentTimeString = timeOverride || clock
     const payload = lines.map((lineText) => ({ content: lineText, entry_date: date, entry_type: selectedType, entry_time: currentTimeString }))
     const { data, error } = await supabase!.from('daily_entries').insert(payload).select()
+    if (error && !navigator.onLine) {
+      // Mất mạng: giữ bài trong hàng đợi, có mạng lại tự đẩy lên.
+      const local = payload.map((row, i) => ({ ...row, id: `local-${Date.now()}-${i}`, created_at: new Date().toISOString() })) as Entry[]
+      payload.forEach((row) => queueWrite({ table: 'daily_entries', op: 'insert', payload: row }))
+      setItems((prev) => [...local, ...prev])
+      setContent('')
+      showToast(`📴 Đã lưu ${lines.length} bài offline, sẽ tự đồng bộ khi có mạng.`, 'local')
+      setBusy(false)
+      return
+    }
     if (!error && data) {
       setItems((prev) => [...(data as Entry[]), ...prev])
       if (supabase) {

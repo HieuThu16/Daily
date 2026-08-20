@@ -29,11 +29,13 @@ import { EnglishPage } from './features/english/EnglishPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
 import { exportBackup } from './lib/backup'
+import { startQueueAutoFlush } from './lib/offlineQueue'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
+import { ShareTarget } from './features/ShareTarget'
 import { ToastProvider, useToast } from './features/ToastContext'
 
 const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -303,6 +305,14 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
   useTaskReminders()
 
+  // Có mạng lại (hoặc quay lại tab) thì đẩy nốt những gì đã ghi lúc offline.
+  useEffect(() => {
+    return startQueueAutoFlush(({ sent, failed }) => {
+      if (sent) showToast(`☁️ Đã đồng bộ ${sent} mục ghi lúc offline.`, 'supabase')
+      if (failed) showToast(`⚠️ ${failed} mục ghi offline không đồng bộ được, đã bỏ qua.`, 'delete')
+    })
+  }, [showToast])
+
   const [backingUp, setBackingUp] = useState(false)
   const handleBackup = async () => {
     setBackingUp(true)
@@ -362,7 +372,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
                         <button
                           key={id}
                           className={isActive ? 'active' : ''}
-                          onClick={() => nav('/' + id)}
+                          onClick={() => nav('/' + id, { viewTransition: true })}
                           aria-current={isActive ? 'page' : undefined}
                         >
                           <div className={`nav-icon-wrapper ${item.colorClass}`}>
@@ -439,7 +449,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
                               <button
                                 className={path === '/' + id ? 'active' : ''}
                                 onClick={() => {
-                                  nav('/' + id)
+                                  nav('/' + id, { viewTransition: true })
                                   setMenuOpen(false)
                                 }}
                               >
@@ -471,7 +481,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
       <nav className="bottom-nav">
         {dynamicPrimaryNavigation.map(({ id, label, icon: Icon, colorClass }) => (
-          <button key={id} className={path === '/' + id ? 'active' : ''} onClick={() => nav('/' + id)}>
+          <button key={id} className={path === '/' + id ? 'active' : ''} onClick={() => nav('/' + id, { viewTransition: true })}>
             <div className={`nav-icon-wrapper ${colorClass}`}>
               <Icon size={18} />
             </div>
@@ -531,6 +541,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/habit" element={<HabitsPage />} />
                       <Route path="/daily" element={<DailyPage />} />
                       <Route path="/tasks" element={<TasksPage />} />
+                      <Route path="/share" element={<ShareTarget />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
                       <Route path="/tvshow" element={<TvShowView />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />

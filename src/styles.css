@@ -11490,3 +11490,23 @@ svg.lucide-library {
   font-size: 0.76rem;
   color: var(--text-muted);
 }
+
+/* ── Chuyển tab mượt như app native (View Transitions API) ────────────────── */
+/* Trình duyệt chưa hỗ trợ thì bỏ qua khối này, không cần dự phòng. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: vt-fade-out 140ms ease-in both;
+  }
+
+  ::view-transition-new(root) {
+    animation: vt-fade-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes vt-fade-out {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes vt-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+}

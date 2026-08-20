@@ -123,6 +123,12 @@ export default defineConfig(({ mode }) => {
         ],
         // Nhấn giữ icon app trên màn hình chính sẽ ra bốn lối tắt này.
         // PWA không làm được widget thật, shortcuts là thứ gần nhất và miễn phí.
+        // Chia sẻ link từ app khác (YouTube, trình duyệt) thẳng vào form thêm nhạc/video.
+        share_target: {
+          action: '/share',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' },
+        },
         shortcuts: [
           { name: 'Viết nhật ký', short_name: 'Nhật ký', url: '/daily' },
           { name: 'Tick thói quen', short_name: 'Thói quen', url: '/habit' },

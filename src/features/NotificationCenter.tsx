@@ -134,6 +134,17 @@ export function NotificationCenter() {
   }
   const total = counts.tasks + counts.study + counts.manga + counts.people + counts.memories + counts.habits
 
+  // Số cần chú ý hiện luôn trên icon app khi đã cài PWA (Android/desktop; iOS chưa hỗ trợ).
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>
+      clearAppBadge?: () => Promise<void>
+    }
+    if (!nav.setAppBadge) return
+    if (total > 0) void nav.setAppBadge(total).catch(() => {})
+    else void nav.clearAppBadge?.().catch(() => {})
+  }, [total])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {

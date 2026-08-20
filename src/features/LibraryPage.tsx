@@ -312,6 +312,17 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     [activeModal, items, name],
   )
 
+  /** Link chia sẻ từ app khác (/share → /music?youtube=…): mở luôn form và điền sẵn. */
+  useEffect(() => {
+    const shared = new URLSearchParams(window.location.search).get('youtube')
+    if (!shared) return
+    openAdd('MUSIC')
+    setYoutubeUrlVal(shared)
+    void handleYouTubeUrlChange(shared)
+    // Xoá tham số để bấm Back hay tải lại không mở lại form.
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
   const openAdd = (kind: Kind) => {
     setActiveModal({ kind })
     setName('')
