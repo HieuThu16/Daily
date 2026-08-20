@@ -4,5 +4,11 @@
       "source": "/((?!api/|assets/|manifest\\.webmanifest$|registerSW\\.js$|sw\\.js$|workbox-.*\\.js$).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron-sync",
+      "schedule": "0 1 * * *"
+    }
   ]
 }
