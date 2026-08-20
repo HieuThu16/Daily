@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, buildQueue, deckStats, initialSrs, intervalLabel, isDue, review, reviewStreak, withSrsDefaults } from './srs'
+import { addDays, buildQueue, deckStats, initialSrs, intervalLabel, isDue, retrievability, review, reviewStreak, withSrsDefaults } from './srs'
 import type { SrsFields } from './srs'
 
 const TODAY = '2026-08-18'
@@ -17,13 +17,16 @@ describe('srs', () => {
   })
 
   it('nhớ liên tiếp thì khoảng cách giãn dần', () => {
-    let card = initialSrs(TODAY)
-    card = review(card, 'GOOD', TODAY)
-    expect(card.interval_days).toBe(1)
+    // FSRS không cố định 1-3 ngày như SM-2; điều phải đúng là lần sau xa hơn lần trước.
+    let card = review(initialSrs(TODAY), 'GOOD', TODAY)
+    const first = card.interval_days
     card = review(card, 'GOOD', card.due_date)
-    expect(card.interval_days).toBe(3)
+    const second = card.interval_days
     card = review(card, 'GOOD', card.due_date)
-    expect(card.interval_days).toBeGreaterThan(3)
+
+    expect(first).toBeGreaterThanOrEqual(1)
+    expect(second).toBeGreaterThan(first)
+    expect(card.interval_days).toBeGreaterThan(second)
   })
 
   it('bấm Quên thì đặt lại tiến độ, đếm thêm một lần lỡ và hẹn lại hôm nay', () => {
@@ -41,15 +44,39 @@ describe('srs', () => {
   })
 
   it('Dễ giãn xa hơn Được, Được giãn xa hơn Khó', () => {
-    let card = initialSrs(TODAY)
-    card = review(card, 'GOOD', TODAY)
-    card = review(card, 'GOOD', TODAY)
-    card = review(card, 'GOOD', TODAY)
-    const hard = review(card, 'HARD', TODAY).interval_days
-    const good = review(card, 'GOOD', TODAY).interval_days
-    const easy = review(card, 'EASY', TODAY).interval_days
+    // Ôn đúng ngày đến hạn ba lần cho thẻ đủ "chín", rồi mới so ba mức chấm.
+    let card = review(initialSrs(TODAY), 'GOOD', TODAY)
+    card = review(card, 'GOOD', card.due_date)
+    card = review(card, 'GOOD', card.due_date)
+
+    const day = card.due_date
+    const hard = review(card, 'HARD', day).interval_days
+    const good = review(card, 'GOOD', day).interval_days
+    const easy = review(card, 'EASY', day).interval_days
     expect(hard).toBeLessThan(good)
     expect(good).toBeLessThan(easy)
+  })
+
+  it('quên thì độ bền tụt xuống, không giữ nguyên', () => {
+    let card = review(initialSrs(TODAY), 'GOOD', TODAY)
+    card = review(card, 'GOOD', card.due_date)
+    const before = card.stability ?? 0
+    const after = review(card, 'AGAIN', card.due_date).stability ?? 0
+    expect(after).toBeLessThan(before)
+    expect(after).toBeGreaterThan(0)
+  })
+
+  it('xác suất nhớ giảm dần theo ngày và bằng ~0.9 tại mốc độ bền', () => {
+    expect(retrievability(10, 0)).toBe(1)
+    expect(retrievability(10, 10)).toBeGreaterThan(retrievability(10, 30))
+    expect(retrievability(10, 10)).toBeCloseTo(0.9, 1)
+  })
+
+  it('thẻ cũ từ thời SM-2 chưa có stability vẫn xếp lịch được', () => {
+    const legacy = { ...initialSrs(TODAY), reps: 4, interval_days: 30, ease: 2.5, due_date: TODAY, stability: 0 }
+    const next = review(legacy, 'GOOD', TODAY)
+    expect(next.interval_days).toBeGreaterThan(30)
+    expect(next.stability).toBeGreaterThan(0)
   })
 
   it('hàng đợi chỉ lấy thẻ đến hạn, ưu tiên thẻ hay quên, và tôn trọng mục tiêu ngày', () => {
@@ -80,7 +107,7 @@ describe('srs', () => {
   it('nhãn khoảng cách đọc được bằng tiếng Việt', () => {
     const long = { ...initialSrs(TODAY), reps: 5, interval_days: 30 }
     expect(intervalLabel(long, 'AGAIN')).toBe('lát nữa')
-    expect(intervalLabel(initialSrs(TODAY), 'GOOD')).toBe('1 ngày')
+    expect(intervalLabel(initialSrs(TODAY), 'GOOD')).toMatch(/ngày$/)
     expect(intervalLabel(long, 'GOOD')).toMatch(/tuần|tháng/)
   })
 })

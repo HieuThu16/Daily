@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, Flame, Sparkles, Volume2, X } from 'lucide-react'
 import { speakEnglish } from '../../lib/tts'
 import { intervalLabel, type Grade } from '../../lib/srs'
+import { localDate } from '../../lib/date'
 import type { StudyCard } from './deck'
 
 const GRADES: { id: Grade; label: string; hint: string; className: string; key: string }[] = [
@@ -142,7 +143,7 @@ export function ReviewSession({ queue, deckLabel, onGrade, onClose }: Props) {
                   title={`${g.hint} — phím ${g.key}`}
                 >
                   <span className="rs-grade-label">{g.label}</span>
-                  <span className="rs-grade-when">{intervalLabel(card, g.id)}</span>
+                  <span className="rs-grade-when">{intervalLabel(card, g.id, localDate())}</span>
                 </button>
               ))}
             </div>

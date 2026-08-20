@@ -70,13 +70,18 @@ export function useDeck(deck: DeckId, goal?: number) {
       })
 
       if (!supabase) return
-      const { error } = await supabase
-        .from(DECKS[deck].table)
-        .update({ ...next, last_reviewed_at: new Date().toISOString() })
-        .eq('id', card.id)
+      const payload = { ...next, last_reviewed_at: new Date().toISOString() }
+      let { error } = await supabase.from(DECKS[deck].table).update(payload).eq('id', card.id)
+
       if (error && MISSING_COLUMN_CODES.includes(error.code ?? '')) {
-        setNeedsMigration(true)
-        return
+        // Chưa chạy migration FSRS: bỏ hai cột mới, lịch ôn vẫn ghi được như cũ.
+        const { stability: _s, difficulty: _d, ...legacy } = payload
+        const retry = await supabase.from(DECKS[deck].table).update(legacy).eq('id', card.id)
+        error = retry.error
+        if (error && MISSING_COLUMN_CODES.includes(error.code ?? '')) {
+          setNeedsMigration(true)
+          return
+        }
       }
       // Nhật ký ôn dùng để vẽ chuỗi ngày học; hỏng thì bỏ qua, không chặn việc học.
       await supabase.from('study_reviews').insert({ deck, card_id: card.id, grade: value, log_date: today })

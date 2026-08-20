@@ -4,7 +4,7 @@ import {
   Search, Heart, BookOpen, Clock, Play, 
   X, Bookmark, ChevronRight,
   Flame, Trophy, Zap, Calendar, Sparkles, Loader2,
-  Layers, Check,
+  Layers, Check, FolderOpen,
   ExternalLink,
 } from 'lucide-react';
 import type { BLManga, HotMangaData } from '../../types/manga';
@@ -14,6 +14,7 @@ import {
   getReadingHistory, hasMangaData 
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
+import { LocalCbzReader } from './LocalCbzReader';
 import { useScrollRestore } from '../shared';
 import './blManga.css';
 
@@ -184,6 +185,7 @@ export const BLMangaPage: React.FC = () => {
   
   // Progressive batching count
   // Số thẻ đã mở giữ theo phiên: quay lại từ trang chi tiết không phải cuộn lại từ đầu.
+  const [localReaderOpen, setLocalReaderOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number>(
     () => Number(sessionStorage.getItem('daily_count_bl-list') ?? BATCH_SIZE) || BATCH_SIZE,
   );
@@ -439,6 +441,8 @@ export const BLMangaPage: React.FC = () => {
     return mangaList.filter(m => m.hotRank != null || m.isHot).slice(0, 6);
   }, [hotData, mangaMap, mangaList]);
 
+  if (localReaderOpen) return <LocalCbzReader onClose={() => setLocalReaderOpen(false)} />;
+
   return (
     <div className="bl-page-container">
       {continueReading && (
@@ -467,6 +471,10 @@ export const BLMangaPage: React.FC = () => {
             onClick={() => setActiveTab('all')}
           >
             <BookOpen size={16} /> Tất cả <span className="bl-count-pill">{mangaList.length}</span>
+          </button>
+
+          <button className="bl-nav-tab-btn" onClick={() => setLocalReaderOpen(true)} title="Mở file .cbz trên máy">
+            <FolderOpen size={16} /> Đọc file CBZ
           </button>
           
           <button
