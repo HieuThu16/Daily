@@ -28,8 +28,9 @@ import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
 import { EnglishPage } from './features/english/EnglishPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
-import { exportBackup } from './lib/backup'
+import { backupReminder, exportBackup, getLastBackupAt } from './lib/backup'
 import { startQueueAutoFlush } from './lib/offlineQueue'
+import { ErrorBoundary } from './features/ErrorBoundary'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
@@ -62,6 +63,8 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
 
 const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
 const PINNED_TABS_STORAGE_KEY = 'daily_pinned_tabs'
+/** Ngày đã nhắc sao lưu gần nhất, để đừng nhắc lại nhiều lần trong ngày. */
+const BACKUP_NUDGE_KEY = 'daily_backup_nudged_on'
 const THEME_STORAGE_KEY = 'daily_theme'
 const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'tvshow', 'reviews']
 const BOTTOM_NAV_SIZE = 5
@@ -313,6 +316,17 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     })
   }, [showToast])
 
+  // Nhắc sao lưu, tối đa một lần mỗi ngày: dữ liệu chỉ nằm một chỗ trên Supabase.
+  useEffect(() => {
+    const message = backupReminder(getLastBackupAt())
+    if (!message) return
+    const today = localDate()
+    if (localStorage.getItem(BACKUP_NUDGE_KEY) === today) return
+    localStorage.setItem(BACKUP_NUDGE_KEY, today)
+    const timer = setTimeout(() => showToast(`💾 ${message} Vào Hồ sơ → Tải dữ liệu về máy.`, 'info'), 3000)
+    return () => clearTimeout(timer)
+  }, [showToast])
+
   const [backingUp, setBackingUp] = useState(false)
   const handleBackup = async () => {
     setBackingUp(true)
@@ -499,7 +513,10 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             canInstall={canInstall && !installed}
             onInstallPWA={handleInstallPWA}
           />
-        ) : children}
+        ) : (
+          // key theo đường dẫn: đổi tab là boundary dựng lại, thoát được tab đang lỗi.
+          <ErrorBoundary key={path}>{children}</ErrorBoundary>
+        )}
       </main>
 
       {/* Cột phụ desktop. Luôn dựng, CSS quyết định có hiện hay không. */}

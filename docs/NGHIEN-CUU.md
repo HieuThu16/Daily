@@ -128,3 +128,37 @@ Toạ độ lấy từ `navigator.geolocation`, có cache theo ngày để khỏ
 - Khoá app bằng passkey/vân tay (WebAuthn)
 - CBZ/EPUB nhập từ máy (đã có jszip)
 - Background Sync thật trong service worker (cần injectManifest)
+
+---
+
+# Đợt 3 — 20/08/2026: soi lại theo hướng "cấp bách", không phải "hay ho"
+
+## Nguồn
+
+- Ink & Switch — Local-first software: https://www.inkandswitch.com/essay/local-first/
+- Local-First Software Guide 2026: https://www.alexcloudstar.com/blog/local-first-software-developer-guide-2026/
+- Educative — Data conflict detection and resolution: https://www.educative.io/courses/mobile-system-design/lta/data-conflict-detection-and-resolution
+- TechBuzz — Mất 30 năm dữ liệu vì khoá tài khoản: https://www.techbuzz.ai/articles/cloud-storage-nightmare-user-loses-30-years-of-data-after-microsoft-account-lock
+- UBOS — OneDrive xoá nhầm file: https://ubos.tech/news/onedrive-data-loss-concerns-rise-as-users-report-deleted-files-ubos-news/
+- Day One — Passcode & Biometric: https://dayoneapp.com/features/passcode-biometric-security/
+- Day One — Privacy FAQs: https://dayoneapp.com/privacy-faqs/
+- Todoist — 2026 changelog: https://www.todoist.com/help/articles/2026-changelog-HD3jJAtLd
+
+## Cấp bách (đã kiểm chứng trong mã nguồn)
+
+1. **Không có ErrorBoundary** — `grep -rn "ErrorBoundary\|componentDidCatch" src` không ra kết quả nào.
+   Một lỗi render ở bất kỳ tab nào là trắng màn hình toàn app, không có nút thoát.
+2. **Backup thủ công, không ai nhắc** — `exportBackup` chỉ chạy khi tự bấm ở Hồ sơ.
+   Toàn bộ dữ liệu nằm một chỗ trên Supabase free tier.
+3. **Không có khoá app** — nhật ký, tiền, tin nhắn cặp đôi mở thẳng khi đưa máy cho người khác.
+   Day One coi passcode/vân tay là tính năng nền tảng.
+4. **Ghi đè không cảnh báo** — mọi update là last-write-wins, không so `updated_at`.
+   Hai thiết bị sửa cùng bản ghi thì bên lưu sau nuốt bên kia, im lặng.
+5. **Hàng đợi offline mới phủ 2 chỗ** — chỉ `daily_entries` và `todos` insert.
+   Các tab khác mất mạng là mất thao tác.
+
+## Chưa cấp bách nhưng còn nợ
+
+- Tiền: không ngân sách theo danh mục, không giao dịch định kỳ, không xuất CSV.
+- Thói quen: chưa có lịch linh hoạt (3 lần/tuần, thứ 2-4-6), chưa nhắc giờ riêng.
+- Học: chưa có cloze / che ảnh, chưa có biểu đồ dự báo lượng ôn.

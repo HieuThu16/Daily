@@ -65,9 +65,36 @@ export function downloadJson(content: unknown, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+/** Mốc lần sao lưu gần nhất. Để trong localStorage vì nó là chuyện của từng máy. */
+const LAST_BACKUP_KEY = 'daily_last_backup_at'
+
+/** Quá số ngày này chưa sao lưu thì nhắc một lần. */
+export const BACKUP_REMIND_AFTER_DAYS = 30
+
+export const getLastBackupAt = (): string | null => localStorage.getItem(LAST_BACKUP_KEY)
+
+/**
+ * Số ngày kể từ lần sao lưu gần nhất; `null` nghĩa là chưa bao giờ sao lưu.
+ * Tách khỏi localStorage để kiểm thử được, và để chỗ hiển thị dùng chung với chỗ nhắc.
+ */
+export function daysSinceBackup(lastAt: string | null, now = new Date()): number | null {
+  if (!lastAt) return null
+  const ms = now.getTime() - new Date(lastAt).getTime()
+  return Math.max(0, Math.floor(ms / 86_400_000))
+}
+
+/** Câu nhắc, hoặc `null` khi vừa sao lưu gần đây. Chưa bao giờ sao lưu cũng phải nhắc. */
+export function backupReminder(lastAt: string | null, now = new Date()): string | null {
+  const days = daysSinceBackup(lastAt, now)
+  if (days === null) return 'Bạn chưa từng sao lưu dữ liệu về máy lần nào.'
+  if (days < BACKUP_REMIND_AFTER_DAYS) return null
+  return `Đã ${days} ngày chưa sao lưu dữ liệu về máy.`
+}
+
 export async function exportBackup() {
   const backup = await collectBackup()
   downloadJson(backup, `my-space-backup-${localDate()}.json`)
+  localStorage.setItem(LAST_BACKUP_KEY, backup.exported_at)
   return backup
 }
 

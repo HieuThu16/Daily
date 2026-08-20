@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import type { ChangelogEntry } from '../data/changelog'
 import { CHANGELOG, getUnseenLatest, markLatestSeen } from '../data/changelog'
-import { exportBackup, importBackup } from '../lib/backup'
+import { backupReminder, daysSinceBackup, exportBackup, getLastBackupAt, importBackup } from '../lib/backup'
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push'
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
@@ -266,12 +266,18 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
     } finally { setPushBusy(false) }
   }
 
+  // Đọc lại sau mỗi lần sao lưu để dòng "lần cuối" đổi ngay, khỏi phải tải lại trang.
+  const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt)
+  const lastBackupDays = daysSinceBackup(lastBackupAt)
+  const overdueBackup = backupReminder(lastBackupAt) !== null
+
   const handleBackup = async () => {
     setBackingUp(true)
     try {
       const backup = await exportBackup()
       if (backup.failed.length) showToast(`⚠️ Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`, 'info')
       else showToast('☁️ Đã tải bản sao lưu.')
+      setLastBackupAt(getLastBackupAt())
     } catch {
       showToast('❌ Chưa sao lưu được — kiểm tra kết nối Supabase.', 'delete')
     }
@@ -328,7 +334,16 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
                 {/* Tải dữ liệu về máy */}
                 <button className="settings-row" onClick={handleBackup} disabled={backingUp}>
                   <div className="sr-icon sr-icon--amber"><HardDriveDownload size={16} /></div>
-                  <span className="sr-label">{backingUp ? 'Đang tải…' : 'Tải dữ liệu về máy'}</span>
+                  <div className="sr-label-group">
+                    <span className="sr-label">{backingUp ? 'Đang tải…' : 'Tải dữ liệu về máy'}</span>
+                    <span className="sr-sub" style={overdueBackup ? { color: 'var(--amber)', fontWeight: 600 } : undefined}>
+                      {lastBackupDays === null
+                        ? '⚠️ Chưa sao lưu lần nào'
+                        : lastBackupDays === 0
+                          ? 'Lần cuối: hôm nay'
+                          : `Lần cuối: ${lastBackupDays} ngày trước`}
+                    </span>
+                  </div>
                   <ChevronRight size={15} />
                 </button>
 

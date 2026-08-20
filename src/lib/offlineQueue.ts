@@ -7,9 +7,9 @@ const EVENT_NAME = 'daily_write_queue_changed'
 export type QueuedWrite = {
   id: string
   table: string
-  op: 'insert' | 'update'
+  op: 'insert' | 'update' | 'delete'
   payload: Record<string, unknown>
-  /** Với 'update': điều kiện eq, thường là { id: '...' }. */
+  /** Với 'update'/'delete': điều kiện eq, thường là { id: '...' }. */
   match?: Record<string, string>
   queuedAt: string
 }
@@ -54,7 +54,7 @@ export async function flushWriteQueue(): Promise<{ sent: number; failed: number;
       if (item.op === 'insert') {
         ;({ error } = await table.insert(item.payload))
       } else {
-        let query = table.update(item.payload)
+        let query = item.op === 'delete' ? table.delete() : table.update(item.payload)
         for (const [column, value] of Object.entries(item.match ?? {})) query = query.eq(column, value)
         ;({ error } = await query)
       }
