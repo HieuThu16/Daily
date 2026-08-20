@@ -316,7 +316,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   useEffect(() => {
     const shared = new URLSearchParams(window.location.search).get('youtube')
     if (!shared) return
-    openAdd('MUSIC')
+    // /movies?youtube=… là video lẻ, /music?youtube=… là nhạc.
+    openAdd(defaultType === 'MOVIE' || defaultType === 'YOUTUBE' ? 'YOUTUBE' : 'MUSIC')
     setYoutubeUrlVal(shared)
     void handleYouTubeUrlChange(shared)
     // Xoá tham số để bấm Back hay tải lại không mở lại form.

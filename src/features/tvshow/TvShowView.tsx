@@ -158,7 +158,9 @@ export function TvShowView() {
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<CategorizedGroup<VideoRow> | null>(null)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
-  const [addVideoOpen, setAddVideoOpen] = useState(false)
+  // /share đưa sang /tvshow?youtube=… thì mở luôn form thêm video lẻ.
+  const [sharedUrl] = useState(() => new URLSearchParams(window.location.search).get('youtube') ?? '')
+  const [addVideoOpen, setAddVideoOpen] = useState(Boolean(sharedUrl))
   const [reloadKey, setReloadKey] = useState(0)
   /** Vị trí cuộn của danh sách trước khi mở video/kênh, để quay lại đúng chỗ cũ. */
   const savedScroll = useRef(0)
@@ -898,6 +900,7 @@ export function TvShowView() {
 
       {addVideoOpen && (
         <AddTvShowMovieModal
+          initialUrl={sharedUrl}
           onClose={() => setAddVideoOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
@@ -2230,9 +2233,9 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
 type DraftPart = ParsedVideo & { title: string; thumbnail: string }
 
 /** Modal thêm video lẻ TV Show */
-function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function AddTvShowMovieModal({ onClose, onSaved, initialUrl = '' }: { onClose: () => void; onSaved: () => void; initialUrl?: string }) {
   const [mode, setMode] = useState<'single' | 'batch'>('single')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(initialUrl)
   const [title, setTitle] = useState('')
   const [channelName, setChannelName] = useState('')
   const [status, setStatus] = useState<'UNWATCHED' | 'WATCHED'>('UNWATCHED')
@@ -2262,6 +2265,12 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
         }
       })
   }, [])
+
+  // Link chia sẻ từ app khác: điền sẵn rồi tự đọc tiêu đề, khỏi phải dán tay.
+  useEffect(() => {
+    if (initialUrl) void handleUrlChange(initialUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUrl])
 
   // Khi paste link video đơn, tự động đọc tiêu đề và kênh
   const handleUrlChange = async (val: string) => {

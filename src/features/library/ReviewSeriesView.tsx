@@ -105,7 +105,9 @@ export function ReviewSeriesView() {
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<CategorizedGroup<VideoRow> | null>(null)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
-  const [addMovieOpen, setAddMovieOpen] = useState(false)
+  // /share đưa sang /reviews?youtube=… thì mở luôn form thêm video review.
+  const [sharedUrl] = useState(() => new URLSearchParams(window.location.search).get('youtube') ?? '')
+  const [addMovieOpen, setAddMovieOpen] = useState(Boolean(sharedUrl))
   const [reloadKey, setReloadKey] = useState(0)
 
   // 2 nút thêm nằm trên header chung, cạnh nút thông báo
@@ -780,6 +782,7 @@ export function ReviewSeriesView() {
 
       {addMovieOpen && (
         <AddReviewMovieModal
+          initialUrl={sharedUrl}
           onClose={() => setAddMovieOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
@@ -1985,9 +1988,9 @@ function AddReviewChannelModal({ onClose, onSynced }: { onClose: () => void; onS
 type DraftPart = ParsedVideo & { title: string; thumbnail: string }
 
 /** Modal thêm phim review lẻ */
-function AddReviewMovieModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function AddReviewMovieModal({ onClose, onSaved, initialUrl = '' }: { onClose: () => void; onSaved: () => void; initialUrl?: string }) {
   const [mode, setMode] = useState<'single' | 'batch'>('single')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(initialUrl)
   const [title, setTitle] = useState('')
   const [channelName, setChannelName] = useState('')
   const [status, setStatus] = useState<'UNWATCHED' | 'WATCHED'>('UNWATCHED')
@@ -2019,6 +2022,11 @@ function AddReviewMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
   }, [])
 
   // Khi paste link video đơn, tự động đọc tiêu đề và kênh
+  useEffect(() => {
+    if (initialUrl) void handleUrlChange(initialUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUrl])
+
   const handleUrlChange = async (val: string) => {
     setUrl(val)
     const videoId = youtubeVideoId(val)
