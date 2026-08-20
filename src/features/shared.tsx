@@ -81,6 +81,38 @@ export function useQuery<T>(table: string, order = 'created_at') {
   return { items, setItems: setItemsCached, loading, error, reload }
 }
 
+/**
+ * Dựng danh sách dài theo từng mẻ thay vì đổ hết ra DOM một lúc.
+ *
+ * Trả về số phần tử nên hiện và một ref để gắn vào thẻ canh cuối danh sách;
+ * thẻ đó lọt vào tầm nhìn (trước 400px) thì tự nới thêm một mẻ. Đổi bộ lọc thì
+ * `resetKey` đổi theo và đếm lại từ đầu, nếu không danh sách mới vẫn nặng như cũ.
+ */
+export function useIncrementalList(total: number, step = 48, resetKey: unknown = null) {
+  const [visibleCount, setVisibleCount] = useState(step)
+  const sentinel = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setVisibleCount(step)
+  }, [resetKey, step])
+
+  useEffect(() => {
+    if (!sentinel.current || visibleCount >= total) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setVisibleCount((prev) => Math.min(prev + step, total))
+      },
+      { rootMargin: '400px' },
+    )
+    observer.observe(sentinel.current)
+    return () => observer.disconnect()
+  }, [visibleCount, total, step])
+
+  const showMore = () => setVisibleCount((prev) => Math.min(prev + step, total))
+
+  return { visibleCount, sentinel, showMore, hasMore: visibleCount < total, remaining: Math.max(0, total - visibleCount) }
+}
+
 export function Empty({ children, icon: Icon = Inbox, colorClass = 'icon-box-blue' }: { children: React.ReactNode; icon?: any; colorClass?: string }) {
   return (
     <div className="empty">

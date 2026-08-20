@@ -7,7 +7,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useHideHeader } from '../HeaderAction'
 import { useToast } from '../ToastContext'
-import { Modal } from '../shared'
+import { Modal, useIncrementalList } from '../shared'
 import { CategorizedGroup, VideoCategoryType } from '../../lib/videoCategorizer'
 import { summarizeVideo, toKnowledgeRows, videosNeedingLesson } from '../../lib/videoLesson'
 import './tvShow.css'
@@ -152,6 +152,8 @@ export function CategoryDetailView({
     return result
   }, [videos, search, filterMode, watched, sortOrder])
 
+  const list = useIncrementalList(filteredVideos.length, 48, `${search}|${filterMode}|${sortOrder}`)
+
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
   const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find((v) => v.video_id === playingId) || videos[0])
 
@@ -271,7 +273,7 @@ export function CategoryDetailView({
                   aria-label="Nhấn để phát video"
                 >
                   <img
-                    src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/hqdefault.jpg`}
+                    src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/mqdefault.jpg`}
                     alt={currentVideo.title}
                   />
                   <div className="tv-player-play-overlay">
@@ -441,7 +443,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
 
             {/* Danh sách Video Items */}
             <div className="tv-video-card-list">
-              {filteredVideos.map((v, i) => {
+              {filteredVideos.slice(0, list.visibleCount).map((v, i) => {
                 const isPlaying = v.video_id === playingId
                 const isWatched = watched.has(v.video_id)
                 const indexNum = sortOrder === 'desc' ? i + 1 : videos.length - i
@@ -457,7 +459,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   >
                     <div className="tv-video-thumb-container">
                       <img
-                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`}
                         alt=""
                         loading="lazy"
                       />
@@ -503,6 +505,14 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   </div>
                 )
               })}
+              {list.hasMore && (
+                <>
+                  <div ref={list.sentinel} style={{ height: 1 }} />
+                  <button type="button" className="tv-load-more" onClick={list.showMore}>
+                    Hiện thêm · còn {list.remaining} video
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </>

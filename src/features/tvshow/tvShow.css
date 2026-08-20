@@ -1968,3 +1968,24 @@
   border-color: var(--primary);
   background: rgba(59, 130, 246, 0.06);
 }
+
+/* Danh sách video dài: bỏ qua việc dựng hình phần ngoài màn hình.
+   contain-intrinsic-size giữ chỗ đúng chiều cao thẻ nên thanh cuộn không nhảy. */
+.tv-video-card-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+
+.tv-load-more {
+  display: block;
+  width: 100%;
+  margin: 10px 0 4px;
+  padding: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}

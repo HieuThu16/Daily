@@ -9,7 +9,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
-import { Modal } from '../shared'
+import { Modal, useIncrementalList } from '../shared'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { useToast } from '../ToastContext'
 import { 
@@ -253,10 +253,17 @@ export function ReviewSeriesView() {
   }, [categoryGroups, search])
 
   // Lọc + sắp xếp video: tìm kiếm, chip thể loại, trạng thái đã xem, thứ tự
+  // Phân loại một lần cho cả kho thay vì tính lại mỗi lần gõ ô tìm.
+  const categoryByVideo = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof resolveVideoCategories>>()
+    for (const v of allVideos) map.set(v.video_id, resolveVideoCategories(v.video_id, v.title, 'review', categoryOverrides))
+    return map
+  }, [allVideos, categoryOverrides])
+
   const filteredVideos = useMemo(() => {
     const q = search.trim().toLowerCase()
     let result = allVideos.filter((v) => {
-      const cats = resolveVideoCategories(v.video_id, v.title, 'review', categoryOverrides)
+      const cats = categoryByVideo.get(v.video_id) ?? []
       if (activeCatId && !cats.some((c) => c.id === activeCatId)) return false
       if (watchFilter === 'watched' && !watchedSet.has(v.video_id)) return false
       if (watchFilter === 'unwatched' && watchedSet.has(v.video_id)) return false
@@ -282,7 +289,9 @@ export function ReviewSeriesView() {
       )
     }
     return result
-  }, [allVideos, search, categoryOverrides, activeCatId, watchFilter, sortMode, watchedSet])
+  }, [allVideos, search, categoryByVideo, activeCatId, watchFilter, sortMode, watchedSet])
+
+  const mainList = useIncrementalList(filteredVideos.length, 48, `${search}|${activeCatId}|${watchFilter}|${sortMode}`)
 
   // Số video theo từng thể loại, để hiện trên chip lọc
   const catChips = useMemo(
@@ -517,7 +526,7 @@ export function ReviewSeriesView() {
             </div>
           ) : (
             <div className="tv-video-card-list">
-              {filteredVideos.map((v) => {
+              {filteredVideos.slice(0, mainList.visibleCount).map((v) => {
                 const picked = selectedIds.has(v.video_id)
                 return (
                   <div
@@ -541,7 +550,7 @@ export function ReviewSeriesView() {
 
                     <div className="tv-video-thumb-container">
                       <img
-                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`}
                         alt=""
                         loading="lazy"
                       />
@@ -582,6 +591,14 @@ export function ReviewSeriesView() {
                   </div>
                 )
               })}
+              {mainList.hasMore && (
+                <>
+                  <div ref={mainList.sentinel} style={{ height: 1 }} />
+                  <button type="button" className="tv-load-more" onClick={mainList.showMore}>
+                    Hiện thêm · còn {mainList.remaining} video
+                  </button>
+                </>
+              )}
             </div>
           )}
         </>
@@ -896,6 +913,8 @@ function ReviewChannelDetailView({
     return result
   }, [videos, search, filterMode, watched, sortOrder])
 
+  const channelList = useIncrementalList(filteredVideos.length, 48, `${search}|${filterMode}|${sortOrder}`)
+
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
   const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find(v => v.video_id === playingId) || videos[0])
 
@@ -979,7 +998,7 @@ function ReviewChannelDetailView({
                   aria-label="Nhấn để phát video"
                 >
                   <img
-                    src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/hqdefault.jpg`}
+                    src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/mqdefault.jpg`}
                     alt={currentVideo.title}
                   />
                   <div className="tv-player-play-overlay">
@@ -1133,7 +1152,7 @@ function ReviewChannelDetailView({
 
             {/* Danh sách video items */}
             <div className="tv-video-card-list">
-              {filteredVideos.map((v, i) => {
+              {filteredVideos.slice(0, channelList.visibleCount).map((v, i) => {
                 const isPlaying = v.video_id === playingId
                 const isWatched = watched.has(v.video_id)
                 const indexNum = sortOrder === 'desc' ? i + 1 : videos.length - i
@@ -1150,7 +1169,7 @@ function ReviewChannelDetailView({
                     {/* Thumbnail + badge thời lượng */}
                     <div className="tv-video-thumb-container">
                       <img
-                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`}
                         alt=""
                         loading="lazy"
                       />
@@ -1203,6 +1222,14 @@ function ReviewChannelDetailView({
                   </div>
                 )
               })}
+              {channelList.hasMore && (
+                <>
+                  <div ref={channelList.sentinel} style={{ height: 1 }} />
+                  <button type="button" className="tv-load-more" onClick={channelList.showMore}>
+                    Hiện thêm · còn {channelList.remaining} video
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </>
@@ -2000,7 +2027,7 @@ function AddReviewMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
       return
     }
 
-    const defaultThumb = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    const defaultThumb = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
     setThumbnail(defaultThumb)
     setAutofilling(true)
     setError(null)
@@ -2065,7 +2092,7 @@ function AddReviewMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
         title: title.trim(),
         canonical_url: `https://www.youtube.com/watch?v=${videoId}`,
         embed_url: `https://www.youtube.com/embed/${videoId}`,
-        thumbnail: thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        thumbnail: thumbnail || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
         part_number: 1,
         total_parts: 1,
         is_final: true,
@@ -2109,7 +2136,7 @@ function AddReviewMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
     const drafts: DraftPart[] = valid.map((v, i) => ({
       ...v,
       title: metas[i]?.title ?? `Video ${i + 1}`,
-      thumbnail: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+      thumbnail: `https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`,
     }))
     setParts(drafts)
     if (!movie.trim() && drafts[0]) setMovie(drafts[0].title)

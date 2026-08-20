@@ -9,7 +9,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
-import { Modal } from '../shared'
+import { Modal, useIncrementalList } from '../shared'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { useToast } from '../ToastContext'
 import { 
@@ -301,10 +301,17 @@ export function TvShowView() {
   }, [categoryGroups, search])
 
   // Lọc + sắp xếp video: tìm kiếm, chip thể loại, trạng thái đã xem, thứ tự
+  // Phân loại mỗi video đúng một lần; trước đây gõ một chữ vào ô tìm là chạy lại cho cả kho.
+  const categoryByVideo = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof resolveVideoCategories>>()
+    for (const v of allVideos) map.set(v.video_id, resolveVideoCategories(v.video_id, v.title, 'tvshow', categoryOverrides))
+    return map
+  }, [allVideos, categoryOverrides])
+
   const filteredVideos = useMemo(() => {
     const q = search.trim().toLowerCase()
     let result = allVideos.filter((v) => {
-      const cats = resolveVideoCategories(v.video_id, v.title, 'tvshow', categoryOverrides)
+      const cats = categoryByVideo.get(v.video_id) ?? []
       if (activeCatId && !cats.some((c) => c.id === activeCatId)) return false
       if (watchFilter === 'watched' && !watchedSet.has(v.video_id)) return false
       if (watchFilter === 'unwatched' && watchedSet.has(v.video_id)) return false
@@ -330,7 +337,14 @@ export function TvShowView() {
       )
     }
     return result
-  }, [allVideos, search, categoryOverrides, activeCatId, watchFilter, sortMode, watchedSet])
+  }, [allVideos, search, categoryByVideo, activeCatId, watchFilter, sortMode, watchedSet])
+
+  // Dựng dần danh sách: kho video vài nghìn cái, đổ hết ra DOM là treo máy.
+  const { visibleCount, sentinel, showMore, hasMore, remaining } = useIncrementalList(
+    filteredVideos.length,
+    48,
+    `${search}|${activeCatId}|${watchFilter}|${sortMode}`,
+  )
 
   // Số video theo từng thể loại, để hiện trên chip lọc
   const catChips = useMemo(
@@ -566,7 +580,7 @@ export function TvShowView() {
             </div>
           ) : (
             <div className="tv-video-card-list">
-              {filteredVideos.map((v) => {
+              {filteredVideos.slice(0, visibleCount).map((v) => {
                 const picked = selectedIds.has(v.video_id)
                 return (
                   <div
@@ -590,9 +604,12 @@ export function TvShowView() {
 
                     <div className="tv-video-thumb-container">
                       <img
-                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`}
                         alt=""
                         loading="lazy"
+                        decoding="async"
+                        width={160}
+                        height={90}
                       />
                       <span className="tv-video-duration-pill">
                         {v.part_number ? `P.${v.part_number}` : 'Video'}
@@ -631,6 +648,14 @@ export function TvShowView() {
                   </div>
                 )
               })}
+              {hasMore && (
+                <>
+                  <div ref={sentinel} style={{ height: 1 }} />
+                  <button type="button" className="tv-load-more" onClick={showMore}>
+                    Hiện thêm · còn {remaining} video
+                  </button>
+                </>
+              )}
             </div>
           )}
         </>
@@ -977,6 +1002,8 @@ function ChannelDetailView({
     return result
   }, [videos, search, filterMode, watched, sortOrder])
 
+  const channelList = useIncrementalList(filteredVideos.length, 48, `${search}|${filterMode}|${sortOrder}`)
+
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
   const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find(v => v.video_id === playingId) || videos[0])
 
@@ -1237,7 +1264,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
 
             {/* Danh sách video items */}
             <div className="tv-video-card-list">
-              {filteredVideos.map((v, i) => {
+              {filteredVideos.slice(0, channelList.visibleCount).map((v, i) => {
                 const isPlaying = v.video_id === playingId
                 const isWatched = watched.has(v.video_id)
                 const indexNum = sortOrder === 'desc' ? i + 1 : videos.length - i
@@ -1254,9 +1281,12 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                     {/* Thumbnail + badge thời lượng */}
                     <div className="tv-video-thumb-container">
                       <img
-                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/hqdefault.jpg`}
+                        src={v.thumbnail || `https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`}
                         alt=""
                         loading="lazy"
+                        decoding="async"
+                        width={160}
+                        height={90}
                       />
                       <span className="tv-video-duration-pill">
                         {v.part_number ? `P.${v.part_number}` : 'Video'}
@@ -1307,6 +1337,14 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   </div>
                 )
               })}
+              {channelList.hasMore && (
+                <>
+                  <div ref={channelList.sentinel} style={{ height: 1 }} />
+                  <button type="button" className="tv-load-more" onClick={channelList.showMore}>
+                    Hiện thêm · còn {channelList.remaining} video
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </>
