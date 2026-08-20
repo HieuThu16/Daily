@@ -1574,6 +1574,57 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       {/* Add / Edit Modal with Header Manage Buttons for All Metadata Categories */}
       {activeModal && (
         <Modal title={(activeModal.item ? 'Sửa ' : 'Thêm ') + categories.find((c) => c.id === activeModal.kind)?.label} onClose={() => setActiveModal(null)}>
+          {activeModal.kind === 'MUSIC' && (
+                <div style={{ background: 'var(--bg-main)', padding: 10, borderRadius: 10, border: '1px solid var(--card-border)' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', marginBottom: 6 }}>
+                    <Youtube size={16} /> Link YouTube (để chuyển thành Audio)
+                    {autofilling && <RefreshCw size={13} className="spin" aria-label="Đang lấy tên bài" />}
+                  </span>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                    <input
+                      value={youtubeUrlVal}
+                      onChange={(e) => handleYouTubeUrlChange(e.target.value)}
+                      placeholder="Paste link YouTube (https://www.youtube.com/watch?v=...)..."
+                      style={{ flex: 1, fontSize: '0.8rem' }}
+                    />
+                    <button
+                      type="button"
+                      disabled={isConverting}
+                      onClick={() => handleConvertYouTubeToAudio()}
+                      style={{
+                        background: 'var(--cyan)', color: 'white', fontWeight: 700, borderRadius: 8, padding: '0 10px', fontSize: '0.76rem',
+                        display: 'flex', alignItems: 'center', gap: 4, border: 0, cursor: 'pointer', opacity: isConverting ? 0.7 : 1
+                      }}
+                    >
+                      <RefreshCw size={13} className={isConverting ? 'spin' : ''} />
+                      {isConverting ? 'Đang chuyển...' : 'Lấy MP3'}
+                    </button>
+                  </div>
+  
+                  {audioUrlVal && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, background: 'var(--card-bg)', padding: 8, borderRadius: 8, border: '1px solid var(--emerald)' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--emerald)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Volume2 size={14} /> File Audio MP3 phát nền (Đã tải xong thời lượng):
+                      </span>
+                      <audio
+                        key={audioUrlVal}
+                        controls
+                        src={audioUrlVal}
+                        onError={() => {
+                          setAudioLoadError(true)
+                          showToast('Audio stream không phát được hoặc đã hết hạn. Hãy lấy lại MP3.', 'delete')
+                        }}
+                        style={{ width: '100%', height: 36 }}
+                        preload="auto"
+                      />
+                      <span style={{ fontSize: '0.7rem', color: audioLoadError ? 'var(--rose)' : 'var(--emerald)', fontWeight: 700, fontStyle: 'italic' }}>
+                        👉 Bấm nút "Lưu vào cơ sở dữ liệu" màu xanh ở dưới để lưu vĩnh viễn bài nhạc MP3 này!
+                      </span>
+                    </div>
+                  )}
+                </div>
+          )}
+
           {/* Nhạc không có ảnh bìa: chỉ cần ô tên, đỡ một tầng cho form. */}
           {activeModal.kind === 'MUSIC' ? (
             <label>
@@ -1912,55 +1963,6 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                 </datalist>
               </div>
 
-              {/* YouTube Link -> Convert Audio Stream */}
-              <div style={{ background: 'var(--bg-main)', padding: 10, borderRadius: 10, border: '1px solid var(--card-border)' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', marginBottom: 6 }}>
-                  <Youtube size={16} /> Link YouTube (để chuyển thành Audio)
-                  {autofilling && <RefreshCw size={13} className="spin" aria-label="Đang lấy tên bài" />}
-                </span>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                  <input
-                    value={youtubeUrlVal}
-                    onChange={(e) => handleYouTubeUrlChange(e.target.value)}
-                    placeholder="Paste link YouTube (https://www.youtube.com/watch?v=...)..."
-                    style={{ flex: 1, fontSize: '0.8rem' }}
-                  />
-                  <button
-                    type="button"
-                    disabled={isConverting}
-                    onClick={() => handleConvertYouTubeToAudio()}
-                    style={{
-                      background: 'var(--cyan)', color: 'white', fontWeight: 700, borderRadius: 8, padding: '0 10px', fontSize: '0.76rem',
-                      display: 'flex', alignItems: 'center', gap: 4, border: 0, cursor: 'pointer', opacity: isConverting ? 0.7 : 1
-                    }}
-                  >
-                    <RefreshCw size={13} className={isConverting ? 'spin' : ''} />
-                    {isConverting ? 'Đang chuyển...' : 'Lấy MP3'}
-                  </button>
-                </div>
-
-                {audioUrlVal && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8, background: 'var(--card-bg)', padding: 8, borderRadius: 8, border: '1px solid var(--emerald)' }}>
-                    <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--emerald)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Volume2 size={14} /> File Audio MP3 phát nền (Đã tải xong thời lượng):
-                    </span>
-                    <audio
-                      key={audioUrlVal}
-                      controls
-                      src={audioUrlVal}
-                      onError={() => {
-                        setAudioLoadError(true)
-                        showToast('Audio stream không phát được hoặc đã hết hạn. Hãy lấy lại MP3.', 'delete')
-                      }}
-                      style={{ width: '100%', height: 36 }}
-                      preload="auto"
-                    />
-                    <span style={{ fontSize: '0.7rem', color: audioLoadError ? 'var(--rose)' : 'var(--emerald)', fontWeight: 700, fontStyle: 'italic' }}>
-                      👉 Bấm nút "Lưu vào cơ sở dữ liệu" màu xanh ở dưới để lưu vĩnh viễn bài nhạc MP3 này!
-                    </span>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 

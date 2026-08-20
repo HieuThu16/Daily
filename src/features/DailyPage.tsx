@@ -68,6 +68,7 @@ export function DailyPage() {
   const [content, setContent] = useState('')
   const [filterType, setFilterType] = useState<'ALL' | 'FAV' | DailyType>('ALL')
   const [date, setDate] = useState(localDate())
+  const [timeOverride, setTimeOverride] = useState('') // rỗng = dùng giờ hiện tại
   const [busy, setBusy] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState('')
   const [editing, setEditing] = useState<Entry | null>(null)
@@ -89,8 +90,8 @@ export function DailyPage() {
     if (!lines.length) return
     setBusy(true)
     setSaveSuccess('')
-    const currentTimeString = clock
-    const payload = lines.map((lineText) => ({ content: lineText, entry_date: date, entry_type: selectedType, entry_time: clock }))
+    const currentTimeString = timeOverride || clock
+    const payload = lines.map((lineText) => ({ content: lineText, entry_date: date, entry_type: selectedType, entry_time: currentTimeString }))
     const { data, error } = await supabase!.from('daily_entries').insert(payload).select()
     if (!error && data) {
       setItems((prev) => [...(data as Entry[]), ...prev])
@@ -282,9 +283,20 @@ export function DailyPage() {
             {/* Giờ hiện tại: đây chính là giờ sẽ được lưu kèm bài viết. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: 'var(--amber-bg)', color: 'var(--amber)', fontSize: '0.82rem', fontWeight: 800 }}>
-                <Clock size={13} /> {clock}
+                <Clock size={13} />
+                <input
+                  type="time"
+                  value={timeOverride || clock}
+                  onChange={(e) => setTimeOverride(e.target.value)}
+                  style={{ border: 0, background: 'transparent', color: 'inherit', font: 'inherit', padding: 0, width: 72 }}
+                />
               </span>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>giờ sẽ lưu cùng bài viết</span>
+              {timeOverride && (
+                <button type="button" className="icon small" onClick={() => setTimeOverride('')} style={{ fontSize: '0.7rem', color: 'var(--cyan)', fontWeight: 700 }}>
+                  Giờ hiện tại
+                </button>
+              )}
             </div>
             <textarea
               value={content}
