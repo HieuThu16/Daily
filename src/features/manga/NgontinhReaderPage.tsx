@@ -9,6 +9,7 @@ import { fetchNgontinhList, getNgontinhProgress, saveNgontinhProgress, fetchNgon
 import { hydrateMangadexManga } from './mangadexService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
+import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 import './ngontinhReader.css';
 
 export const NgontinhReaderPage: React.FC = () => {
@@ -62,6 +63,11 @@ export const NgontinhReaderPage: React.FC = () => {
   const currentChapter = sortedChapters[currentIndex] || manga?.chapters.find(c => c.number === currentChapterNum) || sortedChapters[0];
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
+
+  const { prefs, update: updatePrefs, readerStyle } = useReaderPrefs();
+  // Trang này cuộn bằng cả cửa sổ nên không có phần tử cuộn riêng.
+  const autoScroll = useAutoScroll(useCallback(() => null, []), prefs.speed);
+  const preloadedRef = useRef<Set<number>>(new Set());
 
   // Dynamically fetch images if chapter has no images
   useEffect(() => {
@@ -147,6 +153,17 @@ export const NgontinhReaderPage: React.FC = () => {
             scrollRatio: window.scrollY / total,
           });
         }
+        // Qua 80% thì nạp ngầm ảnh chương kế cho lần bấm "chương sau".
+        if (progress >= 80 && nextChapter?.number != null && !preloadedRef.current.has(nextChapter.number)) {
+          const num = nextChapter.number;
+          preloadedRef.current.add(num);
+          void fetchNgontinhChapterImages(manga?.slug ?? '', num).then((imgs) => {
+            for (const img of imgs.slice(0, 5)) {
+              const url = typeof img === 'string' ? img : img?.url;
+              if (url) new Image().src = url;
+            }
+          });
+        }
         if (progress >= 85 && manga && currentChapter) {
           recordMangaReading({
             mangaSlug: manga.slug,
@@ -161,7 +178,7 @@ export const NgontinhReaderPage: React.FC = () => {
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [manga, currentChapter, currentChapterNum]);
+  }, [manga, currentChapter, currentChapterNum, nextChapter]);
 
   const goToChapter = useCallback((chNum: number) => {
     if (manga && currentChapter) {
@@ -306,7 +323,9 @@ export const NgontinhReaderPage: React.FC = () => {
       <div className="ngontinh-reader-progress-line" style={{ width: `${scrollProgress}%` }} />
 
       {/* Image Stream */}
-      <main className={`ngontinh-reader-main-stream fit-${fitMode}`}>
+      <ReaderControls running={autoScroll.running} onToggle={autoScroll.toggle} prefs={prefs} onChange={updatePrefs} />
+
+      <main className={`ngontinh-reader-main-stream fit-${fitMode}`} style={readerStyle}>
         {fetchingChapterImages ? (
           <div className="ngontinh-reader-source-notice" style={{ padding: '60px 20px' }}>
             <Sparkles className="animate-spin" size={36} color="#f43f5e" style={{ margin: '0 auto 12px auto' }} />

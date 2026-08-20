@@ -5,6 +5,7 @@ import { localDate } from '../../lib/date'
 import { buildDayReview } from '../../lib/dayReview'
 import { todayCompletion } from '../../lib/homeProgress'
 import { useMangaReadingLogs } from '../../lib/mangaReadingLog'
+import { summarizeMangaLogs } from '../../lib/mangaStats'
 import { parseLocalDate, upcomingOccasions } from '../../lib/occasions'
 import { Aside, AsideCard } from '../AsideSlot'
 import { DatePager } from './DatePager'
@@ -44,6 +45,9 @@ export function HomePage() {
     const media = data.todayMedia.filter((m) => m.is_favorite)
     return { entries, media, total: entries.length + media.length }
   }, [data.entries, data.todayMedia])
+
+  /** Thống kê đọc truyện: dữ liệu vốn đã ghi sẵn, giờ mới có chỗ xem. */
+  const mangaStats = useMemo(() => summarizeMangaLogs(mangaLogs, dateKey), [mangaLogs, dateKey])
 
   const nextOccasion = useMemo(
     () => upcomingOccasions(data.occasions, data.people, new Date(), { withinDays: 60, limit: 1 })[0] ?? null,
@@ -103,6 +107,25 @@ export function HomePage() {
             <strong>{data.meals.length}</strong>
           </div>
         </AsideCard>
+
+        {mangaStats.totalChapters > 0 && (
+          <AsideCard title="Đọc truyện">
+            <div className="aside-row">
+              <span>Tuần này</span>
+              <strong>{mangaStats.thisWeek} chương</strong>
+            </div>
+            <div className="aside-row">
+              <span>Chuỗi ngày đọc</span>
+              <strong>🔥 {mangaStats.streak}</strong>
+            </div>
+            {mangaStats.topManga[0] && (
+              <div className="aside-row">
+                <span>Đọc nhiều nhất</span>
+                <strong>{mangaStats.topManga[0].title}</strong>
+              </div>
+            )}
+          </AsideCard>
+        )}
 
         <AsideCard title="Sắp tới">
           {nextOccasion ? (

@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, 
 import type { NgontinhManga } from '../../types/manga';
 import { getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
+import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 
 interface Props {
   manga: NgontinhManga;
@@ -27,6 +28,10 @@ export const NgontinhReaderModal: React.FC<Props> = ({
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+
+  const { prefs, update: updatePrefs, readerStyle } = useReaderPrefs();
+  const autoScroll = useAutoScroll(useCallback(() => mainRef.current, []), prefs.speed);
+  const preloadedRef = useRef<Set<number>>(new Set());
 
   const currentChapter = manga.chapters.find(c => c.number === currentChapterNum) || manga.chapters[0];
   const sortedChapters = [...manga.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
@@ -128,6 +133,17 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       }
 
       const scrollBottom = el.scrollTop + el.clientHeight;
+      // Qua 80% chương thì nạp ngầm chương kế.
+      if (el.scrollHeight > 0 && scrollBottom / el.scrollHeight > 0.8 && nextChapter?.number != null && !preloadedRef.current.has(nextChapter.number)) {
+        const num = nextChapter.number;
+        preloadedRef.current.add(num);
+        void fetchNgontinhChapterImages(manga.slug, num).then((imgs) => {
+          for (const img of imgs.slice(0, 5)) {
+            const url = typeof img === 'string' ? img : img?.url;
+            if (url) new Image().src = url;
+          }
+        });
+      }
       const threshold = el.scrollHeight - 250;
       if (scrollBottom >= threshold && currentChapter) {
         recordMangaReading({
@@ -203,6 +219,8 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       <div ref={topRef} />
       
       {/* Floating Reader Header */}
+      <ReaderControls running={autoScroll.running} onToggle={autoScroll.toggle} prefs={prefs} onChange={updatePrefs} />
+
       <header className="ngontinh-reader-header-compact">
         <div className="ngontinh-reader-header-left">
           <button className="ngontinh-reader-back-btn" onClick={onClose} title="Trở về danh sách">
@@ -249,7 +267,7 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       </header>
 
       {/* Reader Body */}
-      <main ref={mainRef} className="ngontinh-reader-body">
+      <main ref={mainRef} className="ngontinh-reader-body" style={readerStyle}>
         {fetchingChapterImages ? (
           <div className="ngontinh-reader-empty" style={{ padding: '60px 20px' }}>
             <Sparkles className="animate-spin" size={36} color="#f43f5e" style={{ margin: '0 auto 12px auto' }} />

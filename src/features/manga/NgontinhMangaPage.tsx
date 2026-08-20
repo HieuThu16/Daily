@@ -402,8 +402,35 @@ export const NgontinhMangaPage: React.FC = () => {
     return mangaList.filter(m => m.hotRank != null || m.isHot).slice(0, 6);
   }, [hotData, mangaMap, mangaList]);
 
+  /** Truyện đang đọc dở gần nhất, đưa lên thẻ "Đọc tiếp". */
+  const continueReading = useMemo(() => {
+    const entries = Object.values(history) as Array<{ slug: string; chapterNumber: number; chapterName?: string; readAt?: string }>
+    const latest = entries
+      .filter((h) => h?.slug && mangaMap.has(h.slug))
+      .sort((a, b) => (b.readAt ?? '').localeCompare(a.readAt ?? ''))[0]
+    return latest ? { progress: latest, manga: mangaMap.get(latest.slug)! } : null;
+  }, [history, mangaMap]);
+
   return (
     <div className="ngontinh-page-container">
+      {continueReading && (
+        <button
+          type="button"
+          className="continue-reading"
+          onClick={() => void openReader(continueReading.manga, continueReading.progress.chapterNumber)}
+        >
+          {continueReading.manga.cover && (
+            <img className="continue-reading-cover" src={continueReading.manga.cover} alt="" loading="lazy" />
+          )}
+          <span className="continue-reading-body">
+            <span className="continue-reading-label">▶ Đọc tiếp</span>
+            <span className="continue-reading-title">{continueReading.manga.title}</span>
+            <span className="continue-reading-sub">
+              {continueReading.progress.chapterName || `Chương ${continueReading.progress.chapterNumber}`}
+            </span>
+          </span>
+        </button>
+      )}
       {/* Top Header & Main Navigation Bar */}
       <div className="ngontinh-top-nav-bar">
         <div className="ngontinh-nav-tabs">

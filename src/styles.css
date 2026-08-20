@@ -11339,3 +11339,154 @@ svg.lucide-library {
 }
 
 .cal-quick-add button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Thanh điều khiển trình đọc (tự cuộn + tuỳ chọn hiển thị) ─────────────── */
+.reader-controls {
+  position: fixed;
+  right: 12px;
+  bottom: 84px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.reader-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.reader-controls-bar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
+.reader-controls-bar button.on {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.reader-controls-bar .reader-play {
+  width: 38px;
+  height: 38px;
+  background: #6366f1;
+  color: #fff;
+}
+
+.reader-controls-panel {
+  width: 232px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(17, 24, 39, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e5e7eb;
+  font-size: 0.76rem;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+
+.reader-controls-panel label {
+  display: grid;
+  gap: 4px;
+}
+
+.reader-controls-panel input[type='range'] {
+  width: 100%;
+  accent-color: #6366f1;
+}
+
+.reader-bg-row {
+  display: flex;
+  gap: 6px;
+}
+
+.reader-bg-row button {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.reader-bg-row button.on {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+/* Khoảng hở giữa các trang truyện, chỉnh trong bảng tuỳ chọn. */
+.bl-reader-image-stream,
+.ngontinh-reader-image-stream {
+  gap: var(--reader-gap, 0px);
+}
+
+/* ── Thẻ "Đọc tiếp" đầu trang truyện ──────────────────────────────────────── */
+.continue-reading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 12%, transparent), transparent 70%);
+  cursor: pointer;
+  text-align: left;
+}
+
+.continue-reading-cover {
+  width: 44px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.continue-reading-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.continue-reading-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.continue-reading-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.continue-reading-sub {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}

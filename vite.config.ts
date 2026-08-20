@@ -103,6 +103,19 @@ export default defineConfig(({ mode }) => {
           maximumFileSizeToCacheInBytes: 35 * 1024 * 1024,
           globIgnores: ['**/book-parsers-*.js', '**/pdf.worker*.mjs', '**/ngontinh_manga-*.js', '**/bl_manga-*.js'],
           importScripts: ['/push-sw.js'],
+          // Ảnh truyện đã đọc giữ lại trong cache: mất mạng vẫn đọc lại được.
+          // CacheFirst + trần 600 ảnh (~30 ngày) để khỏi phình bộ nhớ máy.
+          runtimeCaching: [
+            {
+              urlPattern: ({ request }: { request: Request }) => request.destination === 'image',
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'manga-images',
+                expiration: { maxEntries: 600, maxAgeSeconds: 30 * 24 * 60 * 60, purgeOnQuotaError: true },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
         },
         manifest: { name: 'My Space', short_name: 'My Space', theme_color: '#466147', background_color: '#fafaf7', display: 'standalone', icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },

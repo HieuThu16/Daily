@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
 import type { BLManga, ChapterImage } from '../../types/manga';
 import { fetchBLChapterImages, getMangaProgress, saveReadingProgress } from './mangaService';
 import { fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
+import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 
 interface Props {
   manga: BLManga;
@@ -26,6 +27,9 @@ export const BLReaderModal: React.FC<Props> = ({
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+
+  const { prefs, update: updatePrefs, readerStyle } = useReaderPrefs();
+  const autoScroll = useAutoScroll(useCallback(() => mainRef.current, []), prefs.speed);
 
   const currentChapter = manga.chapters.find(c => c.number === currentChapterNum) || manga.chapters[0];
   const sortedChapters = [...manga.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
@@ -103,6 +107,8 @@ export const BLReaderModal: React.FC<Props> = ({
       }
 
       const scrollBottom = el.scrollTop + el.clientHeight;
+      // Quá 80% chương thì nạp ngầm chương kế, bấm "chương sau" là hiện ngay.
+      if (el.scrollHeight > 0 && scrollBottom / el.scrollHeight > 0.8) preloadNext();
       const threshold = el.scrollHeight - 250;
       if (scrollBottom >= threshold && currentChapter) {
         recordMangaReading({
@@ -172,6 +178,35 @@ export const BLReaderModal: React.FC<Props> = ({
     return () => { alive = false; };
   }, [manga.slug, manga.source, currentChapter]);
 
+  /** Nạp trước ảnh chương kế; chạy một lần cho mỗi chương nhờ cờ preloadedRef. */
+  const preloadedRef = useRef<Set<number>>(new Set());
+  const preloadNext = useCallback(() => {
+    const num = nextChapter?.number;
+    if (num == null || preloadedRef.current.has(num)) return;
+    preloadedRef.current.add(num);
+
+    const warm = (imgs: ChapterImage[] | undefined) => {
+      for (const img of (imgs ?? []).slice(0, 5)) {
+        const url = typeof img === 'string' ? img : img?.url;
+        if (url) new Image().src = url;
+      }
+    };
+
+    if (nextChapter?.images?.length) {
+      warm(nextChapter.images);
+    } else if (manga.source === 'otruyen') {
+      void fetchNgontinhChapterImages(manga.slug, num).then((imgs) => {
+        setLazyImages((prev) => ({ ...prev, [String(num)]: imgs }));
+        warm(imgs);
+      });
+    } else {
+      void fetchBLChapterImages(manga.slug).then((byChapter) => {
+        setLazyImages((prev) => ({ ...prev, ...byChapter }));
+        warm(byChapter[String(num)]);
+      });
+    }
+  }, [nextChapter, manga.slug, manga.source]);
+
   const images =
     currentChapter?.images?.length
       ? currentChapter.images
@@ -181,6 +216,8 @@ export const BLReaderModal: React.FC<Props> = ({
     <div className="bl-reader-overlay">
       <div ref={topRef} />
       
+      <ReaderControls running={autoScroll.running} onToggle={autoScroll.toggle} prefs={prefs} onChange={updatePrefs} />
+
       {/* Sleek Floating Reader Header */}
       <header className="bl-reader-header-compact">
         <div className="bl-reader-header-left">
@@ -228,7 +265,7 @@ export const BLReaderModal: React.FC<Props> = ({
       </header>
 
       {/* Reader Body */}
-      <main ref={mainRef} className="bl-reader-body">
+      <main ref={mainRef} className="bl-reader-body" style={readerStyle}>
         {images.length > 0 ? (
           <div className="bl-reader-image-stream">
             {images.map((img, idx) => {
