@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronRight, Clock, Flame, Sparkles, X } from 'lucide-react'
+import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronRight, Clock, Flame, Clapperboard, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useBackdropClose } from './shared'
 import { localDate } from '../lib/date'
@@ -10,6 +10,7 @@ import { countdownLabel, upcomingOccasions } from '../lib/occasions'
 import { anniversariesOn, yearsAgoLabel, type Anniversary } from '../lib/anniversary'
 import { useUncompletedTasks } from './useUncompletedTasks'
 import { useMangaUpdates, mangaPath } from './manga/mangaUpdates'
+import { useNewVideos } from './newVideos'
 import { useDeck } from './study/useDeck'
 import { useToast } from './ToastContext'
 import type { Habit, HabitLog, Person, PersonOccasion, SharedEvent, Todo } from '../types'
@@ -86,14 +87,15 @@ function useMemoryAnniversaries(): Array<Anniversary<SharedEvent>> {
   return useMemo(() => anniversariesOn(events, today), [events, today])
 }
 
-type Section = 'tasks' | 'study' | 'manga' | 'people' | 'memories' | 'habits'
+type Section = 'tasks' | 'study' | 'manga' | 'videos' | 'people' | 'memories' | 'habits'
 
-const SECTION_ORDER: Section[] = ['memories', 'study', 'tasks', 'manga', 'people', 'habits']
+const SECTION_ORDER: Section[] = ['memories', 'study', 'tasks', 'videos', 'manga', 'people', 'habits']
 
 const SECTION_PATH: Record<Section, string> = {
   tasks: '/tasks',
   study: '/english',
   manga: '/bl',
+  videos: '/reviews',
   people: '/people',
   memories: '/daily',
   habits: '/habit',
@@ -107,6 +109,7 @@ export function NotificationCenter() {
   const { tasks, overdueCount, completeTask } = useUncompletedTasks()
   const backdrop = useBackdropClose(() => setOpen(false))
   const { updates, dismiss, dismissAll } = useMangaUpdates()
+  const newVideos = useNewVideos()
   const occasions = useUpcomingOccasions()
   const unloggedHabits = useUnloggedHabits()
   const anniversaries = useMemoryAnniversaries()
@@ -128,11 +131,12 @@ export function NotificationCenter() {
     tasks: tasks.length,
     study: dueDecks.reduce((sum, d) => sum + d.due, 0),
     manga: updates.length,
+    videos: newVideos.updates.reduce((sum, u) => sum + u.count, 0),
     people: occasions.length,
     memories: anniversaries.length,
     habits: unloggedHabits.length,
   }
-  const total = counts.tasks + counts.study + counts.manga + counts.people + counts.memories + counts.habits
+  const total = counts.tasks + counts.study + counts.manga + counts.videos + counts.people + counts.memories + counts.habits
 
   // Số cần chú ý hiện luôn trên icon app khi đã cài PWA (Android/desktop; iOS chưa hỗ trợ).
   useEffect(() => {
@@ -184,6 +188,7 @@ export function NotificationCenter() {
     { id: 'study', label: 'Ôn tập', icon: Brain },
     { id: 'tasks', label: 'Việc', icon: Clock },
     { id: 'manga', label: 'Truyện', icon: BookMarked },
+    { id: 'videos', label: 'Video mới', icon: Clapperboard },
     { id: 'people', label: 'Dịp', icon: Cake },
     { id: 'memories', label: 'Kỷ niệm', icon: CalendarHeart },
     { id: 'habits', label: 'Thói quen', icon: Flame },
@@ -344,6 +349,29 @@ export function NotificationCenter() {
                       </li>
                     ))}
                   </ul>
+                ) : section === 'videos' ? (
+                  <ul className="task-bell-list">
+                    {newVideos.updates.map((u) => (
+                      <li
+                        key={u.key}
+                        className="task-bell-item"
+                        onClick={() => {
+                          newVideos.dismissAll()
+                          goTo(u.kind === 'tvshow' ? '/tvshow' : '/reviews')
+                        }}
+                      >
+                        {u.thumbnail && <img className="mn-cover" src={u.thumbnail} alt="" loading="lazy" />}
+                        <div className="task-bell-item-content">
+                          <span className="task-bell-item-title">{u.creatorName}</span>
+                          <div className="task-bell-item-tags">
+                            <span className="task-tag-badge tag-today"><Clapperboard size={11} />+{u.count} video mới</span>
+                            <span className="task-tag-badge tag-category">{u.latestTitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight size={15} className="task-bell-item-arrow" />
+                      </li>
+                    ))}
+                  </ul>
                 ) : section === 'people' ? (
                   <ul className="task-bell-list">
                     {occasions.map((o) => (
@@ -376,7 +404,12 @@ export function NotificationCenter() {
               </div>
 
               <div className="task-bell-footer">
-                {section === 'manga' && counts.manga > 0 ? (
+                {section === 'videos' && counts.videos > 0 ? (
+                  <button type="button" className="task-bell-view-all-btn" onClick={newVideos.dismissAll}>
+                    <span>Đánh dấu đã xem hết</span>
+                    <ChevronRight size={16} />
+                  </button>
+                ) : section === 'manga' && counts.manga > 0 ? (
                   <button type="button" className="task-bell-view-all-btn" onClick={dismissAll}>
                     <span>Đánh dấu đã xem hết</span>
                     <ChevronRight size={16} />
