@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
-import { saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
+import { getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 
 interface Props {
@@ -87,11 +87,20 @@ export const NgontinhReaderModal: React.FC<Props> = ({
         status: 'READING',
       });
 
-      if (topRef.current) {
-        topRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-      if (mainRef.current) {
-        mainRef.current.scrollTop = 0;
+      // Đang đọc dở chương này thì trả về đúng chỗ cũ.
+      const saved = getNgontinhProgress(manga.slug);
+      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
+      if (resumeRatio > 0.01) {
+        let tries = 0;
+        const restore = () => {
+          if (!mainRef.current) return;
+          mainRef.current.scrollTop = mainRef.current.scrollHeight * resumeRatio;
+          if (++tries < 20) setTimeout(restore, 250);
+        };
+        restore();
+      } else {
+        if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (mainRef.current) mainRef.current.scrollTop = 0;
       }
       setImageErrors({});
     }
@@ -102,7 +111,22 @@ export const NgontinhReaderModal: React.FC<Props> = ({
     const el = mainRef.current;
     if (!el) return;
 
+    let ticking = false;
     const handleScroll = () => {
+      if (!ticking && currentChapter) {
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          saveNgontinhProgress({
+            slug: manga.slug,
+            chapterNumber: currentChapter.number ?? currentChapterNum,
+            chapterName: currentChapter.name,
+            readAt: new Date().toISOString(),
+            scrollRatio: el.scrollHeight > 0 ? el.scrollTop / el.scrollHeight : 0,
+          });
+        });
+      }
+
       const scrollBottom = el.scrollTop + el.clientHeight;
       const threshold = el.scrollHeight - 250;
       if (scrollBottom >= threshold && currentChapter) {

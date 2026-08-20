@@ -113,6 +113,27 @@ export function useIncrementalList(total: number, step = 48, resetKey: unknown =
   return { visibleCount, sentinel, showMore, hasMore: visibleCount < total, remaining: Math.max(0, total - visibleCount) }
 }
 
+/**
+ * Nhớ vị trí cuộn của một trang danh sách qua các lần rời đi rồi quay lại.
+ * `ready` bật khi dữ liệu đã dựng xong — cuộn sớm hơn thì trang còn ngắn, trôi về đầu.
+ * Lưu trong sessionStorage nên đóng tab là quên, đúng nghĩa "phiên làm việc".
+ */
+export function useScrollRestore(key: string, ready: boolean) {
+  useEffect(() => {
+    const onScroll = () => sessionStorage.setItem(`daily_scroll_${key}`, String(window.scrollY))
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [key])
+
+  useEffect(() => {
+    if (!ready) return
+    const saved = Number(sessionStorage.getItem(`daily_scroll_${key}`) ?? 0)
+    if (saved <= 0) return
+    const frame = requestAnimationFrame(() => window.scrollTo({ top: saved }))
+    return () => cancelAnimationFrame(frame)
+  }, [ready, key])
+}
+
 export function Empty({ children, icon: Icon = Inbox, colorClass = 'icon-box-blue' }: { children: React.ReactNode; icon?: any; colorClass?: string }) {
   return (
     <div className="empty">

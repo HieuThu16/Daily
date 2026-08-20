@@ -13,6 +13,7 @@ import {
 } from './ngontinhService';
 import { hydrateMangadexManga } from './mangadexService';
 import { NgontinhReaderModal } from './NgontinhReaderModal';
+import { useScrollRestore } from '../shared';
 import './ngontinhManga.css';
 
 type MainTab = 'all' | 'ranking' | 'history' | 'favorites';
@@ -164,7 +165,14 @@ export const NgontinhMangaPage: React.FC = () => {
   const [history, setHistory] = useState<Record<string, any>>({});
   
   // Progressive batching count
-  const [visibleCount, setVisibleCount] = useState<number>(BATCH_SIZE);
+  // Số thẻ đã mở giữ theo phiên: quay lại từ trang chi tiết không phải cuộn lại từ đầu.
+  const [visibleCount, setVisibleCount] = useState<number>(
+    () => Number(sessionStorage.getItem('daily_count_ngontinh-list') ?? BATCH_SIZE) || BATCH_SIZE,
+  );
+
+  useEffect(() => {
+    sessionStorage.setItem('daily_count_ngontinh-list', String(visibleCount));
+  }, [visibleCount]);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Quick Reader modal state
@@ -203,6 +211,8 @@ export const NgontinhMangaPage: React.FC = () => {
   useEffect(() => {
     setVisibleCount(BATCH_SIZE);
   }, [activeTab, rankingType, searchQuery]);
+
+  useScrollRestore('ngontinh-list', mangaList.length > 0);
 
   const handleToggleFav = (e: React.MouseEvent, slug: string) => {
     e.stopPropagation();

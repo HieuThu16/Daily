@@ -64,6 +64,8 @@ export interface ReadingProgress {
   chapterName: string;
   readAt: string;
   totalImages?: number;
+  /** Vị trí đang đọc trong chương, 0..1. Mở lại truyện là nhảy đúng chỗ đó. */
+  scrollRatio?: number;
 }
 
 export interface NgontinhManga {

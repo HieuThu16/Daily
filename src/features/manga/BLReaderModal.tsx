@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
 import type { BLManga, ChapterImage } from '../../types/manga';
-import { fetchBLChapterImages, saveReadingProgress } from './mangaService';
+import { fetchBLChapterImages, getMangaProgress, saveReadingProgress } from './mangaService';
 import { fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 
@@ -57,12 +57,22 @@ export const BLReaderModal: React.FC<Props> = ({
         status: 'READING',
       });
 
-      // Scroll to top on chapter change
-      if (topRef.current) {
-        topRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-      if (mainRef.current) {
-        mainRef.current.scrollTop = 0;
+      // Vào đúng chương đang đọc dở thì trả về chỗ cũ, chương khác mới kéo lên đầu.
+      const saved = getMangaProgress(manga.slug);
+      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
+      const el = mainRef.current;
+      if (resumeRatio > 0.01 && el) {
+        // Ảnh chưa tải xong thì scrollHeight còn ngắn; thử lại vài nhịp cho tới khi đủ dài.
+        let tries = 0;
+        const restore = () => {
+          if (!mainRef.current) return;
+          mainRef.current.scrollTop = mainRef.current.scrollHeight * resumeRatio;
+          if (++tries < 20) setTimeout(restore, 250);
+        };
+        restore();
+      } else {
+        if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (el) el.scrollTop = 0;
       }
       setImageErrors({});
     }
@@ -73,7 +83,25 @@ export const BLReaderModal: React.FC<Props> = ({
     const el = mainRef.current;
     if (!el) return;
 
+    let ticking = false;
     const handleScroll = () => {
+      // Ghi vị trí đọc, gộp theo khung hình cho khỏi ghi localStorage liên tục.
+      if (!ticking && currentChapter) {
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          const ratio = el.scrollHeight > 0 ? el.scrollTop / el.scrollHeight : 0;
+          saveReadingProgress({
+            slug: manga.slug,
+            chapterNumber: currentChapter.number ?? currentChapterNum,
+            chapterName: currentChapter.name,
+            readAt: new Date().toISOString(),
+            totalImages: currentChapter.images?.length || 0,
+            scrollRatio: ratio,
+          });
+        });
+      }
+
       const scrollBottom = el.scrollTop + el.clientHeight;
       const threshold = el.scrollHeight - 250;
       if (scrollBottom >= threshold && currentChapter) {

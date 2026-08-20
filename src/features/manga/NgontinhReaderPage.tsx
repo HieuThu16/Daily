@@ -5,7 +5,7 @@ import {
   ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles, BookOpen 
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
-import { fetchNgontinhList, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
+import { fetchNgontinhList, getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { hydrateMangadexManga } from './mangadexService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
@@ -113,7 +113,20 @@ export const NgontinhReaderPage: React.FC = () => {
         status: 'READING',
       });
 
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      // Đúng chương đang dở thì về lại chỗ cũ; chương khác mới kéo lên đầu.
+      const saved = getNgontinhProgress(manga.slug);
+      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
+      if (resumeRatio > 0.01) {
+        let tries = 0;
+        const restore = () => {
+          const total = document.documentElement.scrollHeight - window.innerHeight;
+          if (total > 0) window.scrollTo({ top: total * resumeRatio, behavior: 'instant' as ScrollBehavior });
+          if (++tries < 20) setTimeout(restore, 250);
+        };
+        restore();
+      } else {
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      }
       setImageErrors({});
     }
   }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
@@ -125,6 +138,15 @@ export const NgontinhReaderPage: React.FC = () => {
       if (total > 0) {
         const progress = (window.scrollY / total) * 100;
         setScrollProgress(progress);
+        if (manga && currentChapter) {
+          saveNgontinhProgress({
+            slug: manga.slug,
+            chapterNumber: currentChapter.number ?? currentChapterNum,
+            chapterName: currentChapter.name,
+            readAt: new Date().toISOString(),
+            scrollRatio: window.scrollY / total,
+          });
+        }
         if (progress >= 85 && manga && currentChapter) {
           recordMangaReading({
             mangaSlug: manga.slug,

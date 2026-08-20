@@ -14,6 +14,7 @@ import {
   getReadingHistory, hasMangaData 
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
+import { useScrollRestore } from '../shared';
 import './blManga.css';
 
 type MainTab = 'all' | 'ranking' | 'history' | 'favorites';
@@ -182,7 +183,14 @@ export const BLMangaPage: React.FC = () => {
   const [history, setHistory] = useState<Record<string, any>>({});
   
   // Progressive batching count
-  const [visibleCount, setVisibleCount] = useState<number>(BATCH_SIZE);
+  // Số thẻ đã mở giữ theo phiên: quay lại từ trang chi tiết không phải cuộn lại từ đầu.
+  const [visibleCount, setVisibleCount] = useState<number>(
+    () => Number(sessionStorage.getItem('daily_count_bl-list') ?? BATCH_SIZE) || BATCH_SIZE,
+  );
+
+  useEffect(() => {
+    sessionStorage.setItem('daily_count_bl-list', String(visibleCount));
+  }, [visibleCount]);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Quick Reader modal state
@@ -216,6 +224,8 @@ export const BLMangaPage: React.FC = () => {
     const timer = setInterval(loadData, 5000);
     return () => clearInterval(timer);
   }, []);
+
+  useScrollRestore('bl-list', mangaList.length > 0);
 
   // Reset pagination on tab/search/source change
   useEffect(() => {
