@@ -4,6 +4,7 @@ import { localDate } from '../../lib/date'
 import { weekDays } from '../../lib/homeProgress'
 import { parseLocalDate } from '../../lib/occasions'
 import { shiftDate, sleepMinutesOn } from '../../lib/sleep'
+import { dedupeMusic } from '../../lib/musicDedupe'
 import type { Entry, Habit, HabitLog, Media, NutritionLog, Person, PersonOccasion, SleepLog, Todo } from '../../types'
 
 /**
@@ -80,9 +81,10 @@ export function useHomeData(dateKey: string = localDate()) {
       setTodos((t.data ?? []) as Todo[])
       setTodosDoneToday((td.data ?? []) as Todo[])
       setEntries((e.data ?? []) as Entry[])
-      setMedia((m.data ?? []) as Media[])
-      setTodayMedia((tm.data ?? []) as Media[])
-      setWeekMedia((wm.data ?? []) as Media[])
+      // Nhạc chia sẻ có thể còn bản trùng trong database cũ; gộp trước khi hiện.
+      setMedia(dedupeMusic((m.data ?? []) as Media[]))
+      setTodayMedia(dedupeMusic((tm.data ?? []) as Media[], 'day'))
+      setWeekMedia(dedupeMusic((wm.data ?? []) as Media[], 'day'))
       setTodayReadingLogs(brl.data ?? [])
       setOccasions((o.data ?? []) as PersonOccasion[])
       setPeople((p.data ?? []) as Person[])

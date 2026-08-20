@@ -10,12 +10,15 @@ import type { Media } from '../types'
  *
  * Bản được giữ: ưu tiên bản có MP3, rồi tới bản của chính mình (không phải bản chia sẻ).
  */
-export function dedupeMusic(items: Media[]): Media[] {
+export function dedupeMusic(items: Media[], scope: 'library' | 'day' = 'library'): Media[] {
   const keep = new Map<string, Media>()
 
   for (const item of items) {
     if (item.type !== 'MUSIC') continue
-    const key = `${item.name.trim().toLowerCase()}|${(item.artist ?? '').trim().toLowerCase()}`
+    // Ở lịch/agenda phải kèm ngày: cùng bài nghe hai ngày khác nhau là hai lần nghe thật,
+    // chỉ bản trùng trong *cùng một ngày* mới là rác do chia sẻ lặp.
+    const dayPart = scope === 'day' ? `|${item.log_date ?? ''}` : ''
+    const key = `${item.name.trim().toLowerCase()}|${(item.artist ?? '').trim().toLowerCase()}${dayPart}`
     const current = keep.get(key)
     if (!current || score(item) > score(current)) keep.set(key, item)
   }

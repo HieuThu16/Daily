@@ -34,3 +34,17 @@ describe('dedupeMusic', () => {
     expect(result.map((s) => s.id).sort()).toEqual(['a', 'b', 'book'])
   })
 })
+
+describe('dedupeMusic theo ngày', () => {
+  it('giữ lại mỗi ngày một bản, không gộp hai ngày khác nhau', () => {
+    const result = dedupeMusic(
+      [
+        song({ id: 'd1a', log_date: '2026-08-19' }),
+        song({ id: 'd1b', log_date: '2026-08-19' }),
+        song({ id: 'd2', log_date: '2026-08-20' }),
+      ],
+      'day',
+    )
+    expect(result.map((s) => s.id).sort()).toEqual(['d1a', 'd2'])
+  })
+})

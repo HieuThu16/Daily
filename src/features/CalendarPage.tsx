@@ -6,6 +6,7 @@ import { formatMoney } from '../lib/money'
 import { nextOccurrence, parseLocalDate } from '../lib/occasions'
 import type { Entry, Media, MoneyTransaction, PersonOccasion, Todo } from '../types'
 import { useQuery } from './shared'
+import { dedupeMusic } from '../lib/musicDedupe'
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
 import { notifyTasksChanged } from './useUncompletedTasks'
@@ -114,7 +115,9 @@ export function CalendarPage() {
   const entries = useQuery<Entry>('daily_entries')
   const occasions = useQuery<PersonOccasion>('person_occasions')
   const transactions = useQuery<MoneyTransaction>('transactions')
-  const media = useQuery<Media>('media_items')
+  const mediaQuery = useQuery<Media>('media_items')
+  // Bản nhạc trùng (do chia sẻ nhiều lần) lọt vào lịch thành nhiều dòng y hệt.
+  const media = { ...mediaQuery, items: useMemo(() => dedupeMusic(mediaQuery.items, 'day'), [mediaQuery.items]) }
 
   const today = localDate()
   const [cursor, setCursor] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) - 1 }))
