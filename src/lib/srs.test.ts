@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, buildQueue, deckStats, initialSrs, intervalLabel, isDue, review, withSrsDefaults } from './srs'
+import { addDays, buildQueue, deckStats, initialSrs, intervalLabel, isDue, review, reviewStreak, withSrsDefaults } from './srs'
 import type { SrsFields } from './srs'
 
 const TODAY = '2026-08-18'
@@ -82,5 +82,19 @@ describe('srs', () => {
     expect(intervalLabel(long, 'AGAIN')).toBe('lát nữa')
     expect(intervalLabel(initialSrs(TODAY), 'GOOD')).toBe('1 ngày')
     expect(intervalLabel(long, 'GOOD')).toMatch(/tuần|tháng/)
+  })
+})
+
+describe('reviewStreak', () => {
+  it('đếm ngược liên tiếp từ hôm nay', () => {
+    expect(reviewStreak(['2026-08-18', '2026-08-17', '2026-08-16'], '2026-08-18')).toBe(3)
+  })
+
+  it('hôm nay chưa ôn thì vẫn giữ chuỗi tính từ hôm qua', () => {
+    expect(reviewStreak(['2026-08-17', '2026-08-16'], '2026-08-18')).toBe(2)
+  })
+
+  it('nghỉ hai ngày là đứt chuỗi', () => {
+    expect(reviewStreak(['2026-08-15', '2026-08-14'], '2026-08-18')).toBe(0)
   })
 })

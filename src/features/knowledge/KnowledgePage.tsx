@@ -8,6 +8,7 @@ import type { KnowledgeItem } from '../../types'
 import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory } from './knowledge'
 import { ReviewSession } from '../study/ReviewSession'
 import { useDeck } from '../study/useDeck'
+import { StudyProgressBar } from '../study/StudyProgressBar'
 
 const EMPTY_FORM = { question: '', answer: '', category: '' }
 
@@ -26,7 +27,7 @@ export function getCategoryAccent(cat: string): string {
 
 /** Tab Kiến thức: Thẻ hình chữ nhật dài dọc (2 cột), lật thẻ xem câu trả lời, lọc theo thể loại và tìm kiếm. */
 export function KnowledgePage() {
-  const { showToast } = useToast()
+  const { showToast, showUndoToast } = useToast()
   const [items, setItems] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
@@ -98,7 +99,7 @@ export function KnowledgePage() {
   /** Xoá thể loại: chuyển hết thẻ của nó về "Chung", không xoá thẻ nào. */
   const removeCategory = async (name: string, count: number) => {
     if (name === DEFAULT_CATEGORY) return
-    if (!window.confirm(`Xoá thể loại "${name}"? ${count} thẻ sẽ chuyển về "${DEFAULT_CATEGORY}".`)) return
+    const movedIds = items.filter((i) => i.category === name).map((i) => i.id)
     const { error } = await supabase!
       .from('knowledge_items')
       .update({ category: DEFAULT_CATEGORY })
@@ -110,6 +111,10 @@ export function KnowledgePage() {
     }
     setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: DEFAULT_CATEGORY } : i)))
     setCategory((prev) => (prev === name ? null : prev))
+    showUndoToast(`Đã chuyển ${count} thẻ của "${name}" về "${DEFAULT_CATEGORY}"`, async () => {
+      await supabase!.from('knowledge_items').update({ category: name }).in('id', movedIds)
+      setItems((prev) => prev.map((i) => (movedIds.includes(i.id) ? { ...i, category: name } : i)))
+    })
   }
 
   const visible = useMemo(() => filterKnowledge(items, category, search), [items, category, search])
@@ -138,10 +143,14 @@ export function KnowledgePage() {
 
   const remove = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
-    if (!window.confirm('Xoá thẻ kiến thức này?')) return
+    const removed = items.find((i) => i.id === id)
+    if (!removed) return
     setItems((prev) => prev.filter((i) => i.id !== id))
     await supabase?.from('knowledge_items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
-    showToast('Đã xoá thẻ kiến thức', 'delete')
+    showUndoToast('Đã xoá thẻ kiến thức', async () => {
+      await supabase?.from('knowledge_items').update({ deleted_at: null }).eq('id', id)
+      setItems((prev) => [removed, ...prev])
+    })
   }
 
   const toggleFlip = (id: string) => setFlipped((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -248,6 +257,8 @@ export function KnowledgePage() {
           </button>
         </div>
       </div>
+
+      <StudyProgressBar deck="knowledge" stats={srsStats} />
 
       {reviewing && (
         <ReviewSession

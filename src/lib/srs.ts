@@ -126,3 +126,18 @@ export function deckStats<T extends SrsFields>(cards: T[], today: string): DeckS
     mature: cards.filter((c) => c.interval_days >= MATURE_DAYS).length,
   }
 }
+
+/**
+ * Chuỗi ngày ôn liên tiếp tính ngược từ hôm nay (hoặc từ hôm qua nếu hôm nay chưa ôn,
+ * để chuỗi không bị coi là đứt ngay lúc mở app buổi sáng).
+ */
+export function reviewStreak(logDates: string[], today: string): number {
+  const days = new Set(logDates)
+  let cursor = days.has(today) ? today : addDays(today, -1)
+  let streak = 0
+  while (days.has(cursor)) {
+    streak += 1
+    cursor = addDays(cursor, -1)
+  }
+  return streak
+}

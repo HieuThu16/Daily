@@ -9,7 +9,8 @@ import { useHeaderAction } from './HeaderAction'
 import { Aside, AsideCard } from './AsideSlot'
 import { HabitHistoryTable } from './habits/HabitHistoryTable'
 import { HabitMonthCalendar } from './habits/HabitMonthCalendar'
-import { isCurrentPeriod, monthDates, monthLabel, shiftAnchor, weekDates, weekLabel, type HistoryRange } from './habits/historyRange'
+import { isCurrentPeriod, monthDates, monthLabel, shiftAnchor, weekDates, weekLabel, yearDates, yearLabel, type HistoryRange } from './habits/historyRange'
+import { HabitYearHeatmap } from './habits/HabitYearHeatmap'
 import { ProgressRing } from './home/ProgressRing'
 
 type Tab = 'today' | 'categories' | 'history'
@@ -60,6 +61,7 @@ export function HabitsPage() {
   /** Ngày đang ghi nhận ở tab "Hôm nay"; đổi được để bù log ngày trước. */
   const [logDate, setLogDate] = useState(localDate())
   const [filter, setFilter] = useState<Filter>('ALL')
+  const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Habit | null>(null)
   const [addModal, setAddModal] = useState(false)
   const [manage, setManage] = useState(false)
@@ -106,10 +108,10 @@ export function HabitsPage() {
 
   /** Ngày hiển thị ở tab Lịch sử: cả tuần (T2→CN) hoặc cả tháng đang chọn. */
   const historyDates = useMemo(
-    () => (historyRange === 'week' ? weekDates(anchor) : monthDates(anchor)),
+    () => (historyRange === 'week' ? weekDates(anchor) : historyRange === 'year' ? yearDates(anchor) : monthDates(anchor)),
     [historyRange, anchor],
   )
-  const rangeTitle = historyRange === 'week' ? weekLabel(anchor) : monthLabel(anchor)
+  const rangeTitle = historyRange === 'week' ? weekLabel(anchor) : historyRange === 'year' ? yearLabel(anchor) : monthLabel(anchor)
   const atCurrentPeriod = isCurrentPeriod(anchor, historyRange)
 
   /** Tải log phủ cả kỳ đang xem lẫn tháng hiện tại (tab "Hôm nay" cần ngày hôm nay). */
@@ -144,10 +146,13 @@ export function HabitsPage() {
     return sortedHabits
   }, [filter, sortedHabits, checkHabits, countHabits, goodHabits, badHabits])
 
+  /** Ô tìm nhanh của tab "Hôm nay": lọc theo tên thói quen, bỏ dấu hoa thường. */
+  const matchesSearch = (h: Habit) => !search.trim() || (h.name ?? '').toLowerCase().includes(search.trim().toLowerCase())
+
   const sections = useMemo(() => {
     if (filter === 'ALL') {
-      const check = { key: 'CHECK', title: 'Thói quen tích cực', color: 'var(--emerald)', habits: checkHabits }
-      const count = { key: 'COUNT', title: 'Theo dõi số liệu', color: 'var(--primary)', habits: countHabits }
+      const check = { key: 'CHECK', title: 'Thói quen tích cực', color: 'var(--emerald)', habits: checkHabits.filter(matchesSearch) }
+      const count = { key: 'COUNT', title: 'Theo dõi số liệu', color: 'var(--primary)', habits: countHabits.filter(matchesSearch) }
       return [check, count].filter((s) => s.habits.length > 0)
     }
     const title =
@@ -159,8 +164,8 @@ export function HabitsPage() {
       filter === 'BAD' ? 'var(--rose)'
       : filter === 'COUNT' ? 'var(--primary)'
       : 'var(--emerald)'
-    return [{ key: filter, title, color, habits: filteredHabits }]
-  }, [filter, checkHabits, countHabits, filteredHabits])
+    return [{ key: filter, title, color, habits: filteredHabits.filter(matchesSearch) }]
+  }, [filter, checkHabits, countHabits, filteredHabits, search])
 
   const groups = useMemo(() => {
     const result: Array<[HabitCategory | null, Habit[]]> = categories.items.map((c) => [c, sortedHabits.filter((h) => h.category_id === c.id)])
@@ -739,6 +744,17 @@ export function HabitsPage() {
                 ))}
               </div>
 
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm thói quen theo tên…"
+                aria-label="Tìm thói quen"
+                style={{ width: '100%', marginBottom: 8, fontSize: '0.84rem' }}
+              />
+              {search.trim() && sections.every((s) => !s.habits.length) && (
+                <p className="muted" style={{ fontSize: '0.8rem' }}>Không có thói quen nào khớp "{search.trim()}".</p>
+              )}
+
               {/* Hướng dẫn kéo thả nhẹ nhàng */}
               <div className="habit-reorder-hint">
                 <GripVertical size={13} />
@@ -827,6 +843,7 @@ export function HabitsPage() {
             <div className="habit-range-toggle">
               <button className={historyRange === 'week' ? 'active' : ''} onClick={() => setHistoryRange('week')}>Tuần</button>
               <button className={historyRange === 'month' ? 'active' : ''} onClick={() => setHistoryRange('month')}>Tháng</button>
+              <button className={historyRange === 'year' ? 'active' : ''} onClick={() => setHistoryRange('year')}>Năm</button>
             </div>
             <div className="habit-range-nav">
               <button className="icon" aria-label="Kỳ trước" onClick={() => setAnchor((a) => shiftAnchor(a, historyRange, -1))}>
@@ -839,6 +856,15 @@ export function HabitsPage() {
             </div>
           </div>
 
+          {historyRange === 'year' ? (
+            <div className="card" style={{ padding: 10, margin: 0 }}>
+              <h3 style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--emerald)' }}>
+                🔥 Heatmap cả năm ({checkHabits.length} thói quen tích)
+              </h3>
+              <HabitYearHeatmap habits={checkHabits} logs={logs} dates={historyDates} />
+            </div>
+          ) : (
+          <>
           {/* TABLE 1: THÓI QUEN TÍCH */}
           <div className="card" style={{ padding: 10, margin: 0 }}>
             <h3 style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -866,6 +892,8 @@ export function HabitsPage() {
               <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>Chưa có thói quen dạng Số liệu.</p>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 

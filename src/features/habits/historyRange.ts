@@ -1,6 +1,6 @@
 import { localDate } from '../../lib/date'
 
-export type HistoryRange = 'week' | 'month'
+export type HistoryRange = 'week' | 'month' | 'year'
 
 /** Nhãn thứ trong tuần, bắt đầu từ thứ Hai. */
 export const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
@@ -35,6 +35,16 @@ export const monthDates = (anchor: Date) => {
   return Array.from({ length: days }, (_, i) => localDate(new Date(year, month, i + 1)))
 }
 
+/** Toàn bộ ngày trong năm chứa `anchor`. */
+export const yearDates = (anchor: Date) => {
+  const year = anchor.getFullYear()
+  const days: string[] = []
+  for (const day = new Date(year, 0, 1); day.getFullYear() === year; day.setDate(day.getDate() + 1)) {
+    days.push(localDate(day))
+  }
+  return days
+}
+
 /** Số tuần theo chuẩn ISO (tuần bắt đầu thứ Hai, tuần 1 chứa ngày 4/1). */
 export const isoWeekNumber = (date: Date) => {
   const thursday = startOfWeek(date)
@@ -57,16 +67,21 @@ export const weekLabel = (anchor: Date) => {
 /** 'Tháng 8/2026' */
 export const monthLabel = (anchor: Date) => `Tháng ${anchor.getMonth() + 1}/${anchor.getFullYear()}`
 
+/** 'Năm 2026' */
+export const yearLabel = (anchor: Date) => `Năm ${anchor.getFullYear()}`
+
 /** Lùi/tiến một tuần hoặc một tháng. */
 export const shiftAnchor = (anchor: Date, range: HistoryRange, delta: number) => {
   const next = atMidnight(anchor)
   if (range === 'week') next.setDate(next.getDate() + delta * 7)
+  else if (range === 'year') next.setFullYear(next.getFullYear() + delta, 0, 1)
   else next.setMonth(next.getMonth() + delta, 1)
   return next
 }
 
 /** Đang xem kỳ hiện tại thì không cho bấm "tiến". */
-export const isCurrentPeriod = (anchor: Date, range: HistoryRange, today = new Date()) =>
-  range === 'week'
-    ? localDate(startOfWeek(anchor)) === localDate(startOfWeek(today))
-    : anchor.getFullYear() === today.getFullYear() && anchor.getMonth() === today.getMonth()
+export const isCurrentPeriod = (anchor: Date, range: HistoryRange, today = new Date()) => {
+  if (range === 'week') return localDate(startOfWeek(anchor)) === localDate(startOfWeek(today))
+  if (range === 'year') return anchor.getFullYear() === today.getFullYear()
+  return anchor.getFullYear() === today.getFullYear() && anchor.getMonth() === today.getMonth()
+}

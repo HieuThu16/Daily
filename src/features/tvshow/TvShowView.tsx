@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { 
   ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
-  Youtube, Clock, Settings, Gauge, Zap, Sliders, Bookmark, Bell, MoreVertical, 
+  Youtube, Clock, Settings, Gauge, Zap, Sliders, MoreVertical, 
   Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
   Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers, BookOpen
 } from 'lucide-react'
@@ -11,6 +11,7 @@ import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal } from '../shared'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
+import { useToast } from '../ToastContext'
 import { 
   CategorizedGroup, 
   detectVideoCategory, 
@@ -501,6 +502,7 @@ export function TvShowView() {
                 value={watchFilter}
                 onChange={(e) => setWatchFilter(e.target.value as typeof watchFilter)}
                 title="Lọc theo trạng thái xem"
+                aria-label="Lọc theo trạng thái xem"
               >
                 <option value="all">Tất cả</option>
                 <option value="unwatched">Chưa xem</option>
@@ -511,6 +513,7 @@ export function TvShowView() {
                 value={sortMode}
                 onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
                 title="Sắp xếp"
+                aria-label="Sắp xếp"
               >
                 <option value="default">Mặc định</option>
                 <option value="newest">Mới nhất</option>
@@ -526,6 +529,7 @@ export function TvShowView() {
                     : setSelectedIds(new Set(filteredVideos.map((v) => v.video_id)))
                 }
                 title="Chọn nhiều video để gán thể loại"
+                aria-label="Chọn nhiều video để gán thể loại"
               >
                 <CheckCircle2 size={14} /> {selectedIds.size ? `Bỏ chọn (${selectedIds.size})` : 'Chọn tất cả'}
               </button>
@@ -575,7 +579,7 @@ export function TvShowView() {
                     <button
                       type="button"
                       className={`tv-video-pick-btn${picked ? ' on' : ''}`}
-                      title="Chọn video"
+                      title="Chọn video" aria-label="Chọn video"
                       onClick={(e) => {
                         e.stopPropagation()
                         toggleSelected(v.video_id)
@@ -615,7 +619,7 @@ export function TvShowView() {
                       <button
                         type="button"
                         className="tv-video-cat-edit-btn"
-                        title="Sửa thể loại"
+                        title="Sửa thể loại" aria-label="Sửa thể loại"
                         onClick={(e) => {
                           e.stopPropagation()
                           setEditingCategoryVideos([{ video_id: v.video_id, title: v.title }])
@@ -747,6 +751,7 @@ export function TvShowView() {
                         style={{ padding: '4px 6px', border: 'none', background: 'transparent', color: 'var(--text-muted)' }}
                         onClick={(e) => void deleteChannel(c, e)}
                         title="Xoá kênh này"
+                        aria-label="Xoá kênh này"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -827,6 +832,7 @@ function ChannelDetailView({
   onBack: () => void
 }) {
   useHideHeader(true)
+  const { showToast } = useToast()
 
   const [videos, setVideos] = useState<VideoRow[]>([])
   const [watched, setWatched] = useState<Set<string>>(new Set())
@@ -886,7 +892,7 @@ function ChannelDetailView({
     const timer = setTimeout(() => {
       sendYouTubeCommand('pauseVideo')
       setSleepTimerMinutes(null)
-      alert('⏱️ Đã hết giờ hẹn! Trình phát video đã tạm dừng.')
+      showToast('⏱️ Đã hết giờ hẹn! Trình phát video đã tạm dừng.')
     }, sleepTimerMinutes * 60 * 1000)
 
     return () => clearTimeout(timer)
@@ -1003,7 +1009,7 @@ function ChannelDetailView({
 
   return (
     <div className="tv-detail">
-      {/* 1. Header Top Bar (Quay lại < | TV Show | Chuông thông báo 3 | Bookmark) */}
+      {/* 1. Header Top Bar (Quay lại < | TV Show) */}
       <div className="tv-detail-bar">
         <button 
           type="button" 
@@ -1019,25 +1025,6 @@ function ChannelDetailView({
           <span className="tv-header-title-text">TV Show</span>
         </div>
 
-        <div className="tv-header-right-actions">
-          <button 
-            type="button" 
-            className="tv-header-icon-btn" 
-            title="Thông báo"
-            onClick={() => alert('Bạn không có thông báo mới.')}
-          >
-            <Bell size={18} />
-            <span className="tv-header-badge">3</span>
-          </button>
-          <button 
-            type="button" 
-            className="tv-header-icon-btn" 
-            title="Lưu kênh"
-            onClick={() => alert('Đã lưu kênh vào danh sách yêu thích!')}
-          >
-            <Bookmark size={18} />
-          </button>
-        </div>
       </div>
 
       {loading ? (
@@ -1070,6 +1057,7 @@ function ChannelDetailView({
                   className="tv-player-poster-btn"
                   onClick={() => setIsPlayerActive(true)}
                   title="Nhấn để phát video"
+                  aria-label="Nhấn để phát video"
                 >
                   <img
                     src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/hqdefault.jpg`}
@@ -1124,11 +1112,12 @@ function ChannelDetailView({
                   setLessonBusy(v.video_id)
                   void makeLesson(v).then((err) => {
                     setLessonBusy(null)
-                    alert(err ? `Chưa rút được kiến thức:
+                    showToast(err ? `Chưa rút được kiến thức:
 ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   })
                 }}
                 title="Dùng AI rút thẻ kiến thức từ video đang phát"
+                aria-label="Dùng AI rút thẻ kiến thức từ video đang phát"
               >
                 <div className="tv-action-icon-box">
                   {currentVideo && lessonBusy === currentVideo.video_id ? (
@@ -1157,6 +1146,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   currentVideo && setLessonView({ videoId: currentVideo.video_id, title: currentVideo.title })
                 }
                 title="Xem các thẻ bài học đã tạo từ video này"
+                aria-label="Xem các thẻ bài học đã tạo từ video này"
               >
                 <div className="tv-action-icon-box">
                   <BookOpen size={18} />
@@ -1172,6 +1162,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 className={`tv-action-card-btn ${showSettingsModal ? 'active' : ''}`}
                 onClick={() => setShowSettingsModal(true)}
                 title="Cài đặt & Tùy chọn"
+                aria-label="Cài đặt & Tùy chọn"
               >
                 <div className="tv-action-icon-box">
                   <Settings size={18} />
@@ -1210,6 +1201,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 className="tv-sort-toggle-btn"
                 onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
                 title="Đổi thứ tự hiển thị"
+                aria-label="Đổi thứ tự hiển thị"
               >
                 <ArrowUpDown size={13} />
                 {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
@@ -1307,6 +1299,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                           setSelectedVideoForMenu(v)
                         }}
                         title="Tùy chọn khác"
+                        aria-label="Tùy chọn khác"
                       >
                         <MoreVertical size={18} />
                       </button>
@@ -1567,7 +1560,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 void makeLesson(v).then((err) => {
                   setLessonBusy(null)
                   setSelectedVideoForMenu(null)
-                  alert(err ? `Chưa rút được kiến thức:
+                  showToast(err ? `Chưa rút được kiến thức:
 ${err}` : 'Đã lưu thẻ kiến thức vào tab Kiến thức.')
                 })
               }}
@@ -1596,7 +1589,7 @@ ${err}` : 'Đã lưu thẻ kiến thức vào tab Kiến thức.')
               onClick={() => {
                 const url = selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`
                 navigator.clipboard.writeText(url)
-                alert('Đã sao chép liên kết video vào bộ nhớ tạm!')
+                showToast('Đã sao chép liên kết video vào bộ nhớ tạm!')
                 setSelectedVideoForMenu(null)
               }}
             >
@@ -1641,6 +1634,7 @@ type DiscoveredTvVideo = {
 
 /** Modal cào kênh YouTube TV Show (với danh sách tích chọn video) */
 function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onSynced: () => void }) {
+  const { showToast } = useToast()
   const [text, setText] = useState('')
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'paused' | 'scanned' | 'saving' | 'saved'>('idle')
   const [discoveredVideos, setDiscoveredVideos] = useState<DiscoveredTvVideo[]>([])
@@ -1841,7 +1835,7 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
         onClose()
       }, 1000)
     } catch (err: any) {
-      alert(`Lỗi khi lưu video: ${err.message || err}`)
+      showToast(`Lỗi khi lưu video: ${err.message || err}`)
       setScanState('scanned')
     }
   }
@@ -1852,6 +1846,7 @@ function AddTvShowChannelModal({ onClose, onSynced }: { onClose: () => void; onS
   return (
     <Modal
       title="📡 Thêm kênh YouTube"
+      aria-label="📡 Thêm kênh YouTube"
       onClose={scanState === 'scanning' ? handlePauseScan : onClose}
     >
       <div className="tv-sync-container">
@@ -2506,6 +2501,7 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
                       onClick={() => setParts((v) => moveItem(v, i, i - 1))}
                       disabled={i === 0}
                       title="Lên"
+                      aria-label="Lên"
                     >
                       <ChevronUp size={13} />
                     </button>
@@ -2515,6 +2511,7 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
                       onClick={() => setParts((v) => moveItem(v, i, i + 1))}
                       disabled={i === parts.length - 1}
                       title="Xuống"
+                      aria-label="Xuống"
                     >
                       <ChevronDown size={13} />
                     </button>
@@ -2523,6 +2520,7 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
                       style={{ padding: '3px 6px', color: 'var(--rose)' }}
                       onClick={() => setParts((v) => v.filter((_, k) => k !== i))}
                       title="Bỏ video này"
+                      aria-label="Bỏ video này"
                     >
                       <Trash2 size={13} />
                     </button>

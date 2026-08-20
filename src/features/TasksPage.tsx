@@ -189,7 +189,7 @@ function TaskCard({
 }
 
 export function TasksPage() {
-  const { showToast } = useToast()
+  const { showToast, showUndoToast } = useToast()
   const todos = useQuery<Todo>('todos')
   const ideas = useQuery<Idea>('ideas')
   const categories = useQuery<TaskCategory>('task_categories', 'name')
@@ -587,7 +587,18 @@ export function TasksPage() {
       ideas.setItems((prev) => prev.filter((i) => i.id !== edit.item.id))
     }
     setEdit(null)
-    showToast('🗑️ Đã xóa mục thành công', 'delete')
+    // Xoá mềm nên hoàn tác chỉ là xoá lại dấu deleted_at.
+    const removed = edit.item
+    const kind = edit.kind
+    showUndoToast('🗑️ Đã xoá mục', async () => {
+      await supabase!.from(table).update({ deleted_at: null }).eq('id', removed.id)
+      if (kind === 'todo') {
+        todos.setItems((prev) => [removed as Todo, ...prev])
+        notifyTasksChanged()
+      } else {
+        ideas.setItems((prev) => [removed as Idea, ...prev])
+      }
+    })
   }
 
   const openView = (item: Todo) => setViewDetail({ kind: 'todo', item })

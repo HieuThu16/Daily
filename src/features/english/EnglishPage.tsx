@@ -25,6 +25,7 @@ import { useToast } from '../ToastContext'
 import type { EnglishItem, EnglishKind } from '../../types'
 import { ReviewSession } from '../study/ReviewSession'
 import { useDeck } from '../study/useDeck'
+import { StudyProgressBar } from '../study/StudyProgressBar'
 
 export const KIND_LABEL: Record<EnglishKind, string> = { WORD: 'Từ', SENTENCE: 'Câu' }
 
@@ -298,6 +299,7 @@ export function EnglishPage() {
 
   return (
     <section className="eng-page">
+      <StudyProgressBar deck="english" stats={srsStats} />
       {/* Compact Minimal Header & Stats */}
       <div className="card eng-compact-header">
         <div className="eng-compact-stats-row">

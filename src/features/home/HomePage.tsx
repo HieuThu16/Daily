@@ -13,6 +13,7 @@ import { ProgressRing } from './ProgressRing'
 import { ReportDay } from './ReportDay'
 import { ReportWeek } from './ReportWeek'
 import { useHomeData } from './useHomeData'
+import { SkeletonList } from '../Skeleton'
 
 type ReportTab = 'day' | 'week'
 type DaySubTab = 'review' | 'stats'
@@ -186,7 +187,18 @@ export function HomePage() {
         </div>
       )}
 
-      {tab === 'day' ? (
+      {data.error && (
+        <div className="card" role="alert" style={{ padding: 12, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderColor: 'var(--rose)' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--rose)', fontWeight: 700 }}>{data.error}</span>
+          <button type="button" className="primary" onClick={data.reload} style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {data.loading ? (
+        <SkeletonList rows={5} height={72} />
+      ) : tab === 'day' ? (
         daySubTab === 'review' ? (
           <DayReviewTimeline
             events={dayEvents}

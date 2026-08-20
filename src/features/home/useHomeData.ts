@@ -31,6 +31,9 @@ export function useHomeData(dateKey: string = localDate()) {
   const [occasions, setOccasions] = useState<PersonOccasion[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [reloadTick, setReloadTick] = useState(0)
+  const reload = () => setReloadTick((n) => n + 1)
 
   const week = useMemo(() => weekDays(parseLocalDate(dateKey)), [dateKey])
 
@@ -41,6 +44,7 @@ export function useHomeData(dateKey: string = localDate()) {
         return
       }
       setLoading(true)
+      setError('')
       const today = dateKey
       const after = new Date(parseLocalDate(dateKey).getTime() + 86_400_000)
       const tomorrow = `${after.getFullYear()}-${String(after.getMonth() + 1).padStart(2, '0')}-${String(after.getDate()).padStart(2, '0')}`
@@ -65,6 +69,10 @@ export function useHomeData(dateKey: string = localDate()) {
         supabase.from('sleep_logs').select('*').gte('log_date', shiftDate(today, -1)).lte('log_date', today).is('deleted_at', null),
         supabase.from('sleep_logs').select('*').gte('log_date', week[0].key).lte('log_date', week[6].key).is('deleted_at', null),
       ])
+
+      // Bảng chưa migrate trả lỗi riêng lẻ và vẫn coi là rỗng; chỉ báo lỗi khi hỏng diện rộng.
+      const failed = [h, tl, t, e, nt].filter((r) => r.error).length
+      if (failed >= 3) setError('Chưa tải được dữ liệu hôm nay. Kiểm tra mạng rồi thử lại nhé.')
 
       setHabits((h.data ?? []) as Habit[])
       setTodayLogs((tl.data ?? []) as HabitLog[])
@@ -91,7 +99,7 @@ export function useHomeData(dateKey: string = localDate()) {
       setWeekSleep((sw.data ?? []) as SleepLog[])
       setLoading(false)
     })()
-  }, [week, dateKey])
+  }, [week, dateKey, reloadTick])
 
   return {
     habits,
@@ -114,5 +122,7 @@ export function useHomeData(dateKey: string = localDate()) {
     people,
     week,
     loading,
+    error,
+    reload,
   }
 }

@@ -6,16 +6,20 @@ type ToastMessage = {
   id: number
   message: string
   type?: ToastType
+  onUndo?: () => void
 }
 
 type ToastContextType = {
   showToast: (message: string, type?: ToastType) => void
   showSaveToast: (isSupabaseSaved: boolean, actionLabel?: string) => void
+  /** Toast kèm nút Hoàn tác, sống 6 giây cho kịp bấm. */
+  showUndoToast: (message: string, onUndo: () => void) => void
 }
 
 const ToastContext = createContext<ToastContextType>({
   showToast: () => {},
   showSaveToast: () => {},
+  showUndoToast: () => {},
 })
 
 export const useToast = () => useContext(ToastContext)
@@ -36,6 +40,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((current) => [...current, { id, message, type }].slice(-3))
     // Cảnh báo lưu hỏng thường kèm câu lỗi dài, cần thời gian đọc lâu hơn
     setTimeout(() => dismiss(id), type === 'local' ? 6000 : 2500)
+  }, [dismiss])
+
+  const showUndoToast = useCallback((message: string, onUndo: () => void) => {
+    const id = (nextToastId += 1)
+    setToasts((current) => [...current, { id, message, type: 'delete' as ToastType, onUndo }].slice(-3))
+    setTimeout(() => dismiss(id), 6000)
   }, [dismiss])
 
   const showSaveToast = useCallback((isSupabaseSaved: boolean, actionLabel: string = 'dữ liệu') => {
@@ -62,7 +72,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <ToastContext.Provider value={{ showToast, showSaveToast }}>
+    <ToastContext.Provider value={{ showToast, showSaveToast, showUndoToast }}>
       {children}
       <div
         // role="status" để trình đọc màn hình đọc lên mà không cướp tiêu điểm.
@@ -84,11 +94,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((toast) => {
           const colors = getToastColors(toast.type)
           return (
-            <button
+            <div
               key={toast.id}
-              type="button"
-              aria-label="Đóng thông báo"
-              onClick={() => dismiss(toast.id)}
+              role={toast.onUndo ? 'group' : undefined}
+              onClick={() => !toast.onUndo && dismiss(toast.id)}
               className={`app-toast toast-${toast.type || 'success'}`}
               style={{
                 background: colors.bg,
@@ -111,7 +120,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               }}
             >
               <span>{toast.message}</span>
-            </button>
+              {toast.onUndo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.onUndo?.()
+                    dismiss(toast.id)
+                  }}
+                  style={{ border: 0, background: 'transparent', color: 'var(--cyan)', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Hoàn tác
+                </button>
+              )}
+            </div>
           )
         })}
       </div>

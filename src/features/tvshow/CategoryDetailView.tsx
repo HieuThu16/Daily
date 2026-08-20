@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, CheckCircle2, ChevronRight, Circle, ExternalLink,
-  Gauge, Clock, Settings, Search, ArrowUpDown, Play, Bookmark, Bell,
+  Gauge, Clock, Settings, Search, ArrowUpDown, Play,
   Copy, Check, MoreVertical, Tv, Film, Sparkles, Loader2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHideHeader } from '../HeaderAction'
+import { useToast } from '../ToastContext'
 import { Modal } from '../shared'
 import { CategorizedGroup, VideoCategoryType } from '../../lib/videoCategorizer'
 import { summarizeVideo, toKnowledgeRows, videosNeedingLesson } from '../../lib/videoLesson'
@@ -38,6 +39,7 @@ export function CategoryDetailView({
   initialVideoId?: string | null
   onBack: () => void
 }) {
+  const { showToast } = useToast()
   useHideHeader(true)
 
   const [videos, setVideos] = useState<CategoryDetailVideoRow[]>(group.videos)
@@ -101,7 +103,7 @@ export function CategoryDetailView({
     const timer = setTimeout(() => {
       sendYouTubeCommand('pauseVideo')
       setSleepTimerMinutes(null)
-      alert('⏱️ Đã hết giờ hẹn! Trình phát video đã tạm dừng.')
+      showToast('⏱️ Đã hết giờ hẹn! Trình phát video đã tạm dừng.')
     }, sleepTimerMinutes * 60 * 1000)
 
     return () => clearTimeout(timer)
@@ -187,7 +189,7 @@ export function CategoryDetailView({
       setBatch({ done: i + 1, total: pending.length, failed })
     }
     setBatch(null)
-    alert(failed ? `Xong: ${pending.length - failed} video có thẻ, ${failed} video lỗi.` : `Đã tạo kiến thức cho ${pending.length} video.`)
+    showToast(failed ? `Xong: ${pending.length - failed} video có thẻ, ${failed} video lỗi.` : `Đã tạo kiến thức cho ${pending.length} video.`)
   }
 
   const toggleWatched = async (videoId: string, e?: React.MouseEvent) => {
@@ -235,16 +237,6 @@ export function CategoryDetailView({
           <span className="tv-header-title-text">{group.category.name}</span>
         </div>
 
-        <div className="tv-header-right-actions">
-          <button
-            type="button"
-            className="tv-header-icon-btn"
-            title="Lưu thể loại"
-            onClick={() => alert(`Đã ghim thể loại ${group.category.name}!`)}
-          >
-            <Bookmark size={18} />
-          </button>
-        </div>
       </div>
 
       {loading ? (
@@ -276,6 +268,7 @@ export function CategoryDetailView({
                   className="tv-player-poster-btn"
                   onClick={() => setIsPlayerActive(true)}
                   title="Nhấn để phát video"
+                  aria-label="Nhấn để phát video"
                 >
                   <img
                     src={currentVideo.thumbnail || `https://i.ytimg.com/vi/${currentVideo.video_id}/hqdefault.jpg`}
@@ -333,11 +326,12 @@ export function CategoryDetailView({
                   setLessonBusy(v.video_id)
                   void makeLesson(v).then((err) => {
                     setLessonBusy(null)
-                    alert(err ? `Chưa rút được kiến thức:
+                    showToast(err ? `Chưa rút được kiến thức:
 ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   })
                 }}
                 title="Dùng AI rút thẻ kiến thức từ video đang phát"
+                aria-label="Dùng AI rút thẻ kiến thức từ video đang phát"
               >
                 <div className="tv-action-icon-box">
                   {currentVideo && lessonBusy === currentVideo.video_id ? (
@@ -362,6 +356,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 className={`tv-action-card-btn ${showSettingsModal ? 'active' : ''}`}
                 onClick={() => setShowSettingsModal(true)}
                 title="Cài đặt & Tùy chọn"
+                aria-label="Cài đặt & Tùy chọn"
               >
                 <div className="tv-action-icon-box">
                   <Settings size={18} />
@@ -425,6 +420,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 className="tv-sort-toggle-btn"
                 onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
                 title="Đổi thứ tự hiển thị"
+                aria-label="Đổi thứ tự hiển thị"
               >
                 <ArrowUpDown size={13} />
                 {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
@@ -436,6 +432,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 disabled={!!batch || pending.length === 0}
                 onClick={() => void makeLessonsBatch()}
                 title="Dùng AI rút thẻ kiến thức cho các video chưa có"
+                aria-label="Dùng AI rút thẻ kiến thức cho các video chưa có"
               >
                 {batch ? <Loader2 size={13} className="tv-spin" /> : <Sparkles size={13} />}
                 {batch ? `Đang tạo ${batch.done}/${batch.total}` : `Tạo kiến thức hàng loạt (${pending.length})`}
@@ -498,6 +495,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                         className="tv-video-menu-btn"
                         onClick={() => setSelectedVideoForMenu(v)}
                         title="Tùy chọn khác"
+                        aria-label="Tùy chọn khác"
                       >
                         <MoreVertical size={16} />
                       </button>
@@ -640,7 +638,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 navigator.clipboard?.writeText(
                   selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`
                 )
-                alert('Đã sao chép link video!')
+                showToast('Đã sao chép link video!')
                 setSelectedVideoForMenu(null)
               }}
             >
