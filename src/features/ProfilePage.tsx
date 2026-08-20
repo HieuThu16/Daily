@@ -166,6 +166,75 @@ export function ChangelogModal({ onClose }: { onClose: () => void }) {
 
 // ─── Settings Page ───────────────────────────────────────────────────────────
 
+// ─── Dung lượng đang dùng ─────────────────────────────────────────────────────
+
+/** Hạn mức gói Supabase Free; đổi hai số này nếu nâng gói. */
+const DB_QUOTA_BYTES = 500 * 1024 * 1024
+const STORAGE_QUOTA_BYTES = 1024 * 1024 * 1024
+
+function fmtBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let i = 0
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024
+    i += 1
+  }
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[i]}`
+}
+
+function UsageRow({ label, used, quota, color }: { label: string; used: number; quota: number; color: string }) {
+  const percent = quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : 0
+  return (
+    <div className="settings-row" style={{ display: 'block', cursor: 'default' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <span className="sr-label">{label}</span>
+        <span style={{ fontSize: '0.78rem', fontWeight: 800, color }}>{percent}%</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 99, background: 'var(--card-border)', margin: '6px 0 4px', overflow: 'hidden' }}>
+        <div style={{ width: `${percent}%`, height: '100%', background: color, borderRadius: 99 }} />
+      </div>
+      <span className="sr-sub">{fmtBytes(used)} / {fmtBytes(quota)} · còn {fmtBytes(Math.max(0, quota - used))}</span>
+    </div>
+  )
+}
+
+/**
+ * Ba thanh dung lượng: cơ sở dữ liệu, kho tệp Supabase và bộ nhớ trình duyệt.
+ * Hai số Supabase lấy từ hàm `storage_usage()` (migration 20260920000000);
+ * chưa chạy migration thì phần đó tự ẩn, vẫn còn số của máy.
+ */
+function StorageUsageRows() {
+  const [remote, setRemote] = useState<{ db: number; storage: number } | null>(null)
+  const [device, setDevice] = useState<{ used: number; quota: number } | null>(null)
+
+  useEffect(() => {
+    void (async () => {
+      const res = await supabase?.rpc('storage_usage')
+      const row = Array.isArray(res?.data) ? res?.data[0] : res?.data
+      if (row) setRemote({ db: Number(row.db_bytes ?? 0), storage: Number(row.storage_bytes ?? 0) })
+
+      const estimate = await navigator.storage?.estimate?.()
+      if (estimate?.usage != null && estimate.quota) setDevice({ used: estimate.usage, quota: estimate.quota })
+    })()
+  }, [])
+
+  if (!remote && !device) return null
+
+  return (
+    <>
+      {remote && (
+        <>
+          <UsageRow label="Cơ sở dữ liệu Supabase" used={remote.db} quota={DB_QUOTA_BYTES} color="var(--primary)" />
+          <UsageRow label="Kho tệp (ảnh, nhạc)" used={remote.storage} quota={STORAGE_QUOTA_BYTES} color="var(--emerald)" />
+        </>
+      )}
+      {device && <UsageRow label="Bộ nhớ trên máy này" used={device.used} quota={device.quota} color="#f59e0b" />}
+    </>
+  )
+}
+
 interface SettingsPageProps {
   user: { email?: string | null; full_name?: string | null; avatar_url?: string | null; created_at?: string | null }
   dark: boolean
@@ -216,14 +285,6 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
       {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
 
       <div className="settings-page-container">
-        {/* Header */}
-        <div className="settings-page-head">
-          <div className="settings-head-icon">
-            <Settings size={20} />
-          </div>
-          <span className="settings-page-title">Cài đặt</span>
-        </div>
-
         <div className="settings-page-body">
             {/* Lịch sử & Thông tin cập nhật */}
             <div className="settings-section">
@@ -245,6 +306,8 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
             <div className="settings-section">
               <div className="settings-section-label">Dữ liệu & thiết bị</div>
               <div className="settings-group">
+
+                <StorageUsageRows />
 
                 {/* Tải dữ liệu về máy */}
                 <button className="settings-row" onClick={handleBackup} disabled={backingUp}>
