@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Bell, BookMarked, Brain, Cake, Check, ChevronRight, Clock, Flame, Sparkles, X } from 'lucide-react'
+import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronRight, Clock, Flame, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useBackdropClose } from './shared'
 import { localDate } from '../lib/date'
 import { isOverdue, timeLabel } from '../lib/deadline'
 import { countdownLabel, upcomingOccasions } from '../lib/occasions'
+import { anniversariesOn, yearsAgoLabel, type Anniversary } from '../lib/anniversary'
 import { useUncompletedTasks } from './useUncompletedTasks'
 import { useMangaUpdates, mangaPath } from './manga/mangaUpdates'
 import { useDeck } from './study/useDeck'
 import { useToast } from './ToastContext'
-import type { Habit, HabitLog, Person, PersonOccasion, Todo } from '../types'
+import type { Habit, HabitLog, Person, PersonOccasion, SharedEvent, Todo } from '../types'
 
 /** Số ngày tới được coi là "dịp sắp đến" và đưa vào hộp thư. */
 const OCCASION_WINDOW_DAYS = 7
@@ -68,15 +69,33 @@ function useUnloggedHabits() {
   }, [habits, logs])
 }
 
-type Section = 'tasks' | 'study' | 'manga' | 'people' | 'habits'
+/** Kỷ niệm chung rơi đúng ngày này của các năm trước. */
+function useMemoryAnniversaries(): Array<Anniversary<SharedEvent>> {
+  const [events, setEvents] = useState<SharedEvent[]>([])
+  const today = localDate()
 
-const SECTION_ORDER: Section[] = ['study', 'tasks', 'manga', 'people', 'habits']
+  useEffect(() => {
+    if (!supabase) return
+    void supabase
+      .from('shared_events')
+      .select('*')
+      .is('deleted_at', null)
+      .then(({ data }) => setEvents((data ?? []) as SharedEvent[]))
+  }, [])
+
+  return useMemo(() => anniversariesOn(events, today), [events, today])
+}
+
+type Section = 'tasks' | 'study' | 'manga' | 'people' | 'memories' | 'habits'
+
+const SECTION_ORDER: Section[] = ['memories', 'study', 'tasks', 'manga', 'people', 'habits']
 
 const SECTION_PATH: Record<Section, string> = {
   tasks: '/tasks',
   study: '/english',
   manga: '/bl',
   people: '/people',
+  memories: '/daily',
   habits: '/habit',
 }
 
@@ -90,6 +109,7 @@ export function NotificationCenter() {
   const { updates, dismiss, dismissAll } = useMangaUpdates()
   const occasions = useUpcomingOccasions()
   const unloggedHabits = useUnloggedHabits()
+  const anniversaries = useMemoryAnniversaries()
   const english = useDeck('english')
   const knowledge = useDeck('knowledge')
   const [open, setOpen] = useState(false)
@@ -109,9 +129,10 @@ export function NotificationCenter() {
     study: dueDecks.reduce((sum, d) => sum + d.due, 0),
     manga: updates.length,
     people: occasions.length,
+    memories: anniversaries.length,
     habits: unloggedHabits.length,
   }
-  const total = counts.tasks + counts.study + counts.manga + counts.people + counts.habits
+  const total = counts.tasks + counts.study + counts.manga + counts.people + counts.memories + counts.habits
 
   useEffect(() => {
     if (!open) return
@@ -153,6 +174,7 @@ export function NotificationCenter() {
     { id: 'tasks', label: 'Việc', icon: Clock },
     { id: 'manga', label: 'Truyện', icon: BookMarked },
     { id: 'people', label: 'Dịp', icon: Cake },
+    { id: 'memories', label: 'Kỷ niệm', icon: CalendarHeart },
     { id: 'habits', label: 'Thói quen', icon: Flame },
   ]
 
@@ -257,6 +279,21 @@ export function NotificationCenter() {
                         </li>
                       )
                     })}
+                  </ul>
+                ) : section === 'memories' ? (
+                  <ul className="task-bell-list">
+                    {anniversaries.map(({ event, yearsAgo }) => (
+                      <li key={event.id} className="task-bell-item" onClick={() => goTo('/daily')}>
+                        <div className="task-bell-item-content">
+                          <span className="task-bell-item-title">{event.title}</span>
+                          <div className="task-bell-item-tags">
+                            <span className="task-tag-badge tag-today"><CalendarHeart size={11} />{yearsAgoLabel(yearsAgo)}</span>
+                            <span className="task-tag-badge tag-category">{event.event_date}</span>
+                          </div>
+                        </div>
+                        <ChevronRight size={15} className="task-bell-item-arrow" />
+                      </li>
+                    ))}
                   </ul>
                 ) : section === 'study' ? (
                   <ul className="task-bell-list">

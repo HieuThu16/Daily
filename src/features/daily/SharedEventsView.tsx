@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
+import { anniversariesOn, yearsAgoLabel } from '../../lib/anniversary'
 import type { SharedEvent, SharedPartner } from '../../types'
 import { DeleteButton, Empty, Modal, useQuery } from '../shared'
 import { useToast } from '../ToastContext'
@@ -121,6 +122,9 @@ export function SharedEventsView({
       return true
     })
   }, [sorted, filterYear, filterMonth])
+
+  /** Kỷ niệm rơi đúng ngày này của những năm trước — nhắc ngay đầu trang. */
+  const anniversaries = useMemo(() => anniversariesOn(sorted, localDate()), [sorted])
 
   const viewingEvent = useMemo(
     () => (viewing ? (events.items.find((e) => e.id === viewing.id) ?? viewing) : null),
@@ -459,6 +463,30 @@ export function SharedEventsView({
           </button>
         )}
       </div>
+
+      {anniversaries.length > 0 && (
+        <div className="card" style={{ padding: 12, marginBottom: 12, borderColor: 'var(--rose)' }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: '0.88rem', color: 'var(--rose)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CalendarHeart size={15} /> Ngày này những năm trước ({anniversaries.length})
+          </h3>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {anniversaries.map(({ event, yearsAgo }) => (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => setViewing(event)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--rose)', flexShrink: 0 }}>{yearsAgoLabel(yearsAgo)}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {event.title}
+                </span>
+                {event.image_url && <img src={event.image_url} alt="" loading="lazy" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover' }} />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {roomCode && (
         <div className="memory-room">
