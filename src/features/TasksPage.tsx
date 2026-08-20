@@ -5,6 +5,7 @@ import { localDate } from '../lib/date'
 import { POSTPONE_PRESETS, formatDeadline, formatMinutes, isOverdue, postponeTo, timeLabel } from '../lib/deadline'
 import { BulbIcon } from './BulbIcon'
 import type { Goal, Idea, TaskCategory, TaskDifficulty, TaskPostpone, TaskPriority, Todo } from '../types'
+import { nextDueDate, parseNaturalTask, REPEAT_LABELS, type RepeatRule } from '../lib/naturalTask'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { useHeaderAction } from './HeaderAction'
@@ -228,6 +229,7 @@ export function TasksPage() {
   const [newTitle, setNewTitle] = useState('')
   const [newDueDate, setNewDueDate] = useState(localDate())
   const [newDueTime, setNewDueTime] = useState('')
+  const [newRepeat, setNewRepeat] = useState<RepeatRule | ''>('')
   const [newDifficulty, setNewDifficulty] = useState<TaskDifficulty>('EASY')
   const [newPriority, setNewPriority] = useState<TaskPriority>('NORMAL')
   const [newCategory, setNewCategory] = useState('')
@@ -252,6 +254,7 @@ export function TasksPage() {
   const [editDueDate, setEditDueDate] = useState(localDate())
   const [editDueTime, setEditDueTime] = useState('')
   const [editDifficulty, setEditDifficulty] = useState<TaskDifficulty>('EASY')
+  const [editRepeat, setEditRepeat] = useState<RepeatRule | ''>('')
   const [editPriority, setEditPriority] = useState<TaskPriority>('NORMAL')
   const [editCategory, setEditCategory] = useState('')
 
@@ -437,12 +440,18 @@ export function TasksPage() {
   // Create Todo
   const saveNewTodo = async () => {
     if (!newTitle.trim()) return
-    const title = newTitle.trim()
+    // "họp nhóm 3h chiều thứ 5" → tên việc gọn, hạn và giờ tự điền.
+    const parsed = parseNaturalTask(newTitle.trim())
+    const title = parsed.title
+    const dueDate = parsed.dueDate ?? newDueDate
+    const dueTime = parsed.dueTime ?? newDueTime
+    const repeat = newRepeat || parsed.repeat || null
     const payload = {
       title,
       completed: false,
-      due_date: newDueDate,
-      due_time: newDueTime || null,
+      due_date: dueDate,
+      due_time: dueTime || null,
+      repeat_rule: repeat,
       difficulty: newDifficulty,
       priority: newPriority,
       category: newCategory || null,
@@ -453,8 +462,9 @@ export function TasksPage() {
       id: Date.now().toString(),
       title,
       completed: false,
-      due_date: newDueDate,
-      due_time: newDueTime || null,
+      due_date: dueDate,
+      due_time: dueTime || null,
+      repeat_rule: repeat,
       difficulty: newDifficulty,
       priority: newPriority,
       category: newCategory || null,
@@ -469,6 +479,7 @@ export function TasksPage() {
     setAddModal(null)
     setNewTitle('')
     setNewDueTime('')
+    setNewRepeat('')
     setNewDifficulty('EASY')
     setNewPriority('NORMAL')
     setNewCategory('')
@@ -521,6 +532,25 @@ export function TasksPage() {
     if (error) {
       reportWriteError(error, `todo:${t.id}`, { ...t, ...updateData })
     } else {
+      // Việc lặp lại: xong lần này thì đẻ ngay lần kế tiếp, giữ nguyên mọi thuộc tính.
+      if (next && t.repeat_rule) {
+        const followUp = {
+          title: t.title,
+          completed: false,
+          due_date: nextDueDate(t.repeat_rule, t.due_date ?? localDate()),
+          due_time: t.due_time ?? null,
+          difficulty: t.difficulty,
+          priority: t.priority,
+          category: t.category ?? null,
+          goal_id: t.goal_id ?? null,
+          repeat_rule: t.repeat_rule,
+        }
+        const { data: created } = await supabase!.from('todos').insert(followUp).select().single()
+        if (created) {
+          todos.setItems((prev) => [created as Todo, ...prev])
+          showToast(`🔁 Đã tạo lần kế tiếp: ${followUp.due_date}`, 'info')
+        }
+      }
       // Báo sau khi ghi xong, nếu không chuông sẽ đọc lại DB dữ liệu cũ và hiện lại việc.
       notifyTasksChanged()
       showToast(next ? '✅ Đã tích hoàn thành công việc!' : '🔄 Đã bỏ tích công việc')
@@ -538,6 +568,7 @@ export function TasksPage() {
       setEditDueDate(itemDate)
       setEditDueTime(timeLabel(e.item.due_time))
       setEditDifficulty(e.item.difficulty ?? 'EASY')
+      setEditRepeat(e.item.repeat_rule ?? '')
       setEditPriority(e.item.priority ?? 'NORMAL')
       setEditCategory(e.item.category ?? '')
       setEditGoalId(e.item.goal_id ?? '')
@@ -552,6 +583,7 @@ export function TasksPage() {
         title: editTitle.trim(),
         due_date: editDueDate,
         due_time: editDueTime || null,
+        repeat_rule: editRepeat || null,
         difficulty: editDifficulty,
         priority: editPriority,
         category: editCategory || null,
@@ -1064,6 +1096,11 @@ export function TasksPage() {
           <label>
             {addModal.kind === 'todo' ? 'Tên công việc' : 'Tiêu đề ý tưởng'}
             <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Nhập tên..." autoFocus />
+            {addModal.kind === 'todo' && (
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Gõ luôn ngày giờ cũng được: "họp nhóm 3h chiều thứ 5", "gọi mẹ mai 19h30", "uống thuốc hằng ngày 8h".
+              </span>
+            )}
           </label>
 
           {addModal.kind === 'todo' && (
@@ -1080,6 +1117,17 @@ export function TasksPage() {
                   )}
                 </div>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Bỏ trống giờ = hạn tính đến cuối ngày.</span>
+              </label>
+
+              <label>
+                Lặp lại
+                <select value={newRepeat} onChange={(e) => setNewRepeat(e.target.value as RepeatRule | '')}>
+                  <option value="">Không lặp</option>
+                  {(Object.keys(REPEAT_LABELS) as RepeatRule[]).map((rule) => (
+                    <option key={rule} value={rule}>{REPEAT_LABELS[rule]}</option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Tích xong sẽ tự tạo lần kế tiếp.</span>
               </label>
 
               <label>
@@ -1344,6 +1392,16 @@ export function TasksPage() {
               <label>
                 Độ khó
                 <ChoiceRow options={DIFFICULTY_OPTIONS} config={DIFFICULTY_CONFIG} value={editDifficulty} onChange={setEditDifficulty} />
+              </label>
+
+              <label>
+                Lặp lại
+                <select value={editRepeat} onChange={(e) => setEditRepeat(e.target.value as RepeatRule | '')}>
+                  <option value="">Không lặp</option>
+                  {(Object.keys(REPEAT_LABELS) as RepeatRule[]).map((rule) => (
+                    <option key={rule} value={rule}>{REPEAT_LABELS[rule]}</option>
+                  ))}
+                </select>
               </label>
 
               <label>

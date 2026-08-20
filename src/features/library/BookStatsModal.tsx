@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Target } from 'lucide-react'
 import { Modal } from '../shared'
 import { localDate } from '../../lib/date'
 import { getPeriodRange, shiftPeriodAnchor, type PeriodMode } from '../nutrition/periodData'
 import { listenMinutesByDate, pagesReadByDate, summarizePages } from '../../lib/bookStats'
-import type { BookReadingLog } from '../../types'
+import type { BookReadingLog, Media } from '../../types'
+import { loadLocal, saveLocal } from '../../lib/persistence'
+
+/** Mục tiêu đọc trong tháng, kiểu Goodreads Reading Challenge nhưng theo tháng. */
+const GOAL_KEY = 'daily_book_goal_month'
 
 const MODES: { id: PeriodMode; label: string }[] = [
   { id: 'day', label: 'Ngày' },
@@ -24,7 +28,8 @@ function duration(minutes: number) {
 }
 
 /** Thống kê số trang đã đọc theo ngày / tuần / tháng, kèm biểu đồ cột. */
-export function BookStatsModal({ logs, onClose }: { logs: BookReadingLog[]; onClose: () => void }) {
+export function BookStatsModal({ logs, books = [], onClose }: { logs: BookReadingLog[]; books?: Media[]; onClose: () => void }) {
+  const [goal, setGoal] = useState(() => loadLocal<number>(GOAL_KEY, 2))
   const [mode, setMode] = useState<PeriodMode>('week')
   const [anchor, setAnchor] = useState(localDate())
 
@@ -34,6 +39,19 @@ export function BookStatsModal({ logs, onClose }: { logs: BookReadingLog[]; onCl
   const summary = useMemo(() => summarizePages(byDate), [byDate])
   const listenTotal = Object.values(listenByDate).reduce((sum, value) => sum + value, 0)
   const max = Math.max(...Object.values(byDate), 1)
+
+  // Sách xong trong tháng của ngày đang xem, đếm theo ngày ghi nhận (log_date).
+  const month = anchor.slice(0, 7)
+  const finishedThisMonth = books.filter(
+    (b) => b.status === 'COMPLETED' && (b.end_date ?? b.log_date ?? '').startsWith(month),
+  ).length
+  const goalPercent = goal > 0 ? Math.min(100, Math.round((finishedThisMonth / goal) * 100)) : 0
+
+  const setGoalValue = (value: number) => {
+    const next = Math.max(0, Math.min(99, value))
+    setGoal(next)
+    saveLocal(GOAL_KEY, next)
+  }
 
   return (
     <Modal title="Thống kê đọc sách" onClose={onClose}>
@@ -54,6 +72,28 @@ export function BookStatsModal({ logs, onClose }: { logs: BookReadingLog[]; onCl
           <button className="icon small" aria-label="Khoảng sau" onClick={() => setAnchor((current) => shiftPeriodAnchor(current, mode, 1))}>
             <ChevronRight size={16} />
           </button>
+        </div>
+
+        <div className="nutrition-period-card">
+          <h3><Target size={15} /> Mục tiêu tháng {Number(month.slice(5))}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <strong style={{ fontSize: '1.1rem', color: goalPercent >= 100 ? 'var(--emerald)' : 'var(--primary)' }}>
+              {finishedThisMonth}/{goal}
+            </strong>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>cuốn đã đọc xong · {goalPercent}%</span>
+            <input
+              type="number"
+              min={0}
+              max={99}
+              value={goal}
+              onChange={(e) => setGoalValue(Number(e.target.value))}
+              aria-label="Đặt mục tiêu số sách trong tháng"
+              style={{ width: 62, marginLeft: 'auto', fontSize: '0.8rem' }}
+            />
+          </div>
+          <div style={{ height: 8, borderRadius: 99, background: 'var(--card-border)', overflow: 'hidden' }}>
+            <div style={{ width: `${goalPercent}%`, height: '100%', background: goalPercent >= 100 ? 'var(--emerald)' : 'var(--primary)' }} />
+          </div>
         </div>
 
         <div className="nutrition-period-summary">

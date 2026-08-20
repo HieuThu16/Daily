@@ -107,6 +107,14 @@ export default defineConfig(({ mode }) => {
         manifest: { name: 'My Space', short_name: 'My Space', theme_color: '#466147', background_color: '#fafaf7', display: 'standalone', icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        ],
+        // Nhấn giữ icon app trên màn hình chính sẽ ra bốn lối tắt này.
+        // PWA không làm được widget thật, shortcuts là thứ gần nhất và miễn phí.
+        shortcuts: [
+          { name: 'Viết nhật ký', short_name: 'Nhật ký', url: '/daily' },
+          { name: 'Tick thói quen', short_name: 'Thói quen', url: '/habit' },
+          { name: 'Thêm việc', short_name: 'Việc', url: '/tasks' },
+          { name: 'Ghi khoản tiền', short_name: 'Tiền', url: '/money' },
         ] },
       }),
     ],

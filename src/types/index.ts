@@ -83,6 +83,8 @@ export type Todo = {
   category?: string | null
   /** Mục tiêu mà việc này phục vụ. Null = việc lẻ. */
   goal_id?: string | null
+  /** Lịch lặp; null = việc một lần. Tích xong sinh lần kế tiếp. */
+  repeat_rule?: 'DAILY' | 'WEEKDAYS' | 'WEEKLY' | 'MONTHLY' | null
 }
 
 /** Mục tiêu: tầng trên của công việc. Tiến độ tính từ số task đã xong. */

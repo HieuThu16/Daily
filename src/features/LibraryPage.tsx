@@ -2198,7 +2198,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       )}
 
 
-      {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} onClose={() => setBookStatsOpen(false)} />}
+      {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} books={items.filter((m) => m.type === 'BOOK')} onClose={() => setBookStatsOpen(false)} />}
 
       {importOpen && (
         <BookImportModal

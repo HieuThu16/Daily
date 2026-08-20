@@ -70,3 +70,33 @@ export async function exportBackup() {
   downloadJson(backup, `my-space-backup-${localDate()}.json`)
   return backup
 }
+
+/**
+ * Nhập lại từ file backup JSON đã xuất.
+ * Dùng upsert theo id nên chạy lại nhiều lần không sinh bản trùng; bản ghi hiện có
+ * bị ghi đè bằng bản trong file. Bảng nào lỗi (thiếu cột, chưa migrate) thì bỏ qua
+ * và trả tên về cho người dùng biết, không chặn các bảng còn lại.
+ */
+export async function importBackup(file: File): Promise<{ restored: string[]; failed: string[]; rows: number }> {
+  if (!supabase) throw new Error('Chưa cấu hình Supabase')
+  const parsed = JSON.parse(await file.text()) as Partial<BackupFile>
+  if (!parsed || typeof parsed !== 'object' || !parsed.tables) throw new Error('File không đúng định dạng sao lưu')
+
+  const restored: string[] = []
+  const failed: string[] = []
+  let rows = 0
+
+  // Chạy tuần tự để tôn trọng khoá ngoại theo đúng thứ tự khai báo bảng.
+  for (const table of BACKUP_TABLES) {
+    const data = parsed.tables[table]
+    if (!Array.isArray(data) || data.length === 0) continue
+    const { error } = await supabase.from(table).upsert(data, { onConflict: 'id' })
+    if (error) failed.push(table)
+    else {
+      restored.push(table)
+      rows += data.length
+    }
+  }
+
+  return { restored, failed, rows }
+}

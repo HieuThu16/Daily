@@ -1,0 +1,82 @@
+# Nghiên cứu app quản lý cá nhân — 20/08/2026
+
+Đối chiếu Daily (My Space) với các app cùng loại, để biết còn thiếu gì.
+Ghi lại nguồn để lần sau không phải tra lại từ đầu.
+
+## Các app đã khảo sát
+
+| Mảng | App tham chiếu |
+|---|---|
+| Việc / kế hoạch | Todoist, TickTick, Any.do, OmniFocus, Motion, Sunsama, Microsoft To Do |
+| Thói quen | Streaks, Habitica, Habitify |
+| Nhật ký | Day One |
+| Tiền | YNAB, Spendee, Goodbudget, Money Lover |
+| Học / thẻ ghi nhớ | Anki (FSRS), Brainscape |
+| Sách | StoryGraph, Goodreads |
+| Tổng hợp / dashboard | Notion, ClickUp, Lifestack |
+
+## Nguồn
+
+- Lifestack — Personal task apps 2026: https://lifestack.ai/blog/personal-task-management-app
+- Temporal — TickTick vs Todoist 2026: https://temporal.day/blog/ticktick-vs-todoist-2026
+- Toolfinder — Todoist vs TickTick: https://toolfinder.com/comparisons/todoist-vs-ticktick
+- Day One — Features: https://dayoneapp.com/features/
+- DeepJournal — Private journaling apps 2026: https://deepjournal.app/blog/best-private-journaling-apps-in-2026
+- Streaks 2026 (App Store): https://apps.apple.com/us/app/streaks-2026-habit-tracker/id6740426283
+- Knack — Best habit trackers 2026: https://www.knack.com/blog/best-habit-tracker-app/
+- NerdWallet — Best budget apps 2026: https://www.nerdwallet.com/finance/learn/best-budget-apps
+- Ramsey — Budgeting apps comparison: https://www.ramseysolutions.com/budgeting/budgeting-apps-comparison
+- SlideToAnki — FSRS guide 2026: https://slidetoanki.com/blog/how-to-use-fsrs-anki-guide
+- SlideToAnki — Best Anki add-ons 2026: https://slidetoanki.com/blog/best-anki-addons-2026
+- Makeheadway — StoryGraph vs Goodreads 2026: https://makeheadway.com/blog/storygraph-vs-goodreads/
+- ClickUp — Life planning tools 2026: https://clickup.com/blog/life-planning-software/
+- Notion — Weekly review dashboards: https://www.notion.com/templates/weekly-review-dashboard
+
+## Khoảng cách đã xác định
+
+### Việc (Tasks)
+- Không có việc lặp lại (Todoist hiểu cả "every 3rd Wednesday", "after 2 days" tính từ lúc hoàn thành).
+- Không có nhập ngôn ngữ tự nhiên ("họp 3h chiều thứ 5" → tự điền hạn) — chuẩn mực của Todoist.
+- Không có Pomodoro gắn với từng việc (TickTick có sẵn, miễn phí).
+- Chưa kéo-thả sắp thứ tự (cần cột `sort_order`).
+
+### Thói quen
+- Chưa có chuỗi hiện tại / chuỗi dài nhất / % đều đặn cho **từng** thói quen (Streaks, Habitify có).
+- Chưa có lịch linh hoạt: "3 lần/tuần", "thứ 2-4-6", "cách 2 ngày".
+- Chưa có nhắc giờ riêng cho từng thói quen.
+
+### Nhật ký (Daily)
+- Chưa có "Ngày này năm trước" (tính năng được nhắc nhiều nhất của Day One).
+- Chưa có tìm kiếm trong nhật ký, chưa có tag. (Đánh dấu yêu thích thì **đã có**.)
+- Không tự gắn metadata: thời tiết, vị trí, số bước (Day One đính tự động).
+- Không có khoá app (PIN/vân tay), không mã hoá.
+
+### Tiền
+- Không có ngân sách / hạn mức theo danh mục (lõi của YNAB, Spendee, Goodbudget).
+- Không có giao dịch định kỳ, không nhắc hạn hoá đơn.
+- Danh mục cứng 8 loại, không sửa được; không đa tiền tệ; không xuất CSV.
+- Không có ví chung/chia sẻ (Spendee có; app đã có tính năng cặp đôi nên rất hợp).
+
+### Học (Kiến thức / English)
+- Đang dùng SM-2 rút gọn; Anki đã sang FSRS — giảm 20-30% số thẻ ôn mỗi ngày với độ nhớ tương đương.
+- Không có cloze (điền khuyết), không có che ảnh (image occlusion).
+- Chưa có biểu đồ dự báo lượng ôn sắp tới và tỉ lệ nhớ.
+
+### Sách / thư viện
+- Thiếu trang thống kê đọc (StoryGraph: số trang/ngày, tốc độ, phân bố thể loại, tâm trạng).
+- Chưa có mục tiêu đọc theo tháng/năm (Goodreads Reading Challenge).
+
+### Toàn app
+- Chưa nhập lại được backup (chỉ xuất JSON) — lỗ hổng dữ liệu nguy hiểm nhất.
+- Chưa có widget / shortcut. Widget thật (iOS/Android) cần app native; PWA chỉ khai báo được
+  `shortcuts` trong manifest (menu nhấn giữ icon) — miễn phí, chi phí thấp.
+- Không đồng bộ lịch (ICS / Google Calendar).
+- Xem lại tuần chỉ có số liệu, chưa có bộ câu hỏi gợi ý như Notion weekly review.
+
+## Thứ tự ưu tiên đã chốt
+
+1. Việc lặp lại + nhập ngôn ngữ tự nhiên (Tasks)
+2. Nhập lại backup
+3. Ngân sách theo danh mục + giao dịch định kỳ (Tiền)
+4. "Ngày này năm trước" + tìm kiếm nhật ký
+5. Khoá app bằng PIN

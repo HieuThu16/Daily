@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Frown, Heart, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2 } from 'lucide-react'
+import { BarChart3, Clock, Frown, Heart, History, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import type { DailyType, Entry, Person } from '../types'
@@ -67,6 +67,7 @@ export function DailyPage() {
   const [selectedType, setSelectedType] = useState<DailyType>('FEELING')
   const [content, setContent] = useState('')
   const [filterType, setFilterType] = useState<'ALL' | 'FAV' | DailyType>('ALL')
+  const [search, setSearch] = useState('')
   const [date, setDate] = useState(localDate())
   const [timeOverride, setTimeOverride] = useState('') // rỗng = dùng giờ hiện tại
   const [busy, setBusy] = useState(false)
@@ -183,8 +184,22 @@ export function DailyPage() {
 
   // ── derived ──────────────────────────────────────────────────────────────
 
-  const todayEntries = items.filter((i) => i.entry_date === date
-    && (filterType === 'ALL' || (filterType === 'FAV' ? i.is_favorite : i.entry_type === filterType)))
+  const keyword = search.trim().toLowerCase()
+
+  /** Không tìm kiếm: chỉ ngày đang chọn. Có tìm kiếm: quét toàn bộ nhật ký, mới nhất trước. */
+  const todayEntries = items
+    .filter((i) => (keyword ? i.content.toLowerCase().includes(keyword) : i.entry_date === date))
+    .filter((i) => filterType === 'ALL' || (filterType === 'FAV' ? i.is_favorite : i.entry_type === filterType))
+    .sort((a, b) => (keyword ? b.entry_date.localeCompare(a.entry_date) : 0))
+
+  /** Ngày này năm trước: cùng ngày-tháng, năm cũ hơn — để đọc lại ký ức. */
+  const onThisDay = useMemo(() => {
+    const suffix = date.slice(4) // '-MM-DD'
+    const year = date.slice(0, 4)
+    return items
+      .filter((i) => i.entry_date.endsWith(suffix) && i.entry_date.slice(0, 4) < year)
+      .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
+  }, [items, date])
 
   const statsEntries = useMemo(() => {
     const today = new Date()
@@ -323,11 +338,36 @@ export function DailyPage() {
             )}
           </div>
 
+          {/* Ngày này năm trước — chỉ hiện khi thật sự có ký ức cùng ngày-tháng */}
+          {!keyword && onThisDay.length > 0 && (
+            <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+              <h2 style={{ margin: '0 0 8px', fontSize: '0.88rem', color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <History size={15} /> Ngày này năm trước ({onThisDay.length})
+              </h2>
+              <div style={{ display: 'grid', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+                {onThisDay.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => openEntry(entry)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 7, padding: '5px 8px', cursor: 'pointer' }}
+                  >
+                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--amber)', flexShrink: 0 }}>{entry.entry_date.slice(0, 4)}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.content}
+                    </span>
+                    {entry.image_url && <img src={entry.image_url} alt="" loading="lazy" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover' }} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Today's entries list */}
           <div className="card" style={{ padding: 12, margin: 0 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <h2 style={{ margin: 0, fontSize: '0.88rem', color: 'var(--primary)' }}>
-                <NotebookPen size={15} /> Nhật ký hôm nay ({todayEntries.length})
+                <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký hôm nay (${todayEntries.length})`}
               </h2>
               <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)' }}>
                 <button
@@ -355,6 +395,14 @@ export function DailyPage() {
               </div>
             </div>
 
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm trong toàn bộ nhật ký…"
+              aria-label="Tìm trong nhật ký"
+              style={{ width: '100%', marginBottom: 8, fontSize: '0.82rem' }}
+            />
+
             {loading ? (
               <SkeletonList rows={3} height={72} />
             ) : todayEntries.length ? (
@@ -373,6 +421,9 @@ export function DailyPage() {
                       <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 18, height: 18, flexShrink: 0 }}>
                         <Icon size={10} />
                       </div>
+                      {keyword && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', flexShrink: 0 }}>{entry.entry_date.slice(8)}/{entry.entry_date.slice(5, 7)}</span>
+                      )}
                       {entry.entry_time && (
                         <span style={{ fontSize: '0.7rem', fontWeight: 800, color: cat.color, flexShrink: 0 }}>{entry.entry_time}</span>
                       )}
@@ -404,7 +455,9 @@ export function DailyPage() {
               </div>
             ) : (
               <Empty icon={NotebookPen} colorClass="icon-box-emerald">
-                {filterType === 'ALL' ? 'Chưa có nhật ký nào cho hôm nay.' : `Chưa có mục nào cho "${categories.find((c) => c.type === filterType)?.title}".`}
+                {keyword
+                  ? `Không có bài nào chứa "${search.trim()}".`
+                  : filterType === 'ALL' ? 'Chưa có nhật ký nào cho hôm nay.' : `Chưa có mục nào cho "${categories.find((c) => c.type === filterType)?.title}".`}
               </Empty>
             )}
           </div>

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Bell, BellOff, CheckCircle2, ChevronRight, Clock, Download,
-  HardDriveDownload, History, LogOut, Settings, Sparkles,
+  HardDriveDownload, History, LogOut, Settings, Sparkles, Upload,
   SunMoon, X, Zap,
 } from 'lucide-react'
 import type { ChangelogEntry } from '../data/changelog'
 import { CHANGELOG, getUnseenLatest, markLatestSeen } from '../data/changelog'
-import { exportBackup } from '../lib/backup'
+import { exportBackup, importBackup } from '../lib/backup'
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push'
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
@@ -247,6 +247,8 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
   const { showToast } = useToast()
   const [showChangelog, setShowChangelog] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const restoreInput = useRef<HTMLInputElement>(null)
   const [pushOn, setPushOn] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
 
@@ -274,6 +276,20 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
       showToast('❌ Chưa sao lưu được — kiểm tra kết nối Supabase.', 'delete')
     }
     setBackingUp(false)
+  }
+
+  /** Nhập lại từ file .json đã xuất; hỏi lại một lần vì thao tác này ghi đè dữ liệu hiện có. */
+  const handleRestore = async (file: File) => {
+    if (!confirm('Nhập lại dữ liệu từ file này? Bản ghi trùng id sẽ bị ghi đè.')) return
+    setRestoring(true)
+    try {
+      const result = await importBackup(file)
+      if (result.failed.length) showToast(`⚠️ Đã nhập ${result.rows} dòng. Bỏ qua bảng lỗi: ${result.failed.join(', ')}`, 'info')
+      else showToast(`☁️ Đã nhập lại ${result.rows} dòng từ ${result.restored.length} bảng. Tải lại trang để thấy dữ liệu.`)
+    } catch (error) {
+      showToast(`❌ ${error instanceof Error ? error.message : 'Chưa nhập được file sao lưu.'}`, 'delete')
+    }
+    setRestoring(false)
   }
 
   const displayName = user.full_name || user.email?.split('@')[0] || 'Người dùng'
@@ -315,6 +331,27 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
                   <span className="sr-label">{backingUp ? 'Đang tải…' : 'Tải dữ liệu về máy'}</span>
                   <ChevronRight size={15} />
                 </button>
+
+                {/* Nhập lại từ file sao lưu */}
+                <button className="settings-row" onClick={() => restoreInput.current?.click()} disabled={restoring}>
+                  <div className="sr-icon sr-icon--emerald"><Upload size={16} /></div>
+                  <div className="sr-label-group">
+                    <span className="sr-label">{restoring ? 'Đang nhập lại…' : 'Nhập lại từ file sao lưu'}</span>
+                    <span className="sr-sub">Chọn file my-space-backup-*.json đã tải về</span>
+                  </div>
+                  <ChevronRight size={15} />
+                </button>
+                <input
+                  ref={restoreInput}
+                  type="file"
+                  accept="application/json,.json"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (file) void handleRestore(file)
+                  }}
+                />
 
                 {/* Cài app PWA — luôn hiện; trình duyệt không hỗ trợ prompt thì chỉ dẫn thủ công */}
                 <button
