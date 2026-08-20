@@ -17,6 +17,7 @@ import { RowMenu } from './library/RowMenu'
 import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId } from '../lib/youtubeMeta'
 import { normalizeStorageUrl } from '../lib/storageUrl'
 import { shareMusicToAll } from '../lib/musicShare'
+import { dedupeMusic } from '../lib/musicDedupe'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
 import { ReviewSeriesView } from './library/ReviewSeriesView'
@@ -161,7 +162,9 @@ function getMusicGenreStyle(genreName?: string | null) {
 export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultType?: 'ALL' | Kind; hideCategoryBar?: boolean }) {
   const shouldHideBar = hideCategoryBar !== undefined ? hideCategoryBar : (defaultType !== 'ALL')
   const { showToast, showSaveToast } = useToast()
-  const { items, setItems, loading } = useQuery<Media>('media_items')
+  const { items: rawItems, setItems, loading } = useQuery<Media>('media_items')
+  // Dữ liệu cũ trong cache có thể còn bản nhạc trùng; database đã khoá từ migration 20260920000002.
+  const items = useMemo(() => dedupeMusic(rawItems), [rawItems])
 
   // Dedicated Management Queries for all metadata categories
   const bookAuthorsQuery = useQuery<BookAuthor>('book_authors', 'name')
@@ -324,8 +327,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setEndDateVal('')
     setLogDate(localDate())
     setLogTime(getCurrentTimeString())
-    // Mặc định tiến độ là "Sẽ nghe" / "Chưa nghe" (PLANNED) cho nhạc và các mục thư viện.
-    setStatusVal('PLANNED')
+    // Nhạc thì thêm vào là đã nghe rồi; sách/phim vẫn mặc định "sẽ đọc/xem".
+    setStatusVal(kind === 'MUSIC' ? 'COMPLETED' : 'PLANNED')
     setBookFormat('READ')
     setCoverPreview(false)
   }
@@ -554,6 +557,11 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             })
             .catch((err) => console.warn('[Auto share music error]', err))
         }
+      } else if (error?.code === '23505') {
+        // Unique index nhạc: thư viện đã có đúng bài này rồi.
+        showToast(`"${name.trim()}" đã có trong thư viện rồi.`, 'info')
+        setActiveModal(null)
+        return
       } else {
         console.error('[saveItem insert error — trying safe fallback]', error?.message, error?.code, error?.details)
         // Fallback: insert chỉ các cột cơ bản đã tồn tại từ đầu (bỏ cột mới như music_genre, book_format)
