@@ -22,6 +22,7 @@ import { supabase } from '../../lib/supabase'
 import { speakEnglish } from '../../lib/tts'
 import { useHeaderAction } from '../HeaderAction'
 import { useToast } from '../ToastContext'
+import { useBackdropClose } from '../shared'
 import type { EnglishItem, EnglishKind } from '../../types'
 import { ReviewSession } from '../study/ReviewSession'
 import { useDeck } from '../study/useDeck'
@@ -81,6 +82,7 @@ type LearnedFilter = 'ALL' | 'LEARNING' | 'LEARNED'
 
 export function EnglishPage() {
   const { showToast } = useToast()
+  const formBackdrop = useBackdropClose(() => setIsFormOpen(false))
   const [items, setItems] = useState<EnglishItem[]>([])
   const [loading, setLoading] = useState(true)
   const [kindFilter, setKindFilter] = useState<EnglishKind | 'ALL'>('ALL')
@@ -404,8 +406,8 @@ export function EnglishPage() {
 
       {/* Form Modal (Thêm / Sửa gọn gàng) */}
       {isFormOpen && (
-        <div className="eng-modal-backdrop" onClick={() => setIsFormOpen(false)}>
-          <div className="card eng-compact-form-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="eng-modal-backdrop" {...formBackdrop}>
+          <div className="card eng-compact-form-modal">
             <div className="eng-form-header">
               <h3 className="eng-form-title">
                 {isEditing ? 'Chỉnh sửa thẻ' : 'Thêm thẻ mới'}

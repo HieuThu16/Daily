@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, Bell, BookMarked, Brain, Cake, Check, ChevronRight, Clock, Flame, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useBackdropClose } from './shared'
 import { localDate } from '../lib/date'
 import { isOverdue, timeLabel } from '../lib/deadline'
 import { countdownLabel, upcomingOccasions } from '../lib/occasions'
@@ -85,6 +86,7 @@ const SECTION_PATH: Record<Section, string> = {
  */
 export function NotificationCenter() {
   const { tasks, overdueCount, completeTask } = useUncompletedTasks()
+  const backdrop = useBackdropClose(() => setOpen(false))
   const { updates, dismiss, dismissAll } = useMangaUpdates()
   const occasions = useUpcomingOccasions()
   const unloggedHabits = useUnloggedHabits()
@@ -171,7 +173,7 @@ export function NotificationCenter() {
 
       {open &&
         createPortal(
-          <div className="task-bell-portal-backdrop" role="presentation" onClick={() => setOpen(false)}>
+          <div className="task-bell-portal-backdrop" role="presentation" {...backdrop}>
             <div
               className="task-bell-dropdown-modal"
               role="dialog"

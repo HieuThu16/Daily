@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { CornerDownLeft, Search, X } from 'lucide-react'
 import { filterStatic, searchEverything, type SearchHit } from '../lib/globalSearch'
+import { useBackdropClose } from './shared'
 
 export type PaletteTab = { id: string; label: string; group: string }
 
@@ -18,6 +19,7 @@ export function openCommandPalette() {
 /** Ctrl/Cmd+K: gõ để nhảy tab hoặc tìm task / người / thẻ học / sách xuyên nghiệp vụ. */
 export function CommandPalette({ tabs }: { tabs: PaletteTab[] }) {
   const [open, setOpen] = useState(false)
+  const backdrop = useBackdropClose(() => setOpen(false))
   const [query, setQuery] = useState('')
   const [remote, setRemote] = useState<SearchHit[]>([])
   const [searching, setSearching] = useState(false)
@@ -111,7 +113,7 @@ export function CommandPalette({ tabs }: { tabs: PaletteTab[] }) {
   let lastGroup = ''
 
   return createPortal(
-    <div className="cmdk-backdrop" role="presentation" onClick={() => setOpen(false)}>
+    <div className="cmdk-backdrop" role="presentation" {...backdrop}>
       <div className="cmdk-panel" role="dialog" aria-modal="true" aria-label="Tìm kiếm toàn app" onClick={(e) => e.stopPropagation()}>
         <div className="cmdk-input-row">
           <Search size={18} />

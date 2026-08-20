@@ -117,12 +117,30 @@ export function InlineForm({ placeholder, onSave }: { placeholder: string; onSav
   )
 }
 
+/**
+ * Đóng hộp thoại khi bấm ra nền — nhưng chỉ khi cú bấm *bắt đầu và kết thúc* trên nền.
+ * Bôi đen chữ trong hộp rồi nhả chuột ra ngoài sẽ sinh sự kiện click trên nền,
+ * nếu chỉ nghe click hay mousedown thì form tắt ngang giữa lúc đang chọn chữ.
+ */
+export function useBackdropClose(onClose: () => void) {
+  const startedOnBackdrop = useRef(false)
+  return {
+    onMouseDown: (e: React.MouseEvent) => {
+      startedOnBackdrop.current = e.target === e.currentTarget
+    },
+    onClick: (e: React.MouseEvent) => {
+      if (startedOnBackdrop.current && e.target === e.currentTarget) onClose()
+    },
+  }
+}
+
 export function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   const panel = useRef<HTMLElement>(null)
   // `onClose` thường là arrow inline nên đổi mỗi lần render. Giữ qua ref để effect
   // chỉ chạy đúng một lần lúc mở — chạy lại sẽ cướp tiêu điểm giữa lúc người dùng gõ.
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  const backdrop = useBackdropClose(onClose)
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
@@ -149,8 +167,8 @@ export function Modal({ title, children, onClose }: { title: string; children: R
   }, [])
 
   return createPortal(
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={panel} className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" role="presentation" {...backdrop}>
+      <section ref={panel} className="modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button className="icon" aria-label="Đóng" onClick={onClose}>
