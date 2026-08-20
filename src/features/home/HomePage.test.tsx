@@ -20,8 +20,14 @@ const rows: Record<string, unknown[]> = {
   ],
   habit_logs: [],
   todos: [{ id: 't1', title: 'Học tiếng Anh', completed: false, created_at: '2026-08-12T07:00:00', priority: 'URGENT' }],
-  daily_entries: [{ id: 'e1', content: 'Gặp chú trên đường đi', entry_date: '2026-08-12', created_at: '2026-08-12T08:30:00', entry_type: 'FEELING' }],
-  media_items: [{ id: 'm1', name: 'Người đua diều', type: 'BOOK', status: 'IN_PROGRESS', is_favorite: false, description: null }],
+  daily_entries: [
+    { id: 'e1', content: 'Gặp chú trên đường đi', entry_date: '2026-08-12', created_at: '2026-08-12T08:30:00', entry_type: 'FEELING' },
+    { id: 'e2', content: 'Câu nói đáng nhớ hôm nay', entry_date: '2026-08-12', created_at: '2026-08-12T09:00:00', entry_type: 'FEELING', is_favorite: true },
+  ],
+  media_items: [
+    { id: 'm1', name: 'Người đua diều', type: 'BOOK', status: 'IN_PROGRESS', is_favorite: false, description: null },
+    { id: 'm2', name: 'Rằng Em Mãi Ở Bên', type: 'MUSIC', status: 'COMPLETED', is_favorite: true, artist: 'BÍCH PHƯƠNG', description: null },
+  ],
   // log_date bám ngày chạy test vì giấc ngủ nay được chia theo ngày thật, không còn cộng cả phiên.
   sleep_logs: [{ id: 's1', sleep_start: '23:00', sleep_end: '06:30', duration_minutes: 450, log_date: todayKey }],
   nutrition_logs: [
@@ -57,14 +63,20 @@ const renderHome = () =>
     </MemoryRouter>,
   )
 
+/** Home mở thẳng vào Review ngày; các phép kiểm số liệu phải sang tab Thống kê trước. */
+const renderStatsTab = async () => {
+  renderHome()
+  await userEvent.click(await screen.findByRole('tab', { name: /Thống kê ngày/i }))
+}
+
 describe('HomePage', () => {
   it('hiện phần trăm hoàn thành hôm nay', async () => {
-    renderHome()
+    await renderStatsTab()
     expect(await screen.findByText(/% hôm nay$/)).toBeInTheDocument()
   })
 
   it('hiện bốn ô số liệu của ngày', async () => {
-    renderHome()
+    await renderStatsTab()
     expect(await screen.findByText('Thói quen')).toBeInTheDocument()
     expect(screen.getByText('Việc cần làm')).toBeInTheDocument()
     expect(screen.getByText('Nhật ký')).toBeInTheDocument()
@@ -72,19 +84,19 @@ describe('HomePage', () => {
   })
 
   it('cộng tiền ăn hôm nay và tách theo bữa', async () => {
-    renderHome()
+    await renderStatsTab()
     expect(await screen.findByText('85k')).toBeInTheDocument()
     expect(screen.getByText('35k')).toBeInTheDocument()
     expect(screen.getByText('50k')).toBeInTheDocument()
   })
 
   it('hiện dịp sắp tới lấy từ tab Người', async () => {
-    renderHome()
+    await renderStatsTab()
     expect(await screen.findByText(/Sinh nhật Linh/)).toBeInTheDocument()
   })
 
   it('hiện tổng giờ ngủ trong ngày', async () => {
-    renderHome()
+    await renderStatsTab()
     expect(await screen.findByText('Giấc ngủ')).toBeInTheDocument()
     // Giấc 23:00→06:30 qua đêm: ngày 12 chỉ nhận 1h, 6h30 còn lại thuộc ngày 13.
     expect(screen.getByText('1h')).toBeInTheDocument()
@@ -92,7 +104,7 @@ describe('HomePage', () => {
   })
 
   it('đổi sang ngày khác và quay lại hôm nay được', async () => {
-    renderHome()
+    await renderStatsTab()
     expect(await screen.findByText('Hôm nay')).toBeInTheDocument()
     await userEvent.click(screen.getByLabelText('Ngày trước'))
     expect(screen.queryByText(/% hôm nay/)).not.toBeInTheDocument()
@@ -110,17 +122,22 @@ describe('HomePage', () => {
     expect(screen.getByText('Đều nhất')).toBeInTheDocument()
   })
 
-  it('chuyển đổi qua lại giữa Review ngày và Thống kê ngày', async () => {
+  it('làm nổi bật nhật ký và bài nhạc đã yêu thích trong ngày', async () => {
     renderHome()
-    expect(await screen.findByRole('tab', { name: /Review ngày/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Thống kê ngày/i })).toBeInTheDocument()
+    expect(await screen.findByText(/Yêu thích trong ngày/)).toBeInTheDocument()
+    expect(screen.getByText('Câu nói đáng nhớ hôm nay')).toBeInTheDocument()
+    expect(screen.getByText('Rằng Em Mãi Ở Bên')).toBeInTheDocument()
+  })
 
-    // Bấm sang tab Review ngày
-    await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
+  it('mở Home là vào thẳng Review ngày, bấm qua lại được', async () => {
+    renderHome()
+    // Mặc định đã là Review ngày.
     expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()
 
-    // Bấm lại Thống kê ngày
     await userEvent.click(screen.getByRole('tab', { name: /Thống kê ngày/i }))
     expect(await screen.findByText('Thói quen')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
+    expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()
   })
 })

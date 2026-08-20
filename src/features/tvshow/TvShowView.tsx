@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { 
   ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { Modal, useIncrementalList } from '../shared'
+import { publishedGroupLabel } from '../../lib/videoGrouping'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { useToast } from '../ToastContext'
 import { 
@@ -23,6 +24,9 @@ import { CategoryEditModal } from './CategoryEditModal'
 import { CategoryDetailView } from './CategoryDetailView'
 import { summarizeVideo, toKnowledgeRows } from '../../lib/videoLesson'
 import './tvShow.css'
+
+/** Mỗi lượt kéo bấy nhiêu video; trang đầu về là hiện được ngay. */
+const VIDEO_PAGE_SIZE = 300
 
 const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
 
@@ -137,6 +141,7 @@ export function moveItem<T>(items: T[], from: number, to: number): T[] {
  */
 export function TvShowView() {
   const [channels, setChannels] = useState<ChannelItem[]>([])
+  const [videoCounts, setVideoCounts] = useState(0)
   const [allVideos, setAllVideos] = useState<VideoRow[]>([])
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -155,12 +160,30 @@ export function TvShowView() {
   const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [addVideoOpen, setAddVideoOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  /** Vị trí cuộn của danh sách trước khi mở video/kênh, để quay lại đúng chỗ cũ. */
+  const savedScroll = useRef(0)
 
   // 2 nút thêm nằm trên header chung, cạnh nút thông báo
   useHeaderActions([
     { label: 'Thêm kênh', icon: 'radio', onClick: () => setAddChannelOpen(true) },
     { label: 'Thêm video lẻ', icon: 'plus', onClick: () => setAddVideoOpen(true) },
   ])
+
+  const leftList = Boolean(selectedChannel || selectedCategory || playingVideoId)
+  useEffect(() => {
+    // Rời danh sách thì ngừng theo dõi, con số cuối cùng chính là chỗ cần quay lại.
+    if (leftList) return
+    const onScroll = () => {
+      savedScroll.current = window.scrollY
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    // Danh sách dựng xong mới cuộn, nếu không trình duyệt kẹp về 0.
+    const restore = requestAnimationFrame(() => window.scrollTo({ top: savedScroll.current }))
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(restore)
+    }
+  }, [leftList])
 
   // Tải danh sách Kênh & Toàn bộ video TV Show
   useEffect(() => {
@@ -185,17 +208,19 @@ export function TvShowView() {
 
       const creators = (creatorsRes?.data ?? []) as any[]
 
-      // 2. Lấy danh sách video
-      const [videosRes, watchedRes] = await Promise.all([
+      // 2. Video tải theo trang: trang đầu hiện ngay, các trang sau chảy về nền
+      //    nên mở tab không phải chờ tải cả kho.
+      const fetchVideoPage = (page: number) =>
         supabase
           ?.from('tvshow_videos')
           .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration')
           .is('unavailable_at', null)
-          .order('published_at', { ascending: false }),
-        supabase?.from('tvshow_watched').select('video_id'),
-      ])
+          .order('published_at', { ascending: false })
+          .range(page * VIDEO_PAGE_SIZE, page * VIDEO_PAGE_SIZE + VIDEO_PAGE_SIZE - 1)
 
-      const videos = (videosRes?.data ?? []) as VideoRow[]
+      const [firstPage, watchedRes] = await Promise.all([fetchVideoPage(0), supabase?.from('tvshow_watched').select('video_id')])
+
+      const videos = (firstPage?.data ?? []) as VideoRow[]
       const watchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((w) => w.video_id))
 
       // Gom video theo creator
@@ -249,6 +274,18 @@ export function TvShowView() {
         setWatchedSet(watchedIds)
         setLoading(false)
       }
+
+      // Trang còn lại: nối thêm dần, người dùng đã xem được danh sách mới nhất rồi.
+      if (videos.length === VIDEO_PAGE_SIZE) {
+        for (let page = 1; alive; page += 1) {
+          const res = await fetchVideoPage(page)
+          const rows = (res?.data ?? []) as VideoRow[]
+          if (!alive || rows.length === 0) break
+          setAllVideos((prev) => [...prev, ...rows])
+          setVideoCounts((prev) => prev + rows.length)
+          if (rows.length < VIDEO_PAGE_SIZE) break
+        }
+      }
     })()
 
     return () => {
@@ -281,12 +318,29 @@ export function TvShowView() {
     return groupVideosByCategory(allVideos, 'tvshow', watchedSet, categoryOverrides)
   }, [allVideos, watchedSet, categoryOverrides])
 
+  /** Đếm lại video mỗi kênh theo dữ liệu đã tải được (các trang sau về thì tự cộng thêm). */
+  const channelsWithCounts = useMemo(() => {
+    if (!videoCounts) return channels
+    const stats = new Map<string, { total: number; watched: number }>()
+    for (const v of allVideos) {
+      const key = v.creator_id || v.creator_name || 'manual'
+      const stat = stats.get(key) ?? { total: 0, watched: 0 }
+      stat.total += 1
+      if (watchedSet.has(v.video_id)) stat.watched += 1
+      stats.set(key, stat)
+    }
+    return channels.map((c) => {
+      const stat = stats.get(c.creator_id || c.creator_name || 'manual') ?? stats.get(c.creator_name)
+      return stat ? { ...c, videoCount: stat.total, watchedCount: stat.watched } : c
+    })
+  }, [channels, allVideos, watchedSet, videoCounts])
+
   // Lọc kênh theo tìm kiếm
   const filteredChannels = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return channels
-    return channels.filter((c) => c.creator_name.toLowerCase().includes(q))
-  }, [channels, search])
+    if (!q) return channelsWithCounts
+    return channelsWithCounts.filter((c) => c.creator_name.toLowerCase().includes(q))
+  }, [channelsWithCounts, search])
 
   // Lọc thể loại theo tìm kiếm
   const filteredCategories = useMemo(() => {
@@ -580,9 +634,15 @@ export function TvShowView() {
             </div>
           ) : (
             <div className="tv-video-card-list">
-              {filteredVideos.slice(0, visibleCount).map((v) => {
+              {filteredVideos.slice(0, visibleCount).map((v, index, shown) => {
                 const picked = selectedIds.has(v.video_id)
+                // Chỉ chia mốc khi danh sách đang xếp theo ngày, xếp kiểu khác thì mốc vô nghĩa.
+                const grouped = sortMode === 'default' || sortMode === 'newest'
+                const label = grouped ? publishedGroupLabel(v.published_at) : null
+                const newGroup = grouped && (index === 0 || label !== publishedGroupLabel(shown[index - 1].published_at))
                 return (
+                  <Fragment key={v.video_id}>
+                  {newGroup && <div className="tv-video-group-head">{label}</div>}
                   <div
                     key={v.video_id}
                     className={`tv-video-card-item${picked ? ' picked' : ''}`}
@@ -646,6 +706,7 @@ export function TvShowView() {
                       </button>
                     </div>
                   </div>
+                  </Fragment>
                 )
               })}
               {hasMore && (

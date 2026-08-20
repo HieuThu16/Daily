@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, Clock } from 'lucide-react'
+import { BarChart3, Clock, Music, NotebookPen, Star } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { buildDayReview } from '../../lib/dayReview'
 import { todayCompletion } from '../../lib/homeProgress'
@@ -21,7 +21,8 @@ type DaySubTab = 'review' | 'stats'
 export function HomePage() {
   const nav = useNavigate()
   const [tab, setTab] = useState<ReportTab>('day')
-  const [daySubTab, setDaySubTab] = useState<DaySubTab>('stats')
+  // Mở Home là thấy dòng thời gian của ngày trước, số liệu để ở tab bên cạnh.
+  const [daySubTab, setDaySubTab] = useState<DaySubTab>('review')
   const [dateKey, setDateKey] = useState(localDate())
   const data = useHomeData(dateKey)
   const mangaLogs = useMangaReadingLogs()
@@ -36,6 +37,13 @@ export function HomePage() {
       }, parseLocalDate(dateKey)),
     [data.habits, data.todayLogs, data.todos, data.todosDoneToday, dateKey],
   )
+
+  /** Nhật ký và bài nhạc đã gắn sao trong đúng ngày đang xem. */
+  const favorites = useMemo(() => {
+    const entries = data.entries.filter((e) => e.is_favorite)
+    const media = data.todayMedia.filter((m) => m.is_favorite)
+    return { entries, media, total: entries.length + media.length }
+  }, [data.entries, data.todayMedia])
 
   const nextOccasion = useMemo(
     () => upcomingOccasions(data.occasions, data.people, new Date(), { withinDays: 60, limit: 1 })[0] ?? null,
@@ -184,6 +192,40 @@ export function HomePage() {
           >
             <BarChart3 size={14} /> Thống kê ngày
           </button>
+        </div>
+      )}
+
+      {favorites.total > 0 && (
+        <div className="card" style={{ padding: 12, marginBottom: 12, borderColor: 'var(--amber)' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: '0.88rem', color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Star size={15} fill="currentColor" /> Yêu thích trong ngày ({favorites.total})
+          </h2>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {favorites.entries.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => nav('/daily')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}
+              >
+                <NotebookPen size={13} style={{ color: 'var(--emerald)', flexShrink: 0 }} />
+                {entry.entry_time && <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--emerald)' }}>{entry.entry_time}</span>}
+                <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.content}</span>
+              </button>
+            ))}
+            {favorites.media.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => nav(item.type === 'MUSIC' ? '/music' : '/books')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}
+              >
+                <Music size={13} style={{ color: 'var(--cyan)', flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                {item.artist && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>{item.artist}</span>}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

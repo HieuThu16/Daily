@@ -1989,3 +1989,20 @@
   font-weight: 700;
   cursor: pointer;
 }
+
+/* Mốc thời gian dính giữa danh sách video: biết mình đang cuộn tới đoạn nào. */
+.tv-video-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 10px 0 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
