@@ -80,3 +80,51 @@ Ghi lại nguồn để lần sau không phải tra lại từ đầu.
 3. Ngân sách theo danh mục + giao dịch định kỳ (Tiền)
 4. "Ngày này năm trước" + tìm kiếm nhật ký
 5. Khoá app bằng PIN
+
+---
+
+# Đợt 2 — 20/08/2026: nền tảng web & API miễn phí
+
+## Nguồn
+
+- Chrome for Developers — Built-in AI: https://developer.chrome.com/docs/ai/built-in
+- Chrome for Developers — Prompt API: https://developer.chrome.com/docs/ai/prompt-api
+- Gemini Nano trong trình duyệt (Chrome 148): https://pasqualepillitteri.it/en/news/3145/gemini-nano-chrome-built-in-ai-client-side-en
+- Open-Meteo (không cần API key): https://open-meteo.com/
+- APIScout — 50+ free APIs 2026: https://apiscout.dev/guides/best-free-apis-2026
+- Mixed Analytics — API công khai không cần auth: https://mixedanalytics.com/blog/list-actually-free-open-no-auth-needed-apis/
+- Calen.events — Hướng dẫn ICS cho lập trình viên: https://www.calen.events/blog/ics-file-calendar-integration-guide
+- Alphonso Labs — 15 tính năng PWA 2026: https://www.alphonsolabs.com/pwa-must-have-features-2026/
+- Progressier — PWA capabilities 2026: https://progressier.com/pwa-capabilities
+
+## Đã làm trong đợt này
+
+- Web Share Target + đoán loại link (kênh đã theo dõi > YouTube Music/VEVO > từ khoá)
+- Badge số việc trên icon app
+- View Transitions khi đổi tab
+- Hàng đợi ghi offline (localStorage, tự đẩy khi online/focus)
+
+## Ứng viên tiếp theo
+
+### AI chạy ngay trên máy — miễn phí, không API key
+Chrome 148 đưa Gemini Nano vào thẳng trình duyệt: Prompt / Summarizer / Translator /
+Writer / Rewriter. Model tải một lần, chạy bằng WebGPU, dữ liệu không rời máy, Google
+không tính tiền. Hợp với app này ở: tóm tắt nhật ký tuần, gợi ý tên việc từ câu gõ vội,
+tóm tắt video đã xem, dịch câu tiếng Anh trong tab English. Cần dự phòng cho trình duyệt
+chưa hỗ trợ (`'LanguageModel' in self`).
+
+### Xuất lịch ICS (RFC 5545)
+Việc có hạn + dịp của người thân + kỷ niệm → file .ics tải về, nhập vào Google/Apple
+Calendar. Chỉ là ghép chuỗi, không cần thư viện. Thêm được cả link "đăng ký lịch" nếu
+sau này có endpoint public.
+
+### Thời tiết Open-Meteo (không cần key)
+Đính nhiệt độ/thời tiết vào nhật ký như Day One làm, và vào báo cáo ngày.
+Toạ độ lấy từ `navigator.geolocation`, có cache theo ngày để khỏi gọi lại.
+
+### Các mảng còn nợ từ đợt 1
+- Ngân sách theo danh mục + giao dịch định kỳ (tab Tiền)
+- FSRS thay SM-2 (tab học)
+- Khoá app bằng passkey/vân tay (WebAuthn)
+- CBZ/EPUB nhập từ máy (đã có jszip)
+- Background Sync thật trong service worker (cần injectManifest)
