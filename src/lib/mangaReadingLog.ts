@@ -4,7 +4,7 @@ export interface MangaReadingLog {
   id: string
   mangaSlug: string
   mangaTitle: string
-  mangaType: 'BL' | 'NGONTINH'
+  mangaType: 'BL' | 'NGONTINH' | 'H_MANGA'
   chapterNumber: number
   chapterName: string
   readAt: string // ISO string
@@ -31,7 +31,7 @@ export function getMangaReadingLogs(): MangaReadingLog[] {
 export function recordMangaReading(params: {
   mangaSlug: string
   mangaTitle: string
-  mangaType: 'BL' | 'NGONTINH'
+  mangaType: 'BL' | 'NGONTINH' | 'H_MANGA'
   chapterNumber: number
   chapterName?: string
   status?: 'READING' | 'COMPLETED'

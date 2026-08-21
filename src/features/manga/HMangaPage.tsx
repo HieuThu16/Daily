@@ -1,10 +1,10 @@
-﻿import React, { useEffect, useState, useMemo } from 'react';
+﻿import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Heart, BookOpen, Clock, Play, 
   X, Bookmark, ChevronRight,
   Flame, Sparkles, Loader2, Plus, Download,
-  Link as LinkIcon, CheckCircle2, AlertCircle, Clipboard
+  Link as LinkIcon, AlertCircle, Clipboard, ExternalLink
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { 
@@ -13,16 +13,19 @@ import {
   getHMangaHistory,
   crawlAndSaveStory
 } from './hMangaService';
+import { HMangaReaderModal } from './HMangaReaderModal';
 import { useScrollRestore } from '../shared';
 import { useToast } from '../ToastContext';
 import './ngontinhManga.css';
 
 type MainTab = 'all' | 'history' | 'favorites';
 
+const BATCH_SIZE = 36;
+
 interface CardProps {
   manga: HManga;
   isFav: boolean;
-  userProgress?: { chapterNumber: number; chapterName?: string };
+  userProgress?: { chapterNumber: number };
   onToggleFav: (e: React.MouseEvent, slug: string) => void;
   onOpenReader: (manga: HManga, chapterNum: number) => void;
   onClick: () => void;
@@ -69,7 +72,7 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
           </div>
         )}
 
-        {/* 18+ Badge */}
+        {/* 18+ Hot Tag */}
         <div className="ngontinh-hot-tag" style={{ background: '#e11d48', color: '#fff', fontWeight: 800 }}>
           🔞 18+
         </div>
@@ -88,58 +91,32 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
           {manga.totalChapters || manga.chapters.length} Ch
         </div>
 
-        {/* Fast Reader Action Overlay */}
-        <div className="ngontinh-card-quick-actions">
-          {userProgress ? (
-            <button
-              className="ngontinh-quick-read-btn resume"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenReader(manga, userProgress.chapterNumber);
-              }}
-            >
-              <Play size={13} fill="currentColor" /> Đọc tiếp C.{userProgress.chapterNumber}
-            </button>
-          ) : (
-            <button
-              className="ngontinh-quick-read-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenReader(manga, firstCh);
-              }}
-            >
-              <Play size={13} fill="currentColor" /> Đọc Chap {firstCh}
-            </button>
-          )}
-        </div>
+        {/* Reading Status Badge */}
+        {userProgress && (
+          <div className="ngontinh-reading-ribbon">
+            Đang đọc #{userProgress.chapterNumber}
+          </div>
+        )}
       </div>
 
-      {/* Info Body */}
-      <div className="ngontinh-info-body">
-        <h3 className="ngontinh-manga-title" title={manga.title}>
+      {/* Card Info */}
+      <div className="ngontinh-card-details">
+        <h3 className="ngontinh-card-title" title={manga.title}>
           {manga.title}
         </h3>
 
-        <div className="ngontinh-meta-row">
-          <span className="ngontinh-author-tag">{manga.author || 'Đang cập nhật'}</span>
-          <span className="ngontinh-status-dot" title={manga.status || 'Đang tiến hành'} />
+        <div className="ngontinh-card-actions">
+          <button
+            className="ngontinh-btn-read-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenReader(manga, userProgress?.chapterNumber ?? firstCh);
+            }}
+          >
+            <Play size={13} fill="currentColor" />
+            {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
+          </button>
         </div>
-
-        {/* Genres tag preview */}
-        {manga.genres && manga.genres.length > 0 && (
-          <div className="ngontinh-genres-preview">
-            {manga.genres.slice(0, 3).map((g, idx) => (
-              <span key={idx} className="ngontinh-mini-genre">{g}</span>
-            ))}
-          </div>
-        )}
-
-        {/* Reading Progress Indicator */}
-        {userProgress && (
-          <div className="ngontinh-progress-pill">
-            <Clock size={11} /> Đã đọc Chap {userProgress.chapterNumber}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -389,13 +366,27 @@ export const HMangaPage: React.FC = () => {
   const [history, setHistory] = useState<Record<string, any>>({});
   const [showCrawlModal, setShowCrawlModal] = useState<boolean>(false);
 
+  // Progressive batching count
+  const [visibleCount, setVisibleCount] = useState<number>(
+    () => Number(sessionStorage.getItem('daily_count_h-list') ?? BATCH_SIZE) || BATCH_SIZE,
+  );
+
+  useEffect(() => {
+    sessionStorage.setItem('daily_count_h-list', String(visibleCount));
+  }, [visibleCount]);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Quick Reader modal state
+  const [readingState, setReadingState] = useState<{ manga: HManga; chapterNum: number } | null>(null);
+
   useScrollRestore('truyenh-list', mangaList.length > 0);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const list = await fetchHMangaList();
-      setMangaList(list);
+      if (list && list.length > 0) {
+        setMangaList(list);
+      }
     } catch (err) {
       console.error('Failed to load H manga list', err);
     } finally {
@@ -409,14 +400,20 @@ export const HMangaPage: React.FC = () => {
     setHistory(getHMangaHistory());
   }, []);
 
+  // Reset pagination on tab/search change
+  useEffect(() => {
+    setVisibleCount(BATCH_SIZE);
+  }, [activeTab, searchQuery]);
+
   const handleToggleFav = (e: React.MouseEvent, slug: string) => {
     e.stopPropagation();
     toggleHMangaFavorite(slug);
     setFavorites(getHMangaFavorites());
   };
 
-  const handleOpenReader = (manga: HManga, chapterNum: number) => {
-    navigate(`/truyenh/${manga.slug}/read/${chapterNum}`);
+  const openReader = (manga: HManga, chapterNum: number) => {
+    setReadingState({ manga, chapterNum });
+    setHistory(getHMangaHistory());
   };
 
   const handleCrawlSuccess = (manga: HManga) => {
@@ -425,32 +422,72 @@ export const HMangaPage: React.FC = () => {
     navigate(`/truyenh/${manga.slug}`);
   };
 
-  // Filtered mangas
+  // Map slug to full manga details
+  const mangaMap = useMemo(() => {
+    return new Map(mangaList.map(m => [m.slug, m]));
+  }, [mangaList]);
+
+  // Filtered list
   const filteredList = useMemo(() => {
-    let list = mangaList;
+    let result: { manga: HManga }[] = [];
 
     if (activeTab === 'favorites') {
-      list = list.filter(m => favorites.includes(m.slug));
+      result = mangaList.filter(m => favorites.includes(m.slug)).map(m => ({ manga: m }));
     } else if (activeTab === 'history') {
-      list = list.filter(m => !!history[m.slug]);
-      list.sort((a, b) => {
-        const tA = new Date(history[a.slug]?.readAt || 0).getTime();
-        const tB = new Date(history[b.slug]?.readAt || 0).getTime();
-        return tB - tA;
-      });
+      result = mangaList
+        .filter(m => history[m.slug])
+        .sort((a, b) => {
+          const tA = new Date(history[a.slug]?.readAt || 0).getTime();
+          const tB = new Date(history[b.slug]?.readAt || 0).getTime();
+          return tB - tA;
+        })
+        .map(m => ({ manga: m }));
+    } else {
+      result = mangaList.map(m => ({ manga: m }));
     }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      list = list.filter(m => 
-        m.title.toLowerCase().includes(q) || 
-        m.author?.toLowerCase().includes(q) ||
-        m.genres?.some(g => g.toLowerCase().includes(q))
+      result = result.filter(item => 
+        item.manga.title.toLowerCase().includes(q) || 
+        item.manga.author?.toLowerCase().includes(q) ||
+        item.manga.genres?.some(g => g.toLowerCase().includes(q))
       );
     }
 
-    return list;
+    return result;
   }, [mangaList, activeTab, favorites, history, searchQuery]);
+
+  // Paginated visible list
+  const visibleItems = useMemo(() => {
+    return filteredList.slice(0, visibleCount);
+  }, [filteredList, visibleCount]);
+
+  // Infinite Scroll Intersection Observer
+  useEffect(() => {
+    if (!sentinelRef.current || visibleCount >= filteredList.length) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, filteredList.length));
+        }
+      },
+      { rootMargin: '400px' }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [visibleCount, filteredList.length]);
+
+  /** Truyện đang đọc dở gần nhất */
+  const continueReading = useMemo(() => {
+    const entries = Object.values(history) as Array<{ slug: string; chapterNumber: number; chapterName?: string; readAt?: string }>;
+    const latest = entries
+      .filter((h) => h?.slug && mangaMap.has(h.slug))
+      .sort((a, b) => (b.readAt ?? '').localeCompare(a.readAt ?? ''))[0];
+    return latest ? { progress: latest, manga: mangaMap.get(latest.slug)! } : null;
+  }, [history, mangaMap]);
 
   return (
     <div className="ngontinh-page-container">
@@ -460,29 +497,49 @@ export const HMangaPage: React.FC = () => {
         onSuccess={handleCrawlSuccess}
       />
 
-      {/* Top Bar Navigation */}
+      {/* Continue reading banner if available */}
+      {continueReading && (
+        <button
+          type="button"
+          className="continue-reading"
+          onClick={() => void openReader(continueReading.manga, continueReading.progress.chapterNumber)}
+        >
+          {continueReading.manga.cover && (
+            <img className="continue-reading-cover" src={continueReading.manga.cover} alt="" loading="lazy" />
+          )}
+          <span className="continue-reading-body">
+            <span className="continue-reading-label">▶ Đọc tiếp</span>
+            <span className="continue-reading-title">{continueReading.manga.title}</span>
+            <span className="continue-reading-sub">
+              {continueReading.progress.chapterName || `Chương ${continueReading.progress.chapterNumber}`}
+            </span>
+          </span>
+        </button>
+      )}
+
+      {/* Top Header & Main Navigation Bar */}
       <div className="ngontinh-top-nav-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div className="ngontinh-nav-tabs">
-            <button 
-              className={`ngontinh-nav-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveTab('all')}
-            >
-              <Flame size={15} /> Tất cả ({mangaList.length})
-            </button>
-            <button 
-              className={`ngontinh-nav-tab-btn ${activeTab === 'favorites' ? 'active' : ''}`}
-              onClick={() => setActiveTab('favorites')}
-            >
-              <Heart size={15} /> Yêu thích ({favorites.length})
-            </button>
-            <button 
-              className={`ngontinh-nav-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-              onClick={() => setActiveTab('history')}
-            >
-              <Clock size={15} /> Lịch sử ({Object.keys(history).length})
-            </button>
-          </div>
+        <div className="ngontinh-nav-tabs">
+          <button
+            className={`ngontinh-nav-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveTab('all')}
+          >
+            <BookOpen size={16} /> Tất cả <span className="ngontinh-count-pill">{mangaList.length}</span>
+          </button>
+
+          <button
+            className={`ngontinh-nav-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >
+            <Clock size={16} /> Đang đọc <span className="ngontinh-count-pill">{Object.keys(history).length}</span>
+          </button>
+
+          <button
+            className={`ngontinh-nav-tab-btn ${activeTab === 'favorites' ? 'active' : ''}`}
+            onClick={() => setActiveTab('favorites')}
+          >
+            <Heart size={16} /> Yêu thích <span className="ngontinh-count-pill">{favorites.length}</span>
+          </button>
 
           {/* Button Cào truyện mới */}
           <button
@@ -493,56 +550,90 @@ export const HMangaPage: React.FC = () => {
               background: 'linear-gradient(135deg, #e11d48, #be123c)',
               color: '#ffffff',
               fontWeight: 700,
-              boxShadow: '0 2px 8px rgba(225, 29, 72, 0.3)',
             }}
           >
-            <Plus size={16} /> Paste link cào truyện
+            <Plus size={15} /> Paste link cào truyện
           </button>
         </div>
 
-        {/* Search Bar */}
-        <div className="ngontinh-search-box">
-          <Search size={16} className="search-icon" />
+        <div className="ngontinh-search-wrapper">
+          <Search size={16} className="ngontinh-search-icon" />
           <input
             type="text"
-            placeholder="Tìm kiếm truyện H..."
+            placeholder={`Tìm kiếm trong ${mangaList.length || 'kho'} bộ truyện H...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            className="ngontinh-search-input"
           />
           {searchQuery && (
-            <button className="clear-btn" onClick={() => setSearchQuery('')}>
-              <X size={14} />
+            <button className="ngontinh-search-clear" onClick={() => setSearchQuery('')}>
+              <X size={15} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Content */}
-      {loading ? (
-        <div className="ngontinh-loading-state">
-          <Loader2 className="spinner" size={32} />
+      {/* Manga Grid View */}
+      {loading && mangaList.length === 0 ? (
+        <div className="ngontinh-loading-box">
+          <div className="ngontinh-spinner" />
           <p>Đang tải danh sách truyện H...</p>
         </div>
       ) : filteredList.length === 0 ? (
         <div className="ngontinh-empty-state">
-          <BookOpen size={48} />
-          <h3>Không tìm thấy truyện nào</h3>
-          <p>Bấm nút <strong>"Paste link cào truyện"</strong> ở trên để cào truyện từ metruyen18.app</p>
+          <Bookmark size={40} className="ngontinh-empty-icon" />
+          <h3>Không tìm thấy truyện phù hợp</h3>
+          <p>Thử tìm kiếm với từ khóa khác hoặc bấm nút <strong>"Paste link cào truyện"</strong> ở trên.</p>
         </div>
       ) : (
-        <div className="ngontinh-manga-grid">
-          {filteredList.map((manga) => (
-            <HMangaCardItem
-              key={manga.slug}
-              manga={manga}
-              isFav={favorites.includes(manga.slug)}
-              userProgress={history[manga.slug]}
-              onToggleFav={handleToggleFav}
-              onOpenReader={handleOpenReader}
-              onClick={() => navigate(`/truyenh/${manga.slug}`)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="ngontinh-manga-grid">
+            {visibleItems.map(({ manga }) => {
+              const isFav = favorites.includes(manga.slug);
+              const userProgress = history[manga.slug];
+
+              return (
+                <HMangaCardItem
+                  key={manga.slug}
+                  manga={manga}
+                  isFav={isFav}
+                  userProgress={userProgress}
+                  onToggleFav={handleToggleFav}
+                  onOpenReader={openReader}
+                  onClick={() => navigate(`/truyenh/${manga.slug}`)}
+                />
+              );
+            })}
+          </div>
+
+          {/* Load More & Infinite Scroll Sentinel */}
+          {visibleCount < filteredList.length && (
+            <div className="ngontinh-pagination-footer">
+              <div ref={sentinelRef} style={{ height: 10 }} />
+              <button
+                className="ngontinh-btn-load-more"
+                onClick={() => setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, filteredList.length))}
+              >
+                <Loader2 size={16} className="ngontinh-spin-icon" />
+                <span>
+                  Hiển thị thêm (+{Math.min(BATCH_SIZE, filteredList.length - visibleCount)}) · Còn lại {filteredList.length - visibleCount} truyện
+                </span>
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Quick Webtoon Reader Modal */}
+      {readingState && (
+        <HMangaReaderModal
+          manga={readingState.manga}
+          initialChapterNum={readingState.chapterNum}
+          onClose={() => {
+            setReadingState(null);
+            setHistory(getHMangaHistory());
+          }}
+        />
       )}
     </div>
   );
