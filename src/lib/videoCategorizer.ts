@@ -500,6 +500,7 @@ export type CategorizedGroup<T = any> = {
   category: CategoryMeta
   videos: T[]
   totalCount: number
+  inProgressCount: number
   watchedCount: number
   cover: string | null
 }
@@ -511,16 +512,27 @@ export function groupVideosByCategory<T extends { title: string; video_id: strin
   videos: T[],
   type: VideoCategoryType,
   watchedSet: Set<string> = new Set(),
+  inProgressSetOrOverrides?: Set<string> | CategoryOverrides,
   overrides?: CategoryOverrides
 ): CategorizedGroup<T>[] {
+  let inProgressSet: Set<string> = new Set()
+  let finalOverrides = overrides
+
+  if (inProgressSetOrOverrides instanceof Set) {
+    inProgressSet = inProgressSetOrOverrides
+  } else if (inProgressSetOrOverrides && typeof inProgressSetOrOverrides === 'object') {
+    finalOverrides = inProgressSetOrOverrides as CategoryOverrides
+  }
+
   const categories = type === 'tvshow' ? TVSHOW_CATEGORIES : REVIEW_CATEGORIES
-  const map = new Map<string, { category: CategoryMeta; videos: T[]; watched: number; cover: string | null }>()
+  const map = new Map<string, { category: CategoryMeta; videos: T[]; inProgress: number; watched: number; cover: string | null }>()
 
   // Khởi tạo map cho tất cả categories
   for (const cat of categories) {
     map.set(cat.id, {
       category: cat,
       videos: [],
+      inProgress: 0,
       watched: 0,
       cover: null,
     })
@@ -529,11 +541,13 @@ export function groupVideosByCategory<T extends { title: string; video_id: strin
   // Phân loại từng video
   for (const v of videos) {
     // 1 video có thể nằm ở nhiều thể loại cùng lúc
-    for (const cat of resolveVideoCategories(v.video_id, v.title, type, overrides)) {
+    for (const cat of resolveVideoCategories(v.video_id, v.title, type, finalOverrides)) {
       const entry = map.get(cat.id) || map.get('other')!
       entry.videos.push(v)
       if (watchedSet.has(v.video_id)) {
         entry.watched += 1
+      } else if (inProgressSet.has(v.video_id)) {
+        entry.inProgress += 1
       }
       if (!entry.cover && v.thumbnail) {
         entry.cover = v.thumbnail
@@ -550,6 +564,7 @@ export function groupVideosByCategory<T extends { title: string; video_id: strin
         category: entry.category,
         videos: entry.videos,
         totalCount: entry.videos.length,
+        inProgressCount: entry.inProgress,
         watchedCount: entry.watched,
         cover: entry.cover || (entry.videos[0] as any)?.thumbnail || null,
       })

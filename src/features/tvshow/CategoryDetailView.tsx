@@ -10,6 +10,14 @@ import { useToast } from '../ToastContext'
 import { Modal, useIncrementalList } from '../shared'
 import { CategorizedGroup, VideoCategoryType } from '../../lib/videoCategorizer'
 import { summarizeVideo, toKnowledgeRows, videosNeedingLesson } from '../../lib/videoLesson'
+import {
+  autoMarkVideoWatching,
+  cycleNextVideoStatus,
+  getVideoStatusSets,
+  setVideoStatus as updateVideoStatusRecord,
+  useVideoStatusListener,
+  type VideoStatus
+} from '../../lib/videoStatus'
 import './tvShow.css'
 
 export type CategoryDetailVideoRow = {
@@ -44,12 +52,14 @@ export function CategoryDetailView({
 
   const [videos, setVideos] = useState<CategoryDetailVideoRow[]>(group.videos)
   const [watched, setWatched] = useState<Set<string>>(new Set())
+  const [inProgress, setInProgress] = useState<Set<string>>(new Set())
+  const [statusMap, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
   const [loading, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [isPlayerActive, setIsPlayerActive] = useState(false)
   const [autoplay, setAutoplay] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
   const [playbackRate, setPlaybackRate] = useState<number>(() => {
     try {
@@ -76,6 +86,20 @@ export function CategoryDetailView({
   const playerBoxRef = useRef<HTMLDivElement>(null)
 
   const watchedTable = type === 'review' ? 'review_watched' : 'tvshow_watched'
+
+  const refreshStatuses = async () => {
+    const watchedRes = await supabase?.from(watchedTable).select('video_id')
+    const supabaseWatchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
+    const sets = getVideoStatusSets(type, supabaseWatchedIds)
+    setWatched(sets.watchedSet)
+    setInProgress(sets.inProgressSet)
+    setStatusMap(sets.statusMap)
+    return sets
+  }
+
+  useVideoStatusListener(() => {
+    void refreshStatuses()
+  })
 
   const sendYouTubeCommand = (func: string, args: any[] = []) => {
     if (!iframeRef.current || !iframeRef.current.contentWindow) return
@@ -111,9 +135,7 @@ export function CategoryDetailView({
 
   useEffect(() => {
     void (async () => {
-      const watchedRes = await supabase?.from(watchedTable).select('video_id')
-      const watchedSet = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
-      setWatched(watchedSet)
+      const sets = await refreshStatuses()
       setVideos(group.videos)
 
       const lessonRes = await supabase
@@ -123,12 +145,26 @@ export function CategoryDetailView({
         .is('deleted_at', null)
       setLessonDone(new Set(((lessonRes?.data ?? []) as { source_video_id: string }[]).map((r) => r.source_video_id)))
 
-      const firstUnwatched = group.videos.find((r) => !watchedSet.has(r.video_id))
-      setPlayingId(initialVideoId || (firstUnwatched ? firstUnwatched.video_id : group.videos[0]?.video_id ?? null))
+      // Ưu tiên chọn video đang xem hoặc video chưa xem đầu tiên
+      const firstInProgress = group.videos.find((r) => sets.inProgressSet.has(r.video_id))
+      const firstUnwatched = group.videos.find((r) => !sets.watchedSet.has(r.video_id) && !sets.inProgressSet.has(r.video_id))
+      setPlayingId(initialVideoId || (firstInProgress ? firstInProgress.video_id : (firstUnwatched ? firstUnwatched.video_id : group.videos[0]?.video_id ?? null)))
       if (initialVideoId) setIsPlayerActive(true)
       setLoading(false)
     })()
-  }, [group, watchedTable, initialVideoId])
+  }, [group, watchedTable, type, initialVideoId])
+
+  // Tự động chuyển sang trạng thái Đang xem khi video được phát
+  useEffect(() => {
+    if (isPlayerActive && playingId) {
+      const v = videos.find((item) => item.video_id === playingId)
+      void autoMarkVideoWatching(playingId, type, watched, {
+        title: v?.title,
+        channel_name: v?.creator_name || undefined,
+        series_key: v?.series_key,
+      })
+    }
+  }, [isPlayerActive, playingId, type, videos, watched])
 
   const filteredVideos = useMemo(() => {
     let result = [...videos]
@@ -141,7 +177,9 @@ export function CategoryDetailView({
       )
     }
     if (filterMode === 'unwatched') {
-      result = result.filter((v) => !watched.has(v.video_id))
+      result = result.filter((v) => !watched.has(v.video_id) && !inProgress.has(v.video_id))
+    } else if (filterMode === 'in_progress') {
+      result = result.filter((v) => inProgress.has(v.video_id))
     } else if (filterMode === 'watched') {
       result = result.filter((v) => watched.has(v.video_id))
     }
@@ -150,7 +188,7 @@ export function CategoryDetailView({
       result.reverse()
     }
     return result
-  }, [videos, search, filterMode, watched, sortOrder])
+  }, [videos, search, filterMode, watched, inProgress, sortOrder])
 
   const list = useIncrementalList(filteredVideos.length, 48, `${search}|${filterMode}|${sortOrder}`)
 
@@ -194,30 +232,37 @@ export function CategoryDetailView({
     showToast(failed ? `Xong: ${pending.length - failed} video có thẻ, ${failed} video lỗi.` : `Đã tạo kiến thức cho ${pending.length} video.`)
   }
 
-  const toggleWatched = async (videoId: string, e?: React.MouseEvent) => {
+  const handleSetStatus = async (videoId: string, status: VideoStatus, e?: React.MouseEvent) => {
     e?.stopPropagation()
-    const isWatched = watched.has(videoId)
-    const next = new Set(watched)
-    if (isWatched) {
-      next.delete(videoId)
-      setWatched(next)
-      await supabase?.from(watchedTable).delete().eq('platform', 'youtube').eq('video_id', videoId)
-    } else {
-      next.add(videoId)
-      setWatched(next)
-      await supabase?.from(watchedTable).upsert({
-        platform: 'youtube',
-        video_id: videoId,
-        watched_at: new Date().toISOString(),
-      })
-    }
+    const targetVideo = videos.find((v) => v.video_id === videoId)
+    await updateVideoStatusRecord(videoId, type, status, {
+      title: targetVideo?.title,
+      channel_name: targetVideo?.creator_name || undefined,
+      series_key: targetVideo?.series_key,
+    })
+  }
+
+  const handleCycleStatus = async (videoId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const currentSt = statusMap.get(videoId) || (watched.has(videoId) ? 'COMPLETED' : (inProgress.has(videoId) ? 'IN_PROGRESS' : 'UNWATCHED'))
+    const targetVideo = videos.find((v) => v.video_id === videoId)
+    await cycleNextVideoStatus(videoId, type, currentSt, {
+      title: targetVideo?.title,
+      channel_name: targetVideo?.creator_name || undefined,
+      series_key: targetVideo?.series_key,
+    })
   }
 
   const watchedCount = useMemo(() => {
     return videos.filter((v) => watched.has(v.video_id)).length
   }, [videos, watched])
 
-  const currentIsWatched = currentVideo ? watched.has(currentVideo.video_id) : false
+  const inProgressCount = useMemo(() => {
+    return videos.filter((v) => inProgress.has(v.video_id)).length
+  }, [videos, inProgress])
+
+  const unwatchedCount = videos.length - watchedCount - inProgressCount
+  const currentStatus: VideoStatus = currentVideo ? (statusMap.get(currentVideo.video_id) || (watched.has(currentVideo.video_id) ? 'COMPLETED' : (inProgress.has(currentVideo.video_id) ? 'IN_PROGRESS' : 'UNWATCHED'))) : 'UNWATCHED'
   const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube-nocookie.com/embed/${currentVideo.video_id}` : '')
   const embedSrc = embedBase ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1` : ''
 
@@ -298,22 +343,27 @@ export function CategoryDetailView({
               </div>
             )}
 
-            {/* 3. BẢNG 3 NÚT HÀNG NGANG: Đánh dấu | Kiến thức | Cài đặt.
-                Tốc độ và Hẹn giờ dời vào Cài đặt cho đỡ chật. */}
+            {/* 3. BẢNG 3 NÚT HÀNG NGANG: Đánh dấu | Kiến thức | Cài đặt */}
             <div className="tv-action-grid-3">
-              {/* Nút 1: Đánh dấu đã xem */}
+              {/* Nút 1: Trạng thái xem (Sẽ xem / Đang xem / Đã xem) */}
               <button
                 type="button"
-                className={`tv-action-card-btn ${currentIsWatched ? 'active is-watched' : ''}`}
-                onClick={() => currentVideo && void toggleWatched(currentVideo.video_id)}
-                title={currentIsWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+                className={`tv-action-card-btn ${currentStatus === 'COMPLETED' ? 'active is-watched' : (currentStatus === 'IN_PROGRESS' ? 'active is-in-progress' : '')}`}
+                onClick={() => currentVideo && void handleCycleStatus(currentVideo.video_id)}
+                title="Bấm để đổi trạng thái: Sẽ xem → Đang xem → Đã xem"
               >
                 <div className="tv-action-icon-box">
-                  {currentIsWatched ? <CheckCircle2 size={18} color="#10b981" /> : <Circle size={18} />}
+                  {currentStatus === 'COMPLETED' ? (
+                    <CheckCircle2 size={18} color="#10b981" />
+                  ) : currentStatus === 'IN_PROGRESS' ? (
+                    <Clock size={18} color="#f59e0b" />
+                  ) : (
+                    <Circle size={18} />
+                  )}
                 </div>
-                <span className="tv-action-label-title">Đánh dấu</span>
-                <span className={`tv-action-label-sub ${currentIsWatched ? 'is-green' : ''}`}>
-                  {currentIsWatched ? 'đã xem' : 'chưa xem'}
+                <span className="tv-action-label-title">Trạng thái</span>
+                <span className={`tv-action-label-sub ${currentStatus === 'COMPLETED' ? 'is-green' : (currentStatus === 'IN_PROGRESS' ? 'is-amber' : '')}`}>
+                  {currentStatus === 'COMPLETED' ? 'Đã xem' : (currentStatus === 'IN_PROGRESS' ? 'Đang xem' : 'Sẽ xem')}
                 </span>
               </button>
 
@@ -376,7 +426,7 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                 Danh sách video ({filteredVideos.length})
               </span>
               <span className="tv-playlist-stat">
-                Đã xem {watchedCount}/{videos.length} ({videos.length > 0 ? Math.round((watchedCount / videos.length) * 100) : 0}%)
+                Đã xem {watchedCount}/{videos.length} {inProgressCount > 0 && `• ⏳ Đang xem ${inProgressCount}`}
               </span>
             </div>
 
@@ -406,14 +456,21 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                   className={`tv-filter-pill-btn ${filterMode === 'unwatched' ? 'active' : ''}`}
                   onClick={() => setFilterMode('unwatched')}
                 >
-                  Chưa xem ({videos.length - watchedCount})
+                  📌 Sẽ xem ({unwatchedCount})
+                </button>
+                <button
+                  type="button"
+                  className={`tv-filter-pill-btn in-progress ${filterMode === 'in_progress' ? 'active' : ''}`}
+                  onClick={() => setFilterMode('in_progress')}
+                >
+                  ⏳ Đang xem ({inProgressCount})
                 </button>
                 <button
                   type="button"
                   className={`tv-filter-pill-btn ${filterMode === 'watched' ? 'active' : ''}`}
                   onClick={() => setFilterMode('watched')}
                 >
-                  Đã xem ({watchedCount})
+                  ✅ Đã xem ({watchedCount})
                 </button>
               </div>
 
@@ -445,7 +502,9 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
             <div className="tv-video-card-list">
               {filteredVideos.slice(0, list.visibleCount).map((v, i) => {
                 const isPlaying = v.video_id === playingId
-                const isWatched = watched.has(v.video_id)
+                const st: VideoStatus = statusMap.get(v.video_id) || (watched.has(v.video_id) ? 'COMPLETED' : (inProgress.has(v.video_id) ? 'IN_PROGRESS' : 'UNWATCHED'))
+                const isWatched = st === 'COMPLETED'
+                const isInProgress = st === 'IN_PROGRESS'
                 const indexNum = sortOrder === 'desc' ? i + 1 : videos.length - i
                 return (
                   <div
@@ -472,8 +531,18 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                       <div className="tv-video-item-title">
                         #{indexNum}. {v.title}
                       </div>
-                      <div className="tv-video-item-sub">
+                      <div className="tv-video-item-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span className="tv-video-item-author">{v.creator_name || 'YouTube'}</span>
+                        {isInProgress && (
+                          <span className="tv-status-badge in-progress">
+                            <Clock size={11} /> Đang xem
+                          </span>
+                        )}
+                        {isWatched && (
+                          <span className="tv-status-badge watched">
+                            <Check size={11} /> Đã xem
+                          </span>
+                        )}
                         {v.published_at && (
                           <span className="tv-video-item-date">
                             {new Date(v.published_at).toLocaleDateString('vi-VN')}
@@ -485,11 +554,23 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
                     <div className="tv-video-item-actions" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
-                        className={`tv-video-check-btn ${isWatched ? 'watched' : ''}`}
-                        onClick={(e) => void toggleWatched(v.video_id, e)}
-                        title={isWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+                        className={`tv-video-check-btn ${isWatched ? 'watched' : (isInProgress ? 'in-progress' : '')}`}
+                        onClick={(e) => void handleCycleStatus(v.video_id, e)}
+                        title={
+                          isWatched
+                            ? 'Đã xem — Bấm để chuyển sang Sẽ xem'
+                            : isInProgress
+                            ? 'Đang xem — Bấm để chuyển sang Đã xem'
+                            : 'Sẽ xem — Bấm để chuyển sang Đang xem'
+                        }
                       >
-                        {isWatched ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                        {isWatched ? (
+                          <CheckCircle2 size={18} color="#10b981" />
+                        ) : isInProgress ? (
+                          <Clock size={18} color="#f59e0b" />
+                        ) : (
+                          <Circle size={18} />
+                        )}
                       </button>
 
                       <button
@@ -632,6 +713,45 @@ ${err}` : 'Đã lưu thẻ kiến thức từ video này.')
       {selectedVideoForMenu && (
         <Modal title="Tùy chọn video" onClose={() => setSelectedVideoForMenu(null)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>
+              TRẠNG THÁI XEM
+            </div>
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', color: '#f59e0b' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'IN_PROGRESS')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Clock size={16} /> ⏳ Đánh dấu Đang xem
+            </button>
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', color: '#10b981' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'COMPLETED')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <CheckCircle2 size={16} /> ✅ Đánh dấu Đã xem
+            </button>
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'UNWATCHED')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Circle size={16} /> ⚪ Đánh dấu Sẽ xem (Chưa xem)
+            </button>
+
+            <div style={{ height: 1, background: 'var(--card-border)', margin: '4px 0' }} />
+
             <a
               href={selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`}
               target="_blank"
