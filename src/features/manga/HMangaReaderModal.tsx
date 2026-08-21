@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Bookmark, ArrowUp, RefreshCw, BookOpen } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { getHMangaProgress, saveHMangaProgress } from './hMangaService';
 import { recordMangaReading } from '../../lib/mangaReadingLog';
@@ -48,7 +48,7 @@ export const HMangaReaderModal: React.FC<Props> = ({
 
       saveHMangaProgress(manga.slug, {
         chapterNumber: chNum,
-        chapterName: currentChapter.name,
+        chapterName: currentChapter.name || `Chapter ${chNum}`,
         readAt: new Date().toISOString(),
         totalImages: currentImgs.length,
       });
@@ -58,11 +58,10 @@ export const HMangaReaderModal: React.FC<Props> = ({
         mangaTitle: manga.title,
         mangaType: 'H_MANGA',
         chapterNumber: chNum,
-        chapterName: currentChapter.name,
+        chapterName: currentChapter.name || `Chapter ${chNum}`,
         status: 'READING',
       });
 
-      // Restore scroll
       const saved = getHMangaProgress(manga.slug);
       const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
       if (resumeRatio > 0.01) {
@@ -81,184 +80,198 @@ export const HMangaReaderModal: React.FC<Props> = ({
       } else {
         if (mainRef.current) mainRef.current.scrollTop = 0;
       }
+      setImageErrors({});
     }
   }, [manga, currentChapter, currentChapterNum]);
 
-  const handleScroll = () => {
-    if (!mainRef.current || !currentChapter) return;
-    const { scrollTop, scrollHeight, clientHeight } = mainRef.current;
-    const max = scrollHeight - clientHeight;
-    if (max <= 0) return;
-    const ratio = Math.max(0, Math.min(1, scrollTop / max));
-    const chNum = currentChapter.number ?? currentChapterNum;
-    saveHMangaProgress(manga.slug, {
-      chapterNumber: chNum,
-      chapterName: currentChapter.name,
-      scrollRatio: ratio,
-    });
-  };
+  // Scroll ratio & completed mark
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
 
-  const handleNext = () => {
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking && currentChapter) {
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          saveHMangaProgress(manga.slug, {
+            chapterNumber: currentChapter.number ?? currentChapterNum,
+            chapterName: currentChapter.name,
+            readAt: new Date().toISOString(),
+            scrollRatio: el.scrollHeight > 0 ? el.scrollTop / el.scrollHeight : 0,
+          });
+        });
+      }
+
+      const scrollBottom = el.scrollTop + el.clientHeight;
+      const threshold = el.scrollHeight - 250;
+      if (scrollBottom >= threshold && currentChapter) {
+        recordMangaReading({
+          mangaSlug: manga.slug,
+          mangaTitle: manga.title,
+          mangaType: 'H_MANGA',
+          chapterNumber: currentChapter.number ?? currentChapterNum,
+          chapterName: currentChapter.name,
+          status: 'COMPLETED',
+        });
+      }
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [currentChapter, currentChapterNum, manga.slug, manga.title]);
+
+  const handleNext = useCallback(() => {
+    if (currentChapter) {
+      recordMangaReading({
+        mangaSlug: manga.slug,
+        mangaTitle: manga.title,
+        mangaType: 'H_MANGA',
+        chapterNumber: currentChapter.number ?? currentChapterNum,
+        chapterName: currentChapter.name,
+        status: 'COMPLETED',
+      });
+    }
     if (nextChapter && nextChapter.number != null) {
-      setCurrentChapterNum(nextChapter.number);
-      onSelectChapter?.(nextChapter.number);
+      if (onSelectChapter) onSelectChapter(nextChapter.number);
+      else setCurrentChapterNum(nextChapter.number);
       if (mainRef.current) mainRef.current.scrollTop = 0;
-      setImageErrors({});
     }
-  };
+  }, [currentChapter, currentChapterNum, manga.slug, manga.title, nextChapter, onSelectChapter]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (prevChapter && prevChapter.number != null) {
-      setCurrentChapterNum(prevChapter.number);
-      onSelectChapter?.(prevChapter.number);
+      if (onSelectChapter) onSelectChapter(prevChapter.number);
+      else setCurrentChapterNum(prevChapter.number);
       if (mainRef.current) mainRef.current.scrollTop = 0;
-      setImageErrors({});
     }
-  };
+  }, [prevChapter, onSelectChapter]);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  };
-
-  const handleRetryImage = (idx: number) => {
-    setImageErrors(prev => {
-      const next = { ...prev };
-      delete next[idx];
-      return next;
-    });
-  };
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === 'd') {
+        handleNext();
+      } else if (e.key === 'ArrowLeft' || e.key === 'a') {
+        handlePrev();
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNext, handlePrev, onClose]);
 
   const rawImages = currentChapter?.images || [];
   const images = rawImages.map(img => typeof img === 'string' ? { url: img, alt: 'Trang' } : img);
 
   return (
-    <div className="ngontinh-reader-modal" ref={topRef}>
-      {/* Top Floating Control Bar */}
-      <header className="ngontinh-reader-top-bar">
-        <div className="top-bar-left">
-          <button className="ngontinh-reader-icon-btn" onClick={onClose} title="Đóng trình đọc">
+    <div className="ngontinh-reader-overlay">
+      <div ref={topRef} />
+      
+      {/* Floating Reader Header */}
+      <ReaderControls running={autoScroll.running} onToggle={autoScroll.toggle} prefs={prefs} onChange={updatePrefs} />
+
+      <header className="ngontinh-reader-header-compact">
+        <div className="ngontinh-reader-header-left">
+          <button className="ngontinh-reader-back-btn" onClick={onClose} title="Trở về danh sách">
             <ArrowLeft size={18} />
           </button>
-          
-          <div className="manga-title-wrap">
-            <h2 className="reader-manga-title" title={manga.title}>{manga.title}</h2>
-            <span className="reader-chapter-title">{currentChapter?.name || `Chapter ${currentChapterNum}`}</span>
-          </div>
         </div>
 
-        {/* Center Chapter Switcher */}
-        <div className="top-bar-center">
-          <button
-            className="ch-nav-arrow"
-            disabled={!prevChapter}
-            onClick={handlePrev}
-            title="Chương trước"
-          >
-            <ChevronLeft size={18} />
-          </button>
-
+        <div className="ngontinh-reader-header-right">
+          {/* Quick Chapter Selector */}
           <select
-            className="chapter-select-dropdown"
-            value={currentChapter?.number ?? currentChapterNum}
+            value={currentChapterNum}
             onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              setCurrentChapterNum(val);
-              onSelectChapter?.(val);
+              const val = Number(e.target.value);
+              if (onSelectChapter) onSelectChapter(val);
+              else setCurrentChapterNum(val);
               if (mainRef.current) mainRef.current.scrollTop = 0;
-              setImageErrors({});
             }}
+            className="ngontinh-chapter-picker"
           >
-            {sortedChapters.map((c) => (
-              <option key={c.number} value={c.number!}>
-                {c.name} {c.title ? `- ${c.title}` : ''}
+            {sortedChapters.map((ch) => (
+              <option key={ch.url || ch.number} value={ch.number ?? 0}>
+                {ch.name || `Chương ${ch.number}`}
               </option>
             ))}
           </select>
 
           <button
-            className="ch-nav-arrow"
-            disabled={!nextChapter}
+            className="ngontinh-reader-nav-icon-btn"
+            onClick={handlePrev}
+            disabled={!prevChapter}
+            title="Chương trước (←)"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <button
+            className="ngontinh-reader-nav-icon-btn"
             onClick={handleNext}
-            title="Chương sau"
+            disabled={!nextChapter}
+            title="Chương sau (→)"
           >
             <ChevronRight size={18} />
           </button>
         </div>
-
-        {/* Right Settings */}
-        <div className="top-bar-right">
-          <button 
-            className="ngontinh-reader-icon-btn fullscreen-btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
-          >
-            {isFullscreen ? '⤢' : '⤡'}
-          </button>
-        </div>
       </header>
 
-      {/* Main Images Container */}
-      <main 
-        className="ngontinh-reader-body" 
-        ref={mainRef}
-        onScroll={handleScroll}
-        style={readerStyle}
-      >
-        <div className="ngontinh-reader-images-flow">
-          {images.length === 0 ? (
-            <div className="ngontinh-no-images">
-              <p>Chương này chưa có ảnh hoặc đang cập nhật.</p>
-            </div>
-          ) : (
-            images.map((img, idx) => (
-              <div key={idx} className="ngontinh-page-wrapper">
-                {imageErrors[idx] ? (
-                  <div className="image-error-fallback">
-                    <p>Không thể tải trang {idx + 1}</p>
-                    <button className="retry-btn" onClick={() => handleRetryImage(idx)}>
-                      <RefreshCw size={14} /> Thử lại
-                    </button>
-                  </div>
-                ) : (
-                  <img
-                    src={img.url}
-                    alt={img.alt || `Trang ${idx + 1}`}
-                    className="ngontinh-page-img"
-                    loading={idx < 3 ? 'eager' : 'lazy'}
-                    decoding="async"
-                    onError={() => setImageErrors(prev => ({ ...prev, [idx]: true }))}
-                  />
-                )}
-                <span className="page-idx-pill">{idx + 1} / {images.length}</span>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Next Chapter Prompt Bar */}
-        {nextChapter && (
-          <div className="ngontinh-next-chap-floating">
-            <div>
-              <div className="ngontinh-next-chap-text">Hết {currentChapter?.name || `Chapter ${currentChapterNum}`}</div>
-              <div className="ngontinh-next-chap-sub">Tiếp theo: {nextChapter.name}</div>
-            </div>
-            <button 
-              className="ngontinh-reader-nav-btn primary"
-              onClick={handleNext}
+      {/* Reader Body */}
+      <main ref={mainRef} className="ngontinh-reader-body" style={readerStyle}>
+        {images.length > 0 ? (
+          <div className="ngontinh-reader-image-stream">
+            {images.map((img, idx) => {
+              const imgUrl = img.url || '';
+              const imgAlt = img.alt || `Trang ${idx + 1}`;
+              const hasError = imageErrors[idx];
+              return (
+                <div key={imgUrl || idx} className="ngontinh-image-frame">
+                  {hasError ? (
+                    <div className="ngontinh-image-error">
+                      <p>Không thể tải ảnh {idx + 1}</p>
+                      <a href={imgUrl} target="_blank" rel="noreferrer" className="ngontinh-link-direct">
+                        <ExternalLink size={14} /> Mở ảnh gốc
+                      </a>
+                    </div>
+                  ) : (
+                    <img
+                      src={imgUrl}
+                      alt={imgAlt}
+                      loading={idx < 3 ? 'eager' : 'lazy'}
+                      referrerPolicy="no-referrer"
+                      onError={() => setImageErrors(prev => ({ ...prev, [idx]: true }))}
+                      className="ngontinh-chapter-img"
+                    />
+                  )}
+                  <span className="ngontinh-page-badge">{idx + 1} / {images.length}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="ngontinh-reader-empty">
+            <Bookmark size={40} className="ngontinh-empty-icon" />
+            <h3>Chương này chưa tải sẵn ảnh vào bộ nhớ</h3>
+            <p>Bạn có thể mở đọc trực tiếp ngay trên trang gốc:</p>
+            <a
+              href={currentChapter?.url || manga.url}
+              target="_blank"
+              rel="noreferrer"
+              className="ngontinh-btn-primary"
+              style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              Đọc tiếp <ChevronRight size={16} />
-            </button>
+              <ExternalLink size={16} /> Mở đọc tại nguồn
+            </a>
           </div>
         )}
 
         {/* Bottom Navigator */}
-        <div className="ngontinh-reader-bottom-bar">
+        <div className="ngontinh-reader-bottom-nav">
           <button
-            className="ngontinh-reader-nav-btn"
+            className="ngontinh-btn-nav-control"
             onClick={handlePrev}
             disabled={!prevChapter}
           >
@@ -266,14 +279,17 @@ export const HMangaReaderModal: React.FC<Props> = ({
           </button>
 
           <button
-            className="ngontinh-reader-nav-btn"
-            onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="ngontinh-btn-nav-control"
+            onClick={() => {
+              if (mainRef.current) mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            title="Lên đầu trang"
           >
             <ArrowUp size={16} /> Đầu trang
           </button>
 
           <button
-            className="ngontinh-reader-nav-btn primary"
+            className="ngontinh-btn-nav-control is-primary"
             onClick={handleNext}
             disabled={!nextChapter}
           >
@@ -281,22 +297,6 @@ export const HMangaReaderModal: React.FC<Props> = ({
           </button>
         </div>
       </main>
-
-      {/* Floating Reader Controls */}
-      <div className="reader-floating-actions">
-        {autoScroll.running && (
-          <div className="auto-scroll-badge">
-            Cuộn tự động: x{prefs.speed}
-          </div>
-        )}
-
-        <ReaderControls
-          running={autoScroll.running}
-          onToggle={autoScroll.toggle}
-          prefs={prefs}
-          onChange={updatePrefs}
-        />
-      </div>
     </div>
   );
 };
