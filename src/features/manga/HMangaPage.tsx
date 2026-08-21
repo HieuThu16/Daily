@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Heart, BookOpen, Clock, Play, 
@@ -202,8 +202,8 @@ function CrawlModal({
               <Download size={20} />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Cào truyện từ MeTruyen18</h2>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>Nhập bất kỳ link truyện hoặc link chapter</span>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Cào truyện H (MeTruyen18 & VietManhwa)</h2>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>Hỗ trợ link từ metruyen18.app hoặc vietmanhwa.com</span>
             </div>
           </div>
           <button 
@@ -219,7 +219,7 @@ function CrawlModal({
         <form onSubmit={handleCrawl}>
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-              Đường dẫn truyện (metruyen18.app)
+              Đường dẫn truyện (metruyen18.app hoặc vietmanhwa.com)
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <LinkIcon size={16} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted, #64748b)' }} />
@@ -227,7 +227,7 @@ function CrawlModal({
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://metruyen18.app/truyen/mot-buoc-len-may..."
+                placeholder="https://vietmanhwa.com/manhwa-18/... hoặc https://metruyen18.app/..."
                 disabled={loading}
                 style={{
                   width: '100%',
@@ -262,7 +262,7 @@ function CrawlModal({
               </button>
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted, #64748b)', marginTop: '6px' }}>
-              Ví dụ: <code>https://metruyen18.app/truyen/mot-buoc-len-may/chapter-1</code>
+              Ví dụ: <code>https://vietmanhwa.com/manhwa-18/toi-duoc-giao-nhiem-vu...</code>
             </div>
           </div>
 

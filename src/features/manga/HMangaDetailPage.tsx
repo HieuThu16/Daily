@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Heart, Play, BookOpen, Clock, 
@@ -382,7 +382,7 @@ export const HMangaDetailPage: React.FC = () => {
             <ExternalLink size={19} className="ngontinh-qa-icon" />
             <div className="ngontinh-qa-text">
               <span className="ngontinh-qa-title">Mở trên</span>
-              <span className="ngontinh-qa-subtitle">MeTruyen18</span>
+              <span className="ngontinh-qa-subtitle">{manga.sourceName || (manga.url.includes('vietmanhwa') ? 'VietManhwa' : 'MeTruyen18')}</span>
             </div>
           </a>
         ) : (
@@ -390,7 +390,7 @@ export const HMangaDetailPage: React.FC = () => {
             <ExternalLink size={19} className="ngontinh-qa-icon" />
             <div className="ngontinh-qa-text">
               <span className="ngontinh-qa-title">Nguồn</span>
-              <span className="ngontinh-qa-subtitle">MeTruyen18</span>
+              <span className="ngontinh-qa-subtitle">{manga.sourceName || 'MeTruyen18'}</span>
             </div>
           </div>
         )}
