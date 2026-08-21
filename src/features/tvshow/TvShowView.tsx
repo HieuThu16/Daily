@@ -149,6 +149,7 @@ export function moveItem<T>(items: T[], from: number, to: number): T[] {
  * Hỗ trợ 2 chế độ xem: Xem theo Kênh và Xem theo Thể Loại (Tự động phân loại theo tiêu đề video).
  */
 export function TvShowView() {
+  const { showToast } = useToast()
   const [channels, setChannels] = useState<ChannelItem[]>([])
   const [videoCounts, setVideoCounts] = useState(0)
   const [allVideos, setAllVideos] = useState<VideoRow[]>([])
@@ -162,7 +163,8 @@ export function TvShowView() {
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
   const [categoryOverrides, setCategoryOverrides] = useState<CategoryOverrides>({})
   const [editingCategoryVideos, setEditingCategoryVideos] = useState<{ video_id: string; title: string }[] | null>(null)
-  const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [selectedVideoForMenu, setSelectedVideoForMenu] = useState<VideoRow | null>(null)
+  const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [sortMode, setSortMode] = useState<'default' | 'newest' | 'channel' | 'unwatched'>('default')
   const [activeCatId, setActiveCatId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -175,6 +177,27 @@ export function TvShowView() {
   const [reloadKey, setReloadKey] = useState(0)
   /** Vị trí cuộn của danh sách trước khi mở video/kênh, để quay lại đúng chỗ cũ. */
   const savedScroll = useRef(0)
+
+  const handleSetStatus = async (videoId: string, status: VideoStatus, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const targetVideo = allVideos.find((v) => v.video_id === videoId)
+    await updateVideoStatusRecord(videoId, 'tvshow', status, {
+      title: targetVideo?.title,
+      channel_name: targetVideo?.creator_name || undefined,
+      series_key: targetVideo?.series_key,
+    })
+  }
+
+  const handleCycleStatus = async (videoId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const currentSt = statusMap.get(videoId) || (watchedSet.has(videoId) ? 'COMPLETED' : (inProgressSet.has(videoId) ? 'IN_PROGRESS' : 'UNWATCHED'))
+    const targetVideo = allVideos.find((v) => v.video_id === videoId)
+    await cycleNextVideoStatus(videoId, 'tvshow', currentSt, {
+      title: targetVideo?.title,
+      channel_name: targetVideo?.creator_name || undefined,
+      series_key: targetVideo?.series_key,
+    })
+  }
 
   // 2 nút thêm nằm trên header chung, cạnh nút thông báo
   useHeaderActions([
@@ -398,7 +421,8 @@ export function TvShowView() {
       const cats = categoryByVideo.get(v.video_id) ?? []
       if (activeCatId && !cats.some((c) => c.id === activeCatId)) return false
       if (watchFilter === 'watched' && !watchedSet.has(v.video_id)) return false
-      if (watchFilter === 'unwatched' && watchedSet.has(v.video_id)) return false
+      if (watchFilter === 'in_progress' && !inProgressSet.has(v.video_id)) return false
+      if (watchFilter === 'unwatched' && (watchedSet.has(v.video_id) || inProgressSet.has(v.video_id))) return false
       if (!q) return true
       return (
         v.title.toLowerCase().includes(q) ||
@@ -604,8 +628,9 @@ export function TvShowView() {
                 aria-label="Lọc theo trạng thái xem"
               >
                 <option value="all">Tất cả</option>
-                <option value="unwatched">Chưa xem</option>
-                <option value="watched">Đã xem</option>
+                <option value="unwatched">📌 Sẽ xem (Chưa xem)</option>
+                <option value="in_progress">⏳ Đang xem</option>
+                <option value="watched">✅ Đã xem</option>
               </select>
               <select
                 className="tv-vfilter-select"
@@ -723,7 +748,36 @@ export function TvShowView() {
                     </div>
 
                     <div className="tv-video-right-tools">
-                      {watchedSet.has(v.video_id) && <CheckCircle2 size={20} color="#10b981" />}
+                      {/* Nút đổi trạng thái xem: Sẽ xem ⚪ ➔ Đang xem ⏳ ➔ Đã xem ✅ */}
+                      {(() => {
+                        const isWatched = watchedSet.has(v.video_id)
+                        const isInProgress = inProgressSet.has(v.video_id)
+                        return (
+                          <button
+                            type="button"
+                            className={`tv-video-watch-circle-btn ${isWatched ? 'watched' : (isInProgress ? 'in-progress' : '')}`}
+                            onClick={(e) => void handleCycleStatus(v.video_id, e)}
+                            title={
+                              isWatched
+                                ? 'Đã xem — Bấm để chuyển sang Sẽ xem'
+                                : isInProgress
+                                ? 'Đang xem — Bấm để chuyển sang Đã xem'
+                                : 'Sẽ xem — Bấm để chuyển sang Đang xem'
+                            }
+                            aria-label="Đổi trạng thái xem"
+                          >
+                            {isWatched ? (
+                              <CheckCircle2 size={20} color="#10b981" />
+                            ) : isInProgress ? (
+                              <Clock size={20} color="#f59e0b" />
+                            ) : (
+                              <Circle size={20} />
+                            )}
+                          </button>
+                        )
+                      })()}
+
+                      {/* Nút sửa thể loại */}
                       <button
                         type="button"
                         className="tv-video-cat-edit-btn"
@@ -734,6 +788,20 @@ export function TvShowView() {
                         }}
                       >
                         <Tag size={16} />
+                      </button>
+
+                      {/* Nút 3 chấm tuỳ chọn */}
+                      <button
+                        type="button"
+                        className="tv-video-more-dots-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedVideoForMenu(v)
+                        }}
+                        title="Tùy chọn khác"
+                        aria-label="Tùy chọn khác"
+                      >
+                        <MoreVertical size={18} />
                       </button>
                     </div>
                   </div>
@@ -933,6 +1001,112 @@ export function TvShowView() {
           onClose={() => setAddVideoOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
+      )}
+
+      {/* MODAL MENU 3 CHẤM CỦA VIDEO TRONG DANH SÁCH TỔNG */}
+      {selectedVideoForMenu && (
+        <Modal
+          title={`🎬 ${selectedVideoForMenu.title}`}
+          onClose={() => setSelectedVideoForMenu(null)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Phát video này */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                setPlayingVideoId(selectedVideoForMenu.video_id)
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Play size={16} /> Phát video này ngay
+            </button>
+
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}>
+              TRẠNG THÁI XEM
+            </div>
+
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px', color: '#f59e0b' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'IN_PROGRESS')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Clock size={16} /> ⏳ Đánh dấu Đang xem
+            </button>
+
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px', color: '#10b981' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'COMPLETED')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <CheckCircle2 size={16} /> ✅ Đánh dấu Đã xem
+            </button>
+
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'UNWATCHED')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Circle size={16} /> ⚪ Đánh dấu Sẽ xem (Chưa xem)
+            </button>
+
+            <div style={{ height: 1, background: 'var(--card-border)', margin: '4px 0' }} />
+
+            {/* Sửa thể loại */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                const target = selectedVideoForMenu
+                setSelectedVideoForMenu(null)
+                setEditingCategoryVideos([{ video_id: target.video_id, title: target.title }])
+              }}
+            >
+              <Tag size={16} /> Sửa thể loại video
+            </button>
+
+            {/* Mở trên YouTube */}
+            <a
+              href={selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px', textDecoration: 'none' }}
+              onClick={() => setSelectedVideoForMenu(null)}
+            >
+              <Youtube size={16} color="#ef4444" /> Mở trên YouTube
+            </a>
+
+            {/* Sao chép link */}
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
+              onClick={() => {
+                const url = selectedVideoForMenu.canonical_url || `https://www.youtube.com/watch?v=${selectedVideoForMenu.video_id}`
+                navigator.clipboard.writeText(url)
+                showToast('Đã sao chép liên kết video vào bộ nhớ tạm!')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Copy size={16} /> Sao chép liên kết video
+            </button>
+          </div>
+        </Modal>
       )}
     </section>
   )
