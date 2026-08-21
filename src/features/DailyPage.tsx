@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'
 import type { DailyType, Entry, Person } from '../types'
+import { loadLocal, saveLocal } from '../lib/persistence'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { SkeletonList } from './Skeleton'
@@ -39,6 +40,9 @@ function isoDate(d: Date) {
 }
 
 const PHOTO_BUCKET = 'daily-photos'
+
+const QUICK_KEY = 'daily-quick-phrases'
+const DEFAULT_QUICK = ['Đi làm', 'Đã đến công ty', 'Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Tan làm', 'Về đến nhà', 'Đi ngủ']
 
 function viDate(s: string) {
   const d = new Date(s + 'T12:00:00')
@@ -77,6 +81,8 @@ export function DailyPage() {
   const [editText, setEditText] = useState('')
   const [editTime, setEditTime] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, DEFAULT_QUICK))
+  const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
   const entryFileInput = useRef<HTMLInputElement>(null)
   const mentionQuery = content.match(/@([^\s@]*)$/)?.[1]?.toLowerCase() ?? ''
   const mentionPeople = peopleQuery.items.filter((p) => p.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
@@ -323,6 +329,25 @@ export function DailyPage() {
                   Giờ hiện tại
                 </button>
               )}
+            </div>
+            {/* Chọn nhanh: câu hay dùng, tự sửa được */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <select
+                value=""
+                aria-label="Chọn nhanh câu hay dùng"
+                onChange={(e) => {
+                  if (!e.target.value) return
+                  setContent((text) => (text.trim() ? text.replace(/\n*$/, '\n') : '') + e.target.value)
+                  e.target.value = ''
+                }}
+                style={{ flex: 1, border: '1px solid var(--card-border)', borderRadius: 10, padding: '5px 8px', fontSize: '0.82rem', background: 'var(--card-bg)', color: 'var(--text-main)' }}
+              >
+                <option value="">⚡ Chọn nhanh…</option>
+                {quickPhrases.map((phrase) => <option key={phrase} value={phrase}>{phrase}</option>)}
+              </select>
+              <button type="button" className="icon small" title="Sửa danh sách chọn nhanh" aria-label="Sửa danh sách chọn nhanh" onClick={() => setEditQuick(quickPhrases.join('\n'))}>
+                <Pencil size={14} />
+              </button>
             </div>
             <textarea
               value={content}
@@ -613,6 +638,33 @@ export function DailyPage() {
             </div>
           )}
         </>
+      )}
+
+      {editQuick !== null && (
+        <Modal title="Sửa danh sách chọn nhanh" onClose={() => setEditQuick(null)}>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 6px' }}>Mỗi dòng là một mục.</p>
+          <textarea
+            value={editQuick}
+            onChange={(e) => setEditQuick(e.target.value)}
+            rows={8}
+            aria-label="Danh sách chọn nhanh"
+            style={{ width: '100%', border: '1px solid var(--card-border)', borderRadius: 12, padding: 10, fontSize: '0.9rem', background: 'var(--card-bg)', color: 'var(--text-main)' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button
+              className="primary"
+              onClick={() => {
+                const list = editQuick.split('\n').map((l) => l.trim()).filter(Boolean)
+                setQuickPhrases(list)
+                saveLocal(QUICK_KEY, list)
+                setEditQuick(null)
+                showToast('✅ Đã lưu danh sách chọn nhanh')
+              }}
+            >
+              <Save size={15} /> Lưu
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* Chi tiết một dòng nhật ký: xem đủ nội dung, sửa, đính ảnh */}

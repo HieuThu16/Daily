@@ -2303,6 +2303,26 @@ function AddTvShowMovieModal({ onClose, onSaved, initialUrl = '' }: { onClose: (
     }
   }
 
+  /** Tạo/cập nhật series thủ công trước khi ghi video (FK tvshow_videos.series_key) */
+  const ensureManualSeries = async (seriesKey: string, seriesTitle: string, creatorId: string, creatorName: string, parts: number, now: string) => {
+    const { error } = await supabase!.from('tvshow_series').upsert(
+      {
+        series_key: seriesKey,
+        platform: 'youtube',
+        creator_id: creatorId,
+        creator_name: creatorName,
+        title: seriesTitle,
+        status: 'COMPLETE',
+        expected_parts: parts,
+        found_parts: parts,
+        confidence: 1,
+        updated_at: now,
+      },
+      { onConflict: 'series_key' },
+    )
+    return error
+  }
+
   const handleSaveSingle = async () => {
     const videoId = youtubeVideoId(url)
     if (!videoId) return setError('Vui lòng nhập link video YouTube hợp lệ.')
@@ -2334,6 +2354,12 @@ function AddTvShowMovieModal({ onClose, onSaved, initialUrl = '' }: { onClose: (
       if (newCreator) {
         creatorId = newCreator.creator_id || newCreator.id
       }
+    }
+
+    const seriesErr = await ensureManualSeries(`manual:${videoId}`, title.trim(), creatorId, cleanChannel, 1, now)
+    if (seriesErr) {
+      setBusy(false)
+      return setError(`Không lưu được video: ${seriesErr.message}`)
     }
 
     const { error: videoError } = await supabase!.from('tvshow_videos').upsert(
@@ -2410,6 +2436,12 @@ function AddTvShowMovieModal({ onClose, onSaved, initialUrl = '' }: { onClose: (
     const now = new Date().toISOString()
     const seriesKey = `manual:${parts[0].videoId}`
     const cleanChannel = channelName.trim() || 'Tự thêm'
+
+    const seriesErr = await ensureManualSeries(seriesKey, name, 'manual', cleanChannel, parts.length, now)
+    if (seriesErr) {
+      setBusy(false)
+      return setError(`Không lưu được danh sách video: ${seriesErr.message}`)
+    }
 
     const { error: videoError } = await supabase!.from('tvshow_videos').upsert(
       parts.map((p, i) => ({

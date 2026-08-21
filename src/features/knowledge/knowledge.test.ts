@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryStats, filterKnowledge, normalizeCategory } from './knowledge'
+import { categoryStats, filterKnowledge, normalizeCategory, parseLesson } from './knowledge'
 import type { KnowledgeItem } from '../../types'
 
 const items: KnowledgeItem[] = [
@@ -42,5 +42,18 @@ describe('filterKnowledge', () => {
   })
   it('thể loại và từ khoá cùng lúc', () => {
     expect(filterKnowledge(items, 'JavaScript', 'index')).toHaveLength(0)
+  })
+})
+
+describe('parseLesson', () => {
+  it('tách mỗi dòng thành một thẻ, bỏ dòng trống', () => {
+    expect(parseLesson('Hỏi 1 | Đáp 1\n\n  \nHỏi 2', 'Lịch sử')).toEqual([
+      { question: 'Hỏi 1', answer: 'Đáp 1', category: 'Lịch sử' },
+      { question: 'Hỏi 2', answer: '', category: 'Lịch sử' },
+    ])
+  })
+
+  it('giữ dấu | trong câu trả lời và mặc định thể loại Chung', () => {
+    expect(parseLesson('a | b | c', '')).toEqual([{ question: 'a', answer: 'b | c', category: 'Chung' }])
   })
 })

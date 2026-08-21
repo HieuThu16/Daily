@@ -25,3 +25,18 @@ export function filterKnowledge(items: KnowledgeItem[], category: string | null,
     return `${i.question} ${i.answer} ${i.category}`.toLowerCase().includes(q)
   })
 }
+
+/**
+ * Soạn bài học bằng tay: mỗi dòng một thẻ, dạng "câu hỏi | câu trả lời".
+ * Không có dấu | thì cả dòng là câu hỏi, để trống câu trả lời.
+ */
+export function parseLesson(text: string, category: string): { question: string; answer: string; category: string }[] {
+  const cat = normalizeCategory(category)
+  return text
+    .split('\n')
+    .map((line) => {
+      const [q, ...rest] = line.split('|')
+      return { question: q.trim(), answer: rest.join('|').trim(), category: cat }
+    })
+    .filter((c) => c.question)
+}

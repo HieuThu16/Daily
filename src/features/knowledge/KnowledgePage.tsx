@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Brain, Check, ChevronDown, Plus, Search, Settings2, Tags, Trash2, HelpCircle, BookOpen } from 'lucide-react'
+import { Brain, Check, ChevronDown, FilePlus2, Plus, Search, Settings2, Tags, Trash2, HelpCircle, BookOpen } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHeaderAction } from '../HeaderAction'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import type { KnowledgeItem } from '../../types'
-import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory } from './knowledge'
+import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory, parseLesson } from './knowledge'
 import { ReviewSession } from '../study/ReviewSession'
 import { useDeck } from '../study/useDeck'
 import { StudyProgressBar } from '../study/StudyProgressBar'
@@ -39,6 +39,8 @@ export function KnowledgePage() {
   const [managing, setManaging] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [reviewing, setReviewing] = useState(false)
+  const [lesson, setLesson] = useState<{ category: string; text: string } | null>(null) // != null: đang soạn bài học tay
+  const [lessonBusy, setLessonBusy] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   // Cùng cỗ máy ôn tập với tab Tiếng Anh, chỉ khác bảng dữ liệu.
@@ -141,6 +143,23 @@ export function KnowledgePage() {
     showToast('Đã thêm thẻ kiến thức mới', 'success')
   }
 
+  /** Lưu cả bài học tự soạn: mỗi dòng thành một thẻ. Không gọi AI. */
+  const saveLesson = async () => {
+    if (!lesson || !supabase) return
+    const rows = parseLesson(lesson.text, lesson.category)
+    if (!rows.length) return
+    setLessonBusy(true)
+    const { data, error } = await supabase.from('knowledge_items').insert(rows).select()
+    setLessonBusy(false)
+    if (error) {
+      showToast('❌ Chưa lưu được bài học — kiểm tra kết nối.', 'delete')
+      return
+    }
+    setItems((prev) => [...(data as KnowledgeItem[]), ...prev])
+    setLesson(null)
+    showToast(`Đã thêm ${rows.length} thẻ vào bài học`, 'success')
+  }
+
   const remove = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
     const removed = items.find((i) => i.id === id)
@@ -237,6 +256,11 @@ export function KnowledgePage() {
             )}
           </div>
 
+          <button className="kn-picker-btn" onClick={() => setLesson({ category: category ?? '', text: '' })} title="Tự soạn bài học bằng tay">
+            <FilePlus2 size={14} />
+            <span className="kn-picker-label">Soạn bài học</span>
+          </button>
+
           <button
             className="eng-mini-btn"
             onClick={() => {
@@ -296,6 +320,39 @@ export function KnowledgePage() {
                 </button>
               </div>
             ))}
+          </div>
+        </Modal>
+      )}
+
+      {lesson && (
+        <Modal title="Tự soạn bài học" onClose={() => setLesson(null)}>
+          <label>
+            Tên bài học (thể loại)
+            <input
+              autoFocus
+              list="kn-categories"
+              placeholder={`Mặc định "${DEFAULT_CATEGORY}"`}
+              value={lesson.category}
+              onChange={(e) => setLesson({ ...lesson, category: e.target.value })}
+            />
+          </label>
+          <label>
+            Nội dung — mỗi dòng một thẻ, dạng <code>câu hỏi | câu trả lời</code>
+            <textarea
+              rows={10}
+              placeholder={'Thủ đô Pháp là gì? | Paris' + String.fromCharCode(10) + 'Nước sôi ở bao nhiêu độ? | 100°C'}
+              value={lesson.text}
+              onChange={(e) => setLesson({ ...lesson, text: e.target.value })}
+            />
+          </label>
+          <p className="muted" style={{ fontSize: '0.8rem', margin: '4px 0 0' }}>
+            {parseLesson(lesson.text, lesson.category).length} thẻ sẽ được tạo.
+          </p>
+          <div className="modal-actions">
+            <button onClick={() => setLesson(null)}>Huỷ</button>
+            <button className="primary" onClick={saveLesson} disabled={lessonBusy || !parseLesson(lesson.text, lesson.category).length}>
+              {lessonBusy ? 'Đang lưu…' : 'Lưu bài học'}
+            </button>
           </div>
         </Modal>
       )}
