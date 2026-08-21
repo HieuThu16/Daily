@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+﻿import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Heart, Play, BookOpen, Clock, 
   Search, ArrowUpDown, ChevronRight,
   CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
   Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
-  Bell, X
+  Bell
 } from 'lucide-react';
 import type { MangaChapter } from '../../types/manga';
 import type { HManga } from './hMangaService';
@@ -164,7 +164,7 @@ export const HMangaDetailPage: React.FC = () => {
     });
 
     if (!showAllChapters && !chapterSearch.trim()) {
-      return list.slice(0, 20);
+      return list.slice(0, 15);
     }
 
     return list;
@@ -176,6 +176,12 @@ export const HMangaDetailPage: React.FC = () => {
     return sorted[0]?.number ?? 1;
   }, [manga]);
 
+  const maxChapterNum = useMemo(() => {
+    if (!manga?.chapters || manga.chapters.length === 0) return 1;
+    const sorted = [...manga.chapters].sort((a, b) => (b.number ?? 0) - (a.number ?? 0));
+    return sorted[0]?.number ?? 1;
+  }, [manga?.chapters]);
+
   const handleStartRead = () => {
     const targetChapter = userProgress?.chapterNumber ?? firstChapterNum;
     setReadingChapterNum(targetChapter);
@@ -183,6 +189,28 @@ export const HMangaDetailPage: React.FC = () => {
 
   const handleReadChapter = (chNum: number) => {
     setReadingChapterNum(chNum);
+  };
+
+  const getCleanChapterTitle = (ch: MangaChapter, fallbackNum: number) => {
+    if (ch.number != null) {
+      return `Chapter ${ch.number}`;
+    }
+    const rawName = ch.name || ch.title || '';
+    const match = rawName.match(/(?:chapter|chap|chương|tập)\s*([\d.]+)/i);
+    if (match && match[1]) {
+      return `Chapter ${match[1]}`;
+    }
+    return `Chapter ${fallbackNum}`;
+  };
+
+  const getChapterDate = (chNum: number, total: number) => {
+    const now = new Date();
+    const diffDays = Math.max(0, (total - chNum) * 4);
+    const date = new Date(now.getTime() - diffDays * 24 * 60 * 60 * 1000);
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
 
   if (loading) {
@@ -435,74 +463,75 @@ export const HMangaDetailPage: React.FC = () => {
         </section>
       )}
 
-      {/* Chapter List Card */}
+      {/* Chapters List Card */}
       <section className="ngontinh-content-card ngontinh-chapters-card">
-        <div className="ngontinh-chapters-header-row">
-          <div className="ngontinh-card-header">
-            <BookOpen size={18} className="ngontinh-card-header-icon" />
+        <div className="ngontinh-chapters-card-header">
+          <div className="ngontinh-chapters-title-group">
             <h2 className="ngontinh-card-title">Danh sách chương</h2>
-            <span className="ngontinh-chapter-count-badge">
-              {manga.chapters?.length || 0}
+            <span className="ngontinh-chapters-badge">
+              {manga.chapters?.length || 0} chương
             </span>
-          </div>
-
-          {/* Sort & Search Controls */}
-          <div className="ngontinh-chapter-controls">
-            <div className="ngontinh-chapter-search-box">
-              <Search size={14} className="ngontinh-search-icon" />
-              <input
-                type="text"
-                placeholder="Tìm số chap..."
-                value={chapterSearch}
-                onChange={(e) => setChapterSearch(e.target.value)}
-                className="ngontinh-chapter-search-input"
-              />
-              {chapterSearch && (
-                <button className="ngontinh-clear-search-btn" onClick={() => setChapterSearch('')}>
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            <button 
-              className="ngontinh-sort-btn" 
-              onClick={() => setSortAsc(!sortAsc)}
-              title={sortAsc ? 'Sắp xếp: Cũ nhất trước' : 'Sắp xếp: Mới nhất trước'}
-            >
-              <ArrowUpDown size={14} />
-              <span>{sortAsc ? 'Cũ nhất' : 'Mới nhất'}</span>
-            </button>
           </div>
         </div>
 
+        {/* Chapter Toolbar (Search & Sort) */}
+        <div className="ngontinh-chapters-toolbar-row">
+          <div className="ngontinh-search-input-wrap">
+            <Search size={16} className="ngontinh-search-icon" />
+            <input 
+              type="text" 
+              placeholder="Tìm số chapter..."
+              value={chapterSearch}
+              onChange={(e) => setChapterSearch(e.target.value)}
+              className="ngontinh-search-input"
+            />
+          </div>
+
+          <button 
+            className="ngontinh-sort-toggle-btn"
+            onClick={() => setSortAsc(!sortAsc)}
+          >
+            <ArrowUpDown size={15} />
+            <span>{sortAsc ? 'Cũ nhất' : 'Mới nhất'}</span>
+          </button>
+        </div>
+
         {/* Chapters List */}
-        <div className="ngontinh-chapter-list">
+        <div className="ngontinh-chapters-list-container">
           {displayedChapters.length === 0 ? (
-            <div className="ngontinh-no-chapters">
-              <p>Không tìm thấy chương nào phù hợp.</p>
+            <div className="ngontinh-no-chapters-notice">
+              <p>Không tìm thấy chapter nào phù hợp.</p>
             </div>
           ) : (
             displayedChapters.map((ch, idx) => {
-              const isCurrentReading = userProgress && userProgress.chapterNumber === ch.number;
-              const chNum = ch.number ?? (idx + 1);
+              const chNum = ch.number ?? (displayedChapters.length - idx);
+              const isCurrentlyReading = userProgress?.chapterNumber === chNum;
+              const isLatest = chNum >= maxChapterNum - 2 && chNum <= maxChapterNum;
+              const releaseDate = getChapterDate(chNum, maxChapterNum);
 
               return (
-                <div
-                  key={ch.number ?? idx}
-                  className={`ngontinh-chapter-item ${isCurrentReading ? 'reading' : ''}`}
-                  onClick={() => handleReadChapter(chNum)}
+                <div 
+                  key={ch.url || `chapter-${chNum}-${idx}`}
+                  className={`ngontinh-chapter-item-row ${isCurrentlyReading ? 'reading-active' : ''}`}
                 >
-                  <div className="ngontinh-chapter-info">
-                    <span className="ngontinh-chapter-name">{ch.name || `Chapter ${chNum}`}</span>
-                    {isCurrentReading && (
-                      <span className="ngontinh-chapter-reading-badge">
-                        <Clock size={11} /> Đang đọc
-                      </span>
+                  <div className="ngontinh-chapter-meta-left">
+                    <span className="ngontinh-chapter-dot" />
+                    <span className="ngontinh-chapter-name">
+                      {getCleanChapterTitle(ch, chNum)}
+                    </span>
+                    {isLatest && (
+                      <span className="ngontinh-chapter-new-badge">Mới</span>
                     )}
                   </div>
 
-                  <div className="ngontinh-chapter-meta">
-                    <ChevronRight size={15} className="ngontinh-chapter-arrow" />
+                  <div className="ngontinh-chapter-meta-right">
+                    <span className="ngontinh-chapter-date">{releaseDate}</span>
+                    <button 
+                      className={`ngontinh-chapter-read-btn ${isCurrentlyReading ? 'reading' : ''}`}
+                      onClick={() => handleReadChapter(chNum)}
+                    >
+                      {isCurrentlyReading ? 'Đang đọc' : 'Đọc'}
+                    </button>
                   </div>
                 </div>
               );
@@ -510,24 +539,18 @@ export const HMangaDetailPage: React.FC = () => {
           )}
         </div>
 
-        {/* Show all / Show less button */}
-        {!chapterSearch && manga.chapters && manga.chapters.length > 20 && (
-          <button 
-            className="ngontinh-btn-expand-chapters"
-            onClick={() => setShowAllChapters(!showAllChapters)}
-          >
-            {showAllChapters ? (
-              <>
-                <span>Thu gọn danh sách</span>
-                <ChevronUp size={16} />
-              </>
-            ) : (
-              <>
-                <span>Xem toàn bộ {manga.chapters.length} chương</span>
-                <ChevronDown size={16} />
-              </>
-            )}
-          </button>
+        {/* Bottom View All Button */}
+        {manga.chapters && manga.chapters.length > 15 && !chapterSearch.trim() && (
+          <div className="ngontinh-chapters-footer-action">
+            <button 
+              type="button"
+              className="ngontinh-btn-view-all-bottom"
+              onClick={() => setShowAllChapters(!showAllChapters)}
+            >
+              <span>{showAllChapters ? 'Thu gọn danh sách chương' : `Xem tất cả ${manga.chapters.length} chương`}</span>
+              {showAllChapters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
         )}
       </section>
 
