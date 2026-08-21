@@ -72,6 +72,22 @@ export const HMangaDetailPage: React.FC = () => {
     };
   }, [slug]);
 
+  const [detailCover, setDetailCover] = useState<string>('');
+
+  useEffect(() => {
+    if (manga) {
+      const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
+      setDetailCover(manga.cover || ch1 || '');
+    }
+  }, [manga]);
+
+  const handleDetailCoverError = () => {
+    const ch1 = getChapterImageUrl(manga?.chapters?.[0]?.images?.[0]);
+    if (ch1 && detailCover !== ch1) {
+      setDetailCover(ch1);
+    }
+  };
+
   const isFav = slug ? favorites.includes(slug) : false;
   const isFollowed = slug ? follows.includes(slug) : false;
   const userProgress = slug ? history[slug] : null;
@@ -236,22 +252,6 @@ export const HMangaDetailPage: React.FC = () => {
       </div>
     );
   }
-
-  const [detailCover, setDetailCover] = useState<string>('');
-
-  useEffect(() => {
-    if (manga) {
-      const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-      setDetailCover(manga.cover || ch1 || '');
-    }
-  }, [manga]);
-
-  const handleDetailCoverError = () => {
-    const ch1 = getChapterImageUrl(manga?.chapters?.[0]?.images?.[0]);
-    if (ch1 && detailCover !== ch1) {
-      setDetailCover(ch1);
-    }
-  };
 
   const authorDisplay = manga.author || 'Đang cập nhật';
   const statusDisplay = manga.status || 'Đang tiến hành';
