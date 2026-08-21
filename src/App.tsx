@@ -25,6 +25,9 @@ import { BLMangaDetailPage } from './features/manga/BLMangaDetailPage'
 import { NgontinhMangaPage } from './features/manga/NgontinhMangaPage'
 import { NgontinhDetailPage } from './features/manga/NgontinhDetailPage'
 import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
+import { HMangaPage } from './features/manga/HMangaPage'
+import { HMangaDetailPage } from './features/manga/HMangaDetailPage'
+import { HMangaReaderPage } from './features/manga/HMangaReaderPage'
 import { EnglishPage } from './features/english/EnglishPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
@@ -39,7 +42,15 @@ import { CommandPalette, openCommandPalette } from './features/CommandPalette'
 import { ShareTarget } from './features/ShareTarget'
 import { ToastProvider, useToast } from './features/ToastContext'
 
-const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
+export function isUserAuthorizedForH(user: unknown): boolean {
+  if (!user || typeof user !== 'object') return false
+  const u = user as { email?: string | null; user_metadata?: { email?: string; user_name?: string; name?: string } }
+  const email = (u.email || u.user_metadata?.email || '').toLowerCase()
+  const name = (u.user_metadata?.user_name || u.user_metadata?.name || '').toLowerCase()
+  return email.includes('truongnguyenminhhieu100') || name.includes('truongnguyenminhhieu100')
+}
+
+const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
@@ -61,6 +72,13 @@ const navigation: { id: Tab; label: string; icon: typeof Home; colorClass: strin
   { id: 'settings', label: 'Cài đặt', icon: Settings, colorClass: 'icon-box-slate' },
 ]
 
+const H_NAV_ITEM: { id: Tab; label: string; icon: typeof Home; colorClass: string } = {
+  id: 'truyenh',
+  label: 'Truyện H',
+  icon: Flame,
+  colorClass: 'icon-box-rose',
+}
+
 const RECENT_TABS_STORAGE_KEY = 'daily_recent_tabs'
 const PINNED_TABS_STORAGE_KEY = 'daily_pinned_tabs'
 /** Ngày đã nhắc sao lưu gần nhất, để đừng nhắc lại nhiều lần trong ngày. */
@@ -72,19 +90,19 @@ const BOTTOM_NAV_SIZE = 5
 const MAX_PINNED_TABS = 7
 
 /** Đưa `ids` lên đầu, đệm cho đủ 5 ô bằng tab mặc định rồi tới phần còn lại. */
-function padRecentTabs(ids: Tab[]): Tab[] {
+function padRecentTabs(ids: Tab[], currentNav = BASE_NAVIGATION): Tab[] {
   const combined = [...ids]
-  for (const tab of [...DEFAULT_PRIMARY_TABS, ...navigation.map((n) => n.id)]) {
+  for (const tab of [...DEFAULT_PRIMARY_TABS, ...currentNav.map((n) => n.id)]) {
     if (!combined.includes(tab)) combined.push(tab)
   }
   return combined.slice(0, BOTTOM_NAV_SIZE)
 }
 
-function readSavedTabs(storageKey: string): Tab[] {
+function readSavedTabs(storageKey: string, currentNav = BASE_NAVIGATION): Tab[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
     if (Array.isArray(parsed)) {
-      const validIds = new Set<string>(navigation.map((n) => n.id))
+      const validIds = new Set<string>(currentNav.map((n) => n.id))
       return parsed.filter((id): id is Tab => validIds.has(id))
     }
   } catch (error) {
@@ -94,24 +112,13 @@ function readSavedTabs(storageKey: string): Tab[] {
 }
 
 /** Tab người dùng tự ghim: luôn đứng đầu bottom nav, không bị MRU đẩy đi. */
-function getPinnedTabs(): Tab[] {
-  return readSavedTabs(PINNED_TABS_STORAGE_KEY).slice(0, MAX_PINNED_TABS)
+function getPinnedTabs(currentNav = BASE_NAVIGATION): Tab[] {
+  return readSavedTabs(PINNED_TABS_STORAGE_KEY, currentNav).slice(0, MAX_PINNED_TABS)
 }
 
-function getSavedRecentTabs(): Tab[] {
-  return padRecentTabs(readSavedTabs(RECENT_TABS_STORAGE_KEY))
+function getSavedRecentTabs(currentNav = BASE_NAVIGATION): Tab[] {
+  return padRecentTabs(readSavedTabs(RECENT_TABS_STORAGE_KEY, currentNav), currentNav)
 }
-
-// Ngăn kéo chia theo nhóm lớn, bấm vào mới xổ các mục con.
-const navGroups: { title: string; ids: Tab[] }[] = [
-  { title: 'Tổng quan', ids: ['home', 'calendar'] },
-  { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] },
-  { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'music', 'movies', 'manga'] },
-  { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh'] },
-  { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] },
-  { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] },
-  { title: 'Hệ thống', ids: ['settings'] },
-]
 
 function Login({ user }: { user: unknown }) {
   const [busy, setBusy] = useState(false)
@@ -259,17 +266,40 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     }
   }
 
+  const isHAuthorized = isUserAuthorizedForH(user)
+  const navigation = useMemo(() => {
+    if (!isHAuthorized) return BASE_NAVIGATION
+    const list = [...BASE_NAVIGATION]
+    const ngontinhIdx = list.findIndex((n) => n.id === 'ngontinh')
+    if (ngontinhIdx >= 0) {
+      list.splice(ngontinhIdx + 1, 0, H_NAV_ITEM)
+    } else {
+      list.push(H_NAV_ITEM)
+    }
+    return list
+  }, [isHAuthorized])
+
+  const navGroups = useMemo(() => [
+    { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
+    { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] as Tab[] },
+    { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'music', 'movies', 'manga'] as Tab[] },
+    { title: 'Sách & Truyện online', ids: (isHAuthorized ? ['books', 'bl', 'ngontinh', 'truyenh'] : ['books', 'bl', 'ngontinh']) as Tab[] },
+    { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
+    { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] as Tab[] },
+    { title: 'Hệ thống', ids: ['settings'] as Tab[] },
+  ], [isHAuthorized])
+
   const activeTabItem = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/')) ?? navigation[0]
   const ActiveIcon = activeTabItem.icon
 
   // 5 tab gần nhất người dùng đã truy cập cho thanh điều hướng dưới đáy (bottom nav)
-  const [recentTabs, setRecentTabs] = useState<Tab[]>(() => getSavedRecentTabs())
+  const [recentTabs, setRecentTabs] = useState<Tab[]>(() => getSavedRecentTabs(navigation))
 
   useEffect(() => {
     const currentTabId = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/'))?.id
     if (currentTabId) {
       setRecentTabs((prev) => {
-        const top5 = padRecentTabs([currentTabId, ...prev.filter((id) => id !== currentTabId)])
+        const top5 = padRecentTabs([currentTabId, ...prev.filter((id) => id !== currentTabId)], navigation)
         try {
           localStorage.setItem(RECENT_TABS_STORAGE_KEY, JSON.stringify(top5))
         } catch (error) {
@@ -278,9 +308,9 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
         return top5
       })
     }
-  }, [path])
+  }, [path, navigation])
 
-  const [pinnedTabs, setPinnedTabs] = useState<Tab[]>(() => getPinnedTabs())
+  const [pinnedTabs, setPinnedTabs] = useState<Tab[]>(() => getPinnedTabs(navigation))
 
   const togglePin = (id: Tab) => {
     if (!pinnedTabs.includes(id) && pinnedTabs.length >= MAX_PINNED_TABS) {
@@ -304,7 +334,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     return ids
       .map((id) => navigation.find((n) => n.id === id))
       .filter((item): item is (typeof navigation)[number] => item !== undefined)
-  }, [recentTabs, pinnedTabs])
+  }, [recentTabs, pinnedTabs, navigation])
 
   useTaskReminders()
 
@@ -570,6 +600,9 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/ngontinh" element={<NgontinhMangaPage />} />
                       <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
                       <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
+                      <Route path="/truyenh" element={isUserAuthorizedForH(user) ? <HMangaPage /> : <Navigate to="/home" replace />} />
+                      <Route path="/truyenh/:slug" element={isUserAuthorizedForH(user) ? <HMangaDetailPage /> : <Navigate to="/home" replace />} />
+                      <Route path="/truyenh/:slug/read/:chapterNum" element={isUserAuthorizedForH(user) ? <HMangaReaderPage /> : <Navigate to="/home" replace />} />
                       <Route path="/english" element={<EnglishPage />} />
                       <Route path="/knowledge" element={<KnowledgePage />} />
                       <Route path="/people" element={<PeoplePage />} />

@@ -1,0 +1,56 @@
+﻿import { describe, expect, it, beforeEach } from 'vitest';
+import { isUserAuthorizedForH } from '../../App';
+import { 
+  getHMangaFavorites, toggleHMangaFavorite,
+  getHMangaFollows, toggleHMangaFollow,
+  getHMangaHistory, saveHMangaProgress, getHMangaProgress
+} from './hMangaService';
+
+describe('isUserAuthorizedForH', () => {
+  it('cho phép tài khoản truongnguyenminhhieu100', () => {
+    expect(isUserAuthorizedForH({ email: 'truongnguyenminhhieu100@gmail.com' })).toBe(true);
+    expect(isUserAuthorizedForH({ user_metadata: { email: 'truongnguyenminhhieu100@domain.com' } })).toBe(true);
+    expect(isUserAuthorizedForH({ user_metadata: { user_name: 'truongnguyenminhhieu100' } })).toBe(true);
+  });
+
+  it('chặn các tài khoản khác hoặc null', () => {
+    expect(isUserAuthorizedForH(null)).toBe(false);
+    expect(isUserAuthorizedForH(undefined)).toBe(false);
+    expect(isUserAuthorizedForH({ email: 'otheruser@gmail.com' })).toBe(false);
+  });
+});
+
+describe('hMangaService localStorage helpers', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('quản lý danh sách yêu thích', () => {
+    expect(getHMangaFavorites()).toEqual([]);
+    const added = toggleHMangaFavorite('mot-buoc-len-may');
+    expect(added).toBe(true);
+    expect(getHMangaFavorites()).toEqual(['mot-buoc-len-may']);
+    const removed = toggleHMangaFavorite('mot-buoc-len-may');
+    expect(removed).toBe(false);
+    expect(getHMangaFavorites()).toEqual([]);
+  });
+
+  it('quản lý theo dõi truyện', () => {
+    expect(getHMangaFollows()).toEqual([]);
+    const added = toggleHMangaFollow('mot-buoc-len-may');
+    expect(added).toBe(true);
+    expect(getHMangaFollows()).toEqual(['mot-buoc-len-may']);
+  });
+
+  it('lưu và đọc tiến độ đọc truyện', () => {
+    expect(getHMangaProgress('mot-buoc-len-may')).toBeUndefined();
+    saveHMangaProgress('mot-buoc-len-may', {
+      chapterNumber: 5,
+      chapterName: 'Chapter 5'
+    });
+    const progress = getHMangaProgress('mot-buoc-len-may');
+    expect(progress).toBeDefined();
+    expect(progress?.chapterNumber).toBe(5);
+    expect(progress?.chapterName).toBe('Chapter 5');
+  });
+});
