@@ -303,6 +303,7 @@ export type CategorizedGroup<T = any> = {
   category: CategoryMeta
   videos: T[]
   totalCount: number
+  inProgressCount: number
   watchedCount: number
   cover: string | null
 }
@@ -313,16 +314,18 @@ export type CategorizedGroup<T = any> = {
 export function groupVideosByCategory<T extends { title: string; video_id: string; thumbnail?: string | null }>(
   videos: T[],
   type: VideoCategoryType,
-  watchedSet: Set<string> = new Set()
+  watchedSet: Set<string> = new Set(),
+  inProgressSet: Set<string> = new Set()
 ): CategorizedGroup<T>[] {
   const categories = type === 'tvshow' ? TVSHOW_CATEGORIES : REVIEW_CATEGORIES
-  const map = new Map<string, { category: CategoryMeta; videos: T[]; watched: number; cover: string | null }>()
+  const map = new Map<string, { category: CategoryMeta; videos: T[]; inProgress: number; watched: number; cover: string | null }>()
 
   // Khởi tạo map cho tất cả categories
   for (const cat of categories) {
     map.set(cat.id, {
       category: cat,
       videos: [],
+      inProgress: 0,
       watched: 0,
       cover: null,
     })
@@ -335,6 +338,8 @@ export function groupVideosByCategory<T extends { title: string; video_id: strin
     entry.videos.push(v)
     if (watchedSet.has(v.video_id)) {
       entry.watched += 1
+    } else if (inProgressSet.has(v.video_id)) {
+      entry.inProgress += 1
     }
     if (!entry.cover && v.thumbnail) {
       entry.cover = v.thumbnail
@@ -350,6 +355,7 @@ export function groupVideosByCategory<T extends { title: string; video_id: strin
         category: entry.category,
         videos: entry.videos,
         totalCount: entry.videos.length,
+        inProgressCount: entry.inProgress,
         watchedCount: entry.watched,
         cover: entry.cover || (entry.videos[0] as any)?.thumbnail || null,
       })

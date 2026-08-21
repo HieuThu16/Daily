@@ -15,6 +15,14 @@ import {
   detectVideoCategory, 
   groupVideosByCategory 
 } from '../../lib/videoCategorizer'
+import {
+  autoMarkVideoWatching,
+  cycleNextVideoStatus,
+  getVideoStatusSets,
+  setVideoStatus as updateVideoStatusRecord,
+  useVideoStatusListener,
+  type VideoStatus
+} from '../../lib/videoStatus'
 import { CategoryDetailView } from './CategoryDetailView'
 import './tvShow.css'
 
@@ -27,6 +35,7 @@ type ChannelItem = {
   creator_name: string
   creator_id: string | null
   videoCount: number
+  inProgressCount: number
   watchedCount: number
   cover: string | null
   lastSyncedAt: string | null
@@ -86,6 +95,8 @@ export function TvShowView() {
   const [channels, setChannels] = useState<ChannelItem[]>([])
   const [allVideos, setAllVideos] = useState<VideoRow[]>([])
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
+  const [inProgressSet, setInProgressSet] = useState<Set<string>>(new Set())
+  const [statusMap, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
@@ -95,6 +106,10 @@ export function TvShowView() {
   const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [addVideoOpen, setAddVideoOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+
+  useVideoStatusListener(() => {
+    setReloadKey((k) => k + 1)
+  })
 
   // Tải danh sách Kênh & Toàn bộ video TV Show
   useEffect(() => {
@@ -130,16 +145,21 @@ export function TvShowView() {
       ])
 
       const videos = (videosRes?.data ?? []) as VideoRow[]
-      const watchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((w) => w.video_id))
+      const supabaseWatchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((w) => w.video_id))
+      const statusSets = getVideoStatusSets('tvshow', supabaseWatchedIds)
 
       // Gom video theo creator
-      const statsByCreator = new Map<string, { total: number; watched: number; cover: string | null }>()
+      const statsByCreator = new Map<string, { total: number; inProgress: number; watched: number; cover: string | null }>()
 
       for (const v of videos) {
         const key = v.creator_id || v.creator_name || 'manual'
-        const stat = statsByCreator.get(key) ?? { total: 0, watched: 0, cover: null }
+        const stat = statsByCreator.get(key) ?? { total: 0, inProgress: 0, watched: 0, cover: null }
         stat.total += 1
-        if (watchedIds.has(v.video_id)) stat.watched += 1
+        if (statusSets.watchedSet.has(v.video_id)) {
+          stat.watched += 1
+        } else if (statusSets.inProgressSet.has(v.video_id)) {
+          stat.inProgress += 1
+        }
         if (!stat.cover && v.thumbnail) stat.cover = v.thumbnail
         statsByCreator.set(key, stat)
       }
@@ -147,7 +167,7 @@ export function TvShowView() {
       // Xây dựng danh sách Channel Cards
       const channelCards: ChannelItem[] = creators.map((c) => {
         const key = c.creator_id || c.creator_name || c.id
-        const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, watched: 0, cover: null }
+        const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
         return {
           id: c.id,
           platform: c.platform,
@@ -155,6 +175,7 @@ export function TvShowView() {
           creator_name: c.creator_name || 'Kênh YouTube',
           creator_id: c.creator_id,
           videoCount: stat.total,
+          inProgressCount: stat.inProgress,
           watchedCount: stat.watched,
           cover: stat.cover,
           lastSyncedAt: c.last_synced_at,
@@ -171,6 +192,7 @@ export function TvShowView() {
           creator_name: 'Video tự thêm',
           creator_id: 'manual',
           videoCount: manualStat.total,
+          inProgressCount: manualStat.inProgress,
           watchedCount: manualStat.watched,
           cover: manualStat.cover,
           lastSyncedAt: null,
@@ -180,7 +202,9 @@ export function TvShowView() {
       if (alive) {
         setChannels(channelCards)
         setAllVideos(videos)
-        setWatchedSet(watchedIds)
+        setWatchedSet(statusSets.watchedSet)
+        setInProgressSet(statusSets.inProgressSet)
+        setStatusMap(statusSets.statusMap)
         setLoading(false)
       }
     })()
@@ -192,8 +216,8 @@ export function TvShowView() {
 
   // Gom nhóm video theo Thể Loại tự động dựa vào tiêu đề
   const categoryGroups = useMemo(() => {
-    return groupVideosByCategory(allVideos, 'tvshow', watchedSet)
-  }, [allVideos, watchedSet])
+    return groupVideosByCategory(allVideos, 'tvshow', watchedSet, inProgressSet)
+  }, [allVideos, watchedSet, inProgressSet])
 
   // Lọc kênh theo tìm kiếm
   const filteredChannels = useMemo(() => {
@@ -499,12 +523,14 @@ function ChannelDetailView({
 
   const [videos, setVideos] = useState<VideoRow[]>([])
   const [watched, setWatched] = useState<Set<string>>(new Set())
+  const [inProgress, setInProgress] = useState<Set<string>>(new Set())
+  const [statusMap, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
   const [loading, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [isPlayerActive, setIsPlayerActive] = useState(false)
   const [autoplay, setAutoplay] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'watched'>('all')
+  const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
   const [playbackRate, setPlaybackRate] = useState<number>(() => {
     try {
@@ -524,6 +550,20 @@ function ChannelDetailView({
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const playerBoxRef = useRef<HTMLDivElement>(null)
+
+  const refreshStatuses = async () => {
+    const watchedRes = await supabase?.from('tvshow_watched').select('video_id')
+    const supabaseWatchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
+    const sets = getVideoStatusSets('tvshow', supabaseWatchedIds)
+    setWatched(sets.watchedSet)
+    setInProgress(sets.inProgressSet)
+    setStatusMap(sets.statusMap)
+    return sets
+  }
+
+  useVideoStatusListener(() => {
+    void refreshStatuses()
+  })
 
   const sendYouTubeCommand = (func: string, args: any[] = []) => {
     if (!iframeRef.current || !iframeRef.current.contentWindow) return
@@ -572,23 +612,33 @@ function ChannelDetailView({
         query = query?.eq('creator_name', channel.creator_name)
       }
 
-      const [videoRes, watchedRes] = await Promise.all([
+      const [videoRes, statusSets] = await Promise.all([
         query?.order('part_number', { ascending: true, nullsFirst: false }).order('published_at', { ascending: false }),
-        supabase?.from('tvshow_watched').select('video_id'),
+        refreshStatuses(),
       ])
 
       const rows = (videoRes?.data ?? []) as VideoRow[]
       setVideos(rows)
 
-      const watchedSet = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
-      setWatched(watchedSet)
-
-      // Mặc định chọn video chưa xem đầu tiên
-      const firstUnwatched = rows.find((r) => !watchedSet.has(r.video_id))
-      setPlayingId(firstUnwatched ? firstUnwatched.video_id : rows[0]?.video_id ?? null)
+      // Mặc định chọn video đang xem hoặc video chưa xem đầu tiên
+      const firstInProgress = rows.find((r) => statusSets.inProgressSet.has(r.video_id))
+      const firstUnwatched = rows.find((r) => !statusSets.watchedSet.has(r.video_id) && !statusSets.inProgressSet.has(r.video_id))
+      setPlayingId(firstInProgress ? firstInProgress.video_id : (firstUnwatched ? firstUnwatched.video_id : rows[0]?.video_id ?? null))
       setLoading(false)
     })()
   }, [channel])
+
+  // Tự động chuyển sang trạng thái Đang xem khi phát video
+  useEffect(() => {
+    if (isPlayerActive && playingId) {
+      const v = videos.find((item) => item.video_id === playingId)
+      void autoMarkVideoWatching(playingId, 'tvshow', watched, {
+        title: v?.title,
+        channel_name: v?.creator_name || channel.creator_name,
+        series_key: v?.series_key,
+      })
+    }
+  }, [isPlayerActive, playingId, videos, watched, channel.creator_name])
 
   const filteredVideos = useMemo(() => {
     let result = [...videos]
@@ -597,7 +647,9 @@ function ChannelDetailView({
       result = result.filter((v) => v.title.toLowerCase().includes(q))
     }
     if (filterMode === 'unwatched') {
-      result = result.filter((v) => !watched.has(v.video_id))
+      result = result.filter((v) => !watched.has(v.video_id) && !inProgress.has(v.video_id))
+    } else if (filterMode === 'in_progress') {
+      result = result.filter((v) => inProgress.has(v.video_id))
     } else if (filterMode === 'watched') {
       result = result.filter((v) => watched.has(v.video_id))
     }
@@ -606,41 +658,48 @@ function ChannelDetailView({
       result.reverse()
     }
     return result
-  }, [videos, search, filterMode, watched, sortOrder])
+  }, [videos, search, filterMode, watched, inProgress, sortOrder])
 
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
   const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find(v => v.video_id === playingId) || videos[0])
 
-  const toggleWatched = async (videoId: string, e?: React.MouseEvent) => {
+  const handleSetStatus = async (videoId: string, status: VideoStatus, e?: React.MouseEvent) => {
     e?.stopPropagation()
-    const isWatched = watched.has(videoId)
-    const next = new Set(watched)
-    if (isWatched) {
-      next.delete(videoId)
-      setWatched(next)
-      await supabase?.from('tvshow_watched').delete().eq('platform', 'youtube').eq('video_id', videoId)
-    } else {
-      next.add(videoId)
-      setWatched(next)
-      await supabase?.from('tvshow_watched').upsert({
-        platform: 'youtube',
-        video_id: videoId,
-        watched_at: new Date().toISOString(),
-      })
-    }
+    const targetVideo = videos.find((v) => v.video_id === videoId)
+    await updateVideoStatusRecord(videoId, 'tvshow', status, {
+      title: targetVideo?.title,
+      channel_name: targetVideo?.creator_name || channel.creator_name,
+      series_key: targetVideo?.series_key,
+    })
+  }
+
+  const handleCycleStatus = async (videoId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const currentSt = statusMap.get(videoId) || (watched.has(videoId) ? 'COMPLETED' : (inProgress.has(videoId) ? 'IN_PROGRESS' : 'UNWATCHED'))
+    const targetVideo = videos.find((v) => v.video_id === videoId)
+    await cycleNextVideoStatus(videoId, 'tvshow', currentSt, {
+      title: targetVideo?.title,
+      channel_name: targetVideo?.creator_name || channel.creator_name,
+      series_key: targetVideo?.series_key,
+    })
   }
 
   const watchedCountInChannel = useMemo(() => {
     return videos.filter((v) => watched.has(v.video_id)).length
   }, [videos, watched])
 
-  const currentIsWatched = currentVideo ? watched.has(currentVideo.video_id) : false
+  const inProgressCountInChannel = useMemo(() => {
+    return videos.filter((v) => inProgress.has(v.video_id)).length
+  }, [videos, inProgress])
+
+  const unwatchedCountInChannel = videos.length - watchedCountInChannel - inProgressCountInChannel
+  const currentStatus: VideoStatus = currentVideo ? (statusMap.get(currentVideo.video_id) || (watched.has(currentVideo.video_id) ? 'COMPLETED' : (inProgress.has(currentVideo.video_id) ? 'IN_PROGRESS' : 'UNWATCHED'))) : 'UNWATCHED'
   const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube-nocookie.com/embed/${currentVideo.video_id}` : '')
   const embedSrc = embedBase ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1` : ''
 
   return (
     <div className="tv-detail">
-      {/* 1. Header Top Bar (Quay lại < | TV Show | Chuông thông báo 3 | Bookmark) */}
+      {/* 1. Header Top Bar (Quay lại < | Tên Kênh | Chuông thông báo 3 | Bookmark) */}
       <div className="tv-detail-bar">
         <button 
           type="button" 
@@ -652,25 +711,16 @@ function ChannelDetailView({
         </button>
 
         <div className="tv-detail-title-wrap">
-          <Tv size={20} color="#f59e0b" />
-          <span className="tv-header-title-text">TV Show</span>
+          <Tv size={18} className="tv-header-icon" />
+          <span className="tv-header-title-text">{channel.creator_name}</span>
         </div>
 
         <div className="tv-header-right-actions">
           <button 
             type="button" 
             className="tv-header-icon-btn" 
-            title="Thông báo"
-            onClick={() => alert('Bạn không có thông báo mới.')}
-          >
-            <Bell size={18} />
-            <span className="tv-header-badge">3</span>
-          </button>
-          <button 
-            type="button" 
-            className="tv-header-icon-btn" 
             title="Lưu kênh"
-            onClick={() => alert('Đã lưu kênh vào danh sách yêu thích!')}
+            onClick={() => alert(`Đã ghim kênh ${channel.creator_name}!`)}
           >
             <Bookmark size={18} />
           </button>
@@ -683,9 +733,8 @@ function ChannelDetailView({
         <div className="tv-empty">Kênh này chưa có video nào.</div>
       ) : (
         <>
-          {/* 2. Main Player Card (Player + Meta + 4 NÚT HÀNG NGANG) */}
+          {/* 2. KHUNG TRÌNH PHÁT VIDEO CHÍNH (Chiếm nửa trên) */}
           <div ref={playerBoxRef} className="tv-main-player-card">
-            {/* Khung video / Poster */}
             <div className="tv-player-frame-wrapper">
               {isPlayerActive && currentVideo && embedSrc ? (
                 <iframe
@@ -731,21 +780,27 @@ function ChannelDetailView({
               </div>
             )}
 
-            {/* 3. BẢNG 4 NÚT HÀNG NGANG: Đánh dấu | Tốc độ | Hẹn giờ | Cài đặt */}
+            {/* 3. BẢNG 4 NÚT HÀNG NGANG: Trạng thái | Tốc độ | Hẹn giờ | Cài đặt */}
             <div className="tv-action-grid-4">
-              {/* Nút 1: Đánh dấu đã xem */}
+              {/* Nút 1: Trạng thái xem */}
               <button
                 type="button"
-                className={`tv-action-card-btn ${currentIsWatched ? 'active is-watched' : ''}`}
-                onClick={() => currentVideo && void toggleWatched(currentVideo.video_id)}
-                title={currentIsWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+                className={`tv-action-card-btn ${currentStatus === 'COMPLETED' ? 'active is-watched' : (currentStatus === 'IN_PROGRESS' ? 'active is-in-progress' : '')}`}
+                onClick={() => currentVideo && void handleCycleStatus(currentVideo.video_id)}
+                title="Bấm để đổi trạng thái: Sẽ xem → Đang xem → Đã xem"
               >
                 <div className="tv-action-icon-box">
-                  {currentIsWatched ? <CheckCircle2 size={22} color="#10b981" /> : <Circle size={22} />}
+                  {currentStatus === 'COMPLETED' ? (
+                    <CheckCircle2 size={22} color="#10b981" />
+                  ) : currentStatus === 'IN_PROGRESS' ? (
+                    <Clock size={22} color="#f59e0b" />
+                  ) : (
+                    <Circle size={22} />
+                  )}
                 </div>
-                <span className="tv-action-label-title">Đánh dấu</span>
-                <span className={`tv-action-label-sub ${currentIsWatched ? 'is-green' : ''}`}>
-                  {currentIsWatched ? 'đã xem' : 'chưa xem'}
+                <span className="tv-action-label-title">Trạng thái</span>
+                <span className={`tv-action-label-sub ${currentStatus === 'COMPLETED' ? 'is-green' : (currentStatus === 'IN_PROGRESS' ? 'is-amber' : '')}`}>
+                  {currentStatus === 'COMPLETED' ? 'Đã xem' : (currentStatus === 'IN_PROGRESS' ? 'Đang xem' : 'Sẽ xem')}
                 </span>
               </button>
 
@@ -799,13 +854,13 @@ function ChannelDetailView({
 
           {/* 4. Section Danh sách video */}
           <div className="tv-playlist-section">
-            {/* Header: Danh sách video (664) | Đã xem 0/664 */}
+            {/* Header: Danh sách video */}
             <div className="tv-playlist-head">
               <span className="tv-playlist-title">
                 Danh sách video ({filteredVideos.length})
               </span>
               <span className="tv-playlist-stat">
-                Đã xem {watchedCountInChannel}/{videos.length}
+                Đã xem {watchedCountInChannel}/{videos.length} {inProgressCountInChannel > 0 && `• ⏳ Đang xem ${inProgressCountInChannel}`}
               </span>
             </div>
 
@@ -835,14 +890,21 @@ function ChannelDetailView({
                   className={`tv-filter-pill-btn ${filterMode === 'unwatched' ? 'active' : ''}`}
                   onClick={() => setFilterMode('unwatched')}
                 >
-                  Chưa xem ({videos.length - watchedCountInChannel})
+                  📌 Sẽ xem ({unwatchedCountInChannel})
+                </button>
+                <button
+                  type="button"
+                  className={`tv-filter-pill-btn in-progress ${filterMode === 'in_progress' ? 'active' : ''}`}
+                  onClick={() => setFilterMode('in_progress')}
+                >
+                  ⏳ Đang xem ({inProgressCountInChannel})
                 </button>
                 <button
                   type="button"
                   className={`tv-filter-pill-btn ${filterMode === 'watched' ? 'active' : ''}`}
                   onClick={() => setFilterMode('watched')}
                 >
-                  Đã xem ({watchedCountInChannel})
+                  ✅ Đã xem ({watchedCountInChannel})
                 </button>
               </div>
 
@@ -861,7 +923,9 @@ function ChannelDetailView({
             <div className="tv-video-card-list">
               {filteredVideos.map((v, i) => {
                 const isPlaying = v.video_id === playingId
-                const isWatched = watched.has(v.video_id)
+                const st: VideoStatus = statusMap.get(v.video_id) || (watched.has(v.video_id) ? 'COMPLETED' : (inProgress.has(v.video_id) ? 'IN_PROGRESS' : 'UNWATCHED'))
+                const isWatched = st === 'COMPLETED'
+                const isInProgress = st === 'IN_PROGRESS'
                 const indexNum = sortOrder === 'desc' ? i + 1 : videos.length - i
                 return (
                   <div
@@ -892,6 +956,16 @@ function ChannelDetailView({
                       </div>
                       <div className="tv-video-item-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{channel.creator_name}</span>
+                        {isInProgress && (
+                          <span className="tv-status-badge in-progress">
+                            <Clock size={11} /> Đang xem
+                          </span>
+                        )}
+                        {isWatched && (
+                          <span className="tv-status-badge watched">
+                            <Check size={11} /> Đã xem
+                          </span>
+                        )}
                         {(() => {
                           const cat = detectVideoCategory(v.title, 'tvshow')
                           return (
@@ -907,11 +981,23 @@ function ChannelDetailView({
                     <div className="tv-video-right-tools">
                       <button
                         type="button"
-                        className={`tv-video-watch-circle-btn ${isWatched ? 'watched' : ''}`}
-                        onClick={(e) => void toggleWatched(v.video_id, e)}
-                        title={isWatched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+                        className={`tv-video-watch-circle-btn ${isWatched ? 'watched' : (isInProgress ? 'in-progress' : '')}`}
+                        onClick={(e) => void handleCycleStatus(v.video_id, e)}
+                        title={
+                          isWatched
+                            ? 'Đã xem — Bấm để chuyển sang Sẽ xem'
+                            : isInProgress
+                            ? 'Đang xem — Bấm để chuyển sang Đã xem'
+                            : 'Sẽ xem — Bấm để chuyển sang Đang xem'
+                        }
                       >
-                        {isWatched ? <CheckCircle2 size={20} color="#10b981" /> : <Circle size={20} />}
+                        {isWatched ? (
+                          <CheckCircle2 size={20} color="#10b981" />
+                        ) : isInProgress ? (
+                          <Clock size={20} color="#f59e0b" />
+                        ) : (
+                          <Circle size={20} />
+                        )}
                       </button>
                       <button
                         type="button"
@@ -948,112 +1034,87 @@ function ChannelDetailView({
                 className="tv-setting-item-row"
                 onClick={() => setShowSettingsModal(false)}
               >
-                <div className="tv-setting-item-left">
-                  <div className="tv-setting-item-icon youtube">
-                    <Youtube size={22} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div className="tv-setting-icon-box youtube">
+                    <Youtube size={18} />
                   </div>
-                  <div className="tv-setting-item-text">
-                    <span className="tv-setting-item-title">Mở trên YouTube</span>
-                    <span className="tv-setting-item-desc">Xem video gốc trực tiếp trên ứng dụng YouTube</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.86rem' }}>Mở trên YouTube</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Xem trong ứng dụng hoặc tab mới</div>
                   </div>
                 </div>
-                <ExternalLink size={16} color="var(--text-muted)" />
+                <ExternalLink size={16} style={{ color: 'var(--text-muted)' }} />
               </a>
             )}
 
-            {/* 2. Tự phát tiếp */}
+            {/* 2. Tự động phát tiếp */}
             <div className="tv-setting-item-row" onClick={() => setAutoplay((prev) => !prev)}>
-              <div className="tv-setting-item-left">
-                <div className="tv-setting-item-icon">
-                  <Zap size={22} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="tv-setting-icon-box autoplay">
+                  <Play size={18} />
                 </div>
-                <div className="tv-setting-item-text">
-                  <span className="tv-setting-item-title">Tự phát tiếp</span>
-                  <span className="tv-setting-item-desc">Tự động chuyển sang video tiếp theo sau khi phát xong</span>
-                </div>
-              </div>
-              <label className="tv-toggle-switch" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={autoplay}
-                  onChange={(e) => setAutoplay(e.target.checked)}
-                />
-                <span className="tv-toggle-slider" />
-              </label>
-            </div>
-
-            {/* 3. Tùy chọn phím tắt 2x nhanh */}
-            <div className="tv-setting-item-row" onClick={() => applyPlaybackRate(playbackRate === 2 ? 1 : 2)}>
-              <div className="tv-setting-item-left">
-                <div className="tv-setting-item-icon">
-                  <Gauge size={22} />
-                </div>
-                <div className="tv-setting-item-text">
-                  <span className="tv-setting-item-title">Chế độ 2x nhanh</span>
-                  <span className="tv-setting-item-desc">Chuyển đổi tức thì tốc độ 2.0x</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.86rem' }}>Tự phát video kế tiếp</div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Khi hết video sẽ tự mở video tiếp theo</div>
                 </div>
               </div>
-              <label className="tv-toggle-switch" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={playbackRate === 2}
-                  onChange={(e) => applyPlaybackRate(e.target.checked ? 2 : 1)}
-                />
-                <span className="tv-toggle-slider" />
-              </label>
+              <input
+                type="checkbox"
+                checked={autoplay}
+                onChange={(e) => setAutoplay(e.target.checked)}
+                onClick={(e) => e.stopPropagation()}
+                style={{ width: 18, height: 18, accentColor: '#7c3aed', cursor: 'pointer' }}
+              />
             </div>
           </div>
         </Modal>
       )}
 
       {/* ======================================================== */}
-      {/* MODAL 2: TỐC ĐỘ PHÁT                                    */}
+      {/* MODAL 2: TỐC ĐỘ PHÁT (0.75x, 1x, 1.25x, 1.5x, 2x)        */}
       {/* ======================================================== */}
       {showSpeedModal && (
         <Modal title="⚡ Tốc độ phát video" onClose={() => setShowSpeedModal(false)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
-              Chọn tốc độ phát phù hợp để thưởng thức nội dung nhanh chóng:
-            </p>
-            <div className="tv-speed-modal-grid">
-              {[0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
+            {[0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => {
+              const isActive = playbackRate === rate
+              return (
                 <button
                   key={rate}
                   type="button"
-                  className={`tv-speed-modal-btn ${playbackRate === rate ? 'active' : ''}`}
+                  className={`tv-speed-modal-btn ${isActive ? 'active' : ''}`}
                   onClick={() => {
                     applyPlaybackRate(rate)
                     setShowSpeedModal(false)
                   }}
                 >
-                  <span style={{ fontSize: '1.1rem' }}>{rate}x</span>
-                  <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>
-                    {rate === 1 ? 'Chuẩn' : rate === 2 ? 'Siêu tốc' : 'Nhanh'}
-                  </span>
+                  <span>{rate === 1 ? '1.0x (Chuẩn)' : `${rate}x`}</span>
+                  {isActive && <Check size={18} color="#7c3aed" />}
                 </button>
-              ))}
-            </div>
+              )
+            })}
           </div>
         </Modal>
       )}
 
       {/* ======================================================== */}
-      {/* MODAL 3: HẸN GIỜ TẮT VIDEO                              */}
+      {/* MODAL 3: HẸN GIỜ TẮT (15p, 30p, 45p, 60p, 90p)           */}
       {/* ======================================================== */}
       {showTimerModal && (
         <Modal title="⏱️ Hẹn giờ tắt video" onClose={() => setShowTimerModal(false)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
-              Video sẽ tự động tạm dừng sau khoảng thời gian được chọn:
-            </p>
-            <div className="tv-timer-modal-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Trình phát video sẽ tự động tạm dừng khi hết thời gian đã chọn.
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
                 { min: null, label: 'Tắt hẹn giờ' },
                 { min: 15, label: '15 phút' },
                 { min: 30, label: '30 phút' },
                 { min: 45, label: '45 phút' },
-                { min: 60, label: '60 phút (1h)' },
-                { min: 90, label: '90 phút (1.5h)' },
+                { min: 60, label: '60 phút' },
+                { min: 90, label: '90 phút' },
               ].map((item) => {
                 const isActive = sleepTimerMinutes === item.min
                 return (
@@ -1066,7 +1127,6 @@ function ChannelDetailView({
                       setShowTimerModal(false)
                     }}
                   >
-                    <Clock size={16} />
                     {item.label}
                   </button>
                 )
@@ -1100,26 +1160,47 @@ function ChannelDetailView({
               <Play size={16} /> Phát video này ngay
             </button>
 
-            {/* Đánh dấu đã xem / chưa xem */}
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}>
+              TRẠNG THÁI XEM
+            </div>
+
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px', color: '#f59e0b' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'IN_PROGRESS')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <Clock size={16} /> ⏳ Đánh dấu Đang xem
+            </button>
+
+            <button
+              type="button"
+              className="tv-btn"
+              style={{ justifyContent: 'flex-start', padding: '12px 14px', color: '#10b981' }}
+              onClick={() => {
+                void handleSetStatus(selectedVideoForMenu.video_id, 'COMPLETED')
+                setSelectedVideoForMenu(null)
+              }}
+            >
+              <CheckCircle2 size={16} /> ✅ Đánh dấu Đã xem
+            </button>
+
             <button
               type="button"
               className="tv-btn"
               style={{ justifyContent: 'flex-start', padding: '12px 14px' }}
               onClick={() => {
-                void toggleWatched(selectedVideoForMenu.video_id)
+                void handleSetStatus(selectedVideoForMenu.video_id, 'UNWATCHED')
                 setSelectedVideoForMenu(null)
               }}
             >
-              {watched.has(selectedVideoForMenu.video_id) ? (
-                <>
-                  <Circle size={16} /> Đánh dấu là chưa xem
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} color="#10b981" /> Đánh dấu là đã xem
-                </>
-              )}
+              <Circle size={16} /> ⚪ Đánh dấu Sẽ xem (Chưa xem)
             </button>
+
+            <div style={{ height: 1, background: 'var(--card-border)', margin: '4px 0' }} />
 
             {/* Mở trên YouTube */}
             <a
@@ -1677,7 +1758,7 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
   const [channelName, setChannelName] = useState('')
-  const [status, setStatus] = useState<'UNWATCHED' | 'WATCHED'>('UNWATCHED')
+  const [status, setStatus] = useState<VideoStatus>('UNWATCHED')
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [autofilling, setAutofilling] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -1769,11 +1850,12 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
       }
     }
 
+    const seriesKey = `manual:${videoId}`
     const { error: videoError } = await supabase!.from('tvshow_videos').upsert(
       {
         platform: 'youtube',
         video_id: videoId,
-        series_key: `manual:${videoId}`,
+        series_key: seriesKey,
         creator_id: creatorId,
         creator_name: cleanChannel,
         title: title.trim(),
@@ -1794,12 +1876,12 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
       return setError(`Không lưu được video: ${videoError.message}`)
     }
 
-    // Nếu trạng thái là đã xem, ghi nhận vào tvshow_watched
-    if (status === 'WATCHED') {
-      await supabase!.from('tvshow_watched').upsert({ video_id: videoId, watched_at: now }, { onConflict: 'video_id' })
-    } else {
-      await supabase!.from('tvshow_watched').delete().eq('video_id', videoId)
-    }
+    // Cập nhật trạng thái video (UNWATCHED, IN_PROGRESS, WATCHED)
+    await updateVideoStatusRecord(videoId, 'tvshow', status, {
+      title: title.trim(),
+      channel_name: cleanChannel,
+      series_key: seriesKey,
+    })
 
     setBusy(false)
     onSaved()
@@ -1973,9 +2055,10 @@ function AddTvShowMovieModal({ onClose, onSaved }: { onClose: () => void; onSave
           {/* Ô Trạng thái xem */}
           <label>
             <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Trạng thái xem</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value as 'UNWATCHED' | 'WATCHED')}>
-              <option value="UNWATCHED">⏳ Chưa xem (Sẽ xem)</option>
-              <option value="WATCHED">✅ Đã xem</option>
+            <select value={status} onChange={(e) => setStatus(e.target.value as VideoStatus)}>
+              <option value="UNWATCHED">📌 Sẽ xem (Chưa xem)</option>
+              <option value="IN_PROGRESS">⏳ Đang xem</option>
+              <option value="COMPLETED">✅ Đã xem</option>
             </select>
           </label>
 

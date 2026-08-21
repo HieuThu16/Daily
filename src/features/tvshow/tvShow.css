@@ -193,6 +193,10 @@
   background: var(--green, #16a34a);
 }
 
+.tv-seen-pill.in-progress {
+  background: #f59e0b;
+}
+
 .tv-channel-body {
   display: flex;
   flex-direction: column;
@@ -491,6 +495,11 @@
   border-color: #7c3aed;
 }
 
+.tv-action-card-btn.active.is-in-progress {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: #f59e0b;
+}
+
 .tv-action-icon-box {
   display: flex;
   align-items: center;
@@ -505,6 +514,10 @@
 
 .tv-action-card-btn.is-watched .tv-action-icon-box {
   color: #10b981;
+}
+
+.tv-action-card-btn.is-in-progress .tv-action-icon-box {
+  color: #f59e0b;
 }
 
 .tv-action-label-title {
@@ -528,6 +541,11 @@
 
 .tv-action-label-sub.is-green {
   color: #10b981;
+  font-weight: 700;
+}
+
+.tv-action-label-sub.is-amber {
+  color: #f59e0b;
   font-weight: 700;
 }
 
@@ -628,6 +646,13 @@
   border-color: #7c3aed;
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.tv-filter-pill-btn.in-progress.active {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
 }
 
 .tv-sort-toggle-btn {
@@ -737,6 +762,28 @@
   color: var(--text-muted);
 }
 
+.tv-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.tv-status-badge.in-progress {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.tv-status-badge.watched {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
 .tv-video-right-tools {
   display: flex;
   align-items: center;
@@ -763,6 +810,18 @@
 
 .tv-video-watch-circle-btn.watched {
   color: #10b981;
+}
+
+.tv-video-watch-circle-btn.in-progress {
+  color: #f59e0b;
+}
+
+.tv-video-watch-circle-btn.in-progress:hover {
+  color: #d97706;
+}
+
+.tv-video-check-btn.in-progress {
+  color: #f59e0b;
 }
 
 .tv-video-more-dots-btn {
