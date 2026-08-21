@@ -13,7 +13,8 @@ import {
   fetchHMangaList,
   getHMangaFavorites, toggleHMangaFavorite, 
   getHMangaHistory,
-  getHMangaFollows, toggleHMangaFollow
+  getHMangaFollows, toggleHMangaFollow,
+  getChapterImageUrl
 } from './hMangaService';
 import { HMangaReaderModal } from './HMangaReaderModal';
 import { useToast } from '../ToastContext';
@@ -236,8 +237,25 @@ export const HMangaDetailPage: React.FC = () => {
     );
   }
 
+  const [detailCover, setDetailCover] = useState<string>('');
+
+  useEffect(() => {
+    if (manga) {
+      const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
+      setDetailCover(manga.cover || ch1 || '');
+    }
+  }, [manga]);
+
+  const handleDetailCoverError = () => {
+    const ch1 = getChapterImageUrl(manga?.chapters?.[0]?.images?.[0]);
+    if (ch1 && detailCover !== ch1) {
+      setDetailCover(ch1);
+    }
+  };
+
   const authorDisplay = manga.author || 'Đang cập nhật';
   const statusDisplay = manga.status || 'Đang tiến hành';
+  const sourceName = manga.sourceName || (manga.url?.includes('vietmanhwa') ? 'VietManhwa' : 'MeTruyen18');
 
   return (
     <div className="ngontinh-detail-wrapper">
@@ -267,12 +285,13 @@ export const HMangaDetailPage: React.FC = () => {
         <div className="ngontinh-showcase-grid">
           {/* Left Poster Image */}
           <div className="ngontinh-poster-container">
-            {manga.cover ? (
+            {detailCover ? (
               <img 
-                src={manga.cover} 
+                src={detailCover} 
                 alt={manga.title} 
                 className="ngontinh-poster-image"
                 referrerPolicy="no-referrer"
+                onError={handleDetailCoverError}
               />
             ) : (
               <div className="ngontinh-poster-fallback">
@@ -283,7 +302,7 @@ export const HMangaDetailPage: React.FC = () => {
             {/* Top Team Badge */}
             <div className="ngontinh-team-badge" style={{ background: 'linear-gradient(135deg, #e11d48, #be123c)', color: '#fff' }}>
               <Sparkles size={11} className="ngontinh-sparkle-icon" />
-              <span>🔞 18+ MeTruyen18</span>
+              <span>🔞 18+ {sourceName}</span>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-﻿import type { BLManga as HManga, ReadingProgress, MangaChapter } from '../../types/manga';
+import type { BLManga as HManga, ReadingProgress, MangaChapter, ChapterImage } from '../../types/manga';
 
 const FAVORITES_KEY = 'daily_h_favorites';
 const HISTORY_KEY = 'daily_h_history';
@@ -6,6 +6,11 @@ const FOLLOWS_KEY = 'daily_h_follows';
 const CUSTOM_H_MANGA_KEY = 'daily_custom_h_manga';
 
 export type { HManga };
+
+export function getChapterImageUrl(img?: ChapterImage): string {
+  if (!img) return '';
+  return typeof img === 'string' ? img : img.url || '';
+}
 
 export function getCustomHMangaList(): HManga[] {
   try {

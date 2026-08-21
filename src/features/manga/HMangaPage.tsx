@@ -11,7 +11,8 @@ import {
   fetchHMangaList,
   getHMangaFavorites, toggleHMangaFavorite, 
   getHMangaHistory,
-  crawlAndSaveStory
+  crawlAndSaveStory,
+  getChapterImageUrl
 } from './hMangaService';
 import { HMangaReaderModal } from './HMangaReaderModal';
 import { useScrollRestore } from '../shared';
@@ -39,13 +40,33 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
   onOpenReader,
   onClick,
 }) => {
+  const ch1Img = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
+  const fallbackCover = manga.cover || ch1Img || '';
+  const [currentCover, setCurrentCover] = useState<string>(fallbackCover);
   const [imgLoaded, setImgLoaded] = useState<boolean>(false);
   const [imgError, setImgError] = useState<boolean>(false);
+
+  useEffect(() => {
+    const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
+    setCurrentCover(manga.cover || ch1 || '');
+    setImgError(false);
+    setImgLoaded(false);
+  }, [manga.cover, manga.chapters]);
 
   const sortedChs = useMemo(() => {
     return [...(manga.chapters || [])].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
   }, [manga.chapters]);
   const firstCh = sortedChs[0]?.number ?? 1;
+
+  const handleImgError = () => {
+    const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
+    if (ch1 && currentCover !== ch1) {
+      setCurrentCover(ch1);
+    } else {
+      setImgError(true);
+      setImgLoaded(true);
+    }
+  };
 
   return (
     <div className="ngontinh-manga-card" onClick={onClick}>
@@ -53,18 +74,16 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
       <div className="ngontinh-cover-wrap">
         {!imgLoaded && !imgError && <div className="ngontinh-cover-skeleton" />}
 
-        {manga.cover && !imgError ? (
+        {currentCover && !imgError ? (
           <img
-            src={manga.cover}
+            src={currentCover}
             alt={manga.title}
             className={`ngontinh-cover-img ${imgLoaded ? 'loaded' : 'loading'}`}
             loading="lazy"
             decoding="async"
+            referrerPolicy="no-referrer"
             onLoad={() => setImgLoaded(true)}
-            onError={() => {
-              setImgError(true);
-              setImgLoaded(true);
-            }}
+            onError={handleImgError}
           />
         ) : (
           <div className="ngontinh-cover-placeholder">
@@ -498,24 +517,33 @@ export const HMangaPage: React.FC = () => {
       />
 
       {/* Continue reading banner if available */}
-      {continueReading && (
-        <button
-          type="button"
-          className="continue-reading"
-          onClick={() => void openReader(continueReading.manga, continueReading.progress.chapterNumber)}
-        >
-          {continueReading.manga.cover && (
-            <img className="continue-reading-cover" src={continueReading.manga.cover} alt="" loading="lazy" />
-          )}
-          <span className="continue-reading-body">
-            <span className="continue-reading-label">▶ Đọc tiếp</span>
-            <span className="continue-reading-title">{continueReading.manga.title}</span>
-            <span className="continue-reading-sub">
-              {continueReading.progress.chapterName || `Chương ${continueReading.progress.chapterNumber}`}
+      {continueReading && (() => {
+        const cover = continueReading.manga.cover || getChapterImageUrl(continueReading.manga.chapters?.[0]?.images?.[0]);
+        return (
+          <button
+            type="button"
+            className="continue-reading"
+            onClick={() => void openReader(continueReading.manga, continueReading.progress.chapterNumber)}
+          >
+            {cover && (
+              <img 
+                className="continue-reading-cover" 
+                src={cover} 
+                alt="" 
+                loading="lazy" 
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <span className="continue-reading-body">
+              <span className="continue-reading-label">▶ Đọc tiếp</span>
+              <span className="continue-reading-title">{continueReading.manga.title}</span>
+              <span className="continue-reading-sub">
+                {continueReading.progress.chapterName || `Chương ${continueReading.progress.chapterNumber}`}
+              </span>
             </span>
-          </span>
-        </button>
-      )}
+          </button>
+        );
+      })()}
 
       {/* Top Header & Main Navigation Bar */}
       <div className="ngontinh-top-nav-bar">
