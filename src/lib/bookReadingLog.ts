@@ -402,3 +402,70 @@ export function groupBookReadingLogs(logs: BookReadingSessionLog[]): DayEvent[] 
 
   return events
 }
+
+// ── VỊ TRÍ ĐỌC GẦN NHẤT ĐỂ TIẾP TỤC ĐỌC 1-CHẠM ──────────────────────────────
+
+export interface LastReadBookInfo {
+  mediaItemId: string
+  title: string
+  author?: string | null
+  coverUrl?: string | null
+  chapterIdx: number
+  chapterTitle?: string | null
+  percent: number
+  page?: number | null
+  pageCount?: number | null
+  lastReadAt: string // ISO string
+  lastScrollRatio?: number
+}
+
+const LAST_READ_BOOK_KEY = 'daily_last_read_book_session'
+const LAST_READ_BOOK_EVENT = 'daily_last_read_book_updated'
+
+export function getLastReadBook(): LastReadBookInfo | null {
+  try {
+    const raw = localStorage.getItem(LAST_READ_BOOK_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && parsed.mediaItemId ? (parsed as LastReadBookInfo) : null
+  } catch {
+    return null
+  }
+}
+
+export function saveLastReadBook(info: LastReadBookInfo) {
+  try {
+    localStorage.setItem(LAST_READ_BOOK_KEY, JSON.stringify(info))
+    window.dispatchEvent(new CustomEvent(LAST_READ_BOOK_EVENT, { detail: info }))
+  } catch (err) {
+    console.error('Failed to save last read book session:', err)
+  }
+}
+
+export function clearLastReadBook() {
+  try {
+    localStorage.removeItem(LAST_READ_BOOK_KEY)
+    window.dispatchEvent(new CustomEvent(LAST_READ_BOOK_EVENT, { detail: null }))
+  } catch {
+    // Ignored
+  }
+}
+
+export function useLastReadBook(): LastReadBookInfo | null {
+  const [lastRead, setLastRead] = useState<LastReadBookInfo | null>(() => getLastReadBook())
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setLastRead(getLastReadBook())
+    }
+    window.addEventListener(LAST_READ_BOOK_EVENT, handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+    return () => {
+      window.removeEventListener(LAST_READ_BOOK_EVENT, handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [])
+
+  return lastRead
+}
+

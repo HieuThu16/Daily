@@ -6,7 +6,7 @@ import { loadLocal, saveLocal } from '../../lib/persistence'
 import { loadBookDocument, loadChapterContent, loadChapterList, estimatePage } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument } from '../../types'
 import { useBookReadingProgress } from './useBookReadingProgress'
-import { useBookReadingSessionTracker, useBookReadingSessionLogs, summarizeBookSessions } from '../../lib/bookReadingLog'
+import { useBookReadingSessionTracker, useBookReadingSessionLogs, summarizeBookSessions, saveLastReadBook } from '../../lib/bookReadingLog'
 import { localDate } from '../../lib/date'
 import { useToast } from '../ToastContext'
 import { BookSearchModal } from './BookSearchModal'
@@ -40,6 +40,7 @@ export function BookReaderPage() {
   const [chapters, setChapters] = useState<BookChapterMeta[]>([])
   const [bookName, setBookName] = useState('')
   const [bookAuthor, setBookAuthor] = useState<string | null>(null)
+  const [bookCover, setBookCover] = useState<string | null>(null)
   /** Đoạn đang bôi đen, để hiện nút "Lưu trích dẫn". */
   const [selection, setSelection] = useState('')
   const [savingQuote, setSavingQuote] = useState(false)
@@ -88,6 +89,25 @@ export function BookReaderPage() {
     isCompleted: completed,
   })
 
+  // Tự động đồng bộ vị trí đọc gần nhất để khi chuyển tab quay lại có thể tiếp tục ngay
+  useEffect(() => {
+    if (status === 'ready' && bookName && mediaItemId && !isSearchPreview) {
+      saveLastReadBook({
+        mediaItemId,
+        title: bookName,
+        author: bookAuthor,
+        coverUrl: bookCover,
+        chapterIdx: activeIdx,
+        chapterTitle: activeChapter?.title ?? null,
+        percent: Math.round(percent || 0),
+        page: currentPage,
+        pageCount: bookDocument?.page_count ?? null,
+        lastReadAt: new Date().toISOString(),
+        lastScrollRatio: pendingRatio.current ?? 0,
+      })
+    }
+  }, [status, bookName, mediaItemId, isSearchPreview, bookAuthor, bookCover, activeIdx, activeChapter, percent, currentPage, bookDocument])
+
   const sessionLogs = useBookReadingSessionLogs()
   const bookStats = useMemo(() => summarizeBookSessions(sessionLogs, localDate()), [sessionLogs])
 
@@ -113,16 +133,17 @@ export function BookReaderPage() {
         const list = await loadChapterList(doc.id)
         const { data: item } = await supabase
           .from('media_items')
-          .select('name, status, author')
+          .select('name, status, author, cover_url')
           .eq('id', mediaItemId)
           .single()
         if (cancelled) return
 
-        const media = item as { name?: string; status?: string; author?: string | null } | null
+        const media = item as { name?: string; status?: string; author?: string | null; cover_url?: string | null } | null
         setBookDocument(doc)
         setChapters(list)
         setBookName(media?.name ?? 'Đang đọc')
         setBookAuthor(media?.author ?? null)
+        setBookCover(media?.cover_url ?? null)
         // Mục lục ở màn chi tiết truyền ?chapter=. Người dùng chủ động chọn chương thì
         // phải vào đầu chương, không phải cuộn tới vị trí đã lưu của chương trước đó.
         // Loại cả chuỗi rỗng: `Number('')` ra 0, sẽ nhảy nhầm về chương đầu.

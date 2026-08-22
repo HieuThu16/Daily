@@ -26,6 +26,7 @@ import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
+import { ContinueReadingHero } from './library/ContinueReadingHero'
 import { SkeletonGrid } from './Skeleton'
 
 const categories = [
@@ -1482,6 +1483,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               </div>
             )}
           </div>
+
+          {selectedType === 'BOOK' && <ContinueReadingHero />}
 
           {loading ? (
             <SkeletonGrid items={8} />

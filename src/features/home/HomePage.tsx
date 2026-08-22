@@ -6,7 +6,7 @@ import { buildDayReview } from '../../lib/dayReview'
 import { todayCompletion } from '../../lib/homeProgress'
 import { useMangaReadingLogs } from '../../lib/mangaReadingLog'
 import { summarizeMangaLogs } from '../../lib/mangaStats'
-import { useBookReadingSessionLogs, summarizeBookSessions } from '../../lib/bookReadingLog'
+import { useBookReadingSessionLogs, summarizeBookSessions, useLastReadBook } from '../../lib/bookReadingLog'
 import { parseLocalDate, upcomingOccasions } from '../../lib/occasions'
 import { Aside, AsideCard } from '../AsideSlot'
 import { DatePager } from './DatePager'
@@ -29,6 +29,7 @@ export function HomePage() {
   const data = useHomeData(dateKey)
   const mangaLogs = useMangaReadingLogs()
   const bookSessionLogs = useBookReadingSessionLogs()
+  const lastReadBook = useLastReadBook()
   const isToday = dateKey === localDate()
 
   const completion = useMemo(
@@ -114,23 +115,64 @@ export function HomePage() {
           </div>
         </AsideCard>
 
-        {bookStats.totalPages > 0 && (
+        {(bookStats.totalPages > 0 || lastReadBook) && (
           <AsideCard title="Đọc sách">
-            <div className="aside-row">
-              <span>Tuần này</span>
-              <strong>{bookStats.thisWeekPages} trang</strong>
-            </div>
-            <div className="aside-row">
-              <span>Chuỗi ngày đọc</span>
-              <strong>🔥 {bookStats.streak}</strong>
-            </div>
-            {bookStats.topBooks[0] && (
-              <div className="aside-row">
-                <span>Đọc nhiều nhất</span>
-                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
-                  {bookStats.topBooks[0].title}
-                </strong>
+            {lastReadBook && (
+              <div
+                onClick={() => nav(`/library/books/${lastReadBook.mediaItemId}`)}
+                style={{
+                  padding: '8px 10px',
+                  marginBottom: 8,
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.15))',
+                  border: '1px solid rgba(168, 85, 247, 0.25)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.borderColor = 'var(--purple)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.25)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--purple)', textTransform: 'uppercase' }}>
+                    📖 Tiếp tục đọc
+                  </span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--purple)' }}>
+                    {lastReadBook.percent}%
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lastReadBook.title}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lastReadBook.chapterTitle ? `Ch. ${lastReadBook.chapterIdx + 1}: ${lastReadBook.chapterTitle}` : `Đang đọc chương ${lastReadBook.chapterIdx + 1}`}
+                </div>
               </div>
+            )}
+            {bookStats.totalPages > 0 && (
+              <>
+                <div className="aside-row">
+                  <span>Tuần này</span>
+                  <strong>{bookStats.thisWeekPages} trang</strong>
+                </div>
+                <div className="aside-row">
+                  <span>Chuỗi ngày đọc</span>
+                  <strong>🔥 {bookStats.streak}</strong>
+                </div>
+                {bookStats.topBooks[0] && (
+                  <div className="aside-row">
+                    <span>Đọc nhiều nhất</span>
+                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+                      {bookStats.topBooks[0].title}
+                    </strong>
+                  </div>
+                )}
+              </>
             )}
           </AsideCard>
         )}
