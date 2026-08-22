@@ -63,6 +63,9 @@ export const HMangaReaderPage: React.FC = () => {
   const { prefs, update: updatePrefs, readerStyle } = useReaderPrefs();
   const autoScroll = useAutoScroll(useCallback(() => null, []), prefs.speed);
 
+  const isNavigatingRef = useRef(false);
+  const lastChapterNumRef = useRef(currentChapterNum);
+
   // Tự động theo dõi thời gian đọc trên màn hình
   useMangaReadingTracker({
     mangaSlug: manga?.slug,
@@ -77,13 +80,22 @@ export const HMangaReaderPage: React.FC = () => {
   useEffect(() => {
     if (manga && currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const isDifferentChapter = lastChapterNumRef.current !== chNum;
+      lastChapterNumRef.current = chNum;
+
       const currentImgs = currentChapter.images || [];
+
+      // Nếu chuyển qua chương mới thì vị trí cuộn luôn bắt đầu từ đầu trang (0)
+      const saved = getHMangaProgress(manga.slug);
+      const isSameChapter = saved && saved.chapterNumber === chNum;
+      const resumeRatio = (!isDifferentChapter && isSameChapter) ? (saved.scrollRatio ?? 0) : 0;
 
       saveHMangaProgress(manga.slug, {
         chapterNumber: chNum,
         chapterName: currentChapter.name || `Chapter ${chNum}`,
         readAt: new Date().toISOString(),
         totalImages: currentImgs.length,
+        scrollRatio: resumeRatio,
       });
 
       recordMangaReading({
@@ -95,9 +107,7 @@ export const HMangaReaderPage: React.FC = () => {
         status: 'READING',
       });
 
-      const saved = getHMangaProgress(manga.slug);
-      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
-      if (resumeRatio > 0.01) {
+      if (resumeRatio > 0.01 && resumeRatio < 0.85) {
         let tries = 0;
         const restore = () => {
           const total = document.documentElement.scrollHeight - window.innerHeight;
@@ -108,13 +118,19 @@ export const HMangaReaderPage: React.FC = () => {
       } else {
         window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
       }
+
       setImageErrors({});
+      const timer = setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [manga, currentChapter, currentChapterNum]);
 
   // Track scroll progress & mark completed when scrolling near bottom
   useEffect(() => {
     const handleScroll = () => {
+      if (isNavigatingRef.current) return;
       const total = document.documentElement.scrollHeight - window.innerHeight;
       if (total > 0) {
         const progress = (window.scrollY / total) * 100;
@@ -144,6 +160,7 @@ export const HMangaReaderPage: React.FC = () => {
   }, [manga, currentChapter, currentChapterNum]);
 
   const goToChapter = useCallback((chNum: number) => {
+    isNavigatingRef.current = true;
     if (manga && currentChapter) {
       recordMangaReading({
         mangaSlug: manga.slug,
@@ -153,7 +170,13 @@ export const HMangaReaderPage: React.FC = () => {
         chapterName: currentChapter.name,
         status: 'COMPLETED',
       });
+      saveHMangaProgress(manga.slug, {
+        chapterNumber: chNum,
+        chapterName: `Chapter ${chNum}`,
+        scrollRatio: 0,
+      });
     }
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     if (slug) {
       navigate(`/truyenh/${slug}/read/${chNum}`);
     }

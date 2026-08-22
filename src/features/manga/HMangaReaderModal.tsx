@@ -37,6 +37,9 @@ export const HMangaReaderModal: React.FC<Props> = ({
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
+  const isNavigatingRef = useRef(false);
+  const lastChapterNumRef = useRef(currentChapterNum);
+
   // Tự động theo dõi thời gian đọc trên màn hình
   useMangaReadingTracker({
     mangaSlug: manga?.slug,
@@ -54,13 +57,21 @@ export const HMangaReaderModal: React.FC<Props> = ({
   useEffect(() => {
     if (currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const isDifferentChapter = lastChapterNumRef.current !== chNum;
+      lastChapterNumRef.current = chNum;
+
       const currentImgs = currentChapter.images || [];
+
+      const saved = getHMangaProgress(manga.slug);
+      const isSameChapter = saved && saved.chapterNumber === chNum;
+      const resumeRatio = (!isDifferentChapter && isSameChapter) ? (saved.scrollRatio ?? 0) : 0;
 
       saveHMangaProgress(manga.slug, {
         chapterNumber: chNum,
         chapterName: currentChapter.name || `Chapter ${chNum}`,
         readAt: new Date().toISOString(),
         totalImages: currentImgs.length,
+        scrollRatio: resumeRatio,
       });
 
       recordMangaReading({
@@ -72,9 +83,7 @@ export const HMangaReaderModal: React.FC<Props> = ({
         status: 'READING',
       });
 
-      const saved = getHMangaProgress(manga.slug);
-      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
-      if (resumeRatio > 0.01) {
+      if (resumeRatio > 0.01 && resumeRatio < 0.85) {
         let tries = 0;
         const restore = () => {
           if (!mainRef.current) return;
@@ -90,7 +99,12 @@ export const HMangaReaderModal: React.FC<Props> = ({
       } else {
         if (mainRef.current) mainRef.current.scrollTop = 0;
       }
+
       setImageErrors({});
+      const timer = setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [manga, currentChapter, currentChapterNum]);
 
@@ -101,10 +115,12 @@ export const HMangaReaderModal: React.FC<Props> = ({
 
     let ticking = false;
     const handleScroll = () => {
+      if (isNavigatingRef.current) return;
       if (!ticking && currentChapter) {
         ticking = true;
         requestAnimationFrame(() => {
           ticking = false;
+          if (isNavigatingRef.current) return;
           saveHMangaProgress(manga.slug, {
             chapterNumber: currentChapter.number ?? currentChapterNum,
             chapterName: currentChapter.name,
@@ -144,19 +160,31 @@ export const HMangaReaderModal: React.FC<Props> = ({
       });
     }
     if (nextChapter && nextChapter.number != null) {
+      isNavigatingRef.current = true;
+      saveHMangaProgress(manga.slug, {
+        chapterNumber: nextChapter.number,
+        chapterName: nextChapter.name || `Chapter ${nextChapter.number}`,
+        scrollRatio: 0,
+      });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
       if (onSelectChapter) onSelectChapter(nextChapter.number);
       else setCurrentChapterNum(nextChapter.number);
-      if (mainRef.current) mainRef.current.scrollTop = 0;
     }
   }, [currentChapter, currentChapterNum, manga.slug, manga.title, nextChapter, onSelectChapter]);
 
   const handlePrev = useCallback(() => {
     if (prevChapter && prevChapter.number != null) {
+      isNavigatingRef.current = true;
+      saveHMangaProgress(manga.slug, {
+        chapterNumber: prevChapter.number,
+        chapterName: prevChapter.name || `Chapter ${prevChapter.number}`,
+        scrollRatio: 0,
+      });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
       if (onSelectChapter) onSelectChapter(prevChapter.number);
       else setCurrentChapterNum(prevChapter.number);
-      if (mainRef.current) mainRef.current.scrollTop = 0;
     }
-  }, [prevChapter, onSelectChapter]);
+  }, [prevChapter, onSelectChapter, manga.slug]);
 
   // Keyboard navigation
   useEffect(() => {

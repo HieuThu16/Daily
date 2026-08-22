@@ -47,6 +47,9 @@ export const BLReaderModal: React.FC<Props> = ({
     isActive: !!manga && !!currentChapter,
   });
 
+  const isNavigatingRef = useRef(false);
+  const lastChapterNumRef = useRef(currentChapterNum);
+
   useEffect(() => {
     setCurrentChapterNum(initialChapterNumber ?? initialChapterNum ?? 1);
   }, [initialChapterNumber, initialChapterNum]);
@@ -54,12 +57,20 @@ export const BLReaderModal: React.FC<Props> = ({
   useEffect(() => {
     if (currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const isDifferentChapter = lastChapterNumRef.current !== chNum;
+      lastChapterNumRef.current = chNum;
+
+      const saved = getMangaProgress(manga.slug);
+      const isSameChapter = saved && saved.chapterNumber === chNum;
+      const resumeRatio = (!isDifferentChapter && isSameChapter) ? (saved.scrollRatio ?? 0) : 0;
+
       saveReadingProgress({
         slug: manga.slug,
         chapterNumber: chNum,
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
         totalImages: currentChapter.images?.length || 0,
+        scrollRatio: resumeRatio,
       });
 
       recordMangaReading({
@@ -72,10 +83,8 @@ export const BLReaderModal: React.FC<Props> = ({
       });
 
       // Vào đúng chương đang đọc dở thì trả về chỗ cũ, chương khác mới kéo lên đầu.
-      const saved = getMangaProgress(manga.slug);
-      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
       const el = mainRef.current;
-      if (resumeRatio > 0.01 && el) {
+      if (resumeRatio > 0.01 && resumeRatio < 0.85 && el) {
         // Ảnh chưa tải xong thì scrollHeight còn ngắn; thử lại vài nhịp cho tới khi đủ dài.
         let tries = 0;
         const restore = () => {
@@ -89,6 +98,10 @@ export const BLReaderModal: React.FC<Props> = ({
         if (el) el.scrollTop = 0;
       }
       setImageErrors({});
+      const timer = setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [currentChapter, currentChapterNum, manga.slug, manga.title]);
 
@@ -99,11 +112,13 @@ export const BLReaderModal: React.FC<Props> = ({
 
     let ticking = false;
     const handleScroll = () => {
+      if (isNavigatingRef.current) return;
       // Ghi vị trí đọc, gộp theo khung hình cho khỏi ghi localStorage liên tục.
       if (!ticking && currentChapter) {
         ticking = true;
         requestAnimationFrame(() => {
           ticking = false;
+          if (isNavigatingRef.current) return;
           const ratio = el.scrollHeight > 0 ? el.scrollTop / el.scrollHeight : 0;
           saveReadingProgress({
             slug: manga.slug,
@@ -148,6 +163,14 @@ export const BLReaderModal: React.FC<Props> = ({
       });
     }
     if (nextChapter && nextChapter.number != null) {
+      isNavigatingRef.current = true;
+      saveReadingProgress({
+        slug: manga.slug,
+        chapterNumber: nextChapter.number,
+        chapterName: nextChapter.name || `Chapter ${nextChapter.number}`,
+        scrollRatio: 0,
+      });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
       if (onSelectChapter) onSelectChapter(nextChapter.number);
       else setCurrentChapterNum(nextChapter.number);
     }
@@ -155,6 +178,14 @@ export const BLReaderModal: React.FC<Props> = ({
 
   const handlePrev = () => {
     if (prevChapter && prevChapter.number != null) {
+      isNavigatingRef.current = true;
+      saveReadingProgress({
+        slug: manga.slug,
+        chapterNumber: prevChapter.number,
+        chapterName: prevChapter.name || `Chapter ${prevChapter.number}`,
+        scrollRatio: 0,
+      });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
       if (onSelectChapter) onSelectChapter(prevChapter.number);
       else setCurrentChapterNum(prevChapter.number);
     }

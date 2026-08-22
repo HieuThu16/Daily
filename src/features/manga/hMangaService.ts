@@ -292,10 +292,16 @@ export function getHMangaProgress(slug: string): ReadingProgress | undefined {
 
 export function saveHMangaProgress(slug: string, progress: Partial<ReadingProgress>): void {
   const history = getHMangaHistory();
-  const existing = history[slug] || { slug, chapterNumber: 1, chapterName: 'Chapter 1', readAt: new Date().toISOString() };
+  const existing = history[slug];
+  const isChangingChapter = existing && progress.chapterNumber != null && progress.chapterNumber !== existing.chapterNumber;
+  const scrollRatio = progress.scrollRatio !== undefined 
+    ? progress.scrollRatio 
+    : (isChangingChapter ? 0 : (existing?.scrollRatio ?? 0));
+
   history[slug] = {
-    ...existing,
+    ...(existing || { slug, chapterNumber: 1, chapterName: 'Chapter 1' }),
     ...progress,
+    scrollRatio,
     readAt: new Date().toISOString(),
   } as ReadingProgress;
   try {

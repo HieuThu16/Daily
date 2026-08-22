@@ -104,13 +104,23 @@ export const NgontinhReaderPage: React.FC = () => {
     return () => { isMounted = false; };
   }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
 
+  const isNavigatingRef = useRef(false);
+  const lastChapterNumRef = useRef(currentChapterNum);
+
   // Save reading progress & scroll to top on change
   useEffect(() => {
     if (manga && currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const isDifferentChapter = lastChapterNumRef.current !== chNum;
+      lastChapterNumRef.current = chNum;
+
       const currentImgs = (currentChapter.images && currentChapter.images.length > 0) 
         ? currentChapter.images 
         : (dynamicChapterImages[chNum] || []);
+
+      const saved = getNgontinhProgress(manga.slug);
+      const isSameChapter = saved && saved.chapterNumber === chNum;
+      const resumeRatio = (!isDifferentChapter && isSameChapter) ? (saved.scrollRatio ?? 0) : 0;
 
       saveNgontinhProgress({
         slug: manga.slug,
@@ -118,6 +128,7 @@ export const NgontinhReaderPage: React.FC = () => {
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
         totalImages: currentImgs.length,
+        scrollRatio: resumeRatio,
       });
 
       recordMangaReading({
@@ -130,9 +141,7 @@ export const NgontinhReaderPage: React.FC = () => {
       });
 
       // Đúng chương đang dở thì về lại chỗ cũ; chương khác mới kéo lên đầu.
-      const saved = getNgontinhProgress(manga.slug);
-      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
-      if (resumeRatio > 0.01) {
+      if (resumeRatio > 0.01 && resumeRatio < 0.85) {
         let tries = 0;
         const restore = () => {
           const total = document.documentElement.scrollHeight - window.innerHeight;
@@ -144,12 +153,17 @@ export const NgontinhReaderPage: React.FC = () => {
         window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
       }
       setImageErrors({});
+      const timer = setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
 
   // Track scroll progress & mark completed when scrolling near bottom
   useEffect(() => {
     const handleScroll = () => {
+      if (isNavigatingRef.current) return;
       const total = document.documentElement.scrollHeight - window.innerHeight;
       if (total > 0) {
         const progress = (window.scrollY / total) * 100;
@@ -191,6 +205,7 @@ export const NgontinhReaderPage: React.FC = () => {
   }, [manga, currentChapter, currentChapterNum, nextChapter]);
 
   const goToChapter = useCallback((chNum: number) => {
+    isNavigatingRef.current = true;
     if (manga && currentChapter) {
       recordMangaReading({
         mangaSlug: manga.slug,
@@ -200,7 +215,14 @@ export const NgontinhReaderPage: React.FC = () => {
         chapterName: currentChapter.name,
         status: 'COMPLETED',
       });
+      saveNgontinhProgress({
+        slug: manga.slug,
+        chapterNumber: chNum,
+        chapterName: `Chapter ${chNum}`,
+        scrollRatio: 0,
+      });
     }
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     if (slug) {
       navigate(`/ngontinh/${slug}/read/${chNum}`);
     }

@@ -143,12 +143,20 @@ export function getNgontinhHistory(): Record<string, ReadingProgress> {
   }
 }
 
-export function saveNgontinhProgress(progress: ReadingProgress): void {
+export function saveNgontinhProgress(progress: Partial<ReadingProgress> & { slug: string }): void {
   const current = getNgontinhHistory();
+  const existing = current[progress.slug];
+  const isChangingChapter = existing && progress.chapterNumber != null && progress.chapterNumber !== existing.chapterNumber;
+  const scrollRatio = progress.scrollRatio !== undefined
+    ? progress.scrollRatio
+    : (isChangingChapter ? 0 : (existing?.scrollRatio ?? 0));
+
   current[progress.slug] = {
+    ...(existing || { slug: progress.slug, chapterNumber: 1, chapterName: 'Chương 1' }),
     ...progress,
+    scrollRatio,
     readAt: new Date().toISOString(),
-  };
+  } as ReadingProgress;
   localStorage.setItem(HISTORY_KEY, JSON.stringify(current));
 }
 

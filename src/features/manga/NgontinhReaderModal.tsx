@@ -78,12 +78,22 @@ export const NgontinhReaderModal: React.FC<Props> = ({
     return () => { isMounted = false; };
   }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
 
+  const isNavigatingRef = useRef(false);
+  const lastChapterNumRef = useRef(currentChapterNum);
+
   useEffect(() => {
     if (currentChapter) {
       const chNum = currentChapter.number ?? currentChapterNum;
+      const isDifferentChapter = lastChapterNumRef.current !== chNum;
+      lastChapterNumRef.current = chNum;
+
       const currentImgs = (currentChapter.images && currentChapter.images.length > 0)
         ? currentChapter.images
         : (dynamicChapterImages[chNum] || []);
+
+      const saved = getNgontinhProgress(manga.slug);
+      const isSameChapter = saved && saved.chapterNumber === chNum;
+      const resumeRatio = (!isDifferentChapter && isSameChapter) ? (saved.scrollRatio ?? 0) : 0;
 
       saveNgontinhProgress({
         slug: manga.slug,
@@ -91,6 +101,7 @@ export const NgontinhReaderModal: React.FC<Props> = ({
         chapterName: currentChapter.name,
         readAt: new Date().toISOString(),
         totalImages: currentImgs.length,
+        scrollRatio: resumeRatio,
       });
 
       recordMangaReading({
@@ -103,9 +114,7 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       });
 
       // Đang đọc dở chương này thì trả về đúng chỗ cũ.
-      const saved = getNgontinhProgress(manga.slug);
-      const resumeRatio = saved && saved.chapterNumber === chNum ? saved.scrollRatio ?? 0 : 0;
-      if (resumeRatio > 0.01) {
+      if (resumeRatio > 0.01 && resumeRatio < 0.85) {
         let tries = 0;
         const restore = () => {
           if (!mainRef.current) return;
@@ -118,6 +127,10 @@ export const NgontinhReaderModal: React.FC<Props> = ({
         if (mainRef.current) mainRef.current.scrollTop = 0;
       }
       setImageErrors({});
+      const timer = setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [currentChapter, currentChapterNum, manga.slug, manga.title, dynamicChapterImages]);
 
@@ -128,10 +141,12 @@ export const NgontinhReaderModal: React.FC<Props> = ({
 
     let ticking = false;
     const handleScroll = () => {
+      if (isNavigatingRef.current) return;
       if (!ticking && currentChapter) {
         ticking = true;
         requestAnimationFrame(() => {
           ticking = false;
+          if (isNavigatingRef.current) return;
           saveNgontinhProgress({
             slug: manga.slug,
             chapterNumber: currentChapter.number ?? currentChapterNum,
@@ -183,6 +198,14 @@ export const NgontinhReaderModal: React.FC<Props> = ({
       });
     }
     if (nextChapter && nextChapter.number != null) {
+      isNavigatingRef.current = true;
+      saveNgontinhProgress({
+        slug: manga.slug,
+        chapterNumber: nextChapter.number,
+        chapterName: nextChapter.name || `Chapter ${nextChapter.number}`,
+        scrollRatio: 0,
+      });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
       if (onSelectChapter) onSelectChapter(nextChapter.number);
       else setCurrentChapterNum(nextChapter.number);
     }
@@ -190,10 +213,18 @@ export const NgontinhReaderModal: React.FC<Props> = ({
 
   const handlePrev = useCallback(() => {
     if (prevChapter && prevChapter.number != null) {
+      isNavigatingRef.current = true;
+      saveNgontinhProgress({
+        slug: manga.slug,
+        chapterNumber: prevChapter.number,
+        chapterName: prevChapter.name || `Chapter ${prevChapter.number}`,
+        scrollRatio: 0,
+      });
+      if (mainRef.current) mainRef.current.scrollTop = 0;
       if (onSelectChapter) onSelectChapter(prevChapter.number);
       else setCurrentChapterNum(prevChapter.number);
     }
-  }, [prevChapter, onSelectChapter]);
+  }, [prevChapter, onSelectChapter, manga.slug]);
 
   // Keyboard navigation
   useEffect(() => {
