@@ -58,4 +58,30 @@ describe('NutritionPage period navigation', () => {
     await waitFor(() => expect(screen.getByText('22:00 → 06:00')).toBeInTheDocument())
     expect(screen.getByText('Đêm đủ giấc')).toBeInTheDocument()
   })
+
+  it('shows food suggestions combobox and autofills price when selected', async () => {
+    const user = userEvent.setup()
+    render(<NutritionPage />)
+
+    // Mở modal thêm bữa sáng
+    const addMorningBtn = await screen.findByRole('button', { name: 'Sáng' })
+    await user.click(addMorningBtn)
+
+    const foodInput = screen.getByPlaceholderText('Gõ hoặc chọn món: Cơm tấm, Phở bò…')
+    expect(foodInput).toBeInTheDocument()
+
+    // Focus input để hiện gợi ý combobox
+    await user.click(foodInput)
+
+    // Tìm món gợi ý trong combobox
+    const phoBoItem = await screen.findByText('🍲 Phở bò')
+    expect(phoBoItem).toBeInTheDocument()
+
+    // Click chọn món Phở bò -> tự động fill tên món và giá tiền
+    await user.click(phoBoItem)
+
+    expect(foodInput).toHaveValue('Phở bò')
+    const priceInput = screen.getByPlaceholderText('Ví dụ: 35k hoặc 35000')
+    expect(priceInput).toHaveValue('45000')
+  })
 })

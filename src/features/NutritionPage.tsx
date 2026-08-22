@@ -16,6 +16,12 @@ import {
   type PeriodMode,
   type SleepLog,
 } from './nutrition/periodData'
+import {
+  useRememberedFoods,
+  saveRememberedFood,
+  removeRememberedFood,
+  syncRememberedFoodsFromLogs,
+} from './nutrition/foodSuggestions'
 import { SkeletonList } from './Skeleton'
 
 type SubTab = 'food' | 'sleep'
@@ -69,6 +75,17 @@ export function NutritionPage() {
   const [foodName, setFoodName] = useState('')
   const [foodPrice, setFoodPrice] = useState('')
   const [foodLogTime, setFoodLogTime] = useState(() => new Date().toTimeString().slice(0, 5))
+  const [showFoodSuggestions, setShowFoodSuggestions] = useState(false)
+
+  const rememberedFoods = useRememberedFoods()
+
+  const filteredSuggestions = useMemo(() => {
+    const q = foodName.trim().toLowerCase()
+    if (!q) return rememberedFoods.slice(0, 10)
+    return rememberedFoods
+      .filter((f) => f.name.toLowerCase().includes(q))
+      .slice(0, 10)
+  }, [rememberedFoods, foodName])
   
   const [sleepModal, setSleepModal] = useState(false)
   const [editingSleep, setEditingSleep] = useState<SleepLog | null>(null)
@@ -141,12 +158,21 @@ export function NutritionPage() {
     return map
   }, [logs])
 
+  useEffect(() => {
+    if (logs.length > 0) syncRememberedFoodsFromLogs(logs)
+  }, [logs])
+
+  useEffect(() => {
+    if (periodFoodLogs.length > 0) syncRememberedFoodsFromLogs(periodFoodLogs)
+  }, [periodFoodLogs])
+
   function openAddFoodModal(slot: MealSlot) {
     setEditingFood(null)
     setActiveMeal(slot)
     setFoodName('')
     setFoodPrice('')
     setFoodLogTime(new Date().toTimeString().slice(0, 5))
+    setShowFoodSuggestions(false)
     setFoodModal(true)
   }
 
@@ -156,17 +182,23 @@ export function NutritionPage() {
     setFoodName(log.food_name)
     setFoodPrice(log.price ? String(log.price) : '')
     setFoodLogTime(log.log_time || new Date().toTimeString().slice(0, 5))
+    setShowFoodSuggestions(false)
     setFoodModal(true)
   }
 
   async function saveFood() {
     const priceNum = Number(foodPrice.replace(/\D/g, '')) || 0
+    const cleanFoodName = foodName.trim() || 'Món ăn'
     const payload = {
       meal_slot: activeMeal,
-      food_name: foodName.trim() || 'Món ăn',
+      food_name: cleanFoodName,
       price: priceNum,
       log_date: editingFood ? editingFood.log_date : currentDate,
       log_time: foodLogTime,
+    }
+
+    if (cleanFoodName) {
+      saveRememberedFood(cleanFoodName, priceNum)
     }
 
     if (editingFood) {
@@ -214,6 +246,7 @@ export function NutritionPage() {
     setFoodName('')
     setFoodPrice('')
     setEditingFood(null)
+    setShowFoodSuggestions(false)
     setFoodModal(false)
   }
 
@@ -421,11 +454,88 @@ export function NutritionPage() {
       )}
 
       {foodModal && (
-        <Modal onClose={() => { setFoodModal(false); setEditingFood(null) }} title={editingFood ? `Sửa bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label} (${editingFood.food_name})` : `Thêm bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label}`}>
+        <Modal onClose={() => { setFoodModal(false); setEditingFood(null); setShowFoodSuggestions(false) }} title={editingFood ? `Sửa bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label} (${editingFood.food_name})` : `Thêm bữa ${MEALS.find((meal) => meal.slot === activeMeal)?.label}`}>
           <div className="form-grid">
-            <label>Tên món ăn<input autoFocus value={foodName} onChange={(event) => setFoodName(event.target.value)} placeholder="Ví dụ: Cơm tấm" /></label>
-            <label>Chi phí<input value={foodPrice} onChange={(event) => setFoodPrice(event.target.value)} placeholder="Ví dụ: 35k" inputMode="numeric" /></label>
-            <label>Giờ<input type="time" value={foodLogTime} onChange={(event) => setFoodLogTime(event.target.value)} /></label>
+            <label style={{ position: 'relative' }}>
+              <span>Tên món ăn</span>
+              <div className="food-combobox-wrapper">
+                <input
+                  autoFocus
+                  value={foodName}
+                  onChange={(event) => {
+                    setFoodName(event.target.value)
+                    setShowFoodSuggestions(true)
+                  }}
+                  onFocus={() => setShowFoodSuggestions(true)}
+                  placeholder="Gõ hoặc chọn món: Cơm tấm, Phở bò…"
+                  autoComplete="off"
+                />
+
+                {/* Combobox Gợi ý món ăn & tự fill giá tiền */}
+                {showFoodSuggestions && (
+                  <div 
+                    className="food-suggestions-dropdown"
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {filteredSuggestions.length > 0 ? (
+                      filteredSuggestions.map((item) => (
+                        <button
+                          key={item.name}
+                          type="button"
+                          className="food-suggestion-item"
+                          onClick={() => {
+                            setFoodName(item.name)
+                            if (item.price > 0) setFoodPrice(String(item.price))
+                            setShowFoodSuggestions(false)
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>🍲 {item.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="food-suggestion-price">{item.price ? money(item.price) : '0đ'}</span>
+                            <span
+                              className="food-suggestion-delete"
+                              title="Xoá món này khỏi gợi ý"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                removeRememberedFood(item.name)
+                              }}
+                            >
+                              <Trash2 size={12} />
+                            </span>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div style={{ padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Nhập món mới "{foodName}" tuỳ thích
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </label>
+
+            <label>
+              Chi phí
+              <input
+                value={foodPrice}
+                onChange={(event) => setFoodPrice(event.target.value)}
+                placeholder="Ví dụ: 35k hoặc 35000"
+                inputMode="numeric"
+                onFocus={() => setShowFoodSuggestions(false)}
+              />
+            </label>
+
+            <label>
+              Giờ
+              <input
+                type="time"
+                value={foodLogTime}
+                onChange={(event) => setFoodLogTime(event.target.value)}
+                onFocus={() => setShowFoodSuggestions(false)}
+              />
+            </label>
+
             <button type="button" className="primary" onClick={saveFood}>{editingFood ? 'Lưu thay đổi' : 'Lưu món ăn'}</button>
           </div>
         </Modal>

@@ -93,3 +93,82 @@
   .nutrition-meal-filter button { padding-inline: 10px; }
   .nutrition-history-row { grid-template-columns: 30px minmax(0, 1fr) auto 26px; gap: 4px; }
 }
+
+/* Combobox gợi ý món ăn & tự fill giá tiền */
+.food-combobox-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.food-suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--card-border, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  z-index: 1050;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.food-suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s ease;
+  color: var(--text-main, #1e293b);
+  font-size: 0.85rem;
+}
+
+.food-suggestion-item:hover,
+.food-suggestion-item:focus {
+  background: var(--primary-light, #eff6ff);
+  color: var(--primary, #2563eb);
+}
+
+.food-suggestion-price {
+  font-weight: 700;
+  color: var(--primary, #2563eb);
+  font-size: 0.8rem;
+  background: var(--primary-light, #eff6ff);
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.food-suggestion-item:hover .food-suggestion-price {
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+}
+
+.food-suggestion-delete {
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.food-suggestion-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
