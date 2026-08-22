@@ -14,7 +14,7 @@ import { LibraryAudioAction, LibraryAudioDetail, LibraryCategoryBar } from './li
 import { AudioQueuePicker, AudioQueuePlayer } from './library/AudioQueue'
 import { MarqueeText } from './library/MarqueeText'
 import { RowMenu } from './library/RowMenu'
-import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId } from '../lib/youtubeMeta'
+import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId, detectMusicGenre } from '../lib/youtubeMeta'
 import { normalizeStorageUrl } from '../lib/storageUrl'
 import { shareMusicToAll } from '../lib/musicShare'
 import { dedupeMusic } from '../lib/musicDedupe'
@@ -220,6 +220,10 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const [manageGenresModal, setManageGenresModal] = useState(false)
   const [manageMusicGenresModal, setManageMusicGenresModal] = useState(false)
 
+  // Combobox Suggestions state
+  const [showArtistSuggestions, setShowArtistSuggestions] = useState(false)
+  const [showMusicGenreSuggestions, setShowMusicGenreSuggestions] = useState(false)
+
   // New Management Item Input Values
   const [musicGenreVal, setMusicGenreVal] = useState('')
   const [bookGenreVal, setBookGenreVal] = useState('')
@@ -253,6 +257,29 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const [logNote, setLogNote] = useState<string>('')
   const [logProgressDate, setLogProgressDate] = useState<string>(localDate())
 
+  const DEFAULT_MUSIC_GENRES = useMemo(
+    () => [
+      'Pop',
+      'V-Pop',
+      'Ballad',
+      'Nhạc Trẻ',
+      'Rap / Hip-hop',
+      'R&B',
+      'EDM / Remix',
+      'Lo-fi / Chill',
+      'Acoustic',
+      'Nhạc Trịnh',
+      'Bolero / Trữ Tình',
+      'Rock',
+      'Jazz',
+      'Nhạc Phim (OST)',
+      'Không lời / Piano',
+      'US-UK',
+      'K-Pop',
+    ],
+    [],
+  )
+
   // Datalist collections merged from DB query and item history
   const channels = useMemo(() => {
     const set = new Set<string>(youtubeChannelsQuery.items.map((c) => c.name))
@@ -264,21 +291,40 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   }, [items, youtubeChannelsQuery.items])
 
   const artists = useMemo(() => {
-    const set = new Set<string>(musicArtistsQuery.items.map((a) => a.name))
-    items.filter((i) => i.type === 'MUSIC').forEach((i) => {
-      const val = getItemExtraMeta(i).value
-      if (val) set.add(val)
+    const set = new Set<string>()
+    musicArtistsQuery.items.forEach((a) => {
+      if (a.name && a.name.trim()) set.add(a.name.trim())
     })
-    return Array.from(set)
+    items.filter((i) => i.type === 'MUSIC').forEach((i) => {
+      const val = getItemExtraMeta(i).value || i.artist
+      if (val && val.trim()) set.add(val.trim())
+    })
+    return Array.from(set).filter(Boolean).sort()
   }, [items, musicArtistsQuery.items])
 
   const musicGenres = useMemo(() => {
-    const set = new Set<string>(musicGenresQuery.items.map((g) => g.name))
-    items.filter((i) => i.type === 'MUSIC').forEach((i) => {
-      if (i.music_genre) set.add(i.music_genre)
+    const set = new Set<string>(DEFAULT_MUSIC_GENRES)
+    musicGenresQuery.items.forEach((g) => {
+      if (g.name && g.name.trim()) set.add(g.name.trim())
     })
-    return Array.from(set)
-  }, [items, musicGenresQuery.items])
+    items.filter((i) => i.type === 'MUSIC').forEach((i) => {
+      if (i.music_genre && i.music_genre.trim()) set.add(i.music_genre.trim())
+      if (i.genre && i.genre.trim()) set.add(i.genre.trim())
+    })
+    return Array.from(set).filter(Boolean).sort()
+  }, [items, musicGenresQuery.items, DEFAULT_MUSIC_GENRES])
+
+  const filteredArtists = useMemo(() => {
+    const q = extraVal.trim().toLowerCase()
+    if (!q) return artists.slice(0, 12)
+    return artists.filter((a) => a.toLowerCase().includes(q)).slice(0, 12)
+  }, [artists, extraVal])
+
+  const filteredMusicGenres = useMemo(() => {
+    const q = musicGenreVal.trim().toLowerCase()
+    if (!q) return musicGenres.slice(0, 12)
+    return musicGenres.filter((g) => g.toLowerCase().includes(q)).slice(0, 12)
+  }, [musicGenres, musicGenreVal])
 
   const bookGenres = useMemo(() => {
     const set = new Set<string>(bookGenresQuery.items.map((g) => g.name))
@@ -343,6 +389,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setStatusVal(kind === 'MUSIC' ? 'COMPLETED' : 'PLANNED')
     setBookFormat('READ')
     setCoverPreview(false)
+    setShowArtistSuggestions(false)
+    setShowMusicGenreSuggestions(false)
   }
 
   // Nút "+" của trang dùng ô hành động trên header chung, giống Habits và Người.
@@ -388,6 +436,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setStatusVal(item.status ?? 'PLANNED')
     setBookFormat((item.book_format as BookFormat) ?? 'READ')
     setCoverPreview(false)
+    setShowArtistSuggestions(false)
+    setShowMusicGenreSuggestions(false)
   }
 
   /**
@@ -433,6 +483,10 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       const parsed = parseMusicTitle(meta.title, meta.author)
       if (nameEmpty && parsed.name) setName(parsed.name)
       if (extraEmpty && parsed.artist) setExtraVal(parsed.artist)
+      if (!musicGenreVal.trim()) {
+        const detectedGenre = detectMusicGenre(meta.title, meta.author)
+        if (detectedGenre) setMusicGenreVal(detectedGenre)
+      }
     }
 
     showToast('Đã lấy thông tin từ YouTube', 'success')
@@ -629,6 +683,28 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       }
     }
 
+    // Tự động lưu ca sĩ / nhạc sĩ mới vào cơ sở dữ liệu nếu chưa có
+    if (kind === 'MUSIC' && extraVal.trim() && supabase) {
+      const artName = extraVal.trim()
+      if (!musicArtistsQuery.items.some((a) => a.name.toLowerCase() === artName.toLowerCase())) {
+        void supabase.from('music_artists').insert({ name: artName }).then(() => {
+          musicArtistsQuery.reload?.()
+        })
+      }
+    }
+
+    // Tự động lưu thể loại nhạc mới vào cơ sở dữ liệu nếu chưa có
+    if (kind === 'MUSIC' && musicGenreVal.trim() && supabase) {
+      const genreName = musicGenreVal.trim()
+      if (!musicGenresQuery.items.some((g) => g.name.toLowerCase() === genreName.toLowerCase())) {
+        void supabase.from('music_genres').insert({ name: genreName }).then(() => {
+          musicGenresQuery.reload?.()
+        })
+      }
+    }
+
+    setShowArtistSuggestions(false)
+    setShowMusicGenreSuggestions(false)
     setActiveModal(null)
   }
 
@@ -1923,37 +1999,66 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           {/* 4. Music Fields: Artist + Genre */}
           {activeModal.kind === 'MUSIC' && (
             <div style={{ display: 'grid', gap: 10 }}>
-              {/* Artist */}
+              {/* Artist Combobox */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>Ca sĩ / Nhạc sĩ</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>🎤 Ca sĩ / Nhạc sĩ</span>
                   <button
                     type="button"
                     className="icon small"
                     aria-label="Manage artists"
                     onClick={(e) => {
                       e.preventDefault()
+                      setShowArtistSuggestions(false)
                       setManageArtistsModal(true)
                     }}
                     style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--cyan)', fontWeight: 700 }}
                   >
-                    <FolderCog size={13} /> Quản lý ca sĩ
+                    <FolderCog size={13} /> Quản lý ca sĩ ({artists.length})
                   </button>
                 </div>
-                <input
-                  list="music-artists-list"
-                  value={extraVal}
-                  onChange={(e) => setExtraVal(e.target.value)}
-                  placeholder="Chọn ca sĩ hoặc nhập tên ca sĩ mới…"
-                />
-                <datalist id="music-artists-list">
-                  {artists.map((art) => (
-                    <option key={art} value={art} />
-                  ))}
-                </datalist>
+                <div className="library-combobox-wrapper">
+                  <input
+                    value={extraVal}
+                    onChange={(e) => {
+                      setExtraVal(e.target.value)
+                      setShowArtistSuggestions(true)
+                    }}
+                    onFocus={() => {
+                      setShowArtistSuggestions(true)
+                      setShowMusicGenreSuggestions(false)
+                    }}
+                    placeholder="Gõ hoặc chọn ca sĩ: Đen Vâu, Sơn Tùng, Vũ…"
+                    autoComplete="off"
+                  />
+                  {showArtistSuggestions && (
+                    <div className="library-combobox-dropdown" onMouseDown={(e) => e.preventDefault()}>
+                      {filteredArtists.length > 0 ? (
+                        filteredArtists.map((art) => (
+                          <button
+                            key={art}
+                            type="button"
+                            className="library-combobox-item"
+                            onClick={() => {
+                              setExtraVal(art)
+                              setShowArtistSuggestions(false)
+                            }}
+                          >
+                            <span>🎤 {art}</span>
+                            <span className="library-combobox-badge">Ca sĩ</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="library-combobox-empty">
+                          Nhập tên ca sĩ mới "{extraVal}" tuỳ thích
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Music Genre */}
+              {/* Music Genre Combobox */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>🎼 Thể loại nhạc</span>
@@ -1963,24 +2068,53 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                     aria-label="Manage music genres"
                     onClick={(e) => {
                       e.preventDefault()
+                      setShowMusicGenreSuggestions(false)
                       setManageMusicGenresModal(true)
                     }}
                     style={{ fontSize: '0.76rem', gap: 4, display: 'flex', alignItems: 'center', color: 'var(--cyan)', fontWeight: 700 }}
                   >
-                    <FolderCog size={13} /> Quản lý thể loại
+                    <FolderCog size={13} /> Quản lý thể loại ({musicGenres.length})
                   </button>
                 </div>
-                <input
-                  list="music-genres-list"
-                  value={musicGenreVal}
-                  onChange={(e) => setMusicGenreVal(e.target.value)}
-                  placeholder="VD: Pop, V-Pop, Rock, Jazz, Lo-fi…"
-                />
-                <datalist id="music-genres-list">
-                  {musicGenres.map((g) => (
-                    <option key={g} value={g} />
-                  ))}
-                </datalist>
+                <div className="library-combobox-wrapper">
+                  <input
+                    value={musicGenreVal}
+                    onChange={(e) => {
+                      setMusicGenreVal(e.target.value)
+                      setShowMusicGenreSuggestions(true)
+                    }}
+                    onFocus={() => {
+                      setShowMusicGenreSuggestions(true)
+                      setShowArtistSuggestions(false)
+                    }}
+                    placeholder="Gõ hoặc chọn thể loại: V-Pop, Ballad, Lo-fi…"
+                    autoComplete="off"
+                  />
+                  {showMusicGenreSuggestions && (
+                    <div className="library-combobox-dropdown" onMouseDown={(e) => e.preventDefault()}>
+                      {filteredMusicGenres.length > 0 ? (
+                        filteredMusicGenres.map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            className="library-combobox-item"
+                            onClick={() => {
+                              setMusicGenreVal(g)
+                              setShowMusicGenreSuggestions(false)
+                            }}
+                          >
+                            <span>🎼 {g}</span>
+                            <span className="library-combobox-badge">Thể loại</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="library-combobox-empty">
+                          Nhập thể loại mới "{musicGenreVal}" tuỳ thích
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
             </div>

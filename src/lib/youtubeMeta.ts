@@ -149,8 +149,7 @@ export function parseMusicTitle(rawTitle: string, author: string): { name: strin
 
   if (parts.length < 2) return { name: cleaned, artist: channel || cleaned }
 
-  const channelIndex = channel ? parts.findIndex((p) => looksLikeChannel(p, channel)) : -1
-
+  const channelIndex = parts.findIndex((p) => looksLikeChannel(p, channel))
   if (channelIndex >= 0) {
     const rest = parts.filter((_, i) => i !== channelIndex)
     return { name: rest[0] ?? parts[channelIndex], artist: parts[channelIndex] }
@@ -158,4 +157,25 @@ export function parseMusicTitle(rawTitle: string, author: string): { name: strin
 
   // Không vế nào khớp kênh: theo quy ước phổ biến nhất, vế đầu là ca sĩ.
   return { name: parts.slice(1).join(' - '), artist: parts[0] }
+}
+
+/**
+ * Tự động đoán thể loại nhạc từ tiêu đề video YouTube và tên kênh/ca sĩ.
+ */
+export function detectMusicGenre(rawTitle: string, author?: string): string {
+  const text = `${rawTitle || ''} ${author || ''}`.toLowerCase()
+  if (text.includes('lofi') || text.includes('lo-fi') || text.includes('chill')) return 'Lo-fi / Chill'
+  if (text.includes('remix') || text.includes('edm') || text.includes('vinahouse') || text.includes('house') || text.includes('dj')) return 'EDM / Remix'
+  if (text.includes('rap') || text.includes('freestyle') || text.includes('hiphop') || text.includes('hip-hop') || text.includes('cypher')) return 'Rap / Hip-hop'
+  if (text.includes('acoustic') || text.includes('guitar')) return 'Acoustic'
+  if (text.includes('piano') || text.includes('instrumental') || text.includes('không lời')) return 'Không lời / Piano'
+  if (text.includes('ost') || text.includes('nhạc phim') || text.includes('soundtrack')) return 'Nhạc Phim (OST)'
+  if (text.includes('bolero') || text.includes('trữ tình') || text.includes('quê hương')) return 'Bolero / Trữ Tình'
+  if (text.includes('trịnh') || text.includes('trịnh công sơn')) return 'Nhạc Trịnh'
+  if (text.includes('ballad') || text.includes('buồn')) return 'Ballad'
+  if (text.includes('rock') || text.includes('metal')) return 'Rock'
+  if (text.includes('jazz') || text.includes('blues')) return 'Jazz'
+  if (text.includes('r&b') || text.includes('rnb')) return 'R&B'
+  if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/.test(text)) return 'V-Pop'
+  return 'Pop'
 }

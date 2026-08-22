@@ -11510,3 +11510,66 @@ svg.lucide-library {
 @keyframes vt-fade-in {
   from { opacity: 0; transform: translateY(6px); }
 }
+
+/* ── Interactive Combobox Dropdown for Library (Artists, Genres, Authors) ── */
+.library-combobox-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.library-combobox-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 230px;
+  overflow-y: auto;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--card-border, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 4px 10px -2px rgba(0, 0, 0, 0.08);
+  z-index: 1100;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.library-combobox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+  color: var(--text-main, #0f172a);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.library-combobox-item:hover,
+.library-combobox-item:focus {
+  background: var(--primary-light, #eff6ff);
+  color: var(--primary, #2563eb);
+}
+
+.library-combobox-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cyan, #0891b2);
+  background: var(--cyan-bg, #cffaff);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.library-combobox-empty {
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+  text-align: center;
+}

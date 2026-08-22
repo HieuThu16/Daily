@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchYouTubeMeta, parseChannelName, parseMusicTitle, stripTitleNoise, youtubeVideoId } from './youtubeMeta'
+import { fetchYouTubeMeta, parseChannelName, parseMusicTitle, stripTitleNoise, youtubeVideoId, detectMusicGenre } from './youtubeMeta'
 
 describe('youtubeVideoId', () => {
   it('đọc được các dạng link YouTube thường gặp', () => {
@@ -132,5 +132,18 @@ describe('fetchYouTubeMeta', () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error('offline'))
 
     await expect(fetchYouTubeMeta('https://youtu.be/dQw4w9WgXcQ', fetchImpl)).resolves.toBeNull()
+  })
+})
+
+describe('detectMusicGenre', () => {
+  it('đoán đúng các thể loại phổ biến', () => {
+    expect(detectMusicGenre('1 Phút Lofi Chill Buồn', 'Andiez')).toBe('Lo-fi / Chill')
+    expect(detectMusicGenre('Waiting For You (Remix EDM Vinahouse)', 'MONO')).toBe('EDM / Remix')
+    expect(detectMusicGenre('Đi Về Nhà - Đen Vâu ft. JustaTee (Rap)', 'Đen Vâu')).toBe('Rap / Hip-hop')
+    expect(detectMusicGenre('Hạ Trắng (Nhạc Trịnh Guitar Acoustic)', 'Hà Anh Tuấn')).toBe('Acoustic')
+    expect(detectMusicGenre('Diễm Xưa - Trịnh Công Sơn', 'Khánh Ly')).toBe('Nhạc Trịnh')
+    expect(detectMusicGenre('Sầu Tím Thiệp Hồng (Bolero Trữ Tình)', 'Quang Lê')).toBe('Bolero / Trữ Tình')
+    expect(detectMusicGenre('See Tình (Official MV)', 'Hoàng Thùy Linh')).toBe('V-Pop')
+    expect(detectMusicGenre('Shape of You', 'Ed Sheeran')).toBe('Pop')
   })
 })
