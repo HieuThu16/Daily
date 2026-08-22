@@ -4,7 +4,8 @@ import {
   Search, Heart, BookOpen, Clock, Play, 
   X, Bookmark, ChevronRight,
   Flame, Sparkles, Loader2, Plus, Download,
-  Link as LinkIcon, AlertCircle, Clipboard, ExternalLink
+  Link as LinkIcon, AlertCircle, Clipboard, ExternalLink,
+  CheckCircle2
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { 
@@ -142,20 +143,46 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
   );
 });
 
+function extractSlugFromUrl(rawUrl: string): string {
+  let u = rawUrl.trim();
+  if (!u) return '';
+  u = u.replace(/\/chap(?:ter)?-[\d.]+\/?$/i, '');
+  u = u.replace(/\/+$/, '');
+  const segments = u.split('/').filter(Boolean);
+  return segments[segments.length - 1] || '';
+}
+
 // Crawl Modal Component
 function CrawlModal({ 
   isOpen, 
   onClose, 
-  onSuccess 
+  onSuccess,
+  existingMangaList = [],
+  onOpenExisting
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
   onSuccess: (manga: HManga) => void;
+  existingMangaList?: HManga[];
+  onOpenExisting?: (slug: string) => void;
 }) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Kiểm tra trùng truyện ngay trên frontend khi paste/nhập link
+  const existingMatch = useMemo(() => {
+    if (!url.trim()) return null;
+    const slug = extractSlugFromUrl(url);
+    if (!slug) return null;
+    return existingMangaList.find(m => 
+      m.slug === slug || 
+      m.slug.toLowerCase() === slug.toLowerCase() ||
+      (m.url && extractSlugFromUrl(m.url) === slug) ||
+      m.title.toLowerCase().replace(/[^a-z0-9]/g, '') === slug.replace(/[^a-z0-9]/g, '')
+    );
+  }, [url, existingMangaList]);
 
   if (!isOpen) return null;
 
@@ -169,7 +196,7 @@ function CrawlModal({
   const handleCrawl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) {
-      setErrorMsg('Vui lòng nhập link truyện từ metruyen18.app');
+      setErrorMsg('Vui lòng nhập link truyện từ metruyen18.app hoặc vietmanhwa.com');
       return;
     }
 
@@ -286,6 +313,57 @@ function CrawlModal({
             </div>
           </div>
 
+          {/* Cảnh báo truyện trùng tên/slug ngay trên Frontend */}
+          {existingMatch && !loading && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              padding: '12px 14px',
+              borderRadius: '12px',
+              background: '#fef9c3',
+              color: '#854d0e',
+              fontSize: '0.85rem',
+              marginBottom: '16px',
+              border: '1px solid #fef08a'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
+                <CheckCircle2 size={17} style={{ color: '#ca8a04', flexShrink: 0 }} />
+                <span>Truyện này đã có trong danh sách!</span>
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#713f12' }}>
+                Đã lưu: <strong>{existingMatch.title}</strong> ({existingMatch.chapters?.length || existingMatch.totalChapters || 0} chương).
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenExisting) onOpenExisting(existingMatch.slug);
+                    else onClose();
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#ca8a04',
+                    color: '#fff',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <ExternalLink size={12} /> Mở đọc ngay
+                </button>
+                <span style={{ fontSize: '0.75rem', color: '#854d0e' }}>
+                  hoặc bấm "Cào lại truyện" bên dưới để cập nhật chương mới
+                </span>
+              </div>
+            </div>
+          )}
+
           {errorMsg && (
             <div style={{
               display: 'flex',
@@ -360,6 +438,10 @@ function CrawlModal({
               {loading ? (
                 <>
                   <Loader2 className="spinner" size={16} /> Đang cào truyện...
+                </>
+              ) : existingMatch ? (
+                <>
+                  <Download size={16} /> Cào lại & Cập nhật
                 </>
               ) : (
                 <>
@@ -511,6 +593,11 @@ export const HMangaPage: React.FC = () => {
         isOpen={showCrawlModal}
         onClose={() => setShowCrawlModal(false)}
         onSuccess={handleCrawlSuccess}
+        existingMangaList={mangaList}
+        onOpenExisting={(slug) => {
+          setShowCrawlModal(false);
+          navigate(`/truyenh/${slug}`);
+        }}
       />
 
       {/* Continue reading banner if available */}
