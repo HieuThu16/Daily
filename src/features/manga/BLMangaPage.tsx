@@ -111,7 +111,7 @@ const BLMangaCardItem: React.FC<CardProps> = React.memo(({
         {/* Total Chapters Badge / No Data Badge */}
         {hasMangaData(manga) ? (
           <div className="bl-card-chapter-badge">
-            {manga.totalChapters || manga.chapters.length} Ch
+            {manga.totalChapters || manga.chapters?.length || 0} Ch
           </div>
         ) : (
           <div className="bl-card-nodata-badge">
@@ -658,7 +658,7 @@ export const BLMangaPage: React.FC = () => {
                 <div className="bl-spotlight-info">
                   <span className="bl-spotlight-title">{manga.title}</span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    {manga.totalChapters || manga.chapters.length} chapters
+                    {manga.totalChapters || manga.chapters?.length || 0} chapters
                   </span>
                 </div>
               </div>

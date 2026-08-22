@@ -98,7 +98,7 @@ const NgontinhCardItem: React.FC<CardProps> = React.memo(({
         {/* Total Chapters Badge / No Data Badge */}
         {hasMangaData(manga) ? (
           <div className="ngontinh-card-chapter-badge">
-            {manga.totalChapters || manga.chapters.length} Ch
+            {manga.totalChapters || manga.chapters?.length || 0} Ch
           </div>
         ) : (
           <div className="ngontinh-card-nodata-badge">
@@ -581,7 +581,7 @@ export const NgontinhMangaPage: React.FC = () => {
                 <div className="ngontinh-spotlight-info">
                   <span className="ngontinh-spotlight-title">{manga.title}</span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    {manga.totalChapters || manga.chapters.length} chapters
+                    {manga.totalChapters || manga.chapters?.length || 0} chapters
                   </span>
                 </div>
               </div>

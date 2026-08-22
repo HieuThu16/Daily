@@ -6,7 +6,7 @@ import { loadLocal, saveLocal } from '../../lib/persistence'
 import { loadBookDocument, loadChapterContent, loadChapterList, estimatePage } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument } from '../../types'
 import { useBookReadingProgress } from './useBookReadingProgress'
-import { useBookReadingSessionTracker, useBookReadingSessionLogs, summarizeBookSessions, saveLastReadBook } from '../../lib/bookReadingLog'
+import { useBookReadingSessionTracker, useBookReadingSessionLogs, summarizeBookSessions, saveLastReadBook, getLastReadBook } from '../../lib/bookReadingLog'
 import { localDate } from '../../lib/date'
 import { useToast } from '../ToastContext'
 import { BookSearchModal } from './BookSearchModal'
@@ -150,10 +150,15 @@ export function BookReaderPage() {
         const parsed = Number(requestedChapter)
         const jumping =
           requestedChapter !== null && requestedChapter !== '' && Number.isInteger(parsed) && parsed >= 0
-        const startIdx = jumping ? parsed : doc.last_chapter_idx
+        const localLast = getLastReadBook()
+        const isThisBook = localLast?.mediaItemId === mediaItemId
+        const fallbackIdx = isThisBook && typeof localLast?.chapterIdx === 'number' ? localLast.chapterIdx : 0
+        const fallbackRatio = isThisBook && typeof localLast?.lastScrollRatio === 'number' ? localLast.lastScrollRatio : 0
+
+        const startIdx = jumping ? parsed : (doc.last_chapter_idx ?? fallbackIdx)
         setActiveIdx(Math.min(startIdx, Math.max(0, list.length - 1)))
-        setPercent(doc.percent)
-        pendingRatio.current = jumping ? 0 : doc.last_scroll_ratio
+        setPercent(doc.percent ?? (isThisBook ? (localLast?.percent ?? 0) : 0))
+        pendingRatio.current = jumping ? 0 : (doc.last_scroll_ratio ?? fallbackRatio)
         setStatus('ready')
 
         if (media?.status === 'PLANNED') {

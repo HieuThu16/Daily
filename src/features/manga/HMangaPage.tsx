@@ -111,7 +111,7 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
 
         {/* Total Chapters Badge */}
         <div className="ngontinh-card-chapter-badge">
-          {manga.totalChapters || manga.chapters.length} Ch
+          {manga.totalChapters || manga.chapters?.length || 0} Ch
         </div>
 
         {/* Reading Status Badge */}
@@ -124,7 +124,7 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
 
       {/* Card Info */}
       <div className="ngontinh-card-details">
-        <h3 className="ngontinh-card-title" title={manga.title}>
+        <h3 className="ngontinh-card-title" title={manga.title || ''}>
           {manga.title}
         </h3>
 
@@ -499,6 +499,8 @@ export const HMangaPage: React.FC = () => {
       if (list && list.length > 0) {
         setMangaList(list);
       }
+      setFavorites(getHMangaFavorites());
+      setHistory(getHMangaHistory());
     } catch (err) {
       console.error('Failed to load H manga list', err);
     } finally {
@@ -510,6 +512,12 @@ export const HMangaPage: React.FC = () => {
     loadData();
     setFavorites(getHMangaFavorites());
     setHistory(getHMangaHistory());
+
+    const onHistoryUpdate = (e: any) => {
+      setHistory(e.detail || getHMangaHistory());
+    };
+    window.addEventListener('daily_h_history_updated', onHistoryUpdate);
+    return () => window.removeEventListener('daily_h_history_updated', onHistoryUpdate);
   }, []);
 
   // Reset pagination on tab/search change
@@ -535,34 +543,41 @@ export const HMangaPage: React.FC = () => {
 
   // Map slug to full manga details
   const mangaMap = useMemo(() => {
-    return new Map(mangaList.map(m => [m.slug, m]));
+    const map = new Map<string, HManga>();
+    for (const m of (mangaList || [])) {
+      if (m?.slug) map.set(m.slug, m);
+    }
+    return map;
   }, [mangaList]);
 
   // Filtered list
   const filteredList = useMemo(() => {
     let result: { manga: HManga }[] = [];
+    const list = mangaList || [];
+    const favs = favorites || [];
+    const hist = history || {};
 
     if (activeTab === 'favorites') {
-      result = mangaList.filter(m => favorites.includes(m.slug)).map(m => ({ manga: m }));
+      result = list.filter(m => m?.slug && favs.includes(m.slug)).map(m => ({ manga: m }));
     } else if (activeTab === 'history') {
-      result = mangaList
-        .filter(m => history[m.slug])
+      result = list
+        .filter(m => m?.slug && hist[m.slug])
         .sort((a, b) => {
-          const tA = new Date(history[a.slug]?.readAt || 0).getTime();
-          const tB = new Date(history[b.slug]?.readAt || 0).getTime();
+          const tA = new Date(hist[a.slug]?.readAt || 0).getTime();
+          const tB = new Date(hist[b.slug]?.readAt || 0).getTime();
           return tB - tA;
         })
         .map(m => ({ manga: m }));
     } else {
-      result = mangaList.map(m => ({ manga: m }));
+      result = list.map(m => ({ manga: m }));
     }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(item => 
-        item.manga.title.toLowerCase().includes(q) || 
-        item.manga.author?.toLowerCase().includes(q) ||
-        item.manga.genres?.some(g => g.toLowerCase().includes(q))
+        (item.manga?.title || '').toLowerCase().includes(q) || 
+        (item.manga?.author || '').toLowerCase().includes(q) ||
+        item.manga?.genres?.some(g => (g || '').toLowerCase().includes(q))
       );
     }
 
@@ -571,17 +586,17 @@ export const HMangaPage: React.FC = () => {
 
   // Paginated visible list
   const visibleItems = useMemo(() => {
-    return filteredList.slice(0, visibleCount);
+    return (filteredList || []).slice(0, visibleCount);
   }, [filteredList, visibleCount]);
 
   // Infinite Scroll Intersection Observer
   useEffect(() => {
-    if (!sentinelRef.current || visibleCount >= filteredList.length) return;
+    if (!sentinelRef.current || visibleCount >= (filteredList || []).length) return;
     
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, filteredList.length));
+          setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, (filteredList || []).length));
         }
       },
       { rootMargin: '400px' }
@@ -589,15 +604,15 @@ export const HMangaPage: React.FC = () => {
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [visibleCount, filteredList.length]);
+  }, [visibleCount, filteredList]);
 
   /** Truyện đang đọc dở gần nhất */
   const continueReading = useMemo(() => {
-    const entries = Object.values(history) as Array<{ slug: string; chapterNumber: number; chapterName?: string; readAt?: string }>;
+    const entries = Object.values(history || {}) as Array<{ slug: string; chapterNumber: number; chapterName?: string; readAt?: string }>;
     const latest = entries
       .filter((h) => h?.slug && mangaMap.has(h.slug))
       .sort((a, b) => (b.readAt ?? '').localeCompare(a.readAt ?? ''))[0];
-    return latest ? { progress: latest, manga: mangaMap.get(latest.slug)! } : null;
+    return latest && latest.slug ? { progress: latest, manga: mangaMap.get(latest.slug)! } : null;
   }, [history, mangaMap]);
 
   return (
@@ -660,21 +675,21 @@ export const HMangaPage: React.FC = () => {
             className={`ngontinh-nav-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveTab('all')}
           >
-            <BookOpen size={16} /> Tất cả <span className="ngontinh-count-pill">{mangaList.length}</span>
+            <BookOpen size={16} /> Tất cả <span className="ngontinh-count-pill">{(mangaList || []).length}</span>
           </button>
 
           <button
             className={`ngontinh-nav-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
             onClick={() => setActiveTab('history')}
           >
-            <Clock size={16} /> Đang đọc <span className="ngontinh-count-pill">{Object.keys(history).length}</span>
+            <Clock size={16} /> Đang đọc <span className="ngontinh-count-pill">{Object.keys(history || {}).length}</span>
           </button>
 
           <button
             className={`ngontinh-nav-tab-btn ${activeTab === 'favorites' ? 'active' : ''}`}
             onClick={() => setActiveTab('favorites')}
           >
-            <Heart size={16} /> Yêu thích <span className="ngontinh-count-pill">{favorites.length}</span>
+            <Heart size={16} /> Yêu thích <span className="ngontinh-count-pill">{(favorites || []).length}</span>
           </button>
 
           {/* Button Vừa cào gần đây */}
@@ -691,9 +706,9 @@ export const HMangaPage: React.FC = () => {
             title="Xem danh sách truyện đã cào gần đây (trong 1h trước hoặc tất cả)"
           >
             <Zap size={15} /> Vừa cào gần đây
-            {recentCrawledStories.length > 0 && (
+            {(recentCrawledStories || []).length > 0 && (
               <span className="ngontinh-count-pill" style={{ backgroundColor: 'rgba(168, 85, 247, 0.3)', color: '#e9d5ff' }}>
-                {recentCrawledStories.length}
+                {(recentCrawledStories || []).length}
               </span>
             )}
           </button>
@@ -733,7 +748,7 @@ export const HMangaPage: React.FC = () => {
           <Search size={16} className="ngontinh-search-icon" />
           <input
             type="text"
-            placeholder={`Tìm kiếm trong ${mangaList.length || 'kho'} bộ truyện H...`}
+            placeholder={`Tìm kiếm trong ${(mangaList || []).length || 'kho'} bộ truyện H...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="ngontinh-search-input"
@@ -747,12 +762,12 @@ export const HMangaPage: React.FC = () => {
       </div>
 
       {/* Manga Grid View */}
-      {loading && mangaList.length === 0 ? (
+      {loading && (mangaList || []).length === 0 ? (
         <div className="ngontinh-loading-box">
           <div className="ngontinh-spinner" />
           <p>Đang tải danh sách truyện H...</p>
         </div>
-      ) : filteredList.length === 0 ? (
+      ) : (filteredList || []).length === 0 ? (
         <div className="ngontinh-empty-state">
           <Bookmark size={40} className="ngontinh-empty-icon" />
           <h3>Không tìm thấy truyện phù hợp</h3>
@@ -761,9 +776,10 @@ export const HMangaPage: React.FC = () => {
       ) : (
         <>
           <div className="ngontinh-manga-grid">
-            {visibleItems.map(({ manga }) => {
-              const isFav = favorites.includes(manga.slug);
-              const userProgress = history[manga.slug];
+            {(visibleItems || []).map(({ manga }) => {
+              if (!manga || !manga.slug) return null;
+              const isFav = (favorites || []).includes(manga.slug);
+              const userProgress = history?.[manga.slug];
 
               return (
                 <HMangaCardItem

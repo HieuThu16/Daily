@@ -646,8 +646,8 @@ export function HabitsPage() {
             position: 'fixed',
             inset: 0,
             zIndex: 1200,
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(6px)',
+            background: 'rgba(0, 0, 0, 0.72)',
+            backdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -657,26 +657,27 @@ export function HabitsPage() {
         >
           <div
             style={{
-              background: 'var(--card)',
+              background: 'var(--card-bg)',
               border: '1px solid var(--card-border)',
               borderRadius: '1.25rem',
-              boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+              boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
               padding: '1.75rem 1.5rem 1.5rem',
               maxWidth: 360,
               width: '100%',
               display: 'flex',
               flexDirection: 'column',
               gap: '1.25rem',
+              color: 'var(--text-main)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '2.25rem', marginBottom: '0.25rem' }}>✅</div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>
                 {countPromptHabit.name}
               </h3>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
                 Nhập số liệu hôm nay để đánh dấu hoàn thành
               </p>
             </div>
@@ -690,9 +691,9 @@ export function HabitsPage() {
               }}
             >
               <label
-                style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em' }}
+                style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}
               >
-                SỐ LƯỢNG / SỐ PHÚT
+                Số lượng / Số phút
               </label>
               <input
                 ref={countPromptRef}
@@ -715,13 +716,13 @@ export function HabitsPage() {
                   }
                 }}
                 style={{
-                  background: 'var(--input-bg, var(--card))',
+                  background: 'var(--bg-subtle, var(--card-bg))',
                   border: '2px solid var(--primary)',
                   borderRadius: '0.75rem',
                   padding: '0.75rem 1rem',
-                  fontSize: '1.5rem',
-                  fontWeight: 700,
-                  color: 'var(--text)',
+                  fontSize: '1.6rem',
+                  fontWeight: 800,
+                  color: 'var(--text-main)',
                   textAlign: 'center',
                   outline: 'none',
                   width: '100%',
@@ -737,19 +738,19 @@ export function HabitsPage() {
                     type="button"
                     onClick={() => setCountPromptValue(String(v))}
                     style={{
-                      padding: '0.3rem 0.65rem',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      borderRadius: '6px',
+                      padding: '0.35rem 0.75rem',
+                      fontSize: '0.85rem',
+                      fontWeight: countPromptValue === String(v) ? 700 : 600,
+                      borderRadius: '8px',
                       border: countPromptValue === String(v)
                         ? '2px solid var(--primary)'
                         : '1px solid var(--card-border)',
                       background: countPromptValue === String(v)
                         ? 'var(--primary)'
-                        : 'transparent',
-                      color: countPromptValue === String(v) ? '#fff' : 'var(--text-muted)',
+                        : 'var(--bg-subtle)',
+                      color: countPromptValue === String(v) ? '#ffffff' : 'var(--text-main)',
                       cursor: 'pointer',
-                      transition: 'all 0.15s',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     {v}
@@ -765,14 +766,15 @@ export function HabitsPage() {
                 onClick={() => setCountPromptHabit(null)}
                 style={{
                   flex: 1,
-                  padding: '0.7rem',
+                  padding: '0.75rem',
                   borderRadius: '0.75rem',
                   border: '1px solid var(--card-border)',
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
+                  background: 'var(--bg-subtle)',
+                  color: 'var(--text-main)',
                   fontSize: '0.9rem',
                   fontWeight: 600,
                   cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 Hủy
@@ -789,19 +791,19 @@ export function HabitsPage() {
                 }}
                 style={{
                   flex: 2,
-                  padding: '0.7rem',
+                  padding: '0.75rem',
                   borderRadius: '0.75rem',
                   border: 'none',
                   background: !countPromptValue || Number(countPromptValue) <= 0
                     ? 'var(--card-border)'
-                    : 'linear-gradient(135deg, var(--primary), var(--purple, #8b5cf6))',
+                    : 'linear-gradient(135deg, var(--primary), #7c3aed)',
                   color: !countPromptValue || Number(countPromptValue) <= 0
                     ? 'var(--text-muted)'
-                    : '#fff',
+                    : '#ffffff',
                   fontSize: '0.95rem',
                   fontWeight: 700,
                   cursor: !countPromptValue || Number(countPromptValue) <= 0 ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

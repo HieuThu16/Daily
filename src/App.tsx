@@ -13,6 +13,7 @@ import { DailyPage } from './features/DailyPage'
 import { TasksPage } from './features/TasksPage'
 import { LibraryPage } from './features/LibraryPage'
 import { ReviewSeriesView } from './features/library/ReviewSeriesView'
+import { TikTokPage } from './features/tiktok/TikTokPage'
 import { TvShowView } from './features/tvshow/TvShowView'
 import { NutritionPage } from './features/NutritionPage'
 import { PeoplePage } from './features/people/PeoplePage'
@@ -48,7 +49,12 @@ export function isUserAuthorizedForH(user: unknown): boolean {
   const u = user as { email?: string | null; user_metadata?: { email?: string; user_name?: string; name?: string } }
   const email = (u.email || u.user_metadata?.email || '').toLowerCase()
   const name = (u.user_metadata?.user_name || u.user_metadata?.name || '').toLowerCase()
-  return email.includes('truongnguyenminhhieu100') || name.includes('truongnguyenminhhieu100')
+  return (
+    email.includes('truongnguyenminhhieu100') ||
+    name.includes('truongnguyenminhhieu100') ||
+    email.includes('nguyenkimy') ||
+    name.includes('nguyenkimy')
+  )
 }
 
 const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -58,6 +64,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
   { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
   { id: 'reviews', label: 'Review phim', icon: Clapperboard, colorClass: 'icon-box-purple' },
+  { id: 'tiktok', label: 'TikTok', icon: Flame, colorClass: 'icon-box-rose' },
   { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
   { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
   { id: 'books', label: 'Sách', icon: BookOpen, colorClass: 'icon-box-purple' },
@@ -283,7 +290,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
     { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] as Tab[] },
-    { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'music', 'movies', 'manga'] as Tab[] },
+    { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
     { title: 'Sách & Truyện online', ids: (isHAuthorized ? ['books', 'bl', 'ngontinh', 'truyenh'] : ['books', 'bl', 'ngontinh']) as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] as Tab[] },
@@ -595,6 +602,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
                       <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
                       <Route path="/reviews" element={<ReviewSeriesView />} />
+                      <Route path="/tiktok" element={<TikTokPage />} />
                       <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
                       <Route path="/bl" element={<BLMangaPage />} />
                       <Route path="/bl/:slug" element={<BLMangaDetailPage />} />

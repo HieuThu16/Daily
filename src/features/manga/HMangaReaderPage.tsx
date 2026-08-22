@@ -8,10 +8,9 @@ import {
 import type { HManga } from './hMangaService';
 import { fetchHMangaList, getHMangaProgress, saveHMangaProgress } from './hMangaService';
 import { 
-  getHMangaScreenshots, saveHMangaScreenshot, deleteHMangaScreenshot,
+  getHMangaScreenshots, syncHMangaScreenshotsWithSupabase, saveHMangaScreenshot,
   type HMangaScreenshot 
 } from './hMangaScreenshot';
-import { HMangaScreenshotGalleryModal } from './HMangaScreenshotGalleryModal';
 import { useToast } from '../ToastContext';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
@@ -30,16 +29,19 @@ export const HMangaReaderPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [fitMode, setFitMode] = useState<'standard' | 'wide' | 'full'>('standard');
   const [scrollProgress, setScrollProgress] = useState<number>(0);
+  const [activePage, setActivePage] = useState<number>(1);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
 
   // Screenshot capture & gallery states
   const [capturing, setCapturing] = useState<boolean>(false);
   const [isFlashing, setIsFlashing] = useState<boolean>(false);
-  const [showScreenshotGallery, setShowScreenshotGallery] = useState<boolean>(false);
   const [screenshots, setScreenshots] = useState<HMangaScreenshot[]>([]);
 
   useEffect(() => {
     setScreenshots(getHMangaScreenshots());
+    void syncHMangaScreenshotsWithSupabase().then((list) => {
+      if (list && list.length > 0) setScreenshots(list);
+    });
   }, []);
 
   const currentChapterNum = useMemo(() => {
@@ -145,7 +147,7 @@ export const HMangaReaderPage: React.FC = () => {
     }
   }, [manga, currentChapter, currentChapterNum]);
 
-  // Track scroll progress & mark completed when scrolling near bottom
+  // Track scroll progress, active visible page, & mark completed
   useEffect(() => {
     const handleScroll = () => {
       if (isNavigatingRef.current) return;
@@ -172,7 +174,26 @@ export const HMangaReaderPage: React.FC = () => {
           });
         }
       }
+
+      // Track active visible page
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-page-index]'));
+      if (cards.length > 0) {
+        const viewportCenter = window.innerHeight / 2;
+        let bestIdx = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < cards.length; i++) {
+          const rect = cards[i].getBoundingClientRect();
+          const cardCenter = (rect.top + rect.bottom) / 2;
+          const diff = Math.abs(cardCenter - viewportCenter);
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestIdx = i;
+          }
+        }
+        setActivePage(bestIdx + 1);
+      }
     };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [manga, currentChapter, currentChapterNum]);
@@ -206,77 +227,50 @@ export const HMangaReaderPage: React.FC = () => {
     }
   }, [nextChapter, goToChapter]);
 
+  const handlePrev = useCallback(() => {
+    if (prevChapter && prevChapter.number != null) {
+      goToChapter(prevChapter.number);
+    }
+  }, [prevChapter, goToChapter]);
+
+  // Accurate full-page snapshot capture
   const handleCaptureScreenshot = async () => {
     if (!manga || !currentChapter || capturing) return;
     setCapturing(true);
 
     try {
-      const imgElements = Array.from(document.querySelectorAll<HTMLImageElement>('.ngontinh-reader-image'));
-      const viewportHeight = window.innerHeight;
-      const viewportCenter = viewportHeight / 2;
+      const rawImgs = currentChapter?.images || [];
+      const imgList = rawImgs.map(img => typeof img === 'string' ? { url: img, alt: 'Trang' } : img);
 
-      let targetImg: HTMLImageElement | null = null;
-      let targetIndex = 0;
+      // Identify exact page currently in viewport center
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-page-index]'));
+      const viewportCenter = window.innerHeight / 2;
+      let targetIndex = activePage - 1;
+      let minDiff = Infinity;
 
-      for (let i = 0; i < imgElements.length; i++) {
-        const rect = imgElements[i].getBoundingClientRect();
-        if (rect.top <= viewportCenter && rect.bottom >= viewportCenter) {
-          targetImg = imgElements[i];
+      for (let i = 0; i < cards.length; i++) {
+        const rect = cards[i].getBoundingClientRect();
+        const cardCenter = (rect.top + rect.bottom) / 2;
+        const diff = Math.abs(cardCenter - viewportCenter);
+        if (diff < minDiff) {
+          minDiff = diff;
           targetIndex = i;
-          break;
         }
       }
 
-      if (!targetImg && imgElements.length > 0) {
-        for (let i = 0; i < imgElements.length; i++) {
-          const rect = imgElements[i].getBoundingClientRect();
-          if (rect.bottom > 0 && rect.top < viewportHeight) {
-            targetImg = imgElements[i];
-            targetIndex = i;
-            break;
-          }
-        }
+      targetIndex = Math.max(0, Math.min(imgList.length - 1, targetIndex));
+      const pageNumber = targetIndex + 1;
+      const targetImgObj = imgList[targetIndex];
+      let imageUrl = targetImgObj?.url || '';
+
+      // Fallback to DOM img src if needed
+      if (!imageUrl && cards[targetIndex]) {
+        const domImg = cards[targetIndex].querySelector<HTMLImageElement>('img');
+        if (domImg) imageUrl = domImg.src;
       }
 
-      let dataUrl = '';
-
-      if (targetImg && targetImg.naturalWidth > 0 && targetImg.naturalHeight > 0) {
-        try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const rect = targetImg.getBoundingClientRect();
-
-          const visibleTop = Math.max(0, -rect.top);
-          const visibleHeight = Math.min(rect.height, viewportHeight - Math.max(0, rect.top));
-
-          const scaleY = targetImg.naturalHeight / rect.height;
-          const cropTop = visibleTop * scaleY;
-          const cropHeight = Math.max(120, visibleHeight * scaleY);
-
-          canvas.width = Math.min(800, targetImg.naturalWidth);
-          const destHeight = Math.round((canvas.width / targetImg.naturalWidth) * cropHeight);
-          canvas.height = destHeight;
-
-          if (ctx) {
-            ctx.drawImage(
-              targetImg,
-              0, cropTop, targetImg.naturalWidth, cropHeight,
-              0, 0, canvas.width, destHeight
-            );
-            dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          }
-        } catch {
-          // If canvas is tainted or cross-origin blocked, fallback to direct img URL
-          dataUrl = targetImg.src;
-        }
-      }
-
-      if (!dataUrl && targetImg) {
-        dataUrl = targetImg.src;
-      }
-
-      if (!dataUrl) {
-        showToast('⚠️ Không tìm thấy khung ảnh đang hiển thị để chụp.');
+      if (!imageUrl) {
+        showToast('⚠️ Không tìm thấy ảnh trang hiện tại để lưu.');
         return;
       }
 
@@ -288,9 +282,9 @@ export const HMangaReaderPage: React.FC = () => {
         mangaTitle: manga.title,
         chapterNumber: currentChapter.number ?? currentChapterNum,
         chapterName: currentChapter.name || `Chapter ${currentChapterNum}`,
-        pageIndex: targetIndex + 1,
+        pageIndex: pageNumber,
         scrollRatio,
-        imageData: dataUrl,
+        imageData: imageUrl,
       });
 
       setScreenshots(prev => [saved, ...prev.filter(s => s.id !== saved.id)]);
@@ -299,41 +293,14 @@ export const HMangaReaderPage: React.FC = () => {
       setIsFlashing(true);
       setTimeout(() => setIsFlashing(false), 350);
 
-      showToast(`📸 Đã chụp & lưu trang ${targetIndex + 1} (${currentChapter.name || `Chapter ${currentChapterNum}`})!`);
+      showToast(`📸 Đã lưu Trang ${pageNumber} (${currentChapter.name || `Chapter ${currentChapterNum}`}) vào Bộ sưu tập!`);
     } catch (err: any) {
       console.error('Screenshot error', err);
-      showToast('❌ Lỗi khi chụp màn hình');
+      showToast('❌ Lỗi khi chụp lưu trang');
     } finally {
       setCapturing(false);
     }
   };
-
-  const handleSelectScreenshot = (shot: HMangaScreenshot) => {
-    if (shot.mangaSlug !== manga?.slug) {
-      navigate(`/truyenh/${shot.mangaSlug}/read/${shot.chapterNumber}`);
-      return;
-    }
-    if (shot.chapterNumber !== (currentChapter?.number ?? currentChapterNum)) {
-      goToChapter(shot.chapterNumber);
-      return;
-    }
-    if (shot.scrollRatio != null) {
-      const totalH = document.documentElement.scrollHeight - window.innerHeight;
-      window.scrollTo({ top: totalH * shot.scrollRatio, behavior: 'smooth' });
-    }
-  };
-
-  const handleDeleteScreenshot = async (id: string) => {
-    await deleteHMangaScreenshot(id);
-    setScreenshots(prev => prev.filter(s => s.id !== id));
-    showToast('🗑️ Đã xóa ảnh chụp');
-  };
-
-  const handlePrev = useCallback(() => {
-    if (prevChapter && prevChapter.number != null) {
-      goToChapter(prevChapter.number);
-    }
-  }, [prevChapter, goToChapter]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -391,6 +358,24 @@ export const HMangaReaderPage: React.FC = () => {
           >
             <ArrowLeft size={18} />
           </button>
+
+          {/* Active Page Indicator */}
+          {images.length > 0 && (
+            <span
+              style={{
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                color: '#ec4899',
+                backgroundColor: 'rgba(236, 72, 153, 0.15)',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                border: '1px solid rgba(236, 72, 153, 0.25)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Trang {activePage} / {images.length}
+            </span>
+          )}
         </div>
 
         <div className="ngontinh-reader-right">
@@ -432,21 +417,21 @@ export const HMangaReaderPage: React.FC = () => {
             className="ngontinh-reader-btn-icon"
             onClick={handleCaptureScreenshot}
             disabled={capturing}
-            title="Chụp lưu ảnh trang đang xem vào cơ sở dữ liệu"
+            title={`Chụp & lưu Trang ${activePage} vào Bộ sưu tập`}
             style={{
               color: '#ec4899',
               background: 'rgba(236, 72, 153, 0.15)',
-              border: '1px solid rgba(236, 72, 153, 0.3)',
+              border: '1px solid rgba(236, 72, 153, 0.35)',
             }}
           >
             <Camera size={18} />
           </button>
 
-          {/* Screenshot Gallery Button - navigate to full page */}
+          {/* Screenshot Collection Button -> Navigate to dedicated full page */}
           <button
             className="ngontinh-reader-btn-icon"
-            onClick={() => navigate('/truyenh/screenshots')}
-            title={`Kho ảnh chụp (${screenshots.length})`}
+            onClick={() => navigate(`/truyenh/screenshots?from=${encodeURIComponent(`/truyenh/${manga.slug}/read/${currentChapterNum}`)}&slug=${encodeURIComponent(manga.slug)}`)}
+            title={`Bộ sưu tập ảnh (${screenshots.length})`}
             style={{
               position: 'relative',
               color: screenshots.length > 0 ? '#f472b6' : 'currentColor',
@@ -490,15 +475,6 @@ export const HMangaReaderPage: React.FC = () => {
         />
       )}
 
-      {/* Screenshot Gallery Modal */}
-      <HMangaScreenshotGalleryModal
-        isOpen={showScreenshotGallery}
-        onClose={() => setShowScreenshotGallery(false)}
-        screenshots={screenshots}
-        onSelectScreenshot={handleSelectScreenshot}
-        onDeleteScreenshot={handleDeleteScreenshot}
-      />
-
       {/* Progress Line */}
       <div className="ngontinh-reader-progress-line" style={{ width: `${scrollProgress}%` }} />
 
@@ -512,7 +488,11 @@ export const HMangaReaderPage: React.FC = () => {
             const imgAlt = img.alt || `Trang ${idx + 1}`;
             const hasError = imageErrors[idx];
             return (
-              <div key={imgUrl || idx} className="ngontinh-reader-img-card">
+              <div 
+                key={imgUrl || idx} 
+                className="ngontinh-reader-img-card"
+                data-page-index={idx}
+              >
                 {hasError ? (
                   <div className="ngontinh-img-fallback">
                     <p>Không thể hiển thị trang {idx + 1}</p>

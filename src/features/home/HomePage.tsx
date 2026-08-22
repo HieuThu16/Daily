@@ -119,7 +119,7 @@ export function HomePage() {
           <AsideCard title="Đọc sách">
             {lastReadBook && (
               <div
-                onClick={() => nav(`/library/books/${lastReadBook.mediaItemId}`)}
+                onClick={() => nav(`/read/${lastReadBook.mediaItemId}`)}
                 style={{
                   padding: '8px 10px',
                   marginBottom: 8,

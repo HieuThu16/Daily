@@ -42,6 +42,14 @@
   --cyan-bg: #cffaff;
 
   --red: #ef4444;
+
+  /* Aliases for compatibility */
+  --card: var(--card-bg);
+  --text: var(--text-main);
+  --muted: var(--text-muted);
+  --ink: var(--text-main);
+  --input-bg: var(--card-bg);
+  --green: var(--emerald);
 }
 
 [data-theme="dark"] {
@@ -83,6 +91,14 @@
   --cyan-bg: rgba(8, 145, 178, 0.25);
 
   --red: #f87171;
+
+  /* Aliases for compatibility */
+  --card: var(--card-bg);
+  --text: var(--text-main);
+  --muted: var(--text-muted);
+  --ink: var(--text-main);
+  --input-bg: #0f172a;
+  --green: var(--emerald);
 }
 
 * {

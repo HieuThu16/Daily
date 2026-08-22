@@ -221,7 +221,7 @@ export const HMangaDetailPage: React.FC = () => {
   }, [manga, sortAsc, chapterSearch, showAllChapters]);
 
   const firstChapterNum = useMemo(() => {
-    if (!manga || !manga.chapters.length) return 1;
+    if (!manga || !manga.chapters || !manga.chapters.length) return 1;
     const sorted = [...manga.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
     return sorted[0]?.number ?? 1;
   }, [manga]);

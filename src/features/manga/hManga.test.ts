@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { isUserAuthorizedForH } from '../../App';
 import { 
   getHMangaFavorites, toggleHMangaFavorite,
@@ -7,10 +7,12 @@ import {
 } from './hMangaService';
 
 describe('isUserAuthorizedForH', () => {
-  it('cho phép tài khoản truongnguyenminhhieu100', () => {
+  it('cho phép tài khoản truongnguyenminhhieu100 và nguyenkimy', () => {
     expect(isUserAuthorizedForH({ email: 'truongnguyenminhhieu100@gmail.com' })).toBe(true);
     expect(isUserAuthorizedForH({ user_metadata: { email: 'truongnguyenminhhieu100@domain.com' } })).toBe(true);
     expect(isUserAuthorizedForH({ user_metadata: { user_name: 'truongnguyenminhhieu100' } })).toBe(true);
+    expect(isUserAuthorizedForH({ email: 'nguyenkimy1302.gr@gmail.com' })).toBe(true);
+    expect(isUserAuthorizedForH({ user_metadata: { user_name: 'nguyenkimy' } })).toBe(true);
   });
 
   it('chặn các tài khoản khác hoặc null', () => {

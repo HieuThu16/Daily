@@ -10,7 +10,7 @@ export function ContinueReadingHero() {
   if (!lastRead || !lastRead.mediaItemId) return null
 
   const handleResume = () => {
-    nav(`/library/books/${lastRead.mediaItemId}`)
+    nav(`/read/${lastRead.mediaItemId}`)
   }
 
   const handleDismiss = (e: React.MouseEvent) => {
