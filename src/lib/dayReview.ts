@@ -1,6 +1,7 @@
 import type { Entry, Media, NutritionLog, SleepLog, Todo } from '../types'
 import { getMangaReadingLogs, type MangaReadingLog } from './mangaReadingLog'
 import { getVideoWatchLogs, type VideoWatchLog } from './videoWatchLog'
+import { getBookReadingSessionLogs, groupBookReadingLogs, type BookReadingSessionLog } from './bookReadingLog'
 
 /** Một mốc trong dòng thời gian của một ngày. `time` dạng 'HH:MM' hoặc 'HH:MM - HH:MM'. */
 export type DayEvent = {
@@ -44,6 +45,7 @@ export type DayReviewInput = {
   todos: Todo[]
   media: Media[]
   mangaLogs?: MangaReadingLog[]
+  bookReadingLogs?: BookReadingSessionLog[]
   videoWatchLogs?: VideoWatchLog[]
 }
 
@@ -141,7 +143,7 @@ export function groupMangaReadingLogs(logs: MangaReadingLog[]): DayEvent[] {
 }
 
 /** Gom mọi hoạt động đã có giờ của một ngày thành dòng thời gian tăng dần. */
-export function buildDayReview({ date, entries, meals, sleeps, todos, media, mangaLogs, videoWatchLogs }: DayReviewInput): DayEvent[] {
+export function buildDayReview({ date, entries, meals, sleeps, todos, media, mangaLogs, bookReadingLogs, videoWatchLogs }: DayReviewInput): DayEvent[] {
   const events: DayEvent[] = []
 
   sleeps.filter((s) => s.log_date === date && s.sleep_end).forEach((s) =>
@@ -158,10 +160,19 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
     if (t.completed && sameDay(t.completed_at, date)) events.push({ time: clock(t.completed_at), kind: 'TASK_DONE', label: 'Xong việc', detail: t.title })
   })
 
-  media.filter((m) => m.log_date === date).forEach((m) =>
-    events.push({ time: m.log_time || '', kind: 'MEDIA', label: mediaLabel[m.type], detail: m.artist || m.channel ? `${m.name} — ${m.artist || m.channel}` : m.name }))
+  // 1. Dữ liệu đọc sách theo dõi thời gian và số trang thực tế
+  const bLogs = bookReadingLogs ?? getBookReadingSessionLogs()
+  const todayBookLogs = bLogs.filter((b) => b.log_date === date)
+  const bookEvents = groupBookReadingLogs(todayBookLogs)
+  events.push(...bookEvents)
 
-  // 1. Dữ liệu đọc truyện (Ngôn tình, BL, Truyện H) đã được gom nhóm phiên đọc thông minh
+  media.filter((m) => m.log_date === date).forEach((m) => {
+    // Nếu sách đã có phiên đọc chi tiết thì không cần thẻ media chung chung
+    if (m.type === 'BOOK' && todayBookLogs.length > 0) return
+    events.push({ time: m.log_time || '', kind: 'MEDIA', label: mediaLabel[m.type], detail: m.artist || m.channel ? `${m.name} — ${m.artist || m.channel}` : m.name })
+  })
+
+  // 2. Dữ liệu đọc truyện (Ngôn tình, BL, Truyện H) đã được gom nhóm phiên đọc thông minh
   const logs = mangaLogs ?? getMangaReadingLogs()
   const todayMangaLogs = logs.filter((m) => m.log_date === date)
   const mangaEvents = groupMangaReadingLogs(todayMangaLogs)

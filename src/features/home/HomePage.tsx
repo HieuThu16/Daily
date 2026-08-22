@@ -6,6 +6,7 @@ import { buildDayReview } from '../../lib/dayReview'
 import { todayCompletion } from '../../lib/homeProgress'
 import { useMangaReadingLogs } from '../../lib/mangaReadingLog'
 import { summarizeMangaLogs } from '../../lib/mangaStats'
+import { useBookReadingSessionLogs, summarizeBookSessions } from '../../lib/bookReadingLog'
 import { parseLocalDate, upcomingOccasions } from '../../lib/occasions'
 import { Aside, AsideCard } from '../AsideSlot'
 import { DatePager } from './DatePager'
@@ -27,6 +28,7 @@ export function HomePage() {
   const [dateKey, setDateKey] = useState(localDate())
   const data = useHomeData(dateKey)
   const mangaLogs = useMangaReadingLogs()
+  const bookSessionLogs = useBookReadingSessionLogs()
   const isToday = dateKey === localDate()
 
   const completion = useMemo(
@@ -49,6 +51,9 @@ export function HomePage() {
   /** Thống kê đọc truyện: dữ liệu vốn đã ghi sẵn, giờ mới có chỗ xem. */
   const mangaStats = useMemo(() => summarizeMangaLogs(mangaLogs, dateKey), [mangaLogs, dateKey])
 
+  /** Thống kê đọc sách chi tiết & chuỗi đọc liên tục */
+  const bookStats = useMemo(() => summarizeBookSessions(bookSessionLogs, dateKey), [bookSessionLogs, dateKey])
+
   const nextOccasion = useMemo(
     () => upcomingOccasions(data.occasions, data.people, new Date(), { withinDays: 60, limit: 1 })[0] ?? null,
     [data.occasions, data.people],
@@ -64,8 +69,9 @@ export function HomePage() {
         todos: [...data.todos, ...data.todosDoneToday],
         media: data.todayMedia,
         mangaLogs,
+        bookReadingLogs: bookSessionLogs,
       }),
-    [dateKey, data.entries, data.meals, data.sleep, data.todos, data.todosDoneToday, data.todayMedia, mangaLogs],
+    [dateKey, data.entries, data.meals, data.sleep, data.todos, data.todosDoneToday, data.todayMedia, mangaLogs, bookSessionLogs],
   )
 
   return (
@@ -107,6 +113,27 @@ export function HomePage() {
             <strong>{data.meals.length}</strong>
           </div>
         </AsideCard>
+
+        {bookStats.totalPages > 0 && (
+          <AsideCard title="Đọc sách">
+            <div className="aside-row">
+              <span>Tuần này</span>
+              <strong>{bookStats.thisWeekPages} trang</strong>
+            </div>
+            <div className="aside-row">
+              <span>Chuỗi ngày đọc</span>
+              <strong>🔥 {bookStats.streak}</strong>
+            </div>
+            {bookStats.topBooks[0] && (
+              <div className="aside-row">
+                <span>Đọc nhiều nhất</span>
+                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+                  {bookStats.topBooks[0].title}
+                </strong>
+              </div>
+            )}
+          </AsideCard>
+        )}
 
         {mangaStats.totalChapters > 0 && (
           <AsideCard title="Đọc truyện">

@@ -3,9 +3,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Highlighter, List, Quote, RotateCcw, Search, Type, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { loadLocal, saveLocal } from '../../lib/persistence'
-import { loadBookDocument, loadChapterContent, loadChapterList } from '../../lib/book/repository'
+import { loadBookDocument, loadChapterContent, loadChapterList, estimatePage } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument } from '../../types'
 import { useBookReadingProgress } from './useBookReadingProgress'
+import { useBookReadingSessionTracker, useBookReadingSessionLogs, summarizeBookSessions } from '../../lib/bookReadingLog'
+import { localDate } from '../../lib/date'
 import { useToast } from '../ToastContext'
 import { BookSearchModal } from './BookSearchModal'
 
@@ -68,6 +70,26 @@ export function BookReaderPage() {
     pageCount: bookDocument?.page_count ?? null,
     enabled: !isSearchPreview,
   })
+
+  // Tính toán trang hiện tại đang đọc
+  const currentPage = useMemo(() => {
+    if (!bookDocument || !activeChapter) return 1
+    const offset = activeChapter.char_offset + ((percent || 0) / 100) * (bookDocument.total_chars || 1)
+    return estimatePage(offset, bookDocument.total_chars, bookDocument.page_count)
+  }, [bookDocument, activeChapter, percent])
+
+  // Theo dõi phiên đọc sách theo thời gian thực (start -> end, pages, streak)
+  useBookReadingSessionTracker({
+    mediaItemId,
+    bookTitle: bookName,
+    bookAuthor,
+    currentPage,
+    isActive: status === 'ready' && !isSearchPreview,
+    isCompleted: completed,
+  })
+
+  const sessionLogs = useBookReadingSessionLogs()
+  const bookStats = useMemo(() => summarizeBookSessions(sessionLogs, localDate()), [sessionLogs])
 
   useEffect(() => {
     saveLocal(SETTINGS_KEY, settings)
@@ -445,7 +467,15 @@ export function BookReaderPage() {
         <button aria-label="Quay lại thư viện" onClick={leave}>
           <ArrowLeft size={20} />
         </button>
-        <span className="book-reader-title">{bookName}</span>
+        <span className="book-reader-title">
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bookName}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 8 }}>
+            <span style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }} title={`Chuỗi ${bookStats.streak} ngày đọc sách`}>
+              🔥 {bookStats.streak}
+            </span>
+            <span>Trang {currentPage}{bookDocument?.page_count ? `/${bookDocument.page_count}` : ''}</span>
+          </span>
+        </span>
         <button
           aria-label="Tìm kiếm trong sách"
           title="Tìm kiếm văn bản trong sách (Ctrl+F)"

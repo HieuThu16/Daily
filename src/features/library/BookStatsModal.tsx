@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight, Target } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Flame, History, Target } from 'lucide-react'
 import { Modal } from '../shared'
 import { localDate } from '../../lib/date'
 import { getPeriodRange, shiftPeriodAnchor, type PeriodMode } from '../nutrition/periodData'
 import { listenMinutesByDate, pagesReadByDate, summarizePages } from '../../lib/bookStats'
+import { useBookReadingSessionLogs, summarizeBookSessions } from '../../lib/bookReadingLog'
 import type { BookReadingLog, Media } from '../../types'
 import { loadLocal, saveLocal } from '../../lib/persistence'
 
@@ -33,12 +34,20 @@ export function BookStatsModal({ logs, books = [], onClose }: { logs: BookReadin
   const [mode, setMode] = useState<PeriodMode>('week')
   const [anchor, setAnchor] = useState(localDate())
 
+  const sessionLogs = useBookReadingSessionLogs()
+  const bookSessionStats = useMemo(() => summarizeBookSessions(sessionLogs, anchor), [sessionLogs, anchor])
+
   const range = useMemo(() => getPeriodRange(anchor, mode), [anchor, mode])
   const byDate = useMemo(() => pagesReadByDate(logs, range.days), [logs, range.days])
   const listenByDate = useMemo(() => listenMinutesByDate(logs, range.days), [logs, range.days])
   const summary = useMemo(() => summarizePages(byDate), [byDate])
   const listenTotal = Object.values(listenByDate).reduce((sum, value) => sum + value, 0)
   const max = Math.max(...Object.values(byDate), 1)
+
+  // Danh sách các phiên đọc sách trong khoảng ngày đang chọn
+  const rangeSessions = useMemo(() => {
+    return sessionLogs.filter((s) => range.days.includes(s.log_date))
+  }, [sessionLogs, range.days])
 
   // Sách xong trong tháng của ngày đang xem, đếm theo ngày ghi nhận (log_date).
   const month = anchor.slice(0, 7)
@@ -96,10 +105,11 @@ export function BookStatsModal({ logs, books = [], onClose }: { logs: BookReadin
           </div>
         </div>
 
-        <div className="nutrition-period-summary">
+        <div className="nutrition-period-summary" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
           <div><strong style={{ color: '#2563eb' }}>{summary.total}</strong><span>Tổng trang</span></div>
-          <div><strong style={{ color: '#8b5cf6' }}>{summary.averagePerActiveDay}</strong><span>TB mỗi ngày đọc</span></div>
-          <div><strong style={{ color: '#10b981' }}>{summary.activeDays}</strong><span>Ngày có đọc</span></div>
+          <div><strong style={{ color: '#ef4444' }}>🔥 {bookSessionStats.streak}</strong><span>Chuỗi ngày</span></div>
+          <div><strong style={{ color: '#8b5cf6' }}>{summary.averagePerActiveDay}</strong><span>TB trang/ngày</span></div>
+          <div><strong style={{ color: '#10b981' }}>{summary.activeDays}</strong><span>Ngày đọc</span></div>
         </div>
 
         <div className="nutrition-period-card">
@@ -119,6 +129,50 @@ export function BookStatsModal({ logs, books = [], onClose }: { logs: BookReadin
             </div>
           </div>
         </div>
+
+        {/* Lịch sử phiên đọc sách chi tiết (từ lúc nào đến lúc nào, bao nhiêu trang) */}
+        {rangeSessions.length > 0 && (
+          <div className="nutrition-period-card">
+            <h3><History size={15} /> Chi tiết các phiên đọc sách</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+              {rangeSessions.slice(0, 10).map((session) => {
+                const startTime = session.log_time || (session.startTime ? new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')
+                const endTime = session.endTime ? new Date(session.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+                const timeStr = startTime && endTime && startTime !== endTime ? `${startTime} - ${endTime}` : startTime
+
+                return (
+                  <div
+                    key={session.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      background: 'var(--bg-main)',
+                      fontSize: '0.82rem',
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: 'var(--text-main)' }}>{session.bookTitle}</strong>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                        {session.log_date} · {timeStr} (~{session.durationMinutes} phút)
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                        +{session.pagesRead} trang
+                      </span>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Trang {session.startPage} → {session.endPage}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {listenTotal > 0 && (
           <div className="nutrition-period-card">
