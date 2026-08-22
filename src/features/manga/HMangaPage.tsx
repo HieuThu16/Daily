@@ -17,12 +17,7 @@ import {
   isValidHMangaCover,
   getCustomHMangaList
 } from './hMangaService';
-import { 
-  getHMangaScreenshots, deleteHMangaScreenshot,
-  type HMangaScreenshot 
-} from './hMangaScreenshot';
 import { RecentCrawledModal } from './RecentCrawledModal';
-import { HMangaScreenshotGalleryModal } from './HMangaScreenshotGalleryModal';
 import { useScrollRestore } from '../shared';
 import { useToast } from '../ToastContext';
 import './ngontinhManga.css';
@@ -475,12 +470,6 @@ export const HMangaPage: React.FC = () => {
   const [history, setHistory] = useState<Record<string, any>>({});
   const [showCrawlModal, setShowCrawlModal] = useState<boolean>(false);
   const [showRecentModal, setShowRecentModal] = useState<boolean>(false);
-  const [showScreenshotModal, setShowScreenshotModal] = useState<boolean>(false);
-  const [screenshots, setScreenshots] = useState<HMangaScreenshot[]>([]);
-
-  useEffect(() => {
-    setScreenshots(getHMangaScreenshots());
-  }, []);
 
   const recentCrawledStories = useMemo(() => {
     const customList = getCustomHMangaList();
@@ -633,17 +622,6 @@ export const HMangaPage: React.FC = () => {
         accentColor="#e11d48"
       />
 
-      <HMangaScreenshotGalleryModal
-        isOpen={showScreenshotModal}
-        onClose={() => setShowScreenshotModal(false)}
-        screenshots={screenshots}
-        onSelectScreenshot={(shot) => navigate(`/truyenh/${shot.mangaSlug}/read/${shot.chapterNumber}`)}
-        onDeleteScreenshot={async (id) => {
-          await deleteHMangaScreenshot(id);
-          setScreenshots(prev => prev.filter(s => s.id !== id));
-          showToast('🗑️ Đã xóa ảnh chụp');
-        }}
-      />
 
       {/* Continue reading banner if available */}
       {continueReading && (() => {
@@ -724,7 +702,7 @@ export const HMangaPage: React.FC = () => {
           <button
             type="button"
             className="ngontinh-nav-tab-btn"
-            onClick={() => setShowScreenshotModal(true)}
+            onClick={() => navigate('/truyenh/screenshots')}
             style={{
               background: 'rgba(236, 72, 153, 0.15)',
               color: '#f472b6',
@@ -733,7 +711,7 @@ export const HMangaPage: React.FC = () => {
             }}
             title="Xem kho ảnh chụp khoảnh khắc khi đọc truyện"
           >
-            <Camera size={15} /> Kho ảnh ({screenshots.length})
+            <Camera size={15} /> Kho ảnh chụp
           </button>
 
           {/* Button Cào truyện mới */}

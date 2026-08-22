@@ -28,6 +28,7 @@ import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
 import { HMangaPage } from './features/manga/HMangaPage'
 import { HMangaDetailPage } from './features/manga/HMangaDetailPage'
 import { HMangaReaderPage } from './features/manga/HMangaReaderPage'
+import { HMangaScreenshotPage } from './features/manga/HMangaScreenshotPage'
 import { EnglishPage } from './features/english/EnglishPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
@@ -601,6 +602,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
                       <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
                       <Route path="/truyenh" element={isUserAuthorizedForH(user) ? <HMangaPage /> : <Navigate to="/home" replace />} />
+                      <Route path="/truyenh/screenshots" element={isUserAuthorizedForH(user) ? <HMangaScreenshotPage /> : <Navigate to="/home" replace />} />
                       <Route path="/truyenh/:slug" element={isUserAuthorizedForH(user) ? <HMangaDetailPage /> : <Navigate to="/home" replace />} />
                       <Route path="/truyenh/:slug/read/:chapterNum" element={isUserAuthorizedForH(user) ? <HMangaReaderPage /> : <Navigate to="/home" replace />} />
                       <Route path="/english" element={<EnglishPage />} />

@@ -442,10 +442,10 @@ export const HMangaReaderPage: React.FC = () => {
             <Camera size={18} />
           </button>
 
-          {/* Screenshot Gallery Button */}
+          {/* Screenshot Gallery Button - navigate to full page */}
           <button
             className="ngontinh-reader-btn-icon"
-            onClick={() => setShowScreenshotGallery(true)}
+            onClick={() => navigate('/truyenh/screenshots')}
             title={`Kho ảnh chụp (${screenshots.length})`}
             style={{
               position: 'relative',
