@@ -107,6 +107,11 @@ export default async function handler(req: any, res: any) {
       } catch (err: any) {
         console.warn('Cron lỗi cào truyện H:', item.name, err?.message || err)
       }
+    }
+  } catch (err: any) {
+    console.error('Lỗi sync Truyện H trong cron:', err)
+  }
+
   // 3. Tự động cào chapter mới cho Truyện BL trên đám mây Supabase
   try {
     const { data: blStories } = await db

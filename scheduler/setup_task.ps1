@@ -17,7 +17,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 # Action: chạy file .bat
 $Action = New-ScheduledTaskAction `
     -Execute "cmd.exe" `
-    -Argument "/c `"$BatFile`"" `
+    -Argument "/d /c call `"$BatFile`"" `
     -WorkingDirectory $ProjectDir
 
 # ── Trigger 1: Mỗi ngày lúc 1:00 AM ─────────────────────────────────
@@ -48,7 +48,7 @@ Register-ScheduledTask `
     -Trigger @($Trigger1, $Trigger2) `
     -Settings $Settings `
     -Principal $Principal `
-    -Description "Tu dong cao truyen Ngon Tinh + BL + Teamsany. Chay luc 1AM hoac ngay khi dang nhap Windows (1 lan/ngay)." `
+    -Description "Tu dong cao truyen Ngon Tinh, BL va H. Chay luc 1AM hoac ngay khi dang nhap Windows (1 lan/ngay)." `
     -Force | Out-Null
 
 Write-Host ""
