@@ -1,8 +1,115 @@
 import type { BLManga, ChapterImage, ReadingProgress, MangaChapter, HotMangaData } from '../../types/manga';
 import { blShardOf, blShardPath } from './blShards';
+import { supabase } from '../../lib/supabase';
 
 const FAVORITES_KEY = 'daily_bl_favorites';
 const HISTORY_KEY = 'daily_bl_history';
+const CUSTOM_BL_MANGA_KEY = 'daily_custom_bl_manga';
+
+export function getCustomBLMangaList(): BLManga[] {
+  try {
+    const saved = localStorage.getItem(CUSTOM_BL_MANGA_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomBLManga(manga: BLManga): void {
+  const current = getCustomBLMangaList();
+  const idx = current.findIndex(m => m.slug === manga.slug);
+  let updated: BLManga[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = manga;
+  } else {
+    updated = [manga, ...current];
+  }
+  try {
+    localStorage.setItem(CUSTOM_BL_MANGA_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to save custom BL manga to localStorage', e);
+  }
+
+  // Đồng bộ lên Supabase cho mọi thiết bị
+  if (supabase) {
+    void (async () => {
+      try {
+        const user = (await supabase.auth.getUser())?.data?.user;
+        if (!user) return;
+        const payload = {
+          user_id: user.id,
+          type: 'BL',
+          name: manga.title,
+          author: manga.author || null,
+          genre: manga.genres?.join(', ') || null,
+          cover_url: manga.cover || null,
+          channel: manga.slug,
+          description: JSON.stringify(manga),
+          is_public: true,
+        };
+
+        const { data: existing } = await supabase
+          .from('media_items')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('channel', manga.slug)
+          .eq('type', 'BL')
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          await supabase.from('media_items').update(payload).eq('id', existing[0].id);
+        } else {
+          await supabase.from('media_items').insert(payload);
+        }
+      } catch (err) {
+        console.warn('Could not sync custom BLManga to Supabase', err);
+      }
+    })();
+  }
+}
+
+export async function syncBLMangaChapters(
+  manga: BLManga,
+  onProgress?: (msg: string) => void
+): Promise<{ updated: boolean; manga: BLManga; addedCount: number }> {
+  const storyUrl = manga.url || (manga.slug ? `https://teamsany.com/manga/${manga.slug}/` : '');
+  if (!storyUrl) return { updated: false, manga, addedCount: 0 };
+
+  onProgress?.('Đang kiểm tra chapter mới từ link gốc...');
+  const res = await fetch('/api/crawl-bl', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: storyUrl, existingChapters: manga.chapters })
+  });
+
+  if (!res.ok) {
+    let errMsg = `Lỗi server HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) errMsg = errJson.error;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  const data = await res.json();
+  if (!data?.success || !data?.manga) {
+    throw new Error(data?.error || 'Không nhận được dữ liệu truyện từ server');
+  }
+
+  const freshManga: BLManga = data.manga;
+  const oldCount = Array.isArray(manga.chapters) ? manga.chapters.length : 0;
+  const newCount = Array.isArray(freshManga.chapters) ? freshManga.chapters.length : 0;
+
+  if (newCount > oldCount) {
+    onProgress?.(`Đã tìm thấy ${newCount - oldCount} chapter mới! Đang lưu...`);
+    saveCustomBLManga(freshManga);
+    return { updated: true, manga: freshManga, addedCount: newCount - oldCount };
+  }
+
+  saveCustomBLManga(freshManga);
+  return { updated: false, manga: freshManga, addedCount: 0 };
+}
 
 /**
  * Fetch BL Manga list from DuaLeo database
@@ -91,8 +198,18 @@ export async function fetchBLMangaList(): Promise<BLManga[]> {
   const seenSlugs = new Set<string>();
   const combined: BLManga[] = [];
 
-  // Add Sany Team mangas first or merged
+  // 1. Custom / Updated BL manga (local cache & cloud updates)
+  const customList = getCustomBLMangaList();
+  for (const item of customList) {
+    if (item.slug && !seenSlugs.has(item.slug)) {
+      seenSlugs.add(item.slug);
+      combined.push(item);
+    }
+  }
+
+  // 2. Add Sany Team mangas
   for (const item of sanyList) {
+    if (seenSlugs.has(item.slug)) continue;
     seenSlugs.add(item.slug);
     combined.push({
       ...item,
@@ -101,12 +218,13 @@ export async function fetchBLMangaList(): Promise<BLManga[]> {
     });
   }
 
-  // Add DuaLeo mangas
+  // 3. Add DuaLeo mangas
   for (const item of dualeoList) {
     let slug = item.slug;
     if (seenSlugs.has(slug)) {
       slug = `dl-${slug}`;
     }
+    if (seenSlugs.has(slug)) continue;
     seenSlugs.add(slug);
     combined.push({
       ...item,
@@ -116,7 +234,7 @@ export async function fetchBLMangaList(): Promise<BLManga[]> {
     });
   }
 
-  // Đam mỹ / shounen ai quét từ otruyen: chỉ có mục lục, ảnh tải khi mở chương.
+  // 4. Đam mỹ / shounen ai quét từ otruyen: chỉ có mục lục, ảnh tải khi mở chương.
   for (const item of otruyenList) {
     if (seenSlugs.has(item.slug)) continue;
     seenSlugs.add(item.slug);

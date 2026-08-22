@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as review from '../src/lib/reviewSeries/pageSync.js'
 import * as tvshow from '../src/lib/tvshowSeries/pageSync.js'
 import { crawlVietManhwaStory, crawlMetruyen18Story } from './crawl-truyenh.js'
+import { crawlTeamsanyStory, crawlOtruyenStory } from './crawl-bl.js'
 
 export const config = { maxDuration: 300 }
 
@@ -106,9 +107,53 @@ export default async function handler(req: any, res: any) {
       } catch (err: any) {
         console.warn('Cron lỗi cào truyện H:', item.name, err?.message || err)
       }
+  // 3. Tự động cào chapter mới cho Truyện BL trên đám mây Supabase
+  try {
+    const { data: blStories } = await db
+      .from('media_items')
+      .select('id, name, channel, description, cover_url')
+      .eq('type', 'BL')
+      .is('deleted_at', null)
+      .limit(60)
+
+    for (const item of blStories ?? []) {
+      if (!item.description || !item.description.startsWith('{')) continue
+      try {
+        const mangaObj = JSON.parse(item.description)
+        const storyUrl = mangaObj.url || (mangaObj.slug ? `https://teamsany.com/manga/${mangaObj.slug}/` : '')
+        if (!storyUrl) continue
+
+        const isOtruyen = storyUrl.includes('otruyen')
+        const updatedManga = isOtruyen
+          ? await crawlOtruyenStory(storyUrl, mangaObj.chapters)
+          : await crawlTeamsanyStory(storyUrl, mangaObj.chapters)
+
+        const oldChapterCount = Array.isArray(mangaObj.chapters) ? mangaObj.chapters.length : 0
+        const newChapterCount = Array.isArray(updatedManga.chapters) ? updatedManga.chapters.length : 0
+
+        if (updatedManga && newChapterCount > oldChapterCount) {
+          await db.from('media_items').update({
+            name: updatedManga.title || item.name,
+            cover_url: updatedManga.cover || item.cover_url,
+            description: JSON.stringify(updatedManga),
+            updated_at: new Date().toISOString(),
+          }).eq('id', item.id)
+
+          report.push({
+            kind: 'bl_manga',
+            slug: updatedManga.slug,
+            title: updatedManga.title,
+            oldChapters: oldChapterCount,
+            newChapters: newChapterCount,
+            added: newChapterCount - oldChapterCount,
+          })
+        }
+      } catch (err: any) {
+        console.warn('Cron lỗi cào truyện BL:', item.name, err?.message || err)
+      }
     }
   } catch (err: any) {
-    console.error('Lỗi sync Truyện H trong cron:', err)
+    console.error('Lỗi sync Truyện BL trong cron:', err)
   }
 
   return res.status(200).json({ ok: true, report })

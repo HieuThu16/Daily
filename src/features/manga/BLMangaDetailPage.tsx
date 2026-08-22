@@ -5,14 +5,15 @@ import {
   Search, ArrowUpDown, ChevronRight,
   CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
   Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
-  Layers, CheckCircle, Bell
+  Layers, CheckCircle, Bell, RefreshCw
 } from 'lucide-react';
 import type { BLManga, MangaChapter } from '../../types/manga';
 import { 
   fetchBLMangaList, fetchHotMangaData, 
   getFavorites, toggleFavorite, 
   getReadingHistory, hasMangaData,
-  getFollows, toggleFollow
+  getFollows, toggleFollow,
+  syncBLMangaChapters
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
 import { notifyFollowsChanged } from './mangaUpdates';
@@ -106,6 +107,40 @@ export const BLMangaDetailPage: React.FC = () => {
   const userProgress = useMemo(() => {
     return manga ? history[manga.slug] : null;
   }, [history, manga]);
+
+  const [syncingNewChapters, setSyncingNewChapters] = useState<boolean>(false);
+
+  const handleSyncChapters = async (silent = false) => {
+    if (!manga || syncingNewChapters) return;
+    setSyncingNewChapters(true);
+    try {
+      if (!silent) showToast('🔄 Đang kiểm tra chapter mới từ link gốc...');
+      const res = await syncBLMangaChapters(manga);
+      if (res.updated && res.addedCount > 0) {
+        setManga(res.manga);
+        showToast(`🎉 Đã tự động cào thêm ${res.addedCount} chapter mới!`);
+      } else if (!silent) {
+        setManga(res.manga);
+        showToast('✅ Đã là danh sách chapter mới nhất!');
+      }
+    } catch (err: any) {
+      if (!silent) showToast(`❌ Lỗi kiểm tra: ${err?.message || 'Không kết nối được web gốc'}`);
+    } finally {
+      setSyncingNewChapters(false);
+    }
+  };
+
+  // Tự động kiểm tra chapter mới trong nền khi mở trang chi tiết (mỗi 10 phút / lần mở)
+  useEffect(() => {
+    if (!manga?.slug) return;
+    const cooldownKey = `bl_manga_sync_cooldown_${manga.slug}`;
+    const lastSync = sessionStorage.getItem(cooldownKey);
+    const now = Date.now();
+    if (!lastSync || now - Number(lastSync) > 10 * 60 * 1000) {
+      sessionStorage.setItem(cooldownKey, String(now));
+      void handleSyncChapters(true);
+    }
+  }, [manga?.slug]);
 
   const handleToggleFav = () => {
     if (!manga) return;
@@ -561,13 +596,36 @@ export const BLMangaDetailPage: React.FC = () => {
 
       {/* Chapters List Card */}
       <section className="bl-content-card bl-chapters-card">
-        <div className="bl-chapters-card-header">
+        <div className="bl-chapters-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="bl-chapters-title-group">
             <h2 className="bl-card-title">Danh sách chương</h2>
             <span className="bl-chapters-badge">
               {manga.chapters?.length || 0} chương
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => handleSyncChapters(false)}
+            disabled={syncingNewChapters}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '5px 10px',
+              borderRadius: 8,
+              fontSize: '0.76rem',
+              fontWeight: 600,
+              background: syncingNewChapters ? 'var(--blue-bg, rgba(59, 130, 246, 0.15))' : 'var(--bg-main)',
+              color: 'var(--blue, #3b82f6)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              cursor: syncingNewChapters ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title="Kiểm tra và cào thêm chapter mới từ link gốc"
+          >
+            <RefreshCw size={13} style={{ animation: syncingNewChapters ? 'spin 1s linear infinite' : 'none' }} />
+            <span>{syncingNewChapters ? 'Đang quét...' : 'Cào chap mới'}</span>
+          </button>
         </div>
 
         {/* Chapter Toolbar (Search & Sort) */}
