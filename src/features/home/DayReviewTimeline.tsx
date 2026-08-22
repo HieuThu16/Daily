@@ -1,4 +1,4 @@
-import { BookOpen, CheckCircle2, Clock, Film, Heart, ListPlus, Music, NotebookPen, Sunrise, Tv, UtensilsCrossed } from 'lucide-react'
+import { BookOpen, CheckCircle2, Clock, Film, Flame, Heart, ListPlus, Music, NotebookPen, Sunrise, Tv, UtensilsCrossed } from 'lucide-react'
 import type { DayEvent } from '../../lib/dayReview'
 import { Empty } from '../shared'
 
@@ -19,10 +19,17 @@ const eventStyles: Record<DayEvent['kind'], { icon: any; color: string; bg: stri
   MANGA:     { icon: Heart,           color: '#ec4899',        bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' },
 }
 
+function getMangaEventConfig(label: string) {
+  if (label.includes('H (18+)')) return { icon: Flame, color: '#e11d48', bg: 'rgba(225, 29, 72, 0.12)', route: '/truyenh' }
+  if (label.includes('BL')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
+  return { icon: Heart, color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.12)', route: '/ngontinh' }
+}
+
 function getMediaEventConfig(detail: string, label: string) {
   if (label.includes('sách') || detail.includes('Sách')) return { icon: BookOpen, color: 'var(--purple)', bg: 'var(--purple-bg)', route: '/books' }
+  if (label.includes('Review')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/tvshow' }
   if (label.includes('YouTube') || label.includes('TV Show')) return { icon: Tv, color: 'var(--amber)', bg: 'var(--amber-bg)', route: '/tvshow' }
-  if (label.includes('phim') || label.includes('Phim')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/movies' }
+  if (label.includes('phim') || detail.includes('Phim')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/movies' }
   if (label.includes('BL') || label.includes('truyện')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
   return { icon: Music, color: 'var(--cyan)', bg: 'var(--cyan-bg)', route: '/music' }
 }
@@ -73,6 +80,9 @@ export function DayReviewTimeline({ events, dateKey: _dateKey, isToday, onOpen }
             let baseStyle = eventStyles[ev.kind] ?? { icon: Clock, color: 'var(--text-main)', bg: 'var(--bg-main)' }
             if (ev.kind === 'MEDIA') {
               const extra = getMediaEventConfig(ev.detail, ev.label)
+              baseStyle = { ...baseStyle, ...extra }
+            } else if (ev.kind === 'MANGA') {
+              const extra = getMangaEventConfig(ev.label)
               baseStyle = { ...baseStyle, ...extra }
             }
             const Icon = baseStyle.icon

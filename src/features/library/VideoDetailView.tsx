@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Pencil, Tv, Youtube } from 'lucide-react'
 import type { Media } from '../../types'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
+import { useVideoWatchTracker } from '../../lib/videoWatchLog'
 
 type Props = {
   item: Media
@@ -42,6 +43,14 @@ export function VideoDetailView({ item, onBack, onEdit, onStatusChange }: Props)
   })
 
   const videoId = youtubeVideoId(item.youtube_url ?? '')
+
+  useVideoWatchTracker({
+    videoId: playing && videoId ? videoId : null,
+    title: item.name,
+    channelName: item.channel || undefined,
+    type: 'tvshow',
+    isPlaying: playing,
+  })
 
   const sendYouTubeCommand = (func: string, args: any[] = []) => {
     if (!iframeRef.current || !iframeRef.current.contentWindow) return

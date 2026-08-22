@@ -96,4 +96,94 @@ describe('buildDayReview', () => {
       },
     ])
   })
+
+  it('thông minh gom các chapter đọc liên tục (ví dụ Chap 1 2 3 4 trong 30 phút) và video watch time', () => {
+    const events = buildDayReview({
+      date,
+      sleeps: [],
+      meals: [],
+      entries: [],
+      todos: [],
+      media: [],
+      mangaLogs: [
+        {
+          id: 'h1',
+          mangaSlug: 'gai-chung-cu',
+          mangaTitle: 'Tôi Được Giao Nhiệm Vụ',
+          mangaType: 'H_MANGA',
+          chapterNumber: 1,
+          chapterName: 'Chương 1',
+          readAt: at('14:00'),
+          log_date: date,
+          log_time: '14:00',
+          status: 'COMPLETED',
+        },
+        {
+          id: 'h2',
+          mangaSlug: 'gai-chung-cu',
+          mangaTitle: 'Tôi Được Giao Nhiệm Vụ',
+          mangaType: 'H_MANGA',
+          chapterNumber: 2,
+          chapterName: 'Chương 2',
+          readAt: at('14:10'),
+          log_date: date,
+          log_time: '14:10',
+          status: 'COMPLETED',
+        },
+        {
+          id: 'h3',
+          mangaSlug: 'gai-chung-cu',
+          mangaTitle: 'Tôi Được Giao Nhiệm Vụ',
+          mangaType: 'H_MANGA',
+          chapterNumber: 3,
+          chapterName: 'Chương 3',
+          readAt: at('14:20'),
+          log_date: date,
+          log_time: '14:20',
+          status: 'COMPLETED',
+        },
+        {
+          id: 'h4',
+          mangaSlug: 'gai-chung-cu',
+          mangaTitle: 'Tôi Được Giao Nhiệm Vụ',
+          mangaType: 'H_MANGA',
+          chapterNumber: 4,
+          chapterName: 'Chương 4',
+          readAt: at('14:30'),
+          log_date: date,
+          log_time: '14:30',
+          status: 'COMPLETED',
+        },
+      ],
+      videoWatchLogs: [
+        {
+          id: 'v1',
+          videoId: 'yt123',
+          title: 'Tập 52 - 2 Ngày 1 Đêm',
+          channelName: 'Dong Tay Promotion',
+          type: 'tvshow',
+          startTime: at('15:00'),
+          endTime: at('15:35'),
+          durationMinutes: 35,
+          log_date: date,
+          log_time: '15:00',
+        },
+      ],
+    })
+
+    expect(events).toEqual([
+      {
+        time: '14:00 - 14:30',
+        kind: 'MANGA',
+        label: 'Đọc truyện H (18+)',
+        detail: 'Tôi Được Giao Nhiệm Vụ — Đã đọc 4 chương (Chương 1 → 4) trong ~30 phút (Đã đọc xong)',
+      },
+      {
+        time: '15:00 - 15:35',
+        kind: 'MEDIA',
+        label: 'Xem YouTube',
+        detail: 'Tập 52 - 2 Ngày 1 Đêm — Dong Tay Promotion (Đã xem 35 phút)',
+      },
+    ])
+  })
 })

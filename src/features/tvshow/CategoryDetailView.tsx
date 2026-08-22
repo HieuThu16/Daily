@@ -18,6 +18,7 @@ import {
   useVideoStatusListener,
   type VideoStatus
 } from '../../lib/videoStatus'
+import { useVideoWatchTracker } from '../../lib/videoWatchLog'
 import './tvShow.css'
 
 export type CategoryDetailVideoRow = {
@@ -194,6 +195,15 @@ export function CategoryDetailView({
 
   const currentIndex = filteredVideos.findIndex((v) => v.video_id === playingId)
   const currentVideo = currentIndex >= 0 ? filteredVideos[currentIndex] : (videos.find((v) => v.video_id === playingId) || videos[0])
+
+  // Tự động theo dõi thời gian xem video thực tế trên màn hình để hiển thị lên Home
+  useVideoWatchTracker({
+    videoId: isPlayerActive && playingId ? playingId : null,
+    title: currentVideo?.title,
+    channelName: currentVideo?.creator_name || group.category.name,
+    type,
+    isPlaying: isPlayerActive,
+  })
 
   /** Rút thẻ kiến thức của một video rồi lưu. Trả về null nếu xong, hoặc thông điệp lỗi. */
   const makeLesson = async (v: CategoryDetailVideoRow) => {

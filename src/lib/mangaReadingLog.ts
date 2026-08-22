@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export interface MangaReadingLog {
   id: string
@@ -11,6 +11,7 @@ export interface MangaReadingLog {
   log_date: string // YYYY-MM-DD
   log_time: string // HH:MM
   status?: 'READING' | 'COMPLETED'
+  durationMinutes?: number
 }
 
 const STORAGE_KEY = 'daily_manga_reading_logs'
@@ -36,6 +37,7 @@ export function recordMangaReading(params: {
   chapterName?: string
   status?: 'READING' | 'COMPLETED'
   readAt?: string
+  durationMinutes?: number
 }): MangaReadingLog {
   const now = params.readAt ? new Date(params.readAt) : new Date()
   const log_date = now.toLocaleDateString('sv-SE') // YYYY-MM-DD
@@ -45,12 +47,12 @@ export function recordMangaReading(params: {
 
   const current = getMangaReadingLogs()
 
-  // Tìm xem có log nào của cùng truyện + cùng chapter trong vòng 30 phút hôm nay không
+  // Tìm xem có log nào của cùng truyện + cùng chapter trong vòng 35 phút hôm nay không
   const recentIndex = current.findIndex((log) => {
     if (log.mangaSlug !== params.mangaSlug || log.chapterNumber !== params.chapterNumber) return false
     if (log.log_date !== log_date) return false
     const logTime = new Date(log.readAt).getTime()
-    return Math.abs(now.getTime() - logTime) < 30 * 60 * 1000
+    return Math.abs(now.getTime() - logTime) < 35 * 60 * 1000
   })
 
   let targetLog: MangaReadingLog
@@ -58,6 +60,10 @@ export function recordMangaReading(params: {
   if (recentIndex >= 0) {
     // Cập nhật log gần đây
     const prev = current[recentIndex]
+    const updatedDuration = params.durationMinutes 
+      ? (prev.durationMinutes || 0) + params.durationMinutes 
+      : prev.durationMinutes
+
     targetLog = {
       ...prev,
       mangaTitle: params.mangaTitle || prev.mangaTitle,
@@ -65,6 +71,7 @@ export function recordMangaReading(params: {
       status: status === 'COMPLETED' ? 'COMPLETED' : prev.status,
       readAt: now.toISOString(),
       log_time,
+      durationMinutes: updatedDuration,
     }
     current[recentIndex] = targetLog
   } else {
@@ -80,6 +87,7 @@ export function recordMangaReading(params: {
       log_date,
       log_time,
       status,
+      durationMinutes: params.durationMinutes,
     }
     current.unshift(targetLog)
   }
@@ -94,6 +102,109 @@ export function recordMangaReading(params: {
   }
 
   return targetLog
+}
+
+/**
+ * Hook tự động theo dõi thời gian đọc trên màn hình đọc truyện
+ */
+export function useMangaReadingTracker(activeReading: {
+  mangaSlug?: string
+  mangaTitle?: string
+  mangaType?: 'BL' | 'NGONTINH' | 'H_MANGA'
+  chapterNumber?: number
+  chapterName?: string
+  isActive: boolean
+}) {
+  const sessionRef = useRef<{
+    mangaSlug: string
+    mangaTitle: string
+    mangaType: 'BL' | 'NGONTINH' | 'H_MANGA'
+    chapterNumber: number
+    chapterName?: string
+    readSeconds: number
+  } | null>(null)
+
+  const flushSession = () => {
+    if (!sessionRef.current) return
+    const s = sessionRef.current
+    const durationMin = Math.round(s.readSeconds / 60)
+    if (durationMin >= 1) {
+      recordMangaReading({
+        mangaSlug: s.mangaSlug,
+        mangaTitle: s.mangaTitle,
+        mangaType: s.mangaType,
+        chapterNumber: s.chapterNumber,
+        chapterName: s.chapterName,
+        durationMinutes: durationMin,
+      })
+    }
+    sessionRef.current = null
+  }
+
+  useEffect(() => {
+    if (!activeReading.isActive || !activeReading.mangaSlug || activeReading.chapterNumber == null) {
+      flushSession()
+      return
+    }
+
+    if (
+      !sessionRef.current ||
+      sessionRef.current.mangaSlug !== activeReading.mangaSlug ||
+      sessionRef.current.chapterNumber !== activeReading.chapterNumber
+    ) {
+      flushSession()
+      sessionRef.current = {
+        mangaSlug: activeReading.mangaSlug,
+        mangaTitle: activeReading.mangaTitle || 'Truyện tranh',
+        mangaType: activeReading.mangaType || 'NGONTINH',
+        chapterNumber: activeReading.chapterNumber,
+        chapterName: activeReading.chapterName,
+        readSeconds: 0,
+      }
+    }
+
+    const interval = setInterval(() => {
+      if (document.hidden) return
+      if (sessionRef.current) {
+        sessionRef.current.readSeconds += 1
+        if (sessionRef.current.readSeconds > 0 && sessionRef.current.readSeconds % 60 === 0) {
+          const s = sessionRef.current
+          recordMangaReading({
+            mangaSlug: s.mangaSlug,
+            mangaTitle: s.mangaTitle,
+            mangaType: s.mangaType,
+            chapterNumber: s.chapterNumber,
+            chapterName: s.chapterName,
+            durationMinutes: 1,
+          })
+          s.readSeconds = 0
+        }
+      }
+    }, 1000)
+
+    return () => {
+      clearInterval(interval)
+      flushSession()
+    }
+  }, [
+    activeReading.isActive,
+    activeReading.mangaSlug,
+    activeReading.mangaTitle,
+    activeReading.mangaType,
+    activeReading.chapterNumber,
+    activeReading.chapterName,
+  ])
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushSession()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      flushSession()
+    }
+  }, [])
 }
 
 export function useMangaReadingLogs(): MangaReadingLog[] {

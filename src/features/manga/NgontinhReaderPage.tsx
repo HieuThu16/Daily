@@ -7,7 +7,7 @@ import {
 import type { NgontinhManga } from '../../types/manga';
 import { fetchNgontinhList, getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { hydrateMangadexManga } from './mangadexService';
-import { recordMangaReading } from '../../lib/mangaReadingLog';
+import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 import './ngontinhReader.css';
@@ -68,6 +68,16 @@ export const NgontinhReaderPage: React.FC = () => {
   // Trang này cuộn bằng cả cửa sổ nên không có phần tử cuộn riêng.
   const autoScroll = useAutoScroll(useCallback(() => null, []), prefs.speed);
   const preloadedRef = useRef<Set<number>>(new Set());
+
+  // Tự động theo dõi thời gian đọc trên màn hình
+  useMangaReadingTracker({
+    mangaSlug: manga?.slug,
+    mangaTitle: manga?.title,
+    mangaType: 'NGONTINH',
+    chapterNumber: currentChapter?.number ?? currentChapterNum,
+    chapterName: currentChapter?.name || `Chương ${currentChapterNum}`,
+    isActive: !loading && !!manga && !!currentChapter,
+  });
 
   // Dynamically fetch images if chapter has no images
   useEffect(() => {

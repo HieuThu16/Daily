@@ -1,8 +1,8 @@
-﻿import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { getHMangaProgress, saveHMangaProgress } from './hMangaService';
-import { recordMangaReading } from '../../lib/mangaReadingLog';
+import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 import './ngontinhReader.css';
 
@@ -36,6 +36,16 @@ export const HMangaReaderModal: React.FC<Props> = ({
   const currentIndex = sortedChapters.findIndex(c => c.number === currentChapterNum);
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
+
+  // Tự động theo dõi thời gian đọc trên màn hình
+  useMangaReadingTracker({
+    mangaSlug: manga?.slug,
+    mangaTitle: manga?.title,
+    mangaType: 'H_MANGA',
+    chapterNumber: currentChapter?.number ?? currentChapterNum,
+    chapterName: currentChapter?.name || `Chapter ${currentChapterNum}`,
+    isActive: !!manga && !!currentChapter,
+  });
 
   useEffect(() => {
     setCurrentChapterNum(initialChapterNumber ?? initialChapterNum ?? 1);

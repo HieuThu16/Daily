@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, ChevronLeft, ChevronRight, 
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { fetchHMangaList, getHMangaProgress, saveHMangaProgress } from './hMangaService';
-import { recordMangaReading } from '../../lib/mangaReadingLog';
+import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 import './ngontinhReader.css';
@@ -62,6 +62,16 @@ export const HMangaReaderPage: React.FC = () => {
 
   const { prefs, update: updatePrefs, readerStyle } = useReaderPrefs();
   const autoScroll = useAutoScroll(useCallback(() => null, []), prefs.speed);
+
+  // Tự động theo dõi thời gian đọc trên màn hình
+  useMangaReadingTracker({
+    mangaSlug: manga?.slug,
+    mangaTitle: manga?.title,
+    mangaType: 'H_MANGA',
+    chapterNumber: currentChapter?.number ?? currentChapterNum,
+    chapterName: currentChapter?.name || `Chapter ${currentChapterNum}`,
+    isActive: !loading && !!manga && !!currentChapter,
+  });
 
   // Save reading progress & scroll to top on change
   useEffect(() => {
