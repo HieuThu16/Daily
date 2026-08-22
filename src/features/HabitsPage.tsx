@@ -54,6 +54,10 @@ export function HabitsPage() {
 
   const [logs, setLogs] = useState<HabitLog[]>([])
   const [savingCountId, setSavingCountId] = useState<string | null>(null)
+  /** Modal nhập giá trị khi tick COUNT habit thành công */
+  const [countPromptHabit, setCountPromptHabit] = useState<Habit | null>(null)
+  const [countPromptValue, setCountPromptValue] = useState<string>('')
+  const countPromptRef = useRef<HTMLInputElement>(null)
   const [activeTab, setActiveTab] = useState<Tab>('today')
   const [historyRange, setHistoryRange] = useState<HistoryRange>('week')
   /** Ngày mốc của kỳ đang xem ở tab Lịch sử (đổi khi bấm ‹ ›). */
@@ -536,7 +540,14 @@ export function HabitsPage() {
           aria-pressed={isDone}
           onClick={(e) => {
             e.stopPropagation()
-            toggle(h)
+            if (isCount && !isDone) {
+              // Mở modal nhập giá trị thay vì toggle ngay
+              setCountPromptValue(String(todayValue(h.id) || ''))
+              setCountPromptHabit(h)
+              setTimeout(() => countPromptRef.current?.select(), 80)
+            } else {
+              toggle(h)
+            }
           }}
         />
 
@@ -628,6 +639,182 @@ export function HabitsPage() {
 
   return (
     <section className="page-shell">
+      {/* ── Modal nhập số liệu khi tick COUNT habit ── */}
+      {countPromptHabit && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1200,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+          onClick={() => setCountPromptHabit(null)}
+        >
+          <div
+            style={{
+              background: 'var(--card)',
+              border: '1px solid var(--card-border)',
+              borderRadius: '1.25rem',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+              padding: '1.75rem 1.5rem 1.5rem',
+              maxWidth: 360,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.25rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2.25rem', marginBottom: '0.25rem' }}>✅</div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)' }}>
+                {countPromptHabit.name}
+              </h3>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                Nhập số liệu hôm nay để đánh dấu hoàn thành
+              </p>
+            </div>
+
+            {/* Input */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+              }}
+            >
+              <label
+                style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em' }}
+              >
+                SỐ LƯỢNG / SỐ PHÚT
+              </label>
+              <input
+                ref={countPromptRef}
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="0"
+                autoFocus
+                value={countPromptValue}
+                onChange={(e) => setCountPromptValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = Number(countPromptValue)
+                    if (val > 0) {
+                      void setCount(countPromptHabit, val)
+                      setCountPromptHabit(null)
+                    }
+                  } else if (e.key === 'Escape') {
+                    setCountPromptHabit(null)
+                  }
+                }}
+                style={{
+                  background: 'var(--input-bg, var(--card))',
+                  border: '2px solid var(--primary)',
+                  borderRadius: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  fontSize: '1.5rem',
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  textAlign: 'center',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                }}
+              />
+
+              {/* Quick pick buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '0.25rem' }}>
+                {[5, 10, 15, 20, 25, 30, 45, 60].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setCountPromptValue(String(v))}
+                    style={{
+                      padding: '0.3rem 0.65rem',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: countPromptValue === String(v)
+                        ? '2px solid var(--primary)'
+                        : '1px solid var(--card-border)',
+                      background: countPromptValue === String(v)
+                        ? 'var(--primary)'
+                        : 'transparent',
+                      color: countPromptValue === String(v) ? '#fff' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setCountPromptHabit(null)}
+                style={{
+                  flex: 1,
+                  padding: '0.7rem',
+                  borderRadius: '0.75rem',
+                  border: '1px solid var(--card-border)',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={!countPromptValue || Number(countPromptValue) <= 0}
+                onClick={() => {
+                  const val = Number(countPromptValue)
+                  if (val > 0) {
+                    void setCount(countPromptHabit, val)
+                    setCountPromptHabit(null)
+                  }
+                }}
+                style={{
+                  flex: 2,
+                  padding: '0.7rem',
+                  borderRadius: '0.75rem',
+                  border: 'none',
+                  background: !countPromptValue || Number(countPromptValue) <= 0
+                    ? 'var(--card-border)'
+                    : 'linear-gradient(135deg, var(--primary), var(--purple, #8b5cf6))',
+                  color: !countPromptValue || Number(countPromptValue) <= 0
+                    ? 'var(--text-muted)'
+                    : '#fff',
+                  fontSize: '0.95rem',
+                  fontWeight: 700,
+                  cursor: !countPromptValue || Number(countPromptValue) <= 0 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                }}
+              >
+                <Check size={16} /> Hoàn thành
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cột phụ desktop: hai vòng tròn tiến độ */}
       <Aside>
         <AsideCard title="Hôm nay">
