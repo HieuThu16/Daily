@@ -1,5 +1,10 @@
 name: 🌙 Nightly Crawl — Ngôn Tình + BL + Teamsany
 
+# The crawler writes refreshed JSON back to main. GitHub's default token is
+# read-only for this repository, so grant only the permission it needs.
+permissions:
+  contents: write
+
 on:
   # Chạy tự động lúc 1:00 AM giờ Việt Nam (18:00 UTC)
   schedule:
