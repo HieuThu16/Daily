@@ -226,6 +226,48 @@ export async function crawlAndSaveStory(url: string, onProgress?: (msg: string) 
   return data.manga;
 }
 
+export async function syncHMangaChapters(
+  manga: HManga,
+  onProgress?: (msg: string) => void
+): Promise<{ updated: boolean; manga: HManga; addedCount: number }> {
+  const storyUrl = manga.url || (manga.slug ? `https://vietmanhwa.com/manhwa-18/${manga.slug}` : '');
+  if (!storyUrl) return { updated: false, manga, addedCount: 0 };
+
+  onProgress?.('Đang kiểm tra chapter mới từ link gốc...');
+  const res = await fetch('/api/crawl-truyenh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: storyUrl, existingChapters: manga.chapters })
+  });
+
+  if (!res.ok) {
+    let errMsg = `Lỗi server HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) errMsg = errJson.error;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  const data = await res.json();
+  if (!data?.success || !data?.manga) {
+    throw new Error(data?.error || 'Không nhận được dữ liệu truyện từ server');
+  }
+
+  const freshManga: HManga = data.manga;
+  const oldCount = Array.isArray(manga.chapters) ? manga.chapters.length : 0;
+  const newCount = Array.isArray(freshManga.chapters) ? freshManga.chapters.length : 0;
+
+  if (newCount > oldCount) {
+    onProgress?.(`Đã tìm thấy ${newCount - oldCount} chapter mới! Đang lưu...`);
+    saveCustomHManga(freshManga);
+    return { updated: true, manga: freshManga, addedCount: newCount - oldCount };
+  }
+
+  saveCustomHManga(freshManga);
+  return { updated: false, manga: freshManga, addedCount: 0 };
+}
+
 export function getHMangaFavorites(): string[] {
   try {
     const saved = localStorage.getItem(FAVORITES_KEY);

@@ -50,7 +50,7 @@ export function normalizeStoryUrl(inputUrl: string): { storyUrl: string; slug: s
   return { storyUrl: url, slug, isVietManhwa };
 }
 
-export async function crawlVietManhwaStory(inputUrl: string) {
+export async function crawlVietManhwaStory(inputUrl: string, existingChapters?: any[]) {
   const { storyUrl, slug } = normalizeStoryUrl(inputUrl);
 
   const html = await fetchWithRetry(storyUrl);
@@ -117,11 +117,25 @@ export async function crawlVietManhwaStory(inputUrl: string) {
 
   rawChapters.sort((a, b) => a.number - b.number);
 
+  // Re-use existing chapter images when available to speed up incremental crawling
+  const existingMap = new Map<number, any>();
+  if (Array.isArray(existingChapters)) {
+    for (const ch of existingChapters) {
+      if (typeof ch?.number === 'number' && Array.isArray(ch.images) && ch.images.length > 0) {
+        existingMap.set(ch.number, ch);
+      }
+    }
+  }
+
   // Fetch chapters images with concurrency
   const chaptersWithImages: any[] = [];
+  const chaptersToFetch = rawChapters.filter(ch => !existingMap.has(ch.number));
+
   const CONCURRENCY = 5;
-  for (let i = 0; i < rawChapters.length; i += CONCURRENCY) {
-    const chunk = rawChapters.slice(i, i + CONCURRENCY);
+  const newlyFetched = new Map<number, any>();
+
+  for (let i = 0; i < chaptersToFetch.length; i += CONCURRENCY) {
+    const chunk = chaptersToFetch.slice(i, i + CONCURRENCY);
     const results = await Promise.all(chunk.map(async (ch) => {
       try {
         const chHtml = await fetchWithRetry(ch.url, storyUrl);
@@ -139,7 +153,19 @@ export async function crawlVietManhwaStory(inputUrl: string) {
         return { ...ch, images: [] };
       }
     }));
-    chaptersWithImages.push(...results);
+    for (const res of results) {
+      newlyFetched.set(res.number, res);
+    }
+  }
+
+  for (const ch of rawChapters) {
+    if (existingMap.has(ch.number)) {
+      chaptersWithImages.push(existingMap.get(ch.number));
+    } else if (newlyFetched.has(ch.number)) {
+      chaptersWithImages.push(newlyFetched.get(ch.number));
+    } else {
+      chaptersWithImages.push({ ...ch, images: [] });
+    }
   }
 
   return {
@@ -159,22 +185,44 @@ export async function crawlVietManhwaStory(inputUrl: string) {
   };
 }
 
-export async function crawlMetruyen18Story(inputUrl: string) {
+export async function crawlMetruyen18Story(inputUrl: string, existingChapters?: any[]) {
   const { storyUrl, slug } = normalizeStoryUrl(inputUrl);
 
   const html = await fetchWithRetry(storyUrl);
   const $ = cheerio.load(html);
 
   const title = $('h1').first().text().trim() 
-    || $('meta[property="og:title"]').attr('content')?.replace(/HentaiVN.*/i, '').trim()
+    || $('title').text().replace(/[-|].*$/, '').trim() 
     || slug.replace(/-/g, ' ');
   
-  const cover = $('meta[property="og:image"]').attr('content') 
-    || $('.thumb img, .story-thumb img, .tab-summary img').attr('src') || '';
+  let cover = '';
+  $('img').each((_, el) => {
+    const src = $(el).attr('data-src') || $(el).attr('src') || '';
+    const alt = $(el).attr('alt') || '';
+    if (!cover && src && (alt.toLowerCase().includes('bìa') || src.includes('/story-images/') || src.includes('/truyen/'))) {
+      if (!src.includes('011111111111') && !src.includes('logo') && !src.includes('banner')) {
+        cover = src.startsWith('http') ? src : `https://metruyen18.app${src}`;
+      }
+    }
+  });
+  if (!cover) {
+    const ogImg = $('meta[property="og:image"]').attr('content') || '';
+    if (ogImg && !ogImg.includes('011111111111') && !ogImg.includes('images-story')) {
+      cover = ogImg;
+    }
+  }
   
-  const description = $('.story-description, .desc, .summary, .detail-content, .story-detail-info, .description-summary').text().trim() 
-    || $('meta[name="description"]').attr('content') || '';
-  
+  let description = '';
+  $('p, div').each((_, el) => {
+    const t = $(el).text().trim();
+    if (t.length > 50 && !t.includes('window.') && !description) {
+      description = t;
+    }
+  });
+  if (!description) {
+    description = $('meta[name="description"]').attr('content') || '';
+  }
+
   let author = 'Đang cập nhật';
   let status = 'Đang tiến hành';
   const genres = ['Hentai', 'Manhwa', '18+'];
@@ -217,11 +265,24 @@ export async function crawlMetruyen18Story(inputUrl: string) {
 
   rawChapters.sort((a, b) => a.number - b.number);
 
-  // Fetch chapters images with concurrency
+  // Re-use existing chapter images when available to speed up incremental crawling
+  const existingMap = new Map<number, any>();
+  if (Array.isArray(existingChapters)) {
+    for (const ch of existingChapters) {
+      if (typeof ch?.number === 'number' && Array.isArray(ch.images) && ch.images.length > 0) {
+        existingMap.set(ch.number, ch);
+      }
+    }
+  }
+
   const chaptersWithImages: any[] = [];
+  const chaptersToFetch = rawChapters.filter(ch => !existingMap.has(ch.number));
+
   const CONCURRENCY = 5;
-  for (let i = 0; i < rawChapters.length; i += CONCURRENCY) {
-    const chunk = rawChapters.slice(i, i + CONCURRENCY);
+  const newlyFetched = new Map<number, any>();
+
+  for (let i = 0; i < chaptersToFetch.length; i += CONCURRENCY) {
+    const chunk = chaptersToFetch.slice(i, i + CONCURRENCY);
     const results = await Promise.all(chunk.map(async (ch) => {
       try {
         const chHtml = await fetchWithRetry(ch.url, storyUrl);
@@ -248,7 +309,19 @@ export async function crawlMetruyen18Story(inputUrl: string) {
         return { ...ch, images: [] };
       }
     }));
-    chaptersWithImages.push(...results);
+    for (const res of results) {
+      newlyFetched.set(res.number, res);
+    }
+  }
+
+  for (const ch of rawChapters) {
+    if (existingMap.has(ch.number)) {
+      chaptersWithImages.push(existingMap.get(ch.number));
+    } else if (newlyFetched.has(ch.number)) {
+      chaptersWithImages.push(newlyFetched.get(ch.number));
+    } else {
+      chaptersWithImages.push({ ...ch, images: [] });
+    }
   }
 
   return {
@@ -279,13 +352,16 @@ export default async function handler(req: any, res: any) {
   }
 
   const url = String(body?.url || '').trim();
+  const existingChapters = Array.isArray(body?.existingChapters) ? body.existingChapters : undefined;
   if (!url) {
     return res.status(400).json({ error: 'Vui lòng cung cấp đường dẫn truyện từ metruyen18.app hoặc vietmanhwa.com' });
   }
 
   try {
     const isVietManhwa = url.includes('vietmanhwa.com');
-    const manga = isVietManhwa ? await crawlVietManhwaStory(url) : await crawlMetruyen18Story(url);
+    const manga = isVietManhwa 
+      ? await crawlVietManhwaStory(url, existingChapters) 
+      : await crawlMetruyen18Story(url, existingChapters);
     return res.status(200).json({ success: true, manga });
   } catch (err: any) {
     console.error('Error crawling manga:', err);
