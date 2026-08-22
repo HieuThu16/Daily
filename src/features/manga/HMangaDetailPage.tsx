@@ -14,9 +14,9 @@ import {
   getHMangaFavorites, toggleHMangaFavorite, 
   getHMangaHistory,
   getHMangaFollows, toggleHMangaFollow,
-  getChapterImageUrl
+  getChapterImageUrl,
+  isValidHMangaCover
 } from './hMangaService';
-import { HMangaReaderModal } from './HMangaReaderModal';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhDetail.css';
@@ -39,9 +39,6 @@ export const HMangaDetailPage: React.FC = () => {
   const [chapterSearch, setChapterSearch] = useState<string>('');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [showAllChapters, setShowAllChapters] = useState<boolean>(false);
-
-  // Quick Webtoon Reader Modal
-  const [readingChapterNum, setReadingChapterNum] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -77,7 +74,8 @@ export const HMangaDetailPage: React.FC = () => {
   useEffect(() => {
     if (manga) {
       const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-      setDetailCover(manga.cover || ch1 || '');
+      const valid = (isValidHMangaCover(manga.cover) ? manga.cover : ch1) || manga.cover || '';
+      setDetailCover(valid);
     }
   }, [manga]);
 
@@ -201,11 +199,11 @@ export const HMangaDetailPage: React.FC = () => {
 
   const handleStartRead = () => {
     const targetChapter = userProgress?.chapterNumber ?? firstChapterNum;
-    setReadingChapterNum(targetChapter);
+    navigate(`/truyenh/${slug}/read/${targetChapter}`);
   };
 
   const handleReadChapter = (chNum: number) => {
-    setReadingChapterNum(chNum);
+    navigate(`/truyenh/${slug}/read/${chNum}`);
   };
 
   const getCleanChapterTitle = (ch: MangaChapter, fallbackNum: number) => {
@@ -572,18 +570,6 @@ export const HMangaDetailPage: React.FC = () => {
           </div>
         )}
       </section>
-
-      {/* Quick Webtoon Reader Modal */}
-      {readingChapterNum != null && (
-        <HMangaReaderModal
-          manga={manga}
-          initialChapterNum={readingChapterNum}
-          onClose={() => {
-            setReadingChapterNum(null);
-            setHistory(getHMangaHistory());
-          }}
-        />
-      )}
     </div>
   );
 };

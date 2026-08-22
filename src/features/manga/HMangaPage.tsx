@@ -12,9 +12,9 @@ import {
   getHMangaFavorites, toggleHMangaFavorite, 
   getHMangaHistory,
   crawlAndSaveStory,
-  getChapterImageUrl
+  getChapterImageUrl,
+  isValidHMangaCover
 } from './hMangaService';
-import { HMangaReaderModal } from './HMangaReaderModal';
 import { useScrollRestore } from '../shared';
 import { useToast } from '../ToastContext';
 import './ngontinhManga.css';
@@ -41,14 +41,15 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
   onClick,
 }) => {
   const ch1Img = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-  const fallbackCover = manga.cover || ch1Img || '';
+  const fallbackCover = (isValidHMangaCover(manga.cover) ? manga.cover : ch1Img) || manga.cover || '';
   const [currentCover, setCurrentCover] = useState<string>(fallbackCover);
   const [imgLoaded, setImgLoaded] = useState<boolean>(false);
   const [imgError, setImgError] = useState<boolean>(false);
 
   useEffect(() => {
     const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-    setCurrentCover(manga.cover || ch1 || '');
+    const valid = (isValidHMangaCover(manga.cover) ? manga.cover : ch1) || manga.cover || '';
+    setCurrentCover(valid);
     setImgError(false);
     setImgLoaded(false);
   }, [manga.cover, manga.chapters]);
@@ -395,9 +396,6 @@ export const HMangaPage: React.FC = () => {
   }, [visibleCount]);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Quick Reader modal state
-  const [readingState, setReadingState] = useState<{ manga: HManga; chapterNum: number } | null>(null);
-
   useScrollRestore('truyenh-list', mangaList.length > 0);
 
   const loadData = async () => {
@@ -431,8 +429,7 @@ export const HMangaPage: React.FC = () => {
   };
 
   const openReader = (manga: HManga, chapterNum: number) => {
-    setReadingState({ manga, chapterNum });
-    setHistory(getHMangaHistory());
+    navigate(`/truyenh/${manga.slug}/read/${chapterNum}`);
   };
 
   const handleCrawlSuccess = (manga: HManga) => {
@@ -518,7 +515,8 @@ export const HMangaPage: React.FC = () => {
 
       {/* Continue reading banner if available */}
       {continueReading && (() => {
-        const cover = continueReading.manga.cover || getChapterImageUrl(continueReading.manga.chapters?.[0]?.images?.[0]);
+        const ch1 = getChapterImageUrl(continueReading.manga.chapters?.[0]?.images?.[0]);
+        const cover = (isValidHMangaCover(continueReading.manga.cover) ? continueReading.manga.cover : ch1) || continueReading.manga.cover || '';
         return (
           <button
             type="button"
@@ -650,18 +648,6 @@ export const HMangaPage: React.FC = () => {
             </div>
           )}
         </>
-      )}
-
-      {/* Quick Webtoon Reader Modal */}
-      {readingState && (
-        <HMangaReaderModal
-          manga={readingState.manga}
-          initialChapterNum={readingState.chapterNum}
-          onClose={() => {
-            setReadingState(null);
-            setHistory(getHMangaHistory());
-          }}
-        />
       )}
     </div>
   );

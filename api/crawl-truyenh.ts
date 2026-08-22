@@ -1,4 +1,4 @@
-﻿import * as cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 
 export const config = { maxDuration: 60 };
 
@@ -60,8 +60,22 @@ export async function crawlVietManhwaStory(inputUrl: string) {
     || $('title').text().replace(/[-|].*$/, '').trim() 
     || slug.replace(/-/g, ' ');
   
-  const cover = $('meta[property="og:image"]').attr('content') 
-    || $('img[src*="images-story"]').attr('src') || '';
+  let cover = '';
+  $('img').each((_, el) => {
+    const src = $(el).attr('data-src') || $(el).attr('src') || '';
+    const alt = $(el).attr('alt') || '';
+    if (!cover && src && (alt.toLowerCase().includes('bìa') || src.includes('/story-images/') || src.includes('/manga-posters/'))) {
+      if (!src.includes('011111111111') && !src.includes('logo') && !src.includes('banner')) {
+        cover = src.startsWith('http') ? src : `https://cdn.vietmanhwa.com${src}`;
+      }
+    }
+  });
+  if (!cover) {
+    const ogImg = $('meta[property="og:image"]').attr('content') || '';
+    if (ogImg && !ogImg.includes('011111111111') && !ogImg.includes('images-story')) {
+      cover = ogImg;
+    }
+  }
   
   let description = '';
   $('p, div').each((_, el) => {
