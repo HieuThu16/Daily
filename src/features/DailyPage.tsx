@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Frown, Heart, History, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2 } from 'lucide-react'
+import { BarChart3, Clock, Frown, Heart, History, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'
@@ -92,6 +92,15 @@ export function DailyPage() {
   const [statsType, setStatsType] = useState<'ALL' | DailyType>('ALL')
 
   // ── actions ─────────────────────────────────────────────────────────────
+
+  const insertQuickPhrase = (phrase: string) => {
+    if (!phrase) return
+    setContent((text) => {
+      const trimmed = text.trim()
+      return trimmed ? `${trimmed}\n${phrase}` : phrase
+    })
+    showToast(`⚡ Đã thêm: ${phrase}`)
+  }
 
   const saveEntries = async () => {
     const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -330,24 +339,69 @@ export function DailyPage() {
                 </button>
               )}
             </div>
-            {/* Chọn nhanh: câu hay dùng, tự sửa được */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <select
-                value=""
-                aria-label="Chọn nhanh câu hay dùng"
-                onChange={(e) => {
-                  if (!e.target.value) return
-                  setContent((text) => (text.trim() ? text.replace(/\n*$/, '\n') : '') + e.target.value)
-                  e.target.value = ''
+            {/* Chọn nhanh: câu hay dùng dạng chip 1-chạm (bấm 1 lần ăn ngay) */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Zap size={13} color="var(--amber)" /> Chọn nhanh (1 chạm):
+                </span>
+                <button
+                  type="button"
+                  className="icon small"
+                  title="Sửa danh sách chọn nhanh"
+                  aria-label="Sửa danh sách chọn nhanh"
+                  onClick={() => setEditQuick(quickPhrases.join('\n'))}
+                  style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, color: 'var(--text-muted)' }}
+                >
+                  <Pencil size={12} /> Sửa
+                </button>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  overflowX: 'auto',
+                  paddingBottom: 4,
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch',
                 }}
-                style={{ flex: 1, border: '1px solid var(--card-border)', borderRadius: 10, padding: '5px 8px', fontSize: '0.82rem', background: 'var(--card-bg)', color: 'var(--text-main)' }}
               >
-                <option value="">⚡ Chọn nhanh…</option>
-                {quickPhrases.map((phrase) => <option key={phrase} value={phrase}>{phrase}</option>)}
-              </select>
-              <button type="button" className="icon small" title="Sửa danh sách chọn nhanh" aria-label="Sửa danh sách chọn nhanh" onClick={() => setEditQuick(quickPhrases.join('\n'))}>
-                <Pencil size={14} />
-              </button>
+                {quickPhrases.map((phrase) => (
+                  <button
+                    key={phrase}
+                    type="button"
+                    onClick={() => insertQuickPhrase(phrase)}
+                    style={{
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      padding: '4px 10px',
+                      borderRadius: 16,
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      border: '1px solid var(--card-border)',
+                      background: 'var(--bg-main)',
+                      color: 'var(--text-main)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--amber)'
+                      e.currentTarget.style.background = 'var(--amber-bg)'
+                      e.currentTarget.style.color = 'var(--amber)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--card-border)'
+                      e.currentTarget.style.background = 'var(--bg-main)'
+                      e.currentTarget.style.color = 'var(--text-main)'
+                    }}
+                  >
+                    ⚡ {phrase}
+                  </button>
+                ))}
+              </div>
             </div>
             <textarea
               value={content}
