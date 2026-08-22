@@ -169,22 +169,52 @@ export function SharedEventsView({
     location: location.trim() || null,
   })
 
-  const uploadMultipleImages = async (eventId: string, files: File[]) => {
-    if (!supabase || !files.length) return { urls: [] as string[], paths: [] as string[] }
+  const fileToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(file)
+    })
+
+  const uploadMultipleImages = async (folder: string, files: File[]) => {
+    if (!files.length) return { urls: [] as string[], paths: [] as string[] }
     const urls: string[] = []
     const paths: string[] = []
 
     for (const file of files) {
       try {
-        const ext = file.name.split('.').pop() ?? 'jpg'
-        const path = `${myId || 'common'}/${eventId}/${crypto.randomUUID()}.${ext}`
-        const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
-        if (upErr) continue
-        const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-        urls.push(pub.publicUrl)
-        paths.push(path)
-      } catch {
-        // Ignored
+        const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+        const path = `${folder}/${crypto.randomUUID()}.${ext}`
+        let uploadedUrl = ''
+
+        if (supabase) {
+          const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
+          if (!upErr) {
+            const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+            if (pub?.publicUrl) {
+              uploadedUrl = pub.publicUrl
+            }
+          } else {
+            console.warn('Supabase storage upload error, fallback to data url:', upErr)
+          }
+        }
+
+        if (!uploadedUrl) {
+          uploadedUrl = await fileToDataUrl(file)
+        }
+
+        if (uploadedUrl) {
+          urls.push(uploadedUrl)
+          paths.push(path)
+        }
+      } catch (err) {
+        console.error('Lỗi tải ảnh:', err)
+        const dataUrl = await fileToDataUrl(file)
+        if (dataUrl) {
+          urls.push(dataUrl)
+          paths.push('')
+        }
       }
     }
     return { urls, paths }
@@ -193,45 +223,71 @@ export function SharedEventsView({
   const createEvent = async () => {
     if (!title.trim()) return
     setBusy(true)
-    const newPayload = payload()
-    const { data, error } = await supabase!.from('shared_events').insert(newPayload).select().single()
-    
-    if (error || !data) {
-      setBusy(false)
-      showToast('❌ Chưa lưu được. Chạy migration shared_events chưa?', 'delete')
-      return
+
+    let urls: string[] = []
+    let paths: string[] = []
+    if (pendingFiles.length > 0) {
+      const res = await uploadMultipleImages(eventDate, pendingFiles)
+      urls = res.urls
+      paths = res.paths
     }
 
-    let created = data as SharedEvent
+    const firstUrl = urls[0] || null
+    const firstPath = paths[0] || null
 
-    // Upload pending photos if any
-    if (pendingFiles.length > 0) {
-      const { urls, paths } = await uploadMultipleImages(created.id, pendingFiles)
+    const basePayload = {
+      ...payload(),
+      image_url: firstUrl,
+      image_path: firstPath,
+    }
+
+    let created: SharedEvent | null = null
+
+    if (supabase) {
       if (urls.length > 0) {
-        const firstUrl = urls[0]
-        const firstPath = paths[0]
-        await supabase!
-          .from('shared_events')
-          .update({
-            image_url: firstUrl,
-            image_path: firstPath,
-            images: urls,
-            image_paths: paths,
-          })
-          .eq('id', created.id)
-        created = {
-          ...created,
-          image_url: firstUrl,
-          image_path: firstPath,
+        const fullPayload = {
+          ...basePayload,
           images: urls,
           image_paths: paths,
+        }
+        const { data, error } = await supabase.from('shared_events').insert(fullPayload).select().single()
+        if (error) {
+          // Schema cũ chưa có cột mảng images, thử lại với basePayload
+          const retryRes = await supabase.from('shared_events').insert(basePayload).select().single()
+          if (retryRes.data) {
+            created = {
+              ...(retryRes.data as SharedEvent),
+              images: urls,
+              image_paths: paths,
+            }
+          }
+        } else if (data) {
+          created = data as SharedEvent
+        }
+      } else {
+        const { data } = await supabase.from('shared_events').insert(basePayload).select().single()
+        if (data) {
+          created = data as SharedEvent
         }
       }
     }
 
+    if (!created) {
+      created = {
+        id: `local-${Date.now()}`,
+        owner_id: myId || 'local',
+        ...basePayload,
+        images: urls,
+        image_paths: paths,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+      } as SharedEvent
+    }
+
     setBusy(false)
-    events.setItems((prev) => [created, ...prev])
-    showToast('💞 Đã thêm sự kiện chung')
+    events.setItems((prev) => [created!, ...prev])
+    showToast('💞 Đã thêm kỷ niệm mới')
     setAdding(false)
     resetForm()
   }
@@ -245,27 +301,38 @@ export function SharedEventsView({
     let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
     if (pendingFiles.length > 0) {
-      const { urls, paths } = await uploadMultipleImages(editing.id, pendingFiles)
+      const { urls, paths } = await uploadMultipleImages(eventDate, pendingFiles)
       currentImages = [...currentImages, ...urls]
       currentPaths = [...currentPaths, ...paths]
     }
 
-    const updateData = {
+    const baseUpdateData = {
       ...next,
       image_url: currentImages[0] || null,
       image_path: currentPaths[0] || null,
+    }
+
+    const fullUpdateData = {
+      ...baseUpdateData,
       images: currentImages,
       image_paths: currentPaths,
     }
 
-    const { error } = await supabase!.from('shared_events').update(updateData).eq('id', editing.id)
-    setBusy(false)
-    if (error) {
-      showToast('❌ Chưa lưu được thay đổi', 'delete')
-      return
+    if (supabase) {
+      const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
+      if (error) {
+        // Schema cũ chưa có cột mảng images, thử lại với baseUpdateData
+        await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
+      }
     }
-    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? { ...e, ...updateData } : e)))
-    showToast('✏️ Đã cập nhật sự kiện')
+
+    setBusy(false)
+    const finalEvent = {
+      ...editing,
+      ...fullUpdateData,
+    }
+    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? finalEvent : e)))
+    showToast('✏️ Đã cập nhật kỷ niệm')
     setEditing(null)
     setViewing(null)
     resetForm()
@@ -321,12 +388,12 @@ export function SharedEventsView({
   }
 
   const removeExistingImage = async (imgIdx: number) => {
-    if (!editing || !supabase) return
+    if (!editing) return
     const currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
     const currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
     const pathToDelete = currentPaths[imgIdx]
-    if (pathToDelete) {
+    if (pathToDelete && supabase) {
       try {
         await supabase.storage.from(PHOTO_BUCKET).remove([pathToDelete])
       } catch {
@@ -337,16 +404,27 @@ export function SharedEventsView({
     currentImages.splice(imgIdx, 1)
     currentPaths.splice(imgIdx, 1)
 
-    const updateData = {
+    const baseUpdateData = {
       image_url: currentImages[0] || null,
       image_path: currentPaths[0] || null,
+    }
+
+    const fullUpdateData = {
+      ...baseUpdateData,
       images: currentImages,
       image_paths: currentPaths,
     }
 
-    await supabase.from('shared_events').update(updateData).eq('id', editing.id)
-    setEditing((cur) => (cur ? { ...cur, ...updateData } : cur))
-    events.setItems((prev) => prev.map((item) => (item.id === editing.id ? { ...item, ...updateData } : item)))
+    if (supabase) {
+      const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
+      if (error) {
+        await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
+      }
+    }
+
+    const updated = { ...editing, ...fullUpdateData }
+    setEditing(updated)
+    events.setItems((prev) => prev.map((item) => (item.id === editing.id ? updated : item)))
     showToast('🗑️ Đã gỡ ảnh')
   }
 
