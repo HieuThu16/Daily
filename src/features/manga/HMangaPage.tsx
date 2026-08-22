@@ -5,7 +5,7 @@ import {
   X, Bookmark, ChevronRight,
   Flame, Sparkles, Loader2, Plus, Download,
   Link as LinkIcon, AlertCircle, Clipboard, ExternalLink,
-  CheckCircle2
+  CheckCircle2, Zap, Camera
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { 
@@ -14,8 +14,15 @@ import {
   getHMangaHistory,
   crawlAndSaveStory,
   getChapterImageUrl,
-  isValidHMangaCover
+  isValidHMangaCover,
+  getCustomHMangaList
 } from './hMangaService';
+import { 
+  getHMangaScreenshots, deleteHMangaScreenshot,
+  type HMangaScreenshot 
+} from './hMangaScreenshot';
+import { RecentCrawledModal } from './RecentCrawledModal';
+import { HMangaScreenshotGalleryModal } from './HMangaScreenshotGalleryModal';
 import { useScrollRestore } from '../shared';
 import { useToast } from '../ToastContext';
 import './ngontinhManga.css';
@@ -467,6 +474,23 @@ export const HMangaPage: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
   const [showCrawlModal, setShowCrawlModal] = useState<boolean>(false);
+  const [showRecentModal, setShowRecentModal] = useState<boolean>(false);
+  const [showScreenshotModal, setShowScreenshotModal] = useState<boolean>(false);
+  const [screenshots, setScreenshots] = useState<HMangaScreenshot[]>([]);
+
+  useEffect(() => {
+    setScreenshots(getHMangaScreenshots());
+  }, []);
+
+  const recentCrawledStories = useMemo(() => {
+    const customList = getCustomHMangaList();
+    const map = new Map<string, HManga>();
+    for (const m of customList) map.set(m.slug, m);
+    for (const m of mangaList) {
+      if (m.updatedAt && !map.has(m.slug)) map.set(m.slug, m);
+    }
+    return Array.from(map.values());
+  }, [mangaList]);
 
   // Progressive batching count
   const [visibleCount, setVisibleCount] = useState<number>(
@@ -600,6 +624,27 @@ export const HMangaPage: React.FC = () => {
         }}
       />
 
+      <RecentCrawledModal
+        isOpen={showRecentModal}
+        onClose={() => setShowRecentModal(false)}
+        title="Truyện H đã cào gần đây"
+        items={recentCrawledStories}
+        onSelectStory={(story) => navigate(`/truyenh/${story.slug}`)}
+        accentColor="#e11d48"
+      />
+
+      <HMangaScreenshotGalleryModal
+        isOpen={showScreenshotModal}
+        onClose={() => setShowScreenshotModal(false)}
+        screenshots={screenshots}
+        onSelectScreenshot={(shot) => navigate(`/truyenh/${shot.mangaSlug}/read/${shot.chapterNumber}`)}
+        onDeleteScreenshot={async (id) => {
+          await deleteHMangaScreenshot(id);
+          setScreenshots(prev => prev.filter(s => s.id !== id));
+          showToast('🗑️ Đã xóa ảnh chụp');
+        }}
+      />
+
       {/* Continue reading banner if available */}
       {continueReading && (() => {
         const ch1 = getChapterImageUrl(continueReading.manga.chapters?.[0]?.images?.[0]);
@@ -652,6 +697,43 @@ export const HMangaPage: React.FC = () => {
             onClick={() => setActiveTab('favorites')}
           >
             <Heart size={16} /> Yêu thích <span className="ngontinh-count-pill">{favorites.length}</span>
+          </button>
+
+          {/* Button Vừa cào gần đây */}
+          <button
+            type="button"
+            className="ngontinh-nav-tab-btn"
+            onClick={() => setShowRecentModal(true)}
+            style={{
+              background: 'rgba(168, 85, 247, 0.15)',
+              color: '#c084fc',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              fontWeight: 600,
+            }}
+            title="Xem danh sách truyện đã cào gần đây (trong 1h trước hoặc tất cả)"
+          >
+            <Zap size={15} /> Vừa cào gần đây
+            {recentCrawledStories.length > 0 && (
+              <span className="ngontinh-count-pill" style={{ backgroundColor: 'rgba(168, 85, 247, 0.3)', color: '#e9d5ff' }}>
+                {recentCrawledStories.length}
+              </span>
+            )}
+          </button>
+
+          {/* Button Kho ảnh chụp */}
+          <button
+            type="button"
+            className="ngontinh-nav-tab-btn"
+            onClick={() => setShowScreenshotModal(true)}
+            style={{
+              background: 'rgba(236, 72, 153, 0.15)',
+              color: '#f472b6',
+              border: '1px solid rgba(236, 72, 153, 0.3)',
+              fontWeight: 600,
+            }}
+            title="Xem kho ảnh chụp khoảnh khắc khi đọc truyện"
+          >
+            <Camera size={15} /> Kho ảnh ({screenshots.length})
           </button>
 
           {/* Button Cào truyện mới */}

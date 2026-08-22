@@ -11,10 +11,12 @@ import type { BLManga, HotMangaData } from '../../types/manga';
 import { 
   fetchBLMangaList, fetchHotMangaData, 
   getFavorites, toggleFavorite, 
-  getReadingHistory, hasMangaData 
+  getReadingHistory, hasMangaData,
+  getCustomBLMangaList
 } from './mangaService';
 import { BLReaderModal } from './BLReaderModal';
 import { LocalCbzReader } from './LocalCbzReader';
+import { RecentCrawledModal } from './RecentCrawledModal';
 import { useScrollRestore } from '../shared';
 import './blManga.css';
 
@@ -197,6 +199,17 @@ export const BLMangaPage: React.FC = () => {
 
   // Quick Reader modal state
   const [readingState, setReadingState] = useState<{ manga: BLManga; chapterNum: number } | null>(null);
+  const [showRecentModal, setShowRecentModal] = useState<boolean>(false);
+
+  const recentCrawledStories = useMemo(() => {
+    const customList = getCustomBLMangaList();
+    const map = new Map<string, BLManga>();
+    for (const m of customList) map.set(m.slug, m);
+    for (const m of mangaList) {
+      if (m.updatedAt && !map.has(m.slug)) map.set(m.slug, m);
+    }
+    return Array.from(map.values());
+  }, [mangaList]);
 
   const loadData = async () => {
     try {
@@ -445,6 +458,15 @@ export const BLMangaPage: React.FC = () => {
 
   return (
     <div className="bl-page-container">
+      <RecentCrawledModal
+        isOpen={showRecentModal}
+        onClose={() => setShowRecentModal(false)}
+        title="Truyện Boylove đã cào gần đây"
+        items={recentCrawledStories}
+        onSelectStory={(story) => navigate(`/bl/${story.slug}`)}
+        accentColor="#3b82f6"
+      />
+
       {continueReading && (
         <button
           type="button"
@@ -497,6 +519,27 @@ export const BLMangaPage: React.FC = () => {
             onClick={() => setActiveTab('favorites')}
           >
             <Heart size={16} /> Yêu thích <span className="bl-count-pill">{favorites.length}</span>
+          </button>
+
+          {/* Button Vừa cào gần đây */}
+          <button
+            type="button"
+            className="bl-nav-tab-btn"
+            onClick={() => setShowRecentModal(true)}
+            style={{
+              background: 'rgba(59, 130, 246, 0.15)',
+              color: '#60a5fa',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              fontWeight: 600,
+            }}
+            title="Xem danh sách truyện đã cào gần đây (trong 1h trước hoặc tất cả)"
+          >
+            <Zap size={15} /> Vừa cào gần đây
+            {recentCrawledStories.length > 0 && (
+              <span className="bl-count-pill" style={{ backgroundColor: 'rgba(59, 130, 246, 0.3)', color: '#dbeafe' }}>
+                {recentCrawledStories.length}
+              </span>
+            )}
           </button>
         </div>
 

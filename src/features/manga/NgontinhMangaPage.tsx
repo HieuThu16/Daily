@@ -13,6 +13,7 @@ import {
 } from './ngontinhService';
 import { hydrateMangadexManga } from './mangadexService';
 import { NgontinhReaderModal } from './NgontinhReaderModal';
+import { RecentCrawledModal } from './RecentCrawledModal';
 import { useScrollRestore } from '../shared';
 import './ngontinhManga.css';
 
@@ -177,6 +178,7 @@ export const NgontinhMangaPage: React.FC = () => {
 
   // Quick Reader modal state
   const [readingState, setReadingState] = useState<{ manga: NgontinhManga; chapterNum: number } | null>(null);
+  const [showRecentModal, setShowRecentModal] = useState<boolean>(false);
 
   const loadData = async () => {
     try {
@@ -413,6 +415,15 @@ export const NgontinhMangaPage: React.FC = () => {
 
   return (
     <div className="ngontinh-page-container">
+      <RecentCrawledModal
+        isOpen={showRecentModal}
+        onClose={() => setShowRecentModal(false)}
+        title="Truyện Ngôn Tình đã cào gần đây"
+        items={mangaList}
+        onSelectStory={(story) => navigate(`/ngontinh/${story.slug}`)}
+        accentColor="#e11d48"
+      />
+
       {continueReading && (
         <button
           type="button"
@@ -461,6 +472,22 @@ export const NgontinhMangaPage: React.FC = () => {
             onClick={() => setActiveTab('favorites')}
           >
             <Heart size={16} /> Yêu thích <span className="ngontinh-count-pill">{favorites.length}</span>
+          </button>
+
+          {/* Button Vừa cào gần đây */}
+          <button
+            type="button"
+            className="ngontinh-nav-tab-btn"
+            onClick={() => setShowRecentModal(true)}
+            style={{
+              background: 'rgba(225, 29, 72, 0.15)',
+              color: '#fb7185',
+              border: '1px solid rgba(225, 29, 72, 0.3)',
+              fontWeight: 600,
+            }}
+            title="Xem danh sách truyện đã cào gần đây (trong 1h trước hoặc tất cả)"
+          >
+            <Zap size={15} /> Vừa cào gần đây
           </button>
         </div>
 

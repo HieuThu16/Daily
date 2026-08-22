@@ -2,10 +2,17 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, ChevronLeft, ChevronRight, 
-  ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles, BookOpen 
+  ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles, BookOpen,
+  Camera, Images
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { fetchHMangaList, getHMangaProgress, saveHMangaProgress } from './hMangaService';
+import { 
+  getHMangaScreenshots, saveHMangaScreenshot, deleteHMangaScreenshot,
+  type HMangaScreenshot 
+} from './hMangaScreenshot';
+import { HMangaScreenshotGalleryModal } from './HMangaScreenshotGalleryModal';
+import { useToast } from '../ToastContext';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
@@ -14,6 +21,7 @@ import './ngontinhReader.css';
 export const HMangaReaderPage: React.FC = () => {
   const { slug, chapterNum } = useParams<{ slug: string; chapterNum: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   // Hide the global shell header to give full-screen reader immersion
   useHideHeader(true);
@@ -23,6 +31,16 @@ export const HMangaReaderPage: React.FC = () => {
   const [fitMode, setFitMode] = useState<'standard' | 'wide' | 'full'>('standard');
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
+
+  // Screenshot capture & gallery states
+  const [capturing, setCapturing] = useState<boolean>(false);
+  const [isFlashing, setIsFlashing] = useState<boolean>(false);
+  const [showScreenshotGallery, setShowScreenshotGallery] = useState<boolean>(false);
+  const [screenshots, setScreenshots] = useState<HMangaScreenshot[]>([]);
+
+  useEffect(() => {
+    setScreenshots(getHMangaScreenshots());
+  }, []);
 
   const currentChapterNum = useMemo(() => {
     return chapterNum ? parseFloat(chapterNum) : 1;
@@ -188,6 +206,129 @@ export const HMangaReaderPage: React.FC = () => {
     }
   }, [nextChapter, goToChapter]);
 
+  const handleCaptureScreenshot = async () => {
+    if (!manga || !currentChapter || capturing) return;
+    setCapturing(true);
+
+    try {
+      const imgElements = Array.from(document.querySelectorAll<HTMLImageElement>('.ngontinh-reader-image'));
+      const viewportHeight = window.innerHeight;
+      const viewportCenter = viewportHeight / 2;
+
+      let targetImg: HTMLImageElement | null = null;
+      let targetIndex = 0;
+
+      for (let i = 0; i < imgElements.length; i++) {
+        const rect = imgElements[i].getBoundingClientRect();
+        if (rect.top <= viewportCenter && rect.bottom >= viewportCenter) {
+          targetImg = imgElements[i];
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (!targetImg && imgElements.length > 0) {
+        for (let i = 0; i < imgElements.length; i++) {
+          const rect = imgElements[i].getBoundingClientRect();
+          if (rect.bottom > 0 && rect.top < viewportHeight) {
+            targetImg = imgElements[i];
+            targetIndex = i;
+            break;
+          }
+        }
+      }
+
+      let dataUrl = '';
+
+      if (targetImg && targetImg.naturalWidth > 0 && targetImg.naturalHeight > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const rect = targetImg.getBoundingClientRect();
+
+          const visibleTop = Math.max(0, -rect.top);
+          const visibleHeight = Math.min(rect.height, viewportHeight - Math.max(0, rect.top));
+
+          const scaleY = targetImg.naturalHeight / rect.height;
+          const cropTop = visibleTop * scaleY;
+          const cropHeight = Math.max(120, visibleHeight * scaleY);
+
+          canvas.width = Math.min(800, targetImg.naturalWidth);
+          const destHeight = Math.round((canvas.width / targetImg.naturalWidth) * cropHeight);
+          canvas.height = destHeight;
+
+          if (ctx) {
+            ctx.drawImage(
+              targetImg,
+              0, cropTop, targetImg.naturalWidth, cropHeight,
+              0, 0, canvas.width, destHeight
+            );
+            dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          }
+        } catch {
+          // If canvas is tainted or cross-origin blocked, fallback to direct img URL
+          dataUrl = targetImg.src;
+        }
+      }
+
+      if (!dataUrl && targetImg) {
+        dataUrl = targetImg.src;
+      }
+
+      if (!dataUrl) {
+        showToast('⚠️ Không tìm thấy khung ảnh đang hiển thị để chụp.');
+        return;
+      }
+
+      const totalH = document.documentElement.scrollHeight - window.innerHeight;
+      const scrollRatio = totalH > 0 ? window.scrollY / totalH : 0;
+
+      const saved = await saveHMangaScreenshot({
+        mangaSlug: manga.slug,
+        mangaTitle: manga.title,
+        chapterNumber: currentChapter.number ?? currentChapterNum,
+        chapterName: currentChapter.name || `Chapter ${currentChapterNum}`,
+        pageIndex: targetIndex + 1,
+        scrollRatio,
+        imageData: dataUrl,
+      });
+
+      setScreenshots(prev => [saved, ...prev.filter(s => s.id !== saved.id)]);
+
+      // Flash shutter animation
+      setIsFlashing(true);
+      setTimeout(() => setIsFlashing(false), 350);
+
+      showToast(`📸 Đã chụp & lưu trang ${targetIndex + 1} (${currentChapter.name || `Chapter ${currentChapterNum}`})!`);
+    } catch (err: any) {
+      console.error('Screenshot error', err);
+      showToast('❌ Lỗi khi chụp màn hình');
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  const handleSelectScreenshot = (shot: HMangaScreenshot) => {
+    if (shot.mangaSlug !== manga?.slug) {
+      navigate(`/truyenh/${shot.mangaSlug}/read/${shot.chapterNumber}`);
+      return;
+    }
+    if (shot.chapterNumber !== (currentChapter?.number ?? currentChapterNum)) {
+      goToChapter(shot.chapterNumber);
+      return;
+    }
+    if (shot.scrollRatio != null) {
+      const totalH = document.documentElement.scrollHeight - window.innerHeight;
+      window.scrollTo({ top: totalH * shot.scrollRatio, behavior: 'smooth' });
+    }
+  };
+
+  const handleDeleteScreenshot = async (id: string) => {
+    await deleteHMangaScreenshot(id);
+    setScreenshots(prev => prev.filter(s => s.id !== id));
+    showToast('🗑️ Đã xóa ảnh chụp');
+  };
+
   const handlePrev = useCallback(() => {
     if (prevChapter && prevChapter.number != null) {
       goToChapter(prevChapter.number);
@@ -285,8 +426,78 @@ export const HMangaReaderPage: React.FC = () => {
           >
             <ChevronRight size={18} />
           </button>
+
+          {/* Snapshot Button */}
+          <button
+            className="ngontinh-reader-btn-icon"
+            onClick={handleCaptureScreenshot}
+            disabled={capturing}
+            title="Chụp lưu ảnh trang đang xem vào cơ sở dữ liệu"
+            style={{
+              color: '#ec4899',
+              background: 'rgba(236, 72, 153, 0.15)',
+              border: '1px solid rgba(236, 72, 153, 0.3)',
+            }}
+          >
+            <Camera size={18} />
+          </button>
+
+          {/* Screenshot Gallery Button */}
+          <button
+            className="ngontinh-reader-btn-icon"
+            onClick={() => setShowScreenshotGallery(true)}
+            title={`Kho ảnh chụp (${screenshots.length})`}
+            style={{
+              position: 'relative',
+              color: screenshots.length > 0 ? '#f472b6' : 'currentColor',
+            }}
+          >
+            <Images size={18} />
+            {screenshots.length > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  backgroundColor: '#ec4899',
+                  color: '#fff',
+                  borderRadius: '10px',
+                  padding: '1px 4px',
+                  lineHeight: 1,
+                }}
+              >
+                {screenshots.length}
+              </span>
+            )}
+          </button>
         </div>
       </header>
+
+      {/* Camera Shutter Flash Overlay */}
+      {isFlashing && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: '#ffffff',
+            opacity: 0.85,
+            zIndex: 10000,
+            pointerEvents: 'none',
+            transition: 'opacity 0.35s ease-out',
+          }}
+        />
+      )}
+
+      {/* Screenshot Gallery Modal */}
+      <HMangaScreenshotGalleryModal
+        isOpen={showScreenshotGallery}
+        onClose={() => setShowScreenshotGallery(false)}
+        screenshots={screenshots}
+        onSelectScreenshot={handleSelectScreenshot}
+        onDeleteScreenshot={handleDeleteScreenshot}
+      />
 
       {/* Progress Line */}
       <div className="ngontinh-reader-progress-line" style={{ width: `${scrollProgress}%` }} />
