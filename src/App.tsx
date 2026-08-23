@@ -282,7 +282,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
     { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] as Tab[] },
-    { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
+    { title: 'Giải trí & Video', ids: ['youtube', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] as Tab[] },
