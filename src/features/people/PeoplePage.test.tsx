@@ -33,12 +33,14 @@ afterEach(cleanup)
 describe('PeoplePage', () => {
   it('hiện danh sách người kèm chữ cái đầu', async () => {
     render(<PeoplePage />)
+    await userEvent.click(screen.getByRole('button', { name: /Người thân/ }))
     expect(await screen.findByText('Nguyễn Thuỳ Linh')).toBeInTheDocument()
     expect(screen.getByText('NL')).toBeInTheDocument()
   })
 
   it('lọc theo ô tìm kiếm', async () => {
     render(<PeoplePage />)
+    await userEvent.click(screen.getByRole('button', { name: /Người thân/ }))
     await screen.findByText('Nguyễn Thuỳ Linh')
     await userEvent.type(screen.getByLabelText('Tìm theo tên'), 'minh')
     expect(screen.queryByText('Nguyễn Thuỳ Linh')).not.toBeInTheDocument()
@@ -54,12 +56,14 @@ describe('PeoplePage', () => {
 
   it('hiện chip nhóm của từng người', async () => {
     render(<PeoplePage />)
+    await userEvent.click(screen.getByRole('button', { name: /Người thân/ }))
     expect((await screen.findAllByText('Gia đình')).length).toBeGreaterThan(0)
     expect((await screen.findAllByText('Bạn bè')).length).toBeGreaterThan(0)
   })
 
   it('lọc theo nhóm', async () => {
     render(<PeoplePage />)
+    await userEvent.click(screen.getByRole('button', { name: /Người thân/ }))
     await screen.findByText('Minh')
     const buttons = screen.getAllByRole('button', { name: 'Bạn bè' })
     await userEvent.click(buttons[0])
@@ -69,7 +73,9 @@ describe('PeoplePage', () => {
 
   it('mở màn chi tiết khi bấm vào một người', async () => {
     render(<PeoplePage />)
+    await userEvent.click(screen.getByRole('button', { name: /Người thân/ }))
     await userEvent.click(await screen.findByText('Minh'))
     expect(await screen.findByLabelText('Thêm sở thích')).toBeInTheDocument()
   })
 })
+

@@ -13,7 +13,9 @@ import { DualCalendarDate } from './DualCalendarDate'
 import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
+import { SharedActivityTab } from './SharedActivityTab'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
+
 
 /** Sinh nhật sắp tới của một người, để hiện trên thẻ. */
 function birthdayInfo(occasions: PersonOccasion[], personId: string) {
@@ -42,7 +44,9 @@ export function PeoplePage() {
     rejectPartnerInvitation,
   } = usePeopleData()
 
+  const [mainTab, setMainTab] = useState<'OCCASIONS' | 'SHARED' | 'PEOPLE'>('OCCASIONS')
   const [selected, setSelected] = useState<Person | null>(null)
+
   const [search, setSearch] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [groupFilter, setGroupFilter] = useState<PersonGroup | 'ALL'>('ALL')
@@ -75,7 +79,8 @@ export function PeoplePage() {
   }, [])
 
   const openForm = useCallback(() => setFormOpen(true), [])
-  useHeaderAction('Thêm người', openForm)
+  useHeaderAction(mainTab === 'PEOPLE' ? 'Thêm người' : 'Thêm', openForm)
+
 
   const filtered = useMemo(
     () =>
@@ -194,193 +199,313 @@ export function PeoplePage() {
 
   return (
     <section className="people-page">
-      <div className="people-search">
-        <Search size={17} />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm theo tên…"
-          aria-label="Tìm theo tên"
-        />
+      {/* 3 Tab chính: Kỷ niệm (Đầu tiên), Xem chung (Mới), Người thân quen */}
+      <div
+        className="people-main-nav"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '8px',
+          marginBottom: '18px',
+          background: 'var(--card-bg)',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '4px',
+        }}
+      >
         <button
           type="button"
-          className={'people-filter-toggle' + (groupFilter !== 'ALL' ? ' active' : '')}
-          aria-label="Lọc theo nhóm"
-          aria-expanded={filterOpen}
-          onClick={() => setFilterOpen((v) => !v)}
+          onClick={() => setMainTab('OCCASIONS')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            borderRadius: '12px',
+            border: 'none',
+            background: mainTab === 'OCCASIONS' ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
+            color: mainTab === 'OCCASIONS' ? '#ffffff' : 'var(--text-muted)',
+            fontWeight: 800,
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
         >
-          <SlidersHorizontal size={17} />
+          <CalendarHeart size={16} /> Kỷ niệm
+          {upcomingCount > 0 && (
+            <span
+              style={{
+                fontSize: '0.72rem',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                background: mainTab === 'OCCASIONS' ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
+                color: mainTab === 'OCCASIONS' ? '#fff' : '#f43f5e',
+                fontWeight: 700,
+              }}
+            >
+              {upcomingCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainTab('SHARED')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            borderRadius: '12px',
+            border: 'none',
+            background: mainTab === 'SHARED' ? 'linear-gradient(135deg, #ec4899, #831843)' : 'transparent',
+            color: mainTab === 'SHARED' ? '#ffffff' : 'var(--text-muted)',
+            fontWeight: 800,
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <HeartHandshake size={16} /> Xem chung
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainTab('PEOPLE')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            borderRadius: '12px',
+            border: 'none',
+            background: mainTab === 'PEOPLE' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            color: mainTab === 'PEOPLE' ? '#ffffff' : 'var(--text-muted)',
+            fontWeight: 800,
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Users size={16} /> Người thân
+          <span
+            style={{
+              fontSize: '0.72rem',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              background: mainTab === 'PEOPLE' ? 'rgba(255,255,255,0.25)' : 'rgba(2,132,199,0.15)',
+              color: mainTab === 'PEOPLE' ? '#fff' : '#0284c7',
+              fontWeight: 700,
+            }}
+          >
+            {people.length}
+          </span>
         </button>
       </div>
 
-      <div className="people-filters" role="group" aria-label="Lọc theo nhóm" style={{ marginBottom: 16 }}>
-        {(['ALL', ...GROUPS.map((g) => g.key), 'INVITES'] as const).map((key) => {
-          const isInvites = key === 'INVITES'
-          const labelText = isInvites
-            ? `Lời mời nhận được${pendingReceived.length ? ` (${pendingReceived.length})` : ''}`
-            : key === 'ALL'
-            ? 'Tất cả'
-            : groupLabel(key)
-          return (
-            <button
-              key={key}
-              type="button"
-              className={groupFilter === (key as string) ? 'active' : ''}
-              aria-pressed={groupFilter === (key as string)}
-              onClick={() => setGroupFilter(key as typeof groupFilter)}
-              style={isInvites && pendingReceived.length > 0 ? { borderColor: 'var(--primary)', color: 'var(--primary)', fontWeight: 700 } : undefined}
-            >
-              {labelText}
-            </button>
-          )
-        })}
-      </div>
-
-      {groupFilter === ('INVITES' as unknown) ? (
-        <div className="invite-section" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <HeartHandshake size={22} style={{ color: 'var(--primary)' }} />
-            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Danh sách Lời mời đã nhận ({pendingReceived.length})</h3>
+      {/* TAB 1: KỶ NIỆM (MẶC ĐỊNH ĐẦU TIÊN) */}
+      {mainTab === 'OCCASIONS' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="people-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+            <div className="people-stat rose">
+              <CalendarHeart size={22} />
+              <strong>{upcomingCount}</strong>
+              <span>dịp kỷ niệm sắp tới (30 ngày)</span>
+            </div>
+            <div className="people-stat cyan">
+              <Users size={22} />
+              <strong>{people.length}</strong>
+              <span>người thân đã lưu ngày sinh</span>
+            </div>
           </div>
 
-          {pendingReceived.length === 0 ? (
-            <p className="home-card-empty">Không có lời mời kết nối nào đang chờ.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {pendingReceived.map((inv) => (
-                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: '12px 16px', borderRadius: 12 }}>
-                  <span style={{ fontSize: '0.9rem' }}>
-                    Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> vừa gửi cho bạn lời mời kết nối kỷ niệm chung.
-                  </span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="primary"
-                      style={{ padding: '6px 14px', fontSize: '0.85rem' }}
-                      onClick={() => handleOpenAcceptModal(inv)}
-                    >
-                      <Check size={14} /> Chấp nhận
-                    </button>
-                    <button
-                      style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'var(--card-bg)', border: '1px solid var(--border)' }}
-                      onClick={() => handleRejectInvite(inv.id)}
-                    >
-                      <X size={14} /> Từ chối
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <OccasionsSection
+            occasions={occasions}
+            people={people}
+            onAdd={handleAddOccasion}
+            onRemove={removeOccasion}
+          />
         </div>
-      ) : (
+      )}
+
+      {/* TAB 2: XEM CHUNG (ĐỒNG HÀNH HIẾU ❤️ KIM Ý) */}
+      {mainTab === 'SHARED' && (
+        <SharedActivityTab />
+      )}
+
+      {/* TAB 3: NGƯỜI THÂN QUEN */}
+      {mainTab === 'PEOPLE' && (
         <>
-          {/* Đang có lời mời chưa chấp nhận -> hiện banner nhắc ở trên */}
-          {pendingReceived.length > 0 && (
-            <div className="invite-banner" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: 14, borderRadius: 16, marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div className="people-search">
+            <Search size={17} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm theo tên…"
+              aria-label="Tìm theo tên"
+            />
+            <button
+              type="button"
+              className={'people-filter-toggle' + (groupFilter !== 'ALL' ? ' active' : '')}
+              aria-label="Lọc theo nhóm"
+              aria-expanded={filterOpen}
+              onClick={() => setFilterOpen((v) => !v)}
+            >
+              <SlidersHorizontal size={17} />
+            </button>
+          </div>
+
+          <div className="people-filters" role="group" aria-label="Lọc theo nhóm" style={{ marginBottom: 16 }}>
+            {(['ALL', ...GROUPS.map((g) => g.key), 'INVITES'] as const).map((key) => {
+              const isInvites = key === 'INVITES'
+              const labelText = isInvites
+                ? `Lời mời nhận được${pendingReceived.length ? ` (${pendingReceived.length})` : ''}`
+                : key === 'ALL'
+                ? 'Tất cả'
+                : groupLabel(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={groupFilter === (key as string) ? 'active' : ''}
+                  aria-pressed={groupFilter === (key as string)}
+                  onClick={() => setGroupFilter(key as typeof groupFilter)}
+                  style={isInvites && pendingReceived.length > 0 ? { borderColor: 'var(--primary)', color: 'var(--primary)', fontWeight: 700 } : undefined}
+                >
+                  {labelText}
+                </button>
+              )
+            })}
+          </div>
+
+          {groupFilter === ('INVITES' as unknown) ? (
+            <div className="invite-section" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                 <HeartHandshake size={22} style={{ color: 'var(--primary)' }} />
-                <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>Bạn có {pendingReceived.length} lời mời kết nối kỷ niệm</strong>
+                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Danh sách Lời mời đã nhận ({pendingReceived.length})</h3>
               </div>
-              {pendingReceived.map((inv) => (
-                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--card-bg)', padding: '10px 14px', borderRadius: 12 }}>
-                  <span style={{ fontSize: '0.9rem' }}>
-                    Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> đã gửi lời mời cho bạn.
-                  </span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="primary"
-                      style={{ padding: '6px 12px', fontSize: '0.82rem' }}
-                      onClick={() => handleOpenAcceptModal(inv)}
-                    >
-                      <Check size={14} /> Chấp nhận
-                    </button>
-                    <button
-                      style={{ padding: '6px 12px', fontSize: '0.82rem', background: 'transparent', border: '1px solid var(--border)' }}
-                      onClick={() => handleRejectInvite(inv.id)}
-                    >
-                      <X size={14} /> Từ chối
-                    </button>
-                  </div>
+
+              {pendingReceived.length === 0 ? (
+                <p className="home-card-empty">Không có lời mời kết nối nào đang chờ.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {pendingReceived.map((inv) => (
+                    <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: '12px 16px', borderRadius: 12 }}>
+                      <span style={{ fontSize: '0.9rem' }}>
+                        Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> vừa gửi cho bạn lời mời kết nối kỷ niệm chung.
+                      </span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="primary"
+                          style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+                          onClick={() => handleOpenAcceptModal(inv)}
+                        >
+                          <Check size={14} /> Chấp nhận
+                        </button>
+                        <button
+                          style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'var(--card-bg)', border: '1px solid var(--border)' }}
+                          onClick={() => handleRejectInvite(inv.id)}
+                        >
+                          <X size={14} /> Từ chối
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Đang có lời mời chưa chấp nhận -> hiện banner nhắc ở trên */}
+              {pendingReceived.length > 0 && (
+                <div className="invite-banner" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', padding: 14, borderRadius: 16, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <HeartHandshake size={22} style={{ color: 'var(--primary)' }} />
+                    <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>Bạn có {pendingReceived.length} lời mời kết nối kỷ niệm</strong>
+                  </div>
+                  {pendingReceived.map((inv) => (
+                    <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: 'var(--card-bg)', padding: '10px 14px', borderRadius: 12 }}>
+                      <span style={{ fontSize: '0.9rem' }}>
+                        Tài khoản <strong style={{ color: 'var(--primary)' }}>{inv.sender_email}</strong> đã gửi lời mời cho bạn.
+                      </span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="primary"
+                          style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+                          onClick={() => handleOpenAcceptModal(inv)}
+                        >
+                          <Check size={14} /> Chấp nhận
+                        </button>
+                        <button
+                          style={{ padding: '6px 12px', fontSize: '0.82rem', background: 'transparent', border: '1px solid var(--border)' }}
+                          onClick={() => handleRejectInvite(inv.id)}
+                        >
+                          <X size={14} /> Từ chối
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="people-section-label">
+            <h3>Danh bạ người thân</h3>
+            <span className="count-pill">{filtered.length}</span>
+          </div>
+
+          {loading && people.length === 0 ? (
+            <p className="home-card-empty">Đang tải…</p>
+          ) : filtered.length === 0 ? (
+            <div className="people-empty">
+              <div className="icon-box" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan)' }}>
+                <UserRound size={22} />
+              </div>
+              <p>{people.length === 0 ? 'Chưa có ai ở đây cả.' : 'Không tìm thấy ai khớp bộ lọc.'}</p>
+              {people.length === 0 && (
+                <button className="primary" onClick={openForm}>
+                  <Plus size={15} /> Thêm người đầu tiên
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="person-grid">
+              {filtered.map((person) => {
+                const bd = birthdayInfo(occasions, person.id)
+                const tag = groupLabel(person.group_key)
+                return (
+                  <button key={person.id} className="person-tile" onClick={() => setSelected(person)}>
+                    {person.avatar_url ? (
+                      <img className="person-avatar" src={person.avatar_url} alt={person.name} />
+                    ) : (
+                      <div className="person-avatar" style={avatarStyle(person.name)}>
+                        {initials(person.name)}
+                      </div>
+                    )}
+                    <div className="person-body">
+                      <strong>{person.name}</strong>
+                      <span className="person-tag">{tag}</span>
+                      {bd && (
+                        <span className={'person-birthday' + (bd.soon ? ' soon' : '')}>
+                          🎂 {bd.text} {countdownLabel(bd.days)}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronRight size={16} />
+                  </button>
+                )
+              })}
             </div>
           )}
         </>
       )}
 
-      <div className="people-stats">
-        <div className="people-stat cyan">
-          <Users size={20} />
-          <strong>{people.length}</strong>
-          <span>người thân quen</span>
-        </div>
-        <div className="people-stat rose">
-          <CalendarHeart size={20} />
-          <strong>{upcomingCount}</strong>
-          <span>dịp sắp tới</span>
-        </div>
-      </div>
-
-      <OccasionsSection
-        occasions={occasions}
-        people={people}
-        onAdd={handleAddOccasion}
-        onRemove={removeOccasion}
-      />
-
-      <div className="people-section-label">
-        <h3>Người thân quen</h3>
-        <span className="count-pill">{filtered.length}</span>
-      </div>
-
-      {loading && people.length === 0 ? (
-        <p className="home-card-empty">Đang tải…</p>
-      ) : filtered.length === 0 ? (
-        <div className="people-empty">
-          <div className="icon-box" style={{ background: 'var(--cyan-bg)', color: 'var(--cyan)' }}>
-            <UserRound size={22} />
-          </div>
-          <p>{people.length === 0 ? 'Chưa có ai ở đây cả.' : 'Không tìm thấy ai khớp bộ lọc.'}</p>
-          {people.length === 0 && (
-            <button className="primary" onClick={openForm}>
-              <Plus size={15} /> Thêm người đầu tiên
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="person-grid">
-          {filtered.map((person) => {
-            const bd = birthdayInfo(occasions, person.id)
-            const tag = groupLabel(person.group_key)
-            return (
-              <button key={person.id} className="person-tile" onClick={() => setSelected(person)}>
-                {person.avatar_url ? (
-                  <img className="person-avatar" src={person.avatar_url} alt={person.name} />
-                ) : (
-                  <div className="person-avatar" style={avatarStyle(person.name)}>
-                    {initials(person.name)}
-                  </div>
-                )}
-                <div className="person-body">
-                  <strong>{person.name}</strong>
-                  {tag && <span className="group-chip">{tag}</span>}
-                  {bd ? (
-                    <span className="person-meta">
-                      🎂 {bd.text}
-                      <span className={'countdown-badge' + (bd.soon ? ' soon' : '')}>{countdownLabel(bd.days)}</span>
-                    </span>
-                  ) : (
-                    <span className="person-meta muted">Chưa có sinh nhật</span>
-                  )}
-                </div>
-                <ChevronRight size={18} color="var(--text-muted)" />
-              </button>
-            )
-          })}
-        </div>
-      )}
-
       {formOpen && (
+
         <Modal title="Thêm người" onClose={closeForm}>
           <div className="person-form">
             <label className="field">
