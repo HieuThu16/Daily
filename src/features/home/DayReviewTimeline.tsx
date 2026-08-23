@@ -1,4 +1,4 @@
-import { BookOpen, CheckCircle2, Clock, Film, Flame, Heart, ListPlus, Music, NotebookPen, Sunrise, Tv, UtensilsCrossed } from 'lucide-react'
+import { BookOpen, CheckCircle2, Clock, Film, Flame, Heart, ListPlus, Music, NotebookPen, Star, Sunrise, Tv, UtensilsCrossed } from 'lucide-react'
 import type { DayEvent } from '../../lib/dayReview'
 import { Empty } from '../shared'
 
@@ -97,8 +97,9 @@ export function DayReviewTimeline({ events, dateKey: _dateKey, isToday, onOpen }
                   gap: 10,
                   padding: '8px 12px',
                   borderRadius: 10,
-                  background: 'var(--card-bg)',
-                  border: '1px solid var(--card-border)',
+                  background: ev.is_favorite ? 'linear-gradient(135deg, var(--card-bg), rgba(245, 158, 11, 0.08))' : 'var(--card-bg)',
+                  border: ev.is_favorite ? '1.5px solid rgba(245, 158, 11, 0.55)' : '1px solid var(--card-border)',
+                  boxShadow: ev.is_favorite ? '0 2px 10px rgba(245, 158, 11, 0.12)' : 'none',
                   cursor: onOpen && baseStyle.route ? 'pointer' : 'default',
                   transition: 'transform 0.1s, border-color 0.15s',
                 }}
@@ -107,7 +108,7 @@ export function DayReviewTimeline({ events, dateKey: _dateKey, isToday, onOpen }
                   style={{
                     fontSize: '0.76rem',
                     fontWeight: 800,
-                    color: baseStyle.color,
+                    color: ev.is_favorite ? 'var(--amber)' : baseStyle.color,
                     width: 42,
                     flexShrink: 0,
                     marginTop: 2,
@@ -120,8 +121,8 @@ export function DayReviewTimeline({ events, dateKey: _dateKey, isToday, onOpen }
                 <div
                   className="icon-box icon-box-sm"
                   style={{
-                    background: baseStyle.bg,
-                    color: baseStyle.color,
+                    background: ev.is_favorite ? 'var(--amber-bg)' : baseStyle.bg,
+                    color: ev.is_favorite ? 'var(--amber)' : baseStyle.color,
                     width: 22,
                     height: 22,
                     flexShrink: 0,
@@ -132,10 +133,17 @@ export function DayReviewTimeline({ events, dateKey: _dateKey, isToday, onOpen }
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.66rem', fontWeight: 700, color: baseStyle.color, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
-                    {ev.label}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 1 }}>
+                    <span style={{ fontSize: '0.66rem', fontWeight: 700, color: baseStyle.color, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                      {ev.label}
+                    </span>
+                    {ev.is_favorite && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.65rem', fontWeight: 800, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '1px 6px', borderRadius: 10 }}>
+                        <Star size={10} fill="currentColor" /> Yêu thích
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.4, wordBreak: 'break-word', marginTop: 1 }}>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.4, wordBreak: 'break-word', marginTop: 1, fontWeight: ev.is_favorite ? 600 : 400 }}>
                     {ev.detail}
                   </div>
                 </div>

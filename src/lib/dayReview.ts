@@ -9,6 +9,7 @@ export type DayEvent = {
   kind: 'WAKE' | 'MEAL' | 'DIARY' | 'TASK_ADD' | 'TASK_DONE' | 'MEDIA' | 'MANGA'
   label: string
   detail: string
+  is_favorite?: boolean
 }
 
 const mealLabel: Record<NutritionLog['meal_slot'], string> = {
@@ -153,7 +154,13 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
     events.push({ time: m.log_time || '', kind: 'MEAL', label: mealLabel[m.meal_slot], detail: m.food_name }))
 
   entries.filter((e) => e.entry_date === date).forEach((e) =>
-    events.push({ time: e.entry_time || clock(e.created_at), kind: 'DIARY', label: 'Viết nhật ký', detail: e.content }))
+    events.push({
+      time: e.entry_time || clock(e.created_at),
+      kind: 'DIARY',
+      label: 'Viết nhật ký',
+      detail: e.content,
+      is_favorite: !!e.is_favorite,
+    }))
 
   todos.forEach((t) => {
     if (sameDay(t.created_at, date)) events.push({ time: clock(t.created_at), kind: 'TASK_ADD', label: 'Thêm việc', detail: t.title })
@@ -169,8 +176,15 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
   media.filter((m) => m.log_date === date).forEach((m) => {
     // Nếu sách đã có phiên đọc chi tiết thì không cần thẻ media chung chung
     if (m.type === 'BOOK' && todayBookLogs.length > 0) return
-    events.push({ time: m.log_time || '', kind: 'MEDIA', label: mediaLabel[m.type], detail: m.artist || m.channel ? `${m.name} — ${m.artist || m.channel}` : m.name })
+    events.push({
+      time: m.log_time || '',
+      kind: 'MEDIA',
+      label: mediaLabel[m.type],
+      detail: m.artist || m.channel ? `${m.name} — ${m.artist || m.channel}` : m.name,
+      is_favorite: !!m.is_favorite,
+    })
   })
+
 
   // 2. Dữ liệu đọc truyện (Ngôn tình, BL, Truyện H) đã được gom nhóm phiên đọc thông minh
   const logs = mangaLogs ?? getMangaReadingLogs()
@@ -194,10 +208,14 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
     })
   })
 
-  // Mục chưa có giờ vẫn giữ lại nhưng xếp cuối, để không im lặng nuốt dữ liệu.
+  // Mục gần hiện tại nhất (giờ mới nhất) xếp lên đầu, mục chưa có giờ xếp cuối cùng.
   return events.sort((a, b) => {
-    const timeA = (a.time || '').split(' - ')[0] || '99:99'
-    const timeB = (b.time || '').split(' - ')[0] || '99:99'
-    return timeA.localeCompare(timeB)
+    const timeA = (a.time || '').split(' - ')[0]
+    const timeB = (b.time || '').split(' - ')[0]
+    if (!timeA && !timeB) return 0
+    if (!timeA) return 1
+    if (!timeB) return -1
+    return timeB.localeCompare(timeA)
   })
 }
+

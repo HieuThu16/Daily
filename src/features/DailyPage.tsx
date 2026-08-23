@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Frown, Heart, History, ImagePlus, NotebookPen, Pencil, Save, Star, Trash2, Zap } from 'lucide-react'
+import { BarChart3, Clock, Film, Frown, Heart, History, ImagePlus, Link as LinkIcon, NotebookPen, Pencil, Play, Plus, Save, Search, Sparkles, Star, Trash2, Tv, Video, Youtube, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'
@@ -8,6 +8,8 @@ import { loadLocal, saveLocal } from '../lib/persistence'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { SkeletonList } from './Skeleton'
+import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
+import { getVideoWatchLogs, recordVideoWatchSession, type VideoWatchLog } from '../lib/videoWatchLog'
 
 const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
@@ -29,6 +31,46 @@ type StatsPeriod = 'week' | 'month' | 'all'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
+function formatHourFriendly(t: string): string {
+  if (!t) return ''
+  const [hStr, mStr] = t.split(':')
+  const h = parseInt(hStr, 10)
+  const m = parseInt(mStr || '0', 10)
+  if (isNaN(h)) return t
+  if (m === 0) return `${h}h`
+  return `${h}h${String(m).padStart(2, '0')}`
+}
+
+function computeTimePrefix(from: string, to: string): string {
+  if (from && to) {
+    return `Từ ${formatHourFriendly(from)} -> ${formatHourFriendly(to)}: `
+  }
+  if (from) {
+    return `Từ ${formatHourFriendly(from)}: `
+  }
+  return ''
+}
+
+function applyTimePrefixToContent(currentContent: string, newPrefix: string): string {
+  const prefixRegex = /^(?:Từ\s+)?(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2})(?:\s*->\s*(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2}))?:\s*/i
+  if (prefixRegex.test(currentContent)) {
+    return currentContent.replace(prefixRegex, newPrefix)
+  }
+  if (!currentContent.trim()) {
+    return newPrefix
+  }
+  return `${newPrefix}${currentContent}`
+}
+
+function calculateMinutesBetween(from: string, to: string): number {
+  if (!from || !to) return 30
+  const [h1, m1] = from.split(':').map(Number)
+  const [h2, m2] = to.split(':').map(Number)
+  let diff = (h2 * 60 + m2) - (h1 * 60 + m1)
+  if (diff <= 0) diff += 24 * 60
+  return Math.max(1, diff)
+}
+
 function startOfWeek(d: Date) {
   const c = new Date(d)
   c.setDate(c.getDate() - ((c.getDay() + 6) % 7)) // Monday
@@ -42,7 +84,19 @@ function isoDate(d: Date) {
 const PHOTO_BUCKET = 'daily-photos'
 
 const QUICK_KEY = 'daily-quick-phrases'
-const DEFAULT_QUICK = ['Đi làm', 'Đã đến công ty', 'Ăn sáng', 'Ăn trưa', 'Ăn tối', 'Tan làm', 'Về đến nhà', 'Đi ngủ']
+const DEFAULT_QUICK = [
+  'Chơi LQ',
+  'Xem YouTube',
+  'Lướt TikTok',
+  'Xem phim',
+  'Ăn sáng',
+  'Ăn trưa',
+  'Ăn tối',
+  'Đi làm',
+  'Học bài',
+  'Tập gym',
+  'Đi ngủ',
+]
 
 function viDate(s: string) {
   const d = new Date(s + 'T12:00:00')
@@ -75,6 +129,8 @@ export function DailyPage() {
   const [search, setSearch] = useState('')
   const [date, setDate] = useState(localDate())
   const [timeOverride, setTimeOverride] = useState('') // rỗng = dùng giờ hiện tại
+  const [timeFrom, setTimeFrom] = useState('')
+  const [timeTo, setTimeTo] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState('')
   const [editing, setEditing] = useState<Entry | null>(null)
@@ -83,6 +139,20 @@ export function DailyPage() {
   const [uploading, setUploading] = useState(false)
   const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, DEFAULT_QUICK))
   const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
+  
+  // Action Combobox Modal state
+  const [showActionModal, setShowActionModal] = useState(false)
+  const [actionSearch, setActionSearch] = useState('')
+  const [newActionInput, setNewActionInput] = useState('')
+  
+  // Video / YouTube / TV Show Modal state
+  const [showVideoModal, setShowVideoModal] = useState(false)
+  const [videoUrlInput, setVideoUrlInput] = useState('')
+  const [videoFetching, setVideoFetching] = useState(false)
+  const [fetchedVideoMeta, setFetchedVideoMeta] = useState<{ title: string; author: string; videoId: string } | null>(null)
+  const [recentVideos, setRecentVideos] = useState<VideoWatchLog[]>([])
+
+  
   const entryFileInput = useRef<HTMLInputElement>(null)
   const mentionQuery = content.match(/@([^\s@]*)$/)?.[1]?.toLowerCase() ?? ''
   const mentionPeople = peopleQuery.items.filter((p) => p.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
@@ -91,16 +161,141 @@ export function DailyPage() {
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('week')
   const [statsType, setStatsType] = useState<'ALL' | DailyType>('ALL')
 
+  // Load recent watch logs when opening video modal
+  useEffect(() => {
+    if (showVideoModal) {
+      const logs = getVideoWatchLogs()
+      setRecentVideos(logs.slice(0, 15))
+    }
+  }, [showVideoModal])
+
+  // Handle time from / time to updates
+  const handleTimeFromChange = (fromVal: string) => {
+    setTimeFrom(fromVal)
+    const newPrefix = computeTimePrefix(fromVal, timeTo)
+    setContent((prev) => applyTimePrefixToContent(prev, newPrefix))
+    if (fromVal && timeTo) {
+      setTimeOverride(`${fromVal} - ${timeTo}`)
+    } else if (fromVal) {
+      setTimeOverride(fromVal)
+    }
+  }
+
+  const handleTimeToChange = (toVal: string) => {
+    setTimeTo(toVal)
+    const newPrefix = computeTimePrefix(timeFrom, toVal)
+    setContent((prev) => applyTimePrefixToContent(prev, newPrefix))
+    if (timeFrom && toVal) {
+      setTimeOverride(`${timeFrom} - ${toVal}`)
+    } else if (timeFrom) {
+      setTimeOverride(timeFrom)
+    }
+  }
+
+  const setQuickTimeRange = (from: string, to: string) => {
+    setTimeFrom(from)
+    setTimeTo(to)
+    const newPrefix = computeTimePrefix(from, to)
+    setContent((prev) => applyTimePrefixToContent(prev, newPrefix))
+    setTimeOverride(`${from} - ${to}`)
+    showToast(`🕒 Đã đặt khung giờ: ${formatHourFriendly(from)} -> ${formatHourFriendly(to)}`)
+  }
+
+  const setRecentPastTimeRange = (minutesAgo: number) => {
+    const now = new Date()
+    const past = new Date(now.getTime() - minutesAgo * 60 * 1000)
+    const fromStr = `${String(past.getHours()).padStart(2, '0')}:${String(past.getMinutes()).padStart(2, '0')}`
+    const toStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    setQuickTimeRange(fromStr, toStr)
+  }
+
+  const clearTimeRange = () => {
+    setTimeFrom('')
+    setTimeTo('')
+    setTimeOverride('')
+    const prefixRegex = /^(?:Từ\s+)?(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2})(?:\s*->\s*(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2}))?:\s*/i
+    setContent((prev) => prev.replace(prefixRegex, ''))
+  }
+
   // ── actions ─────────────────────────────────────────────────────────────
 
   const insertQuickPhrase = (phrase: string) => {
     if (!phrase) return
     setContent((text) => {
+      const prefixRegex = /^(?:Từ\s+)?(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2})(?:\s*->\s*(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2}))?:\s*/i
+      const match = text.match(prefixRegex)
+      if (match) {
+        const prefix = match[0]
+        const rest = text.slice(prefix.length).trim()
+        if (!rest) {
+          return `${prefix}${phrase}`
+        }
+        return `${prefix}${rest}, ${phrase}`
+      }
       const trimmed = text.trim()
       return trimmed ? `${trimmed}\n${phrase}` : phrase
     })
     showToast(`⚡ Đã thêm: ${phrase}`)
   }
+
+  // Video paste & select handlers
+  const handleFetchUrlMeta = async (url: string) => {
+    const vId = youtubeVideoId(url)
+    if (!vId) {
+      setFetchedVideoMeta(null)
+      return
+    }
+    setVideoFetching(true)
+    const meta = await fetchYouTubeMeta(url)
+    setVideoFetching(false)
+    if (meta) {
+      setFetchedVideoMeta({ title: meta.title, author: meta.author, videoId: vId })
+    } else {
+      setFetchedVideoMeta({ title: 'Video YouTube', author: '', videoId: vId })
+    }
+  }
+
+  const handleSelectVideo = async (video: { videoId: string; title: string; channelName?: string; youtubeUrl?: string }) => {
+    const duration = (timeFrom && timeTo) ? calculateMinutesBetween(timeFrom, timeTo) : 30
+    const startIso = timeFrom ? new Date(`${date}T${timeFrom}:00`).toISOString() : new Date().toISOString()
+    const endIso = timeTo ? new Date(`${date}T${timeTo}:00`).toISOString() : new Date().toISOString()
+
+    // 1. Lưu vào Video Watch Log (cho YouTube / TV Show)
+    recordVideoWatchSession({
+      videoId: video.videoId,
+      title: video.title,
+      channelName: video.channelName,
+      type: 'youtube',
+      durationMinutes: duration,
+      startTime: startIso,
+      endTime: endIso,
+    })
+
+    // 2. Lưu vào bảng media nếu có kết nối Supabase
+    if (supabase) {
+      supabase.from('media').insert([{
+        type: 'YOUTUBE',
+        name: video.title,
+        channel: video.channelName || null,
+        youtube_url: video.youtubeUrl || `https://www.youtube.com/watch?v=${video.videoId}`,
+        log_date: date,
+        log_time: timeOverride || (timeFrom ? `${timeFrom}${timeTo ? ` - ${timeTo}` : ''}` : clock),
+        status: 'COMPLETED',
+        is_favorite: false,
+      }]).then(() => {})
+    }
+
+    // 3. Điền vào nội dung nhật ký
+    const channelSuffix = video.channelName ? ` (${video.channelName})` : ''
+    const diaryLine = `Xem YouTube: ${video.title}${channelSuffix}`
+    insertQuickPhrase(diaryLine)
+
+    setShowVideoModal(false)
+    setVideoUrlInput('')
+    setFetchedVideoMeta(null)
+    showToast('🎬 Đã liên kết video YouTube vào Nhật ký và Lịch sử xem!')
+  }
+
 
   const saveEntries = async () => {
     const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -315,98 +510,178 @@ export function DailyPage() {
 
           {/* Write card */}
           <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.68rem' }}>
                 {longDate(new Date(date + 'T12:00:00'))}
               </span>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} />
             </div>
-            {/* Giờ hiện tại: đây chính là giờ sẽ được lưu kèm bài viết. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: 'var(--amber-bg)', color: 'var(--amber)', fontSize: '0.82rem', fontWeight: 800 }}>
-                <Clock size={13} />
-                <input
-                  type="time"
-                  value={timeOverride || clock}
-                  onChange={(e) => setTimeOverride(e.target.value)}
-                  style={{ border: 0, background: 'transparent', color: 'inherit', font: 'inherit', padding: 0, width: 72 }}
-                />
-              </span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>giờ sẽ lưu cùng bài viết</span>
-              {timeOverride && (
-                <button type="button" className="icon small" onClick={() => setTimeOverride('')} style={{ fontSize: '0.7rem', color: 'var(--cyan)', fontWeight: 700 }}>
-                  Giờ hiện tại
-                </button>
-              )}
-            </div>
-            {/* Chọn nhanh: câu hay dùng dạng chip 1-chạm (bấm 1 lần ăn ngay) */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Zap size={13} color="var(--amber)" /> Chọn nhanh (1 chạm):
+
+            {/* Khung chọn 2 nút Giờ: Giờ từ ➔ Giờ đến */}
+            <div style={{ padding: '8px 10px', background: 'var(--bg-main)', borderRadius: 10, border: '1px solid var(--card-border)', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={13} color="var(--amber)" /> Khung giờ hoạt động:
                 </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {(timeFrom || timeTo || timeOverride) && (
+                    <button
+                      type="button"
+                      onClick={clearTimeRange}
+                      style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      Xóa giờ
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 2 nút chọn giờ: Giờ từ & Giờ đến */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--amber)' }}>Từ:</span>
+                  <input
+                    type="time"
+                    value={timeFrom}
+                    onChange={(e) => handleTimeFromChange(e.target.value)}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 72 }}
+                  />
+                </div>
+
+                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
+
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--emerald)' }}>Đến:</span>
+                  <input
+                    type="time"
+                    value={timeTo}
+                    onChange={(e) => handleTimeToChange(e.target.value)}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 72 }}
+                  />
+                </div>
+
+                {/* Hoặc dùng 1 mốc giờ cố định */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Mốc lưu:</span>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '2px 6px', borderRadius: 6 }}>
+                    {timeOverride || clock}
+                  </span>
+                </div>
+              </div>
+
+              {/* Các nút chọn nhanh khung giờ */}
+              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
                 <button
                   type="button"
-                  className="icon small"
-                  title="Sửa danh sách chọn nhanh"
-                  aria-label="Sửa danh sách chọn nhanh"
-                  onClick={() => setEditQuick(quickPhrases.join('\n'))}
-                  style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, color: 'var(--text-muted)' }}
+                  onClick={() => setRecentPastTimeRange(60)}
+                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
                 >
-                  <Pencil size={12} /> Sửa
+                  ⏱️ 1h trước ➔ Nay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecentPastTimeRange(30)}
+                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  ⏱️ 30p trước ➔ Nay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickTimeRange('08:00', '12:00')}
+                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  🌅 8h ➔ 12h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickTimeRange('13:00', '17:00')}
+                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  ☀️ 13h ➔ 17h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickTimeRange('19:00', '22:00')}
+                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  🌙 19h ➔ 22h
                 </button>
               </div>
-              <div
+            </div>
+
+            {/* Thanh chọn Hành động & Nút liên kết YouTube / TV Show */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              {/* Nút chính: Mở Modal Combobox Chọn Hành Động */}
+              <button
+                type="button"
+                onClick={() => setShowActionModal(true)}
                 style={{
-                  display: 'flex',
+                  padding: '6px 14px',
+                  borderRadius: 12,
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  border: '1.5px solid var(--amber)',
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.25))',
+                  color: 'var(--amber)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
                   gap: 6,
-                  overflowX: 'auto',
-                  paddingBottom: 4,
-                  scrollbarWidth: 'none',
-                  WebkitOverflowScrolling: 'touch',
+                  boxShadow: '0 2px 6px rgba(245, 158, 11, 0.15)',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.background = 'var(--amber)'
+                  e.currentTarget.style.color = '#fff'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.25))'
+                  e.currentTarget.style.color = 'var(--amber)'
                 }}
               >
-                {quickPhrases.map((phrase) => (
-                  <button
-                    key={phrase}
-                    type="button"
-                    onClick={() => insertQuickPhrase(phrase)}
-                    style={{
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      padding: '4px 10px',
-                      borderRadius: 16,
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      border: '1px solid var(--card-border)',
-                      background: 'var(--bg-main)',
-                      color: 'var(--text-main)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--amber)'
-                      e.currentTarget.style.background = 'var(--amber-bg)'
-                      e.currentTarget.style.color = 'var(--amber)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--card-border)'
-                      e.currentTarget.style.background = 'var(--bg-main)'
-                      e.currentTarget.style.color = 'var(--text-main)'
-                    }}
-                  >
-                    ⚡ {phrase}
-                  </button>
-                ))}
-              </div>
+                <Zap size={14} /> Hành động (Chọn nhanh)
+              </button>
+
+              {/* Nút Gắn YouTube / TV Show */}
+              <button
+                type="button"
+                onClick={() => setShowVideoModal(true)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 12,
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  border: '1.5px solid #ef4444',
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: '0 2px 6px rgba(239, 68, 68, 0.15)',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.background = '#ef4444'
+                  e.currentTarget.style.color = '#fff'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))'
+                  e.currentTarget.style.color = '#ef4444'
+                }}
+              >
+                <Youtube size={14} /> Gắn YouTube / TV Show
+              </button>
             </div>
+
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={`Viết nhật ký ${categories.find((c) => c.type === selectedType)?.title.toLowerCase()} vào đây...`}
+              placeholder={`Viết nhật ký ${categories.find((c) => c.type === selectedType)?.title.toLowerCase()} vào đây... (Ví dụ: Từ 4h -> 5h: Chơi LQ)`}
               rows={3}
               style={{ width: '100%', border: '1px solid var(--card-border)', borderRadius: 12, padding: 10, fontSize: '0.9rem', resize: 'vertical', outline: 'none', background: 'var(--card-bg)', color: 'var(--text-main)', lineHeight: 1.5, marginBottom: 8 }}
             />
@@ -782,6 +1057,291 @@ export function DailyPage() {
           </div>
         </Modal>
       )}
+
+      {/* ── MODAL: CHỌN & GẮN LINK YOUTUBE / TV SHOW VÀO NHẬT KÝ ── */}
+      {showVideoModal && (
+        <Modal title="🎬 Gắn Video YouTube / TV Show vào Nhật ký" onClose={() => { setShowVideoModal(false); setFetchedVideoMeta(null); setVideoUrlInput('') }}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              Chọn video bạn đã xem gần đây hoặc dán link YouTube. Hoạt động sẽ được tự động đồng bộ vào <strong>Lịch sử xem YouTube/TV Show</strong> và ghi vào <strong>Nhật ký</strong>!
+            </p>
+
+            {/* Khung Dán Link YouTube */}
+            <div style={{ padding: 10, background: 'var(--bg-main)', borderRadius: 10, border: '1px solid var(--card-border)' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
+                🔗 Dán link video YouTube:
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="url"
+                  placeholder="https://www.youtube.com/watch?v=... hoặc https://youtu.be/..."
+                  value={videoUrlInput}
+                  onChange={(e) => {
+                    setVideoUrlInput(e.target.value)
+                    handleFetchUrlMeta(e.target.value)
+                  }}
+                  style={{ flex: 1, padding: '7px 10px', fontSize: '0.82rem', borderRadius: 8, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)' }}
+                />
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!fetchedVideoMeta || videoFetching}
+                  onClick={() => {
+                    if (fetchedVideoMeta) {
+                      handleSelectVideo({
+                        videoId: fetchedVideoMeta.videoId,
+                        title: fetchedVideoMeta.title,
+                        channelName: fetchedVideoMeta.author,
+                        youtubeUrl: videoUrlInput.trim(),
+                      })
+                    }
+                  }}
+                  style={{ whiteSpace: 'nowrap', padding: '0 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  <Plus size={14} /> Gắn video
+                </button>
+              </div>
+
+              {videoFetching && (
+                <div style={{ fontSize: '0.74rem', color: 'var(--amber)', marginTop: 4 }}>
+                  ⏳ Đang đọc tiêu đề video…
+                </div>
+              )}
+
+              {fetchedVideoMeta && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '6px 8px', background: 'var(--card-bg)', borderRadius: 8, border: '1px solid var(--emerald)' }}>
+                  <img
+                    src={`https://img.youtube.com/vi/${fetchedVideoMeta.videoId}/hqdefault.jpg`}
+                    alt=""
+                    style={{ width: 48, height: 32, borderRadius: 4, objectFit: 'cover' }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {fetchedVideoMeta.title}
+                    </div>
+                    {fetchedVideoMeta.author && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        Kênh: {fetchedVideoMeta.author}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Danh sách video xem gần đây */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <History size={13} color="var(--primary)" /> Video đã xem gần đây:
+                </span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {recentVideos.length} video
+                </span>
+              </div>
+
+              {recentVideos.length === 0 ? (
+                <div style={{ padding: '16px 8px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)', background: 'var(--bg-main)', borderRadius: 8 }}>
+                  Chưa có lịch sử video đã xem. Hãy dán link YouTube ở trên để thêm nhanh!
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                  {recentVideos.map((v) => (
+                    <div
+                      key={v.id}
+                      onClick={() => handleSelectVideo({
+                        videoId: v.videoId,
+                        title: v.title,
+                        channelName: v.channelName,
+                        youtubeUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+                      })}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 8px',
+                        borderRadius: 8,
+                        background: 'var(--bg-main)',
+                        border: '1px solid var(--card-border)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#ef4444'
+                        e.currentTarget.style.background = 'var(--card-bg)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--card-border)'
+                        e.currentTarget.style.background = 'var(--bg-main)'
+                      }}
+                    >
+                      <img
+                        src={`https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`}
+                        alt=""
+                        loading="lazy"
+                        style={{ width: 44, height: 30, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {v.title}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {v.channelName && <span>{v.channelName}</span>}
+                          {v.durationMinutes > 0 && <span>• Đã xem ~{v.durationMinutes}p</span>}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: '#ef4444',
+                          border: 0,
+                          flexShrink: 0,
+                        }}
+                      >
+                        Chọn
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" onClick={() => setShowVideoModal(false)}>
+                Đóng
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL: COMBOBOX CHỌN HÀNH ĐỘNG ── */}
+      {showActionModal && (
+        <Modal title="⚡ Chọn hành động nhanh" onClose={() => { setShowActionModal(false); setActionSearch('') }}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {/* Ô tìm kiếm hành động (Combobox search) */}
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="🔍 Tìm hành động hoặc gõ hành động mới…"
+                value={actionSearch}
+                onChange={(e) => setActionSearch(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  fontSize: '0.86rem',
+                  border: '1.5px solid var(--amber)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                }}
+              />
+            </div>
+
+            {/* Nếu tìm kiếm không khớp và có chữ -> cho phép thêm / dùng ngay */}
+            {actionSearch.trim() && !quickPhrases.some((p) => p.toLowerCase() === actionSearch.trim().toLowerCase()) && (
+              <div
+                onClick={() => {
+                  const phrase = actionSearch.trim()
+                  insertQuickPhrase(phrase)
+                  setShowActionModal(false)
+                  setActionSearch('')
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  background: 'var(--amber-bg)',
+                  color: 'var(--amber)',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  border: '1px dashed var(--amber)',
+                }}
+              >
+                <Plus size={14} /> Dùng ngay hành động mới: "{actionSearch.trim()}"
+              </div>
+            )}
+
+            {/* Danh sách các hành động có sẵn */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, maxHeight: 280, overflowY: 'auto', padding: '2px 0' }}>
+              {quickPhrases
+                .filter((phrase) => !actionSearch.trim() || phrase.toLowerCase().includes(actionSearch.trim().toLowerCase()))
+                .map((phrase) => (
+                  <button
+                    key={phrase}
+                    type="button"
+                    onClick={() => {
+                      insertQuickPhrase(phrase)
+                      setShowActionModal(false)
+                      setActionSearch('')
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: '1px solid var(--card-border)',
+                      background: 'var(--bg-main)',
+                      color: 'var(--text-main)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--amber)'
+                      e.currentTarget.style.background = 'var(--amber-bg)'
+                      e.currentTarget.style.color = 'var(--amber)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--card-border)'
+                      e.currentTarget.style.background = 'var(--bg-main)'
+                      e.currentTarget.style.color = 'var(--text-main)'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.88rem' }}>⚡</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{phrase}</span>
+                  </button>
+                ))}
+            </div>
+
+            {/* Tùy chỉnh danh sách */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTop: '1px solid var(--card-border)', marginTop: 4 }}>
+              <button
+                type="button"
+                className="icon small"
+                onClick={() => {
+                  setShowActionModal(false)
+                  setEditQuick(quickPhrases.join('\n'))
+                }}
+                style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <Pencil size={12} /> Chỉnh sửa danh sách hành động
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowActionModal(false)}
+                style={{ fontSize: '0.8rem' }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }
+
+

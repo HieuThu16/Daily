@@ -6,7 +6,7 @@ const date = '2026-08-14'
 const at = (hhmm: string) => new Date(`${date}T${hhmm}:00`).toISOString()
 
 describe('buildDayReview', () => {
-  it('gom mọi nguồn của đúng ngày và xếp theo giờ tăng dần', () => {
+  it('gom mọi nguồn của đúng ngày và xếp theo giờ gần hiện tại nhất lên trên (giảm dần)', () => {
     const events = buildDayReview({
       date,
       sleeps: [{ id: 's', sleep_start: '23:30', sleep_end: '07:00', duration_minutes: 450, log_date: date }],
@@ -23,12 +23,12 @@ describe('buildDayReview', () => {
     })
 
     expect(events.map((e) => [e.time, e.kind])).toEqual([
-      ['07:00', 'WAKE'],
-      ['09:00', 'TASK_ADD'],
-      ['12:00', 'MEAL'],
-      ['17:00', 'TASK_DONE'],
-      ['20:15', 'DIARY'],
       ['22:00', 'MEDIA'],
+      ['20:15', 'DIARY'],
+      ['17:00', 'TASK_DONE'],
+      ['12:00', 'MEAL'],
+      ['09:00', 'TASK_ADD'],
+      ['07:00', 'WAKE'],
     ])
   })
 
@@ -83,16 +83,16 @@ describe('buildDayReview', () => {
 
     expect(events).toEqual([
       {
-        time: '14:30',
-        kind: 'MANGA',
-        label: 'Đọc truyện BL',
-        detail: 'Dạ Ký — Chương 5 (Đã đọc xong)',
-      },
-      {
         time: '21:00',
         kind: 'MANGA',
         label: 'Đọc truyện Ngôn tình',
         detail: 'Vụng Trộm Không Thể Giấu — Chương 12',
+      },
+      {
+        time: '14:30',
+        kind: 'MANGA',
+        label: 'Đọc truyện BL',
+        detail: 'Dạ Ký — Chương 5 (Đã đọc xong)',
       },
     ])
   })
@@ -173,16 +173,16 @@ describe('buildDayReview', () => {
 
     expect(events).toEqual([
       {
-        time: '14:00 - 14:30',
-        kind: 'MANGA',
-        label: 'Đọc truyện H (18+)',
-        detail: 'Tôi Được Giao Nhiệm Vụ — Đã đọc 4 chương (Chương 1 → 4) trong ~30 phút (Đã đọc xong)',
-      },
-      {
         time: '15:00 - 15:35',
         kind: 'MEDIA',
         label: 'Xem YouTube',
         detail: 'Tập 52 - 2 Ngày 1 Đêm — Dong Tay Promotion (Đã xem 35 phút)',
+      },
+      {
+        time: '14:00 - 14:30',
+        kind: 'MANGA',
+        label: 'Đọc truyện H (18+)',
+        detail: 'Tôi Được Giao Nhiệm Vụ — Đã đọc 4 chương (Chương 1 → 4) trong ~30 phút (Đã đọc xong)',
       },
     ])
   })
