@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  BookOpen, Music, Play, Flame, RefreshCw, ExternalLink
+  BookOpen, Music, Play, Flame, RefreshCw, ExternalLink,
+  Headphones, PlusCircle, Sparkles, Heart
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { localDate } from '../../lib/date';
@@ -9,6 +10,7 @@ import { useOptionalAudioPlayer } from '../library/AudioPlayerContext';
 import { useToast } from '../ToastContext';
 import { DatePager } from '../home/DatePager';
 import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
+import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
 import type { Media, Person } from '../../types';
 
 export interface SharedActivityItem {
@@ -16,6 +18,7 @@ export interface SharedActivityItem {
   user_id?: string;
   userName: 'Hiếu' | 'Kim Ý' | string;
   type: 'BOOK' | 'BL' | 'H_MANGA' | 'MUSIC';
+  actionType: 'READING' | 'ADDED_MUSIC' | 'LISTENED_MUSIC' | 'ADDED_BOOK' | 'ADDED_MANGA';
   title: string;
   subtitle?: string;
   slug?: string;
@@ -28,6 +31,7 @@ export interface SharedActivityItem {
   audioUrl?: string;
   artist?: string;
   logDate: string;
+  logTime?: string;
   updatedAt: string;
   rawMedia?: any;
 }
@@ -69,6 +73,21 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
   const fetchActivities = async () => {
     setLoading(true);
     try {
+      // 0. Tạo từ điển bìa truyện H từ danh sách truyện sẵn có
+      const mangaCoverMap = new Map<string, { cover: string; title: string }>();
+      try {
+        const customManga = getCustomHMangaList();
+        for (const m of customManga) {
+          if (m.slug) mangaCoverMap.set(m.slug, { cover: m.cover || '', title: m.title || m.slug });
+        }
+        const hList = await fetchHMangaList();
+        for (const m of hList) {
+          if (m.slug && !mangaCoverMap.has(m.slug)) {
+            mangaCoverMap.set(m.slug, { cover: m.cover || '', title: m.title || m.slug });
+          }
+        }
+      } catch {}
+
       const itemsMap = new Map<string, SharedActivityItem>();
 
       // 1. Fetch Media Items từ Supabase
@@ -83,8 +102,9 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         if (mediaRows) {
           for (const m of mediaRows) {
             const rowDate = m.log_date || (m.updated_at ? m.updated_at.split('T')[0] : '');
+            const logTime = m.log_time || (m.updated_at ? m.updated_at.split('T')[1]?.slice(0, 5) : '');
             
-            // Xác định tên người đọc/nghe
+            // Xác định tên người
             let userName = 'Hiếu';
             if (m.user_id && isKimY(m.user_id)) {
               userName = 'Kim Ý';
@@ -92,13 +112,12 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
               userName = 'Kim Ý';
             }
 
-            // A. Sách: Chỉ tính khi có tiến độ thực tế (trang > 1 hoặc tiến độ > 5% hoặc hoàn thành)
+            // A. Sách
             if (m.type === 'BOOK') {
               const current = m.current_page || m.current_chapter || 0;
               const total = m.total_pages || m.total_chapters || 100;
               const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : undefined;
 
-              // Điều kiện: Chỉ tính nếu đã đọc trang > 1 hoặc pct >= 5% hoặc status = COMPLETED/IN_PROGRESS
               const isActuallyReading = current > 1 || (pct && pct >= 5) || m.status === 'COMPLETED' || m.status === 'IN_PROGRESS';
               if (isActuallyReading) {
                 const key = `${userName}::BOOK::${m.name || m.id}`;
@@ -107,6 +126,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                   user_id: m.user_id,
                   userName,
                   type: 'BOOK',
+                  actionType: 'READING',
                   title: m.name || 'Sách',
                   subtitle: m.author || m.description || '',
                   cover: m.cover_url || m.cover || '',
@@ -115,13 +135,14 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                   currentChapterOrPage: current,
                   totalChaptersOrPages: total,
                   logDate: rowDate,
+                  logTime: logTime,
                   updatedAt: m.updated_at || m.created_at || '',
                   rawMedia: m
                 });
               }
             }
 
-            // B. Truyện H / BL: Chỉ tính khi đã đọc thực tế (> 5 phút hoặc chapter > 1 hoặc pct >= 5%)
+            // B. Truyện H / BL
             if (m.type === 'STORY' || m.type === 'MANGA') {
               const isBL = m.genre === 'BL' || m.source === 'bl';
               const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : 'H_MANGA';
@@ -131,7 +152,12 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
               const pct = total ? Math.min(100, Math.round((current / total) * 100)) : undefined;
               const slug = m.channel || m.slug || m.name || '';
 
-              // Điều kiện: Không tính nếu chỉ bấm vào 1 giây (phải có chapter > 1 hoặc pct >= 5% hoặc in_progress)
+              // Tìm ảnh bìa chuẩn từ từ điển hoặc dữ liệu dòng
+              let coverUrl = m.cover_url || m.cover || '';
+              if (!coverUrl && slug && mangaCoverMap.has(slug)) {
+                coverUrl = mangaCoverMap.get(slug)?.cover || '';
+              }
+
               const isActuallyReading = current > 1 || (pct && pct >= 5) || m.status === 'IN_PROGRESS' || m.status === 'COMPLETED';
               if (isActuallyReading) {
                 const key = `${userName}::${storyType}::${slug}`;
@@ -140,36 +166,47 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                   user_id: m.user_id,
                   userName,
                   type: storyType,
-                  title: m.name || m.title || 'Truyện tranh',
+                  actionType: 'READING',
+                  title: m.name || m.title || (slug && mangaCoverMap.get(slug)?.title) || 'Truyện tranh',
                   subtitle: m.channel ? `Bộ: ${m.channel}` : m.author || '',
                   slug: slug,
-                  cover: m.cover_url || m.cover || '',
+                  cover: coverUrl,
                   progressText: `Chapter ${current}${total ? ` / ${total}` : ''}${pct ? ` (${pct}%)` : ''}`,
                   progressPercent: pct,
                   currentChapterOrPage: current,
                   totalChaptersOrPages: total,
                   logDate: rowDate,
+                  logTime: logTime,
                   updatedAt: m.updated_at || m.created_at || '',
                   rawMedia: m
                 });
               }
             }
 
-            // C. Nhạc MP3: Có file âm thanh
+            // C. Nhạc MP3: Phân biệt rõ "Mới thêm nhạc" vs "Vừa nghe nhạc trên web"
             if (m.type === 'MUSIC' && (m.url?.endsWith('.mp3') || m.url?.includes('audio') || m.url?.includes('supabase') || m.url?.includes('mp3') || m.audio_url || m.status === 'COMPLETED')) {
+              // Nếu có log_time hoặc updated_at khác created_at -> Vừa nghe nhạc
+              // Nếu mới tạo trong ngày và log_time trống -> Mới thêm nhạc vào kho
+              const isNewlyAdded = !m.log_time && m.created_at && m.updated_at && Math.abs(new Date(m.updated_at).getTime() - new Date(m.created_at).getTime()) < 60000;
+              const actionType: 'ADDED_MUSIC' | 'LISTENED_MUSIC' = isNewlyAdded ? 'ADDED_MUSIC' : 'LISTENED_MUSIC';
+
               const key = `${userName}::MUSIC::${m.name || m.id}`;
               itemsMap.set(key, {
                 id: `music-${m.id}`,
                 user_id: m.user_id,
                 userName,
                 type: 'MUSIC',
+                actionType: actionType,
                 title: m.name || 'Bài hát',
                 subtitle: m.artist || 'Nghệ sĩ',
                 cover: m.cover_url || m.cover || '',
-                progressText: m.log_time ? `Đã nghe lúc ${m.log_time}` : 'Đã nghe trong ngày',
+                progressText: actionType === 'ADDED_MUSIC' 
+                  ? 'Vừa thêm vào kho nhạc' 
+                  : (m.log_time ? `Nghe lúc ${m.log_time}` : 'Vừa nghe trên web'),
                 audioUrl: m.audio_url || m.url,
                 artist: m.artist,
                 logDate: rowDate,
+                logTime: logTime,
                 updatedAt: m.updated_at || m.created_at || '',
                 rawMedia: m
               });
@@ -178,7 +215,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         }
       }
 
-      // 2. Bổ sung từ Manga Reading Logs (Có theo dõi thời gian đọc thực tế > 5 phút)
+      // 2. Bổ sung từ Manga Reading Logs (Gắn bìa chuẩn từ từ điển manga)
       try {
         const localMangaLogs = getMangaReadingLogs();
         for (const log of localMangaLogs) {
@@ -188,22 +225,25 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
           const userName = isMeHieu ? 'Hiếu' : 'Kim Ý';
           const key = `${userName}::${storyType}::${log.mangaSlug}`;
 
-          // Chỉ tính nếu đọc >= 5 phút hoặc chapter > 1
           const duration = log.durationMinutes || 0;
           if (duration >= 5 || log.chapterNumber > 1) {
+            const coverUrl = mangaCoverMap.get(log.mangaSlug)?.cover || '';
             const existing = itemsMap.get(key);
             if (!existing || new Date(log.readAt).getTime() > new Date(existing.updatedAt).getTime()) {
               itemsMap.set(key, {
                 id: `manga-log-${log.id}`,
                 userName,
                 type: storyType,
-                title: log.mangaTitle || log.mangaSlug,
+                actionType: 'READING',
+                title: log.mangaTitle || (mangaCoverMap.get(log.mangaSlug)?.title) || log.mangaSlug,
                 subtitle: `Đã đọc ${duration > 0 ? `${duration} phút` : ''} · ${log.chapterName || `Chapter ${log.chapterNumber}`}`,
                 slug: log.mangaSlug,
+                cover: coverUrl || existing?.cover || '',
                 progressText: `Chapter ${log.chapterNumber}${duration > 0 ? ` (${duration} phút)` : ''}`,
                 currentChapterOrPage: log.chapterNumber,
                 durationMinutes: duration,
                 logDate: log.log_date,
+                logTime: log.log_time,
                 updatedAt: log.readAt,
               });
             }
@@ -211,7 +251,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         }
       } catch {}
 
-      // 3. Chuyển map thành mảng và sắp xếp mới nhất lên đầu
+      // 3. Chuyển map thành danh sách và sắp xếp mới nhất lên đầu
       const list = Array.from(itemsMap.values());
       list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
       setActivities(list);
@@ -408,10 +448,10 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         >
           <span style={{ fontSize: '2rem', display: 'block', marginBottom: '8px' }}>📖</span>
           <strong style={{ display: 'block', fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '4px' }}>
-            Không có hoạt động đọc hoặc nghe nhạc trong ngày này
+            Không có hoạt động nào trong ngày này
           </strong>
           <p style={{ fontSize: '0.82rem', margin: 0 }}>
-            Tiến độ chỉ hiển thị khi đã đọc thực sự (trên 5 phút hoặc qua các chapter).
+            Tiến độ chỉ hiển thị khi đã đọc thực sự (trên 5 phút) hoặc vừa thêm/nghe nhạc trên web.
           </p>
         </div>
       ) : (
@@ -419,7 +459,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
           {filteredActivities.map((act) => {
             const isStory = act.type === 'H_MANGA' || act.type === 'BL';
             const isH = act.type === 'H_MANGA';
-            const timeFormatted = formatTimeAgo(act.updatedAt);
+            const timeFormatted = act.logTime || formatTimeAgo(act.updatedAt);
 
             return (
               <div
@@ -438,19 +478,21 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                 }}
                 className="shared-activity-card"
               >
-                {/* Ảnh bìa */}
+                {/* Ảnh bìa: Nhỏ gọn, vừa khít khung (60x80px) với bo góc đẹp mắt */}
                 <div
                   style={{
                     width: '60px',
-                    height: '78px',
+                    height: '80px',
                     borderRadius: '10px',
-                    background: 'var(--border)',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
+                    border: '1px solid var(--border)',
                     overflow: 'hidden',
                     flexShrink: 0,
                     position: 'relative',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.12)'
                   }}
                 >
                   {act.cover ? (
@@ -459,12 +501,16 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                       alt={act.title}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       loading="lazy"
+                      onError={(e) => {
+                        // Fallback icon khi link ảnh lỗi
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   ) : (
-                    <div style={{ color: 'var(--text-muted)' }}>
-                      {act.type === 'BOOK' && <BookOpen size={22} />}
-                      {act.type === 'MUSIC' && <Music size={22} />}
-                      {isStory && <Flame size={22} color="#f43f5e" />}
+                    <div style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {act.type === 'BOOK' && <BookOpen size={24} color="#8b5cf6" />}
+                      {act.type === 'MUSIC' && <Music size={24} color="#10b981" />}
+                      {isStory && <Flame size={24} color="#f43f5e" />}
                     </div>
                   )}
                 </div>
@@ -472,8 +518,9 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                 {/* Nội dung thông tin */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
-                    {/* Hàng badge */}
+                    {/* Hàng badge hành động rõ ràng: Mới thêm nhạc / Mới nghe nhạc / Đang đọc */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                      {/* Badge Người */}
                       <span
                         style={{
                           fontSize: '0.72rem',
@@ -487,6 +534,44 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                         {act.userName}
                       </span>
 
+                      {/* Phân biệt rõ: MỚI THÊM NHẠC vs VỪA NGHE NHẠC TRÊN WEB */}
+                      {act.type === 'MUSIC' && act.actionType === 'ADDED_MUSIC' && (
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                            color: '#ffffff',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <PlusCircle size={10} /> Mới thêm nhạc
+                        </span>
+                      )}
+
+                      {act.type === 'MUSIC' && act.actionType === 'LISTENED_MUSIC' && (
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                            color: '#ffffff',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <Headphones size={10} /> Mới nghe trên web
+                        </span>
+                      )}
+
+                      {/* Đang đọc truyện H */}
                       {isH && (
                         <span
                           style={{
@@ -502,6 +587,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                         </span>
                       )}
 
+                      {/* Đang đọc BL */}
                       {act.type === 'BL' && (
                         <span
                           style={{
@@ -517,6 +603,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                         </span>
                       )}
 
+                      {/* Đang đọc Sách */}
                       {act.type === 'BOOK' && (
                         <span
                           style={{
@@ -528,25 +615,11 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                             color: '#8b5cf6'
                           }}
                         >
-                          📚 Sách
+                          📚 Đang đọc Sách
                         </span>
                       )}
 
-                      {act.type === 'MUSIC' && (
-                        <span
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: 'rgba(16, 185, 129, 0.15)',
-                            color: '#10b981'
-                          }}
-                        >
-                          🎵 MP3
-                        </span>
-                      )}
-
+                      {/* Thời gian thực hiện */}
                       {timeFormatted && (
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
                           {timeFormatted}
@@ -554,7 +627,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                       )}
                     </div>
 
-                    {/* Tiêu đề */}
+                    {/* Tiêu đề tác phẩm */}
                     <div
                       style={{
                         fontSize: '0.9rem',
@@ -586,28 +659,36 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                     )}
                   </div>
 
-                  {/* Tiến độ / Nút nghe */}
+                  {/* Tiến độ hoặc Nút nghe nhạc */}
                   <div style={{ marginTop: '5px' }}>
                     {act.type === 'MUSIC' ? (
-                      <button
-                        type="button"
-                        onClick={(e) => handlePlayMusic(e, act)}
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: 'linear-gradient(135deg, #10b981, #059669)',
-                          color: '#ffffff',
-                          fontSize: '0.76rem',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px'
-                        }}
-                      >
-                        <Play size={11} fill="#ffffff" /> Nghe bài này
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontSize: '0.74rem', color: act.actionType === 'ADDED_MUSIC' ? '#0284c7' : '#10b981', fontWeight: 700 }}>
+                          {act.actionType === 'ADDED_MUSIC' 
+                            ? `${act.userName} vừa thêm vào kho` 
+                            : `${act.userName} vừa nghe trên web`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handlePlayMusic(e, act)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                            color: '#ffffff',
+                            fontSize: '0.76rem',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)'
+                          }}
+                        >
+                          <Play size={11} fill="#ffffff" /> Nghe bài này
+                        </button>
+                      </div>
                     ) : (
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '2px' }}>
