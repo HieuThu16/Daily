@@ -127,9 +127,9 @@ export default defineConfig(({ mode }) => {
       apiDevServer(),
       versionPlugin(),
       VitePWA({
-
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         // pdfjs + jszip chỉ cần khi nhập sách và việc nhập luôn cần mạng (lưu lên Supabase).
+
         // Không precache để cài PWA không phải tải thêm ~1.8MB.
         // workbox tự sinh sw.js nên không sửa thẳng được; nạp thêm file xử lý Web Push
         // bằng importScripts thay vì đổi cả dự án sang chế độ injectManifest.
