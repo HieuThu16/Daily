@@ -21,6 +21,7 @@ import { RecentCrawledModal } from './RecentCrawledModal';
 import { lockH } from './HPinGate';
 import { useScrollRestore } from '../shared';
 import { useToast } from '../ToastContext';
+import { getCachedCoverBlobUrl, fetchAndCacheCover } from '../../lib/mangaCoverCache';
 import './ngontinhManga.css';
 
 type MainTab = 'all' | 'history' | 'favorites';
@@ -51,12 +52,27 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
   const [imgError, setImgError] = useState<boolean>(false);
 
   useEffect(() => {
+    let isMounted = true;
     const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
     const valid = (isValidHMangaCover(manga.cover) ? manga.cover : ch1) || manga.cover || '';
-    setCurrentCover(valid);
-    setImgError(false);
-    setImgLoaded(false);
-  }, [manga.cover, manga.chapters]);
+
+    // Check instant local memory / IndexedDB blob cache for 0ms loading
+    void getCachedCoverBlobUrl(manga.slug).then((cachedBlob) => {
+      if (isMounted) {
+        if (cachedBlob) {
+          setCurrentCover(cachedBlob);
+          setImgLoaded(true);
+        } else {
+          setCurrentCover(valid);
+          setImgError(false);
+          setImgLoaded(false);
+          if (valid) void fetchAndCacheCover(valid, manga.slug);
+        }
+      }
+    });
+
+    return () => { isMounted = false; };
+  }, [manga.slug, manga.cover, manga.chapters]);
 
   const sortedChs = useMemo(() => {
     return [...(manga.chapters || [])].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
@@ -67,6 +83,7 @@ const HMangaCardItem: React.FC<CardProps> = React.memo(({
     const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
     if (ch1 && currentCover !== ch1) {
       setCurrentCover(ch1);
+      void fetchAndCacheCover(ch1, manga.slug);
     } else {
       setImgError(true);
       setImgLoaded(true);

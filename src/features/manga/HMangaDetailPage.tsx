@@ -20,7 +20,9 @@ import {
 } from './hMangaService';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
+import { getCachedCoverBlobUrl, fetchAndCacheCover } from '../../lib/mangaCoverCache';
 import './ngontinhDetail.css';
+
 
 export const HMangaDetailPage: React.FC = () => {
   useHideHeader(true);
@@ -74,9 +76,21 @@ export const HMangaDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (manga) {
+      let isMounted = true;
       const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
       const valid = (isValidHMangaCover(manga.cover) ? manga.cover : ch1) || manga.cover || '';
-      setDetailCover(valid);
+      
+      void getCachedCoverBlobUrl(manga.slug).then((cachedBlob) => {
+        if (isMounted) {
+          if (cachedBlob) {
+            setDetailCover(cachedBlob);
+          } else {
+            setDetailCover(valid);
+            if (valid) void fetchAndCacheCover(valid, manga.slug);
+          }
+        }
+      });
+      return () => { isMounted = false; };
     }
   }, [manga]);
 
@@ -84,8 +98,10 @@ export const HMangaDetailPage: React.FC = () => {
     const ch1 = getChapterImageUrl(manga?.chapters?.[0]?.images?.[0]);
     if (ch1 && detailCover !== ch1) {
       setDetailCover(ch1);
+      if (manga?.slug) void fetchAndCacheCover(ch1, manga.slug);
     }
   };
+
 
   const isFav = slug ? favorites.includes(slug) : false;
   const isFollowed = slug ? follows.includes(slug) : false;

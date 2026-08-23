@@ -1,5 +1,6 @@
 import type { BLManga as HManga, ReadingProgress, MangaChapter, ChapterImage } from '../../types/manga';
 import { supabase } from '../../lib/supabase';
+import { uploadCoverToSupabase } from '../../lib/mangaCoverCache';
 
 const FAVORITES_KEY = 'daily_h_favorites';
 const HISTORY_KEY = 'daily_h_history';
@@ -61,13 +62,31 @@ export function saveCustomHManga(manga: HManga): void {
       try {
         const user = (await supabase.auth.getUser())?.data?.user;
         if (!user) return;
+
+        let finalCover = cleanManga.cover || null;
+        if (finalCover && !finalCover.includes('supabase.co/storage/v1/object/public/')) {
+          const cloudCover = await uploadCoverToSupabase(cleanManga.slug, finalCover);
+          if (cloudCover) {
+            finalCover = cloudCover;
+            cleanManga.cover = cloudCover;
+            try {
+              const currentList = getCustomHMangaList();
+              const mIdx = currentList.findIndex(m => m.slug === cleanManga.slug);
+              if (mIdx >= 0) {
+                currentList[mIdx].cover = cloudCover;
+                localStorage.setItem(CUSTOM_H_MANGA_KEY, JSON.stringify(currentList));
+              }
+            } catch {}
+          }
+        }
+
         const payload = {
           user_id: user.id,
           type: 'STORY',
           name: cleanManga.title,
           author: cleanManga.author || null,
           genre: cleanManga.genres?.join(', ') || null,
-          cover_url: cleanManga.cover || null,
+          cover_url: finalCover,
           channel: cleanManga.slug,
           description: JSON.stringify(cleanManga),
           is_public: true,
@@ -95,6 +114,7 @@ export function saveCustomHManga(manga: HManga): void {
     })();
   }
 }
+
 
 export async function fetchHMangaList(): Promise<HManga[]> {
   const customList = getCustomHMangaList();
