@@ -251,8 +251,13 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         }
       } catch {}
 
-      // 3. Chuyển map thành danh sách và sắp xếp mới nhất lên đầu
-      const list = Array.from(itemsMap.values());
+      // 3. Chuyển map thành danh sách, chỉ lấy các hoạt động từ 19:00 ngày 23/08/2026 trở đi
+      const ACTIVITY_START_CUTOFF = new Date('2026-08-23T19:00:00+07:00').getTime();
+      const list = Array.from(itemsMap.values()).filter(it => {
+        const itemTime = new Date(it.updatedAt || it.logDate).getTime();
+        return !isNaN(itemTime) && itemTime >= ACTIVITY_START_CUTOFF;
+      });
+
       list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
       setActivities(list);
     } catch (err) {
@@ -261,6 +266,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     void fetchActivities();
