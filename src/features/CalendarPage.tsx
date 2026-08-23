@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { BookMarked, BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Film, Gift, Music, NotebookPen, Plus, Tv, Wallet, X } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Film, Gift, Music, NotebookPen, Plus, Tv, Wallet, X, Youtube } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { localDate } from '../lib/date'
 import { formatMoney } from '../lib/money'

@@ -132,6 +132,9 @@ export type Media = {
   youtube_url?: string | null
   audio_url?: string | null
   current_chapter?: number | null
+  total_chapters?: number | null
+  current_page?: number | null
+  total_pages?: number | null
   start_date?: string | null
   end_date?: string | null
   log_date?: string | null

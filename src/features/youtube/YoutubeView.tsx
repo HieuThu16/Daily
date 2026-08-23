@@ -955,7 +955,7 @@ export function YoutubeView() {
           ) : (
             /* CHẾ ĐỘ XEM THEO DANH SÁCH VIDEO */
             <div className="tv-videos-flow" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-              {filteredSavedVideos.slice(0, videoList.shown).map((video) => {
+              {filteredSavedVideos.slice(0, videoList.visibleCount).map((video) => {
                 const isWatched = watchedSet.has(video.video_id)
                 const isInProgress = inProgressSet.has(video.video_id)
                 const st: VideoStatus = isWatched ? 'COMPLETED' : isInProgress ? 'IN_PROGRESS' : 'UNWATCHED'

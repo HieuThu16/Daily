@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, Sparkles, Tv, UserRound, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
@@ -49,19 +49,8 @@ import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaU
 
 import { YoutubeView } from './features/youtube/YoutubeView'
 import { getRemoteAppSetting, saveAppSetting } from './lib/userAppSettings'
-
-export function isUserAuthorizedForH(user: unknown): boolean {
-  if (!user || typeof user !== 'object') return false
-  const u = user as { email?: string | null; user_metadata?: { email?: string; user_name?: string; name?: string } }
-  const email = (u.email || u.user_metadata?.email || '').toLowerCase()
-  const name = (u.user_metadata?.user_name || u.user_metadata?.name || '').toLowerCase()
-  return (
-    email.includes('truongnguyenminhhieu100') ||
-    name.includes('truongnguyenminhhieu100') ||
-    email.includes('nguyenkimy') ||
-    name.includes('nguyenkimy')
-  )
-}
+import { isUserAuthorizedForH } from './lib/hAuth'
+export { isUserAuthorizedForH }
 
 const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },

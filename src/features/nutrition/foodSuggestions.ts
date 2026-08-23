@@ -116,7 +116,7 @@ export function removeRememberedFood(name: string) {
     window.dispatchEvent(new CustomEvent(EVENT_NAME))
 
     if (supabase) {
-      void supabase.from('food_suggestions').delete().eq('id', cleanName).catch(() => null)
+      void supabase.from('food_suggestions').delete().eq('id', cleanName).then(() => null, () => null)
     }
   } catch (err) {
     console.error('Failed to remove remembered food:', err)

@@ -29,6 +29,7 @@ export interface SharedActivityItem {
   progressPercent?: number;
   currentChapterOrPage?: number;
   totalChaptersOrPages?: number;
+  durationMinutes?: number;
   audioUrl?: string;
   artist?: string;
   logDate: string;
@@ -37,7 +38,7 @@ export interface SharedActivityItem {
   rawMedia?: Media;
 }
 
-export function SharedActivityTab({ onTabChange }: { onTabChange?: (tab: string) => void }) {
+export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?: (tab: string) => void; partnerPerson?: Person }) {
   const navigate = useNavigate();
   const audioContext = useOptionalAudioPlayer();
   const { showToast } = useToast();
@@ -361,8 +362,8 @@ export function SharedActivityTab({ onTabChange }: { onTabChange?: (tab: string)
       status: 'COMPLETED',
       is_favorite: false,
     };
-    if (player) {
-      player.playTrack(track);
+    if (audioContext) {
+      audioContext.playTrack(track);
       showToast(`▶️ Đang phát: ${act.title}`);
     }
   };

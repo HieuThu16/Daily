@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useState } from 'react'
 
-type ToastType = 'success' | 'info' | 'delete' | 'supabase' | 'local'
+type ToastType = 'success' | 'info' | 'delete' | 'supabase' | 'local' | 'error'
 
 type ToastMessage = {
   id: number
@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     // Giữ tối đa 3 cái: báo lưu và báo lỗi hay bắn liên tiếp, đè nhau thì mất thông tin.
     setToasts((current) => [...current, { id, message, type }].slice(-3))
     // Cảnh báo lưu hỏng thường kèm câu lỗi dài, cần thời gian đọc lâu hơn
-    setTimeout(() => dismiss(id), type === 'local' ? 6000 : 2500)
+    setTimeout(() => dismiss(id), type === 'local' || type === 'error' ? 6000 : 2500)
   }, [dismiss])
 
   const showUndoToast = useCallback((message: string, onUndo: () => void) => {
@@ -58,6 +58,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const getToastColors = (type?: ToastType) => {
     switch (type) {
+      case 'error':
       case 'delete':
         return { color: 'var(--rose)', border: 'var(--rose)', bg: 'var(--card-bg)' }
       case 'info':

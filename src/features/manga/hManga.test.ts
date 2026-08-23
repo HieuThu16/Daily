@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { isUserAuthorizedForH } from '../../App';
+import { isUserAuthorizedForH } from '../../lib/hAuth';
 import { 
   getHMangaFavorites, toggleHMangaFavorite,
   getHMangaFollows, toggleHMangaFollow,
