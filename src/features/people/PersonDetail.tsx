@@ -13,14 +13,15 @@ import { PersonJournal } from './PersonJournal'
 import { PersonSpending } from './PersonSpending'
 import type { NewOccasion } from './usePeopleData'
 
-type DetailTab = 'info' | 'occasions' | 'journal' | 'events'
+type DetailTab = 'events' | 'info' | 'occasions' | 'journal'
 
 const TABS: { key: DetailTab; label: string }[] = [
+  { key: 'events', label: 'Kỷ niệm' },
   { key: 'info', label: 'Thông tin' },
   { key: 'occasions', label: 'Dịp' },
   { key: 'journal', label: 'Nhật ký' },
-  { key: 'events', label: 'Kỷ niệm' },
 ]
+
 
 type Props = {
   person: Person
