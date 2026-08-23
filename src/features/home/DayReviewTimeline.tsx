@@ -27,8 +27,8 @@ function getMangaEventConfig(label: string) {
 
 function getMediaEventConfig(detail: string, label: string) {
   if (label.includes('sách') || detail.includes('Sách')) return { icon: BookOpen, color: 'var(--purple)', bg: 'var(--purple-bg)', route: '/books' }
-  if (label.includes('Review')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/tvshow' }
-  if (label.includes('YouTube') || label.includes('TV Show')) return { icon: Tv, color: 'var(--amber)', bg: 'var(--amber-bg)', route: '/tvshow' }
+  if (label.includes('Review')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/youtube' }
+  if (label.includes('YouTube') || label.includes('TV Show')) return { icon: Tv, color: 'var(--rose)', bg: 'rgba(244, 63, 94, 0.12)', route: '/youtube' }
   if (label.includes('phim') || detail.includes('Phim')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/movies' }
   if (label.includes('BL') || label.includes('truyện')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
   return { icon: Music, color: 'var(--cyan)', bg: 'var(--cyan-bg)', route: '/music' }

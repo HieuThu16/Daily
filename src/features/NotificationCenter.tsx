@@ -95,7 +95,7 @@ const SECTION_PATH: Record<Section, string> = {
   tasks: '/tasks',
   study: '/english',
   manga: '/bl',
-  videos: '/reviews',
+  videos: '/youtube',
   people: '/people',
   memories: '/daily',
   habits: '/habit',
@@ -357,7 +357,7 @@ export function NotificationCenter() {
                         className="task-bell-item"
                         onClick={() => {
                           newVideos.dismissAll()
-                          goTo(u.kind === 'tvshow' ? '/tvshow' : '/reviews')
+                          goTo('/youtube')
                         }}
                       >
                         {u.thumbnail && <img className="mn-cover" src={u.thumbnail} alt="" loading="lazy" />}

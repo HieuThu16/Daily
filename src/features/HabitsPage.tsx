@@ -27,6 +27,8 @@ const FILTER_CHIPS: Array<{ key: Filter; label: string }> = [
 
 const HABIT_ORDER_STORAGE_KEY = 'daily_habit_priority_order'
 
+import { getRemoteAppSetting, saveAppSetting } from '../lib/userAppSettings'
+
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
 const now = new Date()
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -44,6 +46,7 @@ function getStoredOrder(): string[] {
 function saveStoredOrder(ids: string[]) {
   try {
     localStorage.setItem(HABIT_ORDER_STORAGE_KEY, JSON.stringify(ids))
+    void saveAppSetting('habit_custom_order', ids)
   } catch {}
 }
 

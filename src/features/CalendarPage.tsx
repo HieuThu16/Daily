@@ -353,7 +353,7 @@ export function CalendarPage() {
           const mediaMeta: Record<Media['type'], { icon: typeof Music; color: string; path: string; label: string }> = {
             MUSIC: { icon: Music, color: '#06b6d4', path: '/music', label: 'Nhạc' },
             BOOK: { icon: BookOpen, color: '#a855f7', path: '/books', label: 'Sách' },
-            YOUTUBE: { icon: Tv, color: '#f59e0b', path: '/tvshow', label: 'TV Show' },
+            YOUTUBE: { icon: Youtube, color: '#f43f5e', path: '/youtube', label: 'YouTube' },
             MOVIE: { icon: Film, color: '#f43f5e', path: '/movies', label: 'Phim' },
             MANGA: { icon: BookMarked, color: '#10b981', path: '/manga', label: 'Truyện' },
           }

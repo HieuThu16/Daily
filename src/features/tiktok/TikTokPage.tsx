@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import { extractPartInfo, extractSeriesName, normalizeSeriesKey, groupVideosIntoSeries } from '../../lib/tiktokSeries'
+import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
 import './tiktok.css'
 
 export type TikTokVideo = {
@@ -127,6 +128,7 @@ export function TikTokPage() {
 
   const [seriesList, setSeriesList] = useState<TikTokSeries[]>([])
   const [creatorsList, setCreatorsList] = useState<TikTokCreator[]>([])
+
   const [loading, setLoading] = useState(true)
 
   // Player state
@@ -140,6 +142,18 @@ export function TikTokPage() {
       return new Set()
     }
   })
+
+  useEffect(() => {
+    let cancelled = false
+    void getRemoteAppSetting<string[]>('tiktok_watched', []).then((remote) => {
+      if (!cancelled && remote && remote.length > 0) {
+        setWatchedIds((prev) => new Set([...prev, ...remote]))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Import Modal State
   const [showImportModal, setShowImportModal] = useState(false)
@@ -164,8 +178,10 @@ export function TikTokPage() {
       const next = new Set(prev)
       if (next.has(videoId)) next.delete(videoId)
       else next.add(videoId)
+      const arr = [...next]
       try {
-        localStorage.setItem('daily_tiktok_watched', JSON.stringify([...next]))
+        localStorage.setItem('daily_tiktok_watched', JSON.stringify(arr))
+        void saveAppSetting('tiktok_watched', arr)
       } catch (err) {
         console.warn(err)
       }

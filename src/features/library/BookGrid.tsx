@@ -17,6 +17,9 @@ const STATUS_LABEL: Record<Media['status'], [string, string]> = {
   COMPLETED: ['đã đọc', 'đã nghe'],
 }
 
+import { supabase } from '../../lib/supabase'
+import { estimatePage } from '../../lib/book/repository'
+
 interface BookProgressInfo {
   percent: number
   page?: number
@@ -27,36 +30,103 @@ function useBookProgressMap(): Map<string, BookProgressInfo> {
   const [progressMap, setProgressMap] = useState<Map<string, BookProgressInfo>>(new Map())
 
   useEffect(() => {
-    const map = new Map<string, BookProgressInfo>()
+    let cancelled = false
 
-    try {
-      // 1. Nạp từ các phiên đọc gần đây
-      const logs = getBookReadingSessionLogs()
-      for (const log of logs) {
-        if (log.mediaItemId) {
-          const existing = map.get(log.mediaItemId)
-          const highestPage = Math.max(existing?.page || 0, log.endPage || 0, log.startPage || 0)
-          const totalEst = highestPage > 100 ? highestPage + 50 : 200
-          const pct = Math.min(100, Math.max(5, Math.round((highestPage / totalEst) * 100)))
-          map.set(log.mediaItemId, {
-            percent: existing?.percent || pct,
-            page: highestPage,
+    const loadProgress = async () => {
+      const map = new Map<string, BookProgressInfo>()
+
+      try {
+        // 1. Nạp từ database bảng book_documents (tiến độ đọc thực tế được lưu khi đọc sách)
+        if (supabase) {
+          const { data: docs } = await supabase
+            .from('book_documents')
+            .select('media_item_id, percent, page_count, est_pages, last_char_offset, total_chars, last_chapter_idx')
+
+          if (docs && docs.length > 0) {
+            for (const doc of docs) {
+              if (!doc.media_item_id) continue
+              const totalPages = doc.page_count || doc.est_pages || undefined
+              let page: number | undefined
+              if (doc.last_char_offset && doc.total_chars > 0) {
+                page = estimatePage(doc.last_char_offset, doc.total_chars, doc.page_count)
+              }
+              const pct = typeof doc.percent === 'number' 
+                ? Math.round(doc.percent) 
+                : (totalPages && page ? Math.round((page / totalPages) * 100) : 0)
+
+              map.set(doc.media_item_id, {
+                percent: Math.min(100, Math.max(0, pct)),
+                page,
+                totalPages,
+              })
+            }
+          }
+
+          // Nạp thêm từ book_reading_logs mới nhất
+          const { data: readingLogs } = await supabase
+            .from('book_reading_logs')
+            .select('media_item_id, page')
+            .is('deleted_at', null)
+            .order('log_date', { ascending: false })
+
+          if (readingLogs) {
+            for (const log of readingLogs) {
+              if (!log.media_item_id || !log.page) continue
+              const existing = map.get(log.media_item_id)
+              if (!existing) {
+                map.set(log.media_item_id, {
+                  percent: 0,
+                  page: log.page,
+                })
+              } else if (!existing.page || log.page > existing.page) {
+                existing.page = log.page
+                if (existing.totalPages && existing.totalPages > 0) {
+                  existing.percent = Math.min(100, Math.max(existing.percent, Math.round((log.page / existing.totalPages) * 100)))
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Nạp bổ sung từ các phiên đọc gần đây trong local storage (nếu có cập nhật mới chưa sync)
+        const logs = getBookReadingSessionLogs()
+        for (const log of logs) {
+          if (log.mediaItemId) {
+            const existing = map.get(log.mediaItemId)
+            const highestPage = Math.max(existing?.page || 0, log.endPage || 0, log.startPage || 0)
+            const totalEst = existing?.totalPages || (highestPage > 100 ? highestPage + 50 : undefined)
+            const pct = totalEst ? Math.min(100, Math.round((highestPage / totalEst) * 100)) : (existing?.percent || 0)
+            map.set(log.mediaItemId, {
+              percent: existing?.percent !== undefined && existing.percent > 0 ? existing.percent : pct,
+              page: highestPage,
+              totalPages: existing?.totalPages || totalEst,
+            })
+          }
+        }
+
+        // 3. Nạp từ cuốn sách đang đọc gần nhất
+        const last = getLastReadBook()
+        if (last && last.mediaItemId) {
+          const existing = map.get(last.mediaItemId)
+          map.set(last.mediaItemId, {
+            percent: Math.min(100, Math.max(0, Math.round(last.percent ?? existing?.percent ?? 0))),
+            page: last.page ?? existing?.page,
+            totalPages: last.pageCount ?? existing?.totalPages,
           })
         }
+      } catch (err) {
+        console.warn('Lỗi khi tải tiến độ đọc sách:', err)
       }
 
-      // 2. Nạp từ cuốn sách đang đọc gần nhất
-      const last = getLastReadBook()
-      if (last && last.mediaItemId) {
-        map.set(last.mediaItemId, {
-          percent: Math.min(100, Math.max(1, Math.round(last.percent || 0))),
-          page: last.page ?? undefined,
-          totalPages: last.pageCount ?? undefined,
-        })
+      if (!cancelled) {
+        setProgressMap(map)
       }
-    } catch {}
+    }
 
-    setProgressMap(map)
+    void loadProgress()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return progressMap
@@ -71,17 +141,28 @@ export function BookGrid({ items, onOpen, onToggleFavorite }: BookGridProps) {
         const statusLabel = STATUS_LABEL[item.status][item.book_format === 'LISTEN' ? 1 : 0]
         const favoriteLabel = `${item.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'} ${item.name}`
 
-        // Tính toán tiến độ đọc
+        // Tính toán tiến độ đọc từ database
         const isInProgress = item.status === 'IN_PROGRESS'
         const isCompleted = item.status === 'COMPLETED'
         const prog = progressMap.get(item.id)
 
-        let percent = isCompleted ? 100 : (prog?.percent ?? (item.current_chapter ? Math.min(100, item.current_chapter * 5) : (isInProgress ? 25 : 0)))
+        // Tính % từ dữ liệu của item nếu có
+        const itemPct = item.total_pages && item.total_pages > 0 && item.current_page
+          ? Math.min(100, Math.round((item.current_page / item.total_pages) * 100))
+          : (item.total_chapters && item.total_chapters > 0 && item.current_chapter
+              ? Math.min(100, Math.round((item.current_chapter / item.total_chapters) * 100))
+              : 0)
+
+        let percent = isCompleted 
+          ? 100 
+          : (prog?.percent !== undefined && prog.percent > 0 ? prog.percent : itemPct)
         percent = Math.min(100, Math.max(0, Math.round(percent)))
 
         const pageDisplay = prog?.page 
           ? (prog.totalPages ? `${prog.page}/${prog.totalPages}` : `${prog.page}`)
-          : (item.current_chapter ? `${item.current_chapter}` : null)
+          : (item.current_page 
+              ? (item.total_pages ? `${item.current_page}/${item.total_pages}` : `${item.current_page}`)
+              : (item.current_chapter ? `${item.current_chapter}` : null))
 
         return (
           <li key={item.id} className="book-grid-cell">

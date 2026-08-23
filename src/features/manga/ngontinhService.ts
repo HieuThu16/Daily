@@ -109,11 +109,18 @@ export function getNgontinhFollows(): string[] {
   }
 }
 
+import { syncMangaInteraction } from '../../lib/mangaCloudSync';
+
 export function toggleNgontinhFollow(slug: string): boolean {
   const current = getNgontinhFollows();
   const exists = current.includes(slug);
   const updated = exists ? current.filter(s => s !== slug) : [...current, slug];
   localStorage.setItem(FOLLOW_KEY, JSON.stringify(updated));
+  void syncMangaInteraction({
+    manga_type: 'NGONTINH',
+    slug,
+    is_following: !exists,
+  });
   return !exists;
 }
 
@@ -131,6 +138,11 @@ export function toggleNgontinhFavorite(slug: string): boolean {
   const exists = current.includes(slug);
   const updated = exists ? current.filter(s => s !== slug) : [...current, slug];
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(updated));
+  void syncMangaInteraction({
+    manga_type: 'NGONTINH',
+    slug,
+    is_favorite: !exists,
+  });
   return !exists;
 }
 
@@ -151,13 +163,22 @@ export function saveNgontinhProgress(progress: Partial<ReadingProgress> & { slug
     ? progress.scrollRatio
     : (isChangingChapter ? 0 : (existing?.scrollRatio ?? 0));
 
+  const readAt = new Date().toISOString();
   current[progress.slug] = {
     ...(existing || { slug: progress.slug, chapterNumber: 1, chapterName: 'Chương 1' }),
     ...progress,
     scrollRatio,
-    readAt: new Date().toISOString(),
+    readAt,
   } as ReadingProgress;
   localStorage.setItem(HISTORY_KEY, JSON.stringify(current));
+
+  void syncMangaInteraction({
+    manga_type: 'NGONTINH',
+    slug: progress.slug,
+    last_chapter: progress.chapterNumber,
+    last_chapter_name: progress.chapterName,
+    last_read_at: readAt,
+  });
 }
 
 export function getNgontinhProgress(slug: string): ReadingProgress | null {

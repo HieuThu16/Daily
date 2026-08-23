@@ -97,6 +97,10 @@ export function recordMangaReading(params: {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: targetLog }))
+    // Đồng bộ lên Supabase ngầm
+    void import('./mangaCloudSync').then(({ syncMangaReadingLogToSupabase }) => {
+      void syncMangaReadingLogToSupabase(targetLog)
+    }).catch(() => null)
   } catch (err) {
     console.error('Failed to save manga reading log:', err)
   }

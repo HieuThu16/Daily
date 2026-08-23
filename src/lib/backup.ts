@@ -27,6 +27,14 @@ export const BACKUP_TABLES = [
   'youtube_channels',
   'nutrition_logs',
   'sleep_logs',
+  'english_items',
+  'knowledge_items',
+  'video_category_overrides',
+  'manga_interactions',
+  'manga_reading_logs',
+  'custom_manga',
+  'food_suggestions',
+  'user_app_settings',
 ] as const
 
 export type BackupFile = {

@@ -47,6 +47,9 @@ import { ToastProvider, useToast } from './features/ToastContext'
 import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaUpdateNotification'
 
 
+import { YoutubeView } from './features/youtube/YoutubeView'
+import { getRemoteAppSetting, saveAppSetting } from './lib/userAppSettings'
+
 export function isUserAuthorizedForH(user: unknown): boolean {
   if (!user || typeof user !== 'object') return false
   const u = user as { email?: string | null; user_metadata?: { email?: string; user_name?: string; name?: string } }
@@ -65,8 +68,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
-  { id: 'tvshow', label: 'TV Show', icon: Tv, colorClass: 'icon-box-amber' },
-  { id: 'reviews', label: 'Review phim', icon: Clapperboard, colorClass: 'icon-box-purple' },
+  { id: 'youtube', label: 'YouTube', icon: Youtube, colorClass: 'icon-box-rose' },
   { id: 'tiktok', label: 'TikTok', icon: Flame, colorClass: 'icon-box-rose' },
   { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
   { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
@@ -95,7 +97,7 @@ const PINNED_TABS_STORAGE_KEY = 'daily_pinned_tabs'
 /** Ngày đã nhắc sao lưu gần nhất, để đừng nhắc lại nhiều lần trong ngày. */
 const BACKUP_NUDGE_KEY = 'daily_backup_nudged_on'
 const THEME_STORAGE_KEY = 'daily_theme'
-const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'tvshow', 'reviews']
+const DEFAULT_PRIMARY_TABS: Tab[] = ['home', 'habit', 'daily', 'tasks', 'youtube']
 const BOTTOM_NAV_SIZE = 5
 /** Trần số tab được ghim. Ghim quá thì báo lỗi thay vì âm thầm đẩy cái cũ ra. */
 const MAX_PINNED_TABS = 7
@@ -321,6 +323,21 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
   const [pinnedTabs, setPinnedTabs] = useState<Tab[]>(() => getPinnedTabs(navigation))
 
+  useEffect(() => {
+    let cancelled = false
+    void getRemoteAppSetting<Tab[]>('pinned_tabs', []).then((remote) => {
+      if (!cancelled && remote && Array.isArray(remote) && remote.length > 0) {
+        setPinnedTabs(remote)
+        try {
+          localStorage.setItem(PINNED_TABS_STORAGE_KEY, JSON.stringify(remote))
+        } catch {}
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const togglePin = (id: Tab) => {
     if (!pinnedTabs.includes(id) && pinnedTabs.length >= MAX_PINNED_TABS) {
       alert(`Chỉ ghim được tối đa ${MAX_PINNED_TABS} tab. Bỏ ghim một tab khác trước đã.`)
@@ -330,6 +347,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
       const next = prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
       try {
         localStorage.setItem(PINNED_TABS_STORAGE_KEY, JSON.stringify(next))
+        void saveAppSetting('pinned_tabs', next)
       } catch (error) {
         console.warn('Không lưu được tab đã ghim:', error)
       }
@@ -609,11 +627,12 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/daily" element={<DailyPage />} />
                       <Route path="/tasks" element={<TasksPage />} />
                       <Route path="/share" element={<ShareTarget />} />
+                      <Route path="/youtube" element={<YoutubeView />} />
+                      <Route path="/tvshow" element={<Navigate to="/youtube" replace />} />
+                      <Route path="/reviews" element={<Navigate to="/youtube" replace />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
-                      <Route path="/tvshow" element={<TvShowView />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
                       <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
-                      <Route path="/reviews" element={<ReviewSeriesView />} />
                       <Route path="/tiktok" element={<TikTokPage />} />
                       <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
                       <Route path="/bl" element={<BLMangaPage />} />

@@ -759,3 +759,104 @@ do $$ begin
   create policy "own english items" on public.english_items for all to authenticated
     using (user_id = auth.uid()) with check (user_id = auth.uid());
 exception when duplicate_object then null; end $$;
+
+-- -----------------------------------------------------------------------------
+-- 29. Tương tác Manga (manga_interactions)
+-- -----------------------------------------------------------------------------
+create table if not exists public.manga_interactions (
+  id text not null primary key,
+  user_id text,
+  manga_type text not null, -- 'BL', 'H_MANGA', 'NGONTINH'
+  slug text not null,
+  title text,
+  cover_url text,
+  is_favorite boolean not null default false,
+  is_following boolean not null default false,
+  last_chapter numeric default 1,
+  last_chapter_name text,
+  last_read_at timestamptz default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_manga_interactions_slug on public.manga_interactions (slug, manga_type);
+create index if not exists idx_manga_interactions_user on public.manga_interactions (user_id);
+alter table public.manga_interactions enable row level security;
+drop policy if exists "Public manga_interactions access" on public.manga_interactions;
+create policy "Public manga_interactions access" on public.manga_interactions for all using (true) with check (true);
+
+-- -----------------------------------------------------------------------------
+-- 30. Nhật ký đọc Manga (manga_reading_logs)
+-- -----------------------------------------------------------------------------
+create table if not exists public.manga_reading_logs (
+  id text not null primary key,
+  user_id text,
+  manga_type text not null default 'NGONTINH',
+  manga_slug text not null,
+  manga_title text not null,
+  chapter_number numeric not null default 1,
+  chapter_name text,
+  duration_minutes numeric not null default 1,
+  log_date text not null,
+  log_time text,
+  status text not null default 'READING',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_manga_reading_logs_date on public.manga_reading_logs (log_date);
+create index if not exists idx_manga_reading_logs_slug on public.manga_reading_logs (manga_slug);
+alter table public.manga_reading_logs enable row level security;
+drop policy if exists "Public manga_reading_logs access" on public.manga_reading_logs;
+create policy "Public manga_reading_logs access" on public.manga_reading_logs for all using (true) with check (true);
+
+-- -----------------------------------------------------------------------------
+-- 31. Manga tự thêm thủ công (custom_manga)
+-- -----------------------------------------------------------------------------
+create table if not exists public.custom_manga (
+  id text not null primary key,
+  user_id text,
+  manga_type text not null default 'H_MANGA',
+  slug text not null,
+  title text not null,
+  cover text,
+  author text,
+  description text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.custom_manga enable row level security;
+drop policy if exists "Public custom_manga access" on public.custom_manga;
+create policy "Public custom_manga access" on public.custom_manga for all using (true) with check (true);
+
+-- -----------------------------------------------------------------------------
+-- 32. Gợi ý món ăn (food_suggestions)
+-- -----------------------------------------------------------------------------
+create table if not exists public.food_suggestions (
+  id text not null primary key,
+  user_id text,
+  name text not null,
+  price numeric not null default 0,
+  meal_type text,
+  count integer not null default 1,
+  last_used_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+alter table public.food_suggestions enable row level security;
+drop policy if exists "Public food_suggestions access" on public.food_suggestions;
+create policy "Public food_suggestions access" on public.food_suggestions for all using (true) with check (true);
+
+-- -----------------------------------------------------------------------------
+-- 33. Cài đặt người dùng & ứng dụng (user_app_settings)
+-- -----------------------------------------------------------------------------
+create table if not exists public.user_app_settings (
+  setting_key text not null primary key,
+  user_id text,
+  setting_value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_app_settings enable row level security;
+drop policy if exists "Public user_app_settings access" on public.user_app_settings;
+create policy "Public user_app_settings access" on public.user_app_settings for all using (true) with check (true);
+

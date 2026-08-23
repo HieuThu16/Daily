@@ -13,6 +13,8 @@ import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
 import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
 import type { Media, Person } from '../../types';
 
+import { estimatePage } from '../../lib/book/repository';
+
 export interface SharedActivityItem {
   id: string;
   user_id?: string;
@@ -23,26 +25,21 @@ export interface SharedActivityItem {
   subtitle?: string;
   slug?: string;
   cover?: string;
-  progressText: string;
+  progressText?: string;
   progressPercent?: number;
   currentChapterOrPage?: number;
   totalChaptersOrPages?: number;
-  durationMinutes?: number;
   audioUrl?: string;
   artist?: string;
   logDate: string;
   logTime?: string;
   updatedAt: string;
-  rawMedia?: any;
+  rawMedia?: Media;
 }
 
-interface SharedActivityTabProps {
-  partnerPerson?: Person;
-}
-
-export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
+export function SharedActivityTab({ onTabChange }: { onTabChange?: (tab: string) => void }) {
   const navigate = useNavigate();
-  const player = useOptionalAudioPlayer();
+  const audioContext = useOptionalAudioPlayer();
   const { showToast } = useToast();
 
   const [selectedDate, setSelectedDate] = useState<string>(localDate());
@@ -90,14 +87,26 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
 
       const itemsMap = new Map<string, SharedActivityItem>();
 
-      // 1. Fetch Media Items từ Supabase
+      // 1. Fetch Media Items và Book Documents từ Supabase
       if (supabase) {
-        const { data: mediaRows } = await supabase
-          .from('media_items')
-          .select('*')
-          .is('deleted_at', null)
-          .order('updated_at', { ascending: false })
-          .limit(200);
+        const [{ data: mediaRows }, { data: bookDocs }] = await Promise.all([
+          supabase
+            .from('media_items')
+            .select('*')
+            .is('deleted_at', null)
+            .order('updated_at', { ascending: false })
+            .limit(200),
+          supabase
+            .from('book_documents')
+            .select('media_item_id, percent, page_count, est_pages, last_char_offset, total_chars, last_chapter_idx')
+        ]);
+
+        const bookDocMap = new Map<string, any>();
+        if (bookDocs) {
+          for (const d of bookDocs) {
+            if (d.media_item_id) bookDocMap.set(d.media_item_id, d);
+          }
+        }
 
         if (mediaRows) {
           for (const m of mediaRows) {
@@ -114,11 +123,26 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
 
             // A. Sách
             if (m.type === 'BOOK') {
-              const current = m.current_page || m.current_chapter || 0;
-              const total = m.total_pages || m.total_chapters || 100;
-              const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : undefined;
+              const doc = bookDocMap.get(m.id);
+              let current = m.current_page || m.current_chapter || 0;
+              let total = m.total_pages || m.total_chapters || (doc?.page_count || doc?.est_pages || 0);
+              let pct = doc?.percent !== undefined && doc?.percent !== null ? Math.round(doc.percent) : undefined;
 
-              const isActuallyReading = current > 1 || (pct && pct >= 5) || m.status === 'COMPLETED' || m.status === 'IN_PROGRESS';
+              if (doc) {
+                if (doc.last_char_offset && doc.total_chars > 0) {
+                  current = estimatePage(doc.last_char_offset, doc.total_chars, doc.page_count);
+                }
+                if (!total) {
+                  total = doc.page_count || doc.est_pages || 0;
+                }
+                if (pct === undefined && total > 0 && current > 0) {
+                  pct = Math.min(100, Math.round((current / total) * 100));
+                }
+              } else if (pct === undefined && total > 0 && current > 0) {
+                pct = Math.min(100, Math.round((current / total) * 100));
+              }
+
+              const isActuallyReading = current > 0 || (pct !== undefined && pct > 0) || m.status === 'COMPLETED' || m.status === 'IN_PROGRESS';
               if (isActuallyReading) {
                 const key = `${userName}::BOOK::${m.name || m.id}`;
                 itemsMap.set(key, {
@@ -130,10 +154,12 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                   title: m.name || 'Sách',
                   subtitle: m.author || m.description || '',
                   cover: m.cover_url || m.cover || '',
-                  progressText: `Trang ${current}${total ? ` / ${total}` : ''} (${pct || 0}%)`,
+                  progressText: current > 0 
+                    ? `Trang ${current}${total ? ` / ${total}` : ''}${pct !== undefined ? ` (${pct}%)` : ''}`
+                    : (pct !== undefined ? `${pct}%` : 'Đang đọc'),
                   progressPercent: pct,
                   currentChapterOrPage: current,
-                  totalChaptersOrPages: total,
+                  totalChaptersOrPages: total || undefined,
                   logDate: rowDate,
                   logTime: logTime,
                   updatedAt: m.updated_at || m.created_at || '',

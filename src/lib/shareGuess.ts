@@ -79,8 +79,8 @@ export function guessShareKind(
 /** Nơi mỗi loại được mở ra, kèm link đã điền sẵn. */
 export const SHARE_ROUTES: Record<ShareKind, (link: string) => string> = {
   MUSIC: (link) => `/music?youtube=${encodeURIComponent(link)}`,
-  TVSHOW: (link) => `/tvshow?youtube=${encodeURIComponent(link)}`,
-  REVIEW: (link) => `/reviews?youtube=${encodeURIComponent(link)}`,
+  TVSHOW: (link) => `/youtube?youtube=${encodeURIComponent(link)}`,
+  REVIEW: (link) => `/youtube?youtube=${encodeURIComponent(link)}`,
   VIDEO: (link) => `/movies?youtube=${encodeURIComponent(link)}`,
 }
 

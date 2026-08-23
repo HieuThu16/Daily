@@ -1,4 +1,4 @@
-import { BookMarked, BookOpen, CheckSquare, Film, Flame, Heart, Moon, Music, NotebookPen, Salad, Tv } from 'lucide-react'
+import { BookMarked, BookOpen, CheckSquare, Film, Flame, Heart, Moon, Music, NotebookPen, Salad, Tv, Youtube } from 'lucide-react'
 import type { CompletionSummary } from '../../lib/homeProgress'
 import { formatMoney, mealBreakdown, sleepSummary, totalSpend } from '../../lib/report'
 import type { UpcomingOccasion } from '../../lib/occasions'
@@ -181,12 +181,12 @@ export function ReportDay({
 
           <button
             type="button"
-            onClick={() => onOpen('/tvshow')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: 0, cursor: 'pointer', textAlign: 'left' }}
+            onClick={() => onOpen('/youtube')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'rgba(244, 63, 94, 0.12)', color: 'var(--rose)', border: 0, cursor: 'pointer', textAlign: 'left' }}
           >
-            <Tv size={15} />
+            <Youtube size={15} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>TV Show</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>YouTube</span>
               <strong style={{ fontSize: '0.86rem' }}>{tvCount} video</strong>
             </div>
           </button>

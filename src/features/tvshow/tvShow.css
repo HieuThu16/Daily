@@ -2065,3 +2065,94 @@
   text-transform: uppercase;
   backdrop-filter: blur(8px);
 }
+
+/* =========================================================
+ * YouTube Horizontal Scrollable Category Tabs (Kéo tab từ trái qua phải)
+ * ======================================================= */
+
+.yt-category-tabs-container {
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-main);
+  padding: 6px 0 10px;
+  margin-bottom: 4px;
+}
+
+.yt-category-tabs-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  padding: 2px 2px;
+}
+
+.yt-category-tabs-track::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+.yt-category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.yt-category-tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(244, 63, 94, 0.4);
+  background: var(--bg-subtle, rgba(244, 63, 94, 0.04));
+}
+
+.yt-category-tab.active {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35);
+  transform: translateY(-1px);
+}
+
+.yt-tab-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.yt-tab-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.yt-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.yt-category-tab.active .yt-tab-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
