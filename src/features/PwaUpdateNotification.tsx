@@ -183,24 +183,31 @@ export function PwaUpdateNotification() {
 
 /** Hàm gọi chủ động để xóa sạch cache cũ và ép nạp bản mới nhất */
 export async function forceReloadLatestVersion() {
+  // Bước 1: Hủy đăng ký tất cả Service Workers
   try {
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const registration of registrations) {
-        await registration.unregister();
-      }
-    }
-    if ('caches' in window) {
-      const cacheKeys = await caches.keys();
-      for (const key of cacheKeys) {
-        await caches.delete(key);
-      }
+      await Promise.all(registrations.map((r) => r.unregister()));
     }
   } catch (e) {
-    console.warn('[forceReloadLatestVersion error]', e);
+    console.warn('[forceReload] SW unregister error', e);
   }
-  // Thêm query timestamp để vượt qua mọi proxy / ISP cache
-  const url = new URL(window.location.href);
-  url.searchParams.set('_v', Date.now().toString());
-  window.location.href = url.toString();
+
+  // Bước 2: Xóa tất cả Cache Storage (workbox precache, runtime cache...)
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch (e) {
+    console.warn('[forceReload] cache delete error', e);
+  }
+
+  // Bước 3: Hard reload — bỏ qua mọi tầng cache trình duyệt
+  // Dùng window.location.replace để tránh vòng lặp lịch sử
+  // Timestamp param ép proxy/CDN/ISP cache trả về bản mới
+  setTimeout(() => {
+    const base = window.location.origin + window.location.pathname;
+    window.location.replace(base + '?_bust=' + Date.now());
+  }, 300);
 }

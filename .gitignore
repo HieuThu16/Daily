@@ -20,3 +20,6 @@ public/data/romance_manga.json
 src/data/romance_manga.json
 public/data/school_life_manga.json
 src/data/school_life_manga.json
+
+# Sinh tự động mỗi build — không commit để Vercel luôn có giá trị mới nhất
+public/version.json
