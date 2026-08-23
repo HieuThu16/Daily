@@ -52,6 +52,54 @@ function computeTimePrefix(from: string, to: string): string {
   return ''
 }
 
+function normalizeTimeToHHMM(str: string): string {
+  if (!str) return ''
+  str = str.replace(/^từ\s+/i, '').trim()
+  if (/^\d{1,2}:\d{2}$/.test(str)) {
+    const [h, m] = str.split(':')
+    return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
+  }
+  const hmMatch = str.match(/^(\d{1,2})h(\d{1,2})?$/i)
+  if (hmMatch) {
+    const h = hmMatch[1].padStart(2, '0')
+    const m = (hmMatch[2] || '00').padStart(2, '0')
+    return `${h}:${m}`
+  }
+  if (/^\d{1,2}$/.test(str)) {
+    return `${str.padStart(2, '0')}:00`
+  }
+  return str
+}
+
+function parseTimeRangeFromEntry(entryTime?: string | null, content?: string): { from: string; to: string } {
+  let from = ''
+  let to = ''
+
+  if (entryTime) {
+    if (entryTime.includes('-')) {
+      const parts = entryTime.split('-').map((s) => s.trim())
+      if (parts[0]) from = normalizeTimeToHHMM(parts[0])
+      if (parts[1]) to = normalizeTimeToHHMM(parts[1])
+    } else if (entryTime.includes('->')) {
+      const parts = entryTime.split('->').map((s) => s.trim())
+      if (parts[0]) from = normalizeTimeToHHMM(parts[0])
+      if (parts[1]) to = normalizeTimeToHHMM(parts[1])
+    } else {
+      from = normalizeTimeToHHMM(entryTime.trim())
+    }
+  }
+
+  if (content) {
+    const match = content.match(/^(?:Từ\s+)?(\d{1,2}(?:h\d{1,2}|:\d{2}|h)?)(?:\s*(?:->|-)\s*(\d{1,2}(?:h\d{1,2}|:\d{2}|h)?))?:\s*/i)
+    if (match) {
+      if (match[1] && !from) from = normalizeTimeToHHMM(match[1])
+      if (match[2] && (!to || match[2])) to = normalizeTimeToHHMM(match[2])
+    }
+  }
+
+  return { from, to }
+}
+
 function applyTimePrefixToContent(currentContent: string, newPrefix: string): string {
   const prefixRegex = /^(?:Từ\s+)?(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2})(?:\s*->\s*(?:\d{1,2}h(?:\d{2})?|\d{1,2}:\d{2}))?:\s*/i
   if (prefixRegex.test(currentContent)) {
@@ -123,6 +171,8 @@ export function DailyPage() {
   const [editing, setEditing] = useState<Entry | null>(null)
   const [editText, setEditText] = useState('')
   const [editTime, setEditTime] = useState('')
+  const [editTimeFrom, setEditTimeFrom] = useState('')
+  const [editTimeTo, setEditTimeTo] = useState('')
   const [uploading, setUploading] = useState(false)
   const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, []))
   const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
@@ -369,9 +419,39 @@ export function DailyPage() {
     setBusy(false)
   }
 
+  const handleEditTimeFromChange = (fromVal: string) => {
+    setEditTimeFrom(fromVal)
+    const formatted = fromVal && editTimeTo ? `${fromVal} - ${editTimeTo}` : fromVal
+    setEditTime(formatted)
+    const newPrefix = computeTimePrefix(fromVal, editTimeTo)
+    setEditText((prev) => applyTimePrefixToContent(prev, newPrefix))
+  }
+
+  const handleEditTimeToChange = (toVal: string) => {
+    setEditTimeTo(toVal)
+    const formatted = editTimeFrom && toVal ? `${editTimeFrom} - ${toVal}` : editTimeFrom || toVal
+    setEditTime(formatted)
+    const newPrefix = computeTimePrefix(editTimeFrom, toVal)
+    setEditText((prev) => applyTimePrefixToContent(prev, newPrefix))
+  }
+
   const updateEntry = async () => {
     if (!editing || !editText.trim()) return
-    const patch = { content: editText.trim(), entry_date: date, entry_time: editTime || null }
+    let finalTime = editTime
+    if (editTimeFrom && editTimeTo) {
+      finalTime = `${editTimeFrom} - ${editTimeTo}`
+    } else if (editTimeFrom) {
+      finalTime = editTimeFrom
+    } else {
+      const extracted = parseTimeRangeFromEntry(null, editText)
+      if (extracted.from && extracted.to) {
+        finalTime = `${extracted.from} - ${extracted.to}`
+      } else if (extracted.from) {
+        finalTime = extracted.from
+      }
+    }
+
+    const patch = { content: editText.trim(), entry_date: date, entry_time: finalTime || null }
     await supabase!.from('daily_entries').update(patch).eq('id', editing.id)
     setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, ...patch } : i)))
     showToast('✏️ Đã cập nhật bài viết!')
@@ -382,7 +462,10 @@ export function DailyPage() {
     setEditing(entry)
     setEditText(entry.content)
     setDate(entry.entry_date)
-    setEditTime(entry.entry_time ?? '')
+    const { from, to } = parseTimeRangeFromEntry(entry.entry_time, entry.content)
+    setEditTimeFrom(from)
+    setEditTimeTo(to)
+    setEditTime(from && to ? `${from} - ${to}` : from || entry.entry_time || '')
   }
 
   /** Đính ảnh vào dòng nhật ký đang mở; ảnh cũ bị thay và xoá khỏi storage. */
@@ -1012,15 +1095,57 @@ export function DailyPage() {
       {/* Chi tiết một dòng nhật ký: xem đủ nội dung, sửa, đính ảnh */}
       {editing && (
         <Modal title="Chi tiết nhật ký" onClose={() => setEditing(null)}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <label style={{ flex: 1 }}>
+          {/* Khung chọn Ngày & Khung giờ: Từ ➔ Đến */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.8rem', fontWeight: 700 }}>
               Ngày viết
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '6px 8px', fontSize: '0.82rem' }} />
             </label>
-            <label style={{ flex: 1 }}>
-              Giờ
-              <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
-            </label>
+
+            <div style={{ padding: '8px 10px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={13} color="var(--amber)" /> Khung giờ nhật ký:
+                </span>
+                {(editTimeFrom || editTimeTo || editTime) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTimeFrom('')
+                      setEditTimeTo('')
+                      setEditTime('')
+                    }}
+                    style={{ fontSize: '0.68rem', padding: '2px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    Xóa giờ
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
+                  <input
+                    type="time"
+                    value={editTimeFrom}
+                    onChange={(e) => handleEditTimeFromChange(e.target.value)}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.84rem', fontWeight: 700, padding: 0, width: 76, outline: 'none' }}
+                  />
+                </div>
+
+                <span style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
+
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
+                  <input
+                    type="time"
+                    value={editTimeTo}
+                    onChange={(e) => handleEditTimeToChange(e.target.value)}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.84rem', fontWeight: 700, padding: 0, width: 76, outline: 'none' }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           <label>
             Nội dung

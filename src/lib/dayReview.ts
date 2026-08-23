@@ -153,14 +153,40 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
   meals.filter((m) => m.log_date === date).forEach((m) =>
     events.push({ time: m.log_time || '', kind: 'MEAL', label: mealLabel[m.meal_slot], detail: m.food_name }))
 
-  entries.filter((e) => e.entry_date === date).forEach((e) =>
+  entries.filter((e) => e.entry_date === date).forEach((e) => {
+    let displayTime = e.entry_time || clock(e.created_at)
+    if (e.content) {
+      const match = e.content.match(/^(?:Từ\s+)?(\d{1,2}(?:h\d{1,2}|:\d{2}|h)?)(?:\s*(?:->|-)\s*(\d{1,2}(?:h\d{1,2}|:\d{2}|h)?))?:\s*/i)
+      if (match && match[1]) {
+        const normalizeH = (s: string) => {
+          s = s.replace(/^từ\s+/i, '').trim()
+          if (/^\d{1,2}:\d{2}$/.test(s)) {
+            const [h, m] = s.split(':')
+            return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
+          }
+          const hm = s.match(/^(\d{1,2})h(\d{1,2})?$/i)
+          if (hm) return `${hm[1].padStart(2, '0')}:${(hm[2] || '00').padStart(2, '0')}`
+          if (/^\d{1,2}$/.test(s)) return `${s.padStart(2, '0')}:00`
+          return s
+        }
+        const fromH = normalizeH(match[1])
+        const toH = match[2] ? normalizeH(match[2]) : ''
+        if (fromH && toH) {
+          displayTime = `${fromH} - ${toH}`
+        } else if (fromH && !displayTime) {
+          displayTime = fromH
+        }
+      }
+    }
+
     events.push({
-      time: e.entry_time || clock(e.created_at),
+      time: displayTime,
       kind: 'DIARY',
       label: 'Viết nhật ký',
       detail: e.content,
       is_favorite: !!e.is_favorite,
-    }))
+    })
+  })
 
   todos.forEach((t) => {
     if (sameDay(t.created_at, date)) events.push({ time: clock(t.created_at), kind: 'TASK_ADD', label: 'Thêm việc', detail: t.title })
