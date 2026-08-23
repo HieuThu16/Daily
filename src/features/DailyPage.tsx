@@ -608,15 +608,15 @@ export function DailyPage() {
             </div>
 
             {/* Thanh chọn Hành động & Nút liên kết YouTube / TV Show */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               {/* Nút chính: Mở Modal Combobox Chọn Hành Động */}
               <button
                 type="button"
                 onClick={() => setShowActionModal(true)}
                 style={{
-                  padding: '6px 14px',
+                  padding: '7px 8px',
                   borderRadius: 12,
-                  fontSize: '0.82rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   border: '1.5px solid var(--amber)',
                   background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.25))',
@@ -624,9 +624,14 @@ export function DailyPage() {
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6,
+                  justifyContent: 'center',
+                  gap: 5,
                   boxShadow: '0 2px 6px rgba(245, 158, 11, 0.15)',
                   transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  width: '100%',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)'
@@ -639,7 +644,8 @@ export function DailyPage() {
                   e.currentTarget.style.color = 'var(--amber)'
                 }}
               >
-                <Zap size={14} /> Hành động (Chọn nhanh)
+                <Zap size={14} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Hành động (Chọn nhanh)</span>
               </button>
 
               {/* Nút Gắn YouTube / TV Show */}
@@ -647,9 +653,9 @@ export function DailyPage() {
                 type="button"
                 onClick={() => setShowVideoModal(true)}
                 style={{
-                  padding: '6px 14px',
+                  padding: '7px 8px',
                   borderRadius: 12,
-                  fontSize: '0.82rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   border: '1.5px solid #ef4444',
                   background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))',
@@ -657,9 +663,14 @@ export function DailyPage() {
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6,
+                  justifyContent: 'center',
+                  gap: 5,
                   boxShadow: '0 2px 6px rgba(239, 68, 68, 0.15)',
                   transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  width: '100%',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-1px)'
@@ -672,9 +683,11 @@ export function DailyPage() {
                   e.currentTarget.style.color = '#ef4444'
                 }}
               >
-                <Youtube size={14} /> Gắn YouTube / TV Show
+                <Youtube size={14} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Gắn YouTube / TV Show</span>
               </button>
             </div>
+
 
 
             <textarea
