@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Trash2, BookOpen, Calendar, Search, X, Images, Eye, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, Download, ExternalLink } from 'lucide-react';
 import { getHMangaScreenshots, syncHMangaScreenshotsWithSupabase, deleteHMangaScreenshot, type HMangaScreenshot } from './hMangaScreenshot';
 import { useToast } from '../ToastContext';
 
@@ -13,7 +13,7 @@ export const HMangaScreenshotPage: React.FC = () => {
   const { showToast } = useToast();
   const [screenshots, setScreenshots] = useState<HMangaScreenshot[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [previewShot, setPreviewShot] = useState<HMangaScreenshot | null>(null);
   const [selectedManga, setSelectedManga] = useState<string>(filterSlug || 'ALL');
 
@@ -26,30 +26,15 @@ export const HMangaScreenshotPage: React.FC = () => {
     });
   }, []);
 
-  const formatDate = (iso: string) => {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return '';
-    }
-  };
-
   const handleDelete = async (id: string) => {
     await deleteHMangaScreenshot(id);
-    setScreenshots(prev => prev.filter(s => s.id !== id));
-    setDeleteConfirm(null);
+    setScreenshots((prev) => prev.filter((s) => s.id !== id));
+    setDeleteConfirmId(null);
     if (previewShot?.id === id) setPreviewShot(null);
-    showToast('🗑️ Đã xóa ảnh khỏi bộ sưu tập');
+    showToast('🗑️ Đã xóa ảnh thành công');
   };
 
-  const handleOpenReader = (shot: HMangaScreenshot) => {
+  const handleGoToManga = (shot: HMangaScreenshot) => {
     navigate(`/truyenh/${shot.mangaSlug}/read/${shot.chapterNumber}`);
   };
 
@@ -68,14 +53,13 @@ export const HMangaScreenshotPage: React.FC = () => {
   }, [screenshots]);
 
   const filtered = useMemo(() => {
-    return screenshots.filter(s => {
+    return screenshots.filter((s) => {
       if (selectedManga !== 'ALL' && s.mangaSlug !== selectedManga) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       return (
         s.mangaTitle.toLowerCase().includes(q) ||
-        s.chapterName.toLowerCase().includes(q) ||
-        (s.pageIndex && `trang ${s.pageIndex}`.includes(q))
+        s.chapterName.toLowerCase().includes(q)
       );
     });
   }, [screenshots, selectedManga, searchQuery]);
@@ -84,189 +68,190 @@ export const HMangaScreenshotPage: React.FC = () => {
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: '#09090b',
+        backgroundColor: '#0a0a0c',
         color: '#f4f4f5',
         fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
+        paddingBottom: '40px',
       }}
     >
-      {/* Top Header */}
+      {/* ── Top Header ── */}
       <header
         style={{
           position: 'sticky',
           top: 0,
-          zIndex: 100,
-          backgroundColor: 'rgba(9, 9, 11, 0.92)',
+          zIndex: 50,
+          backgroundColor: 'rgba(10, 10, 12, 0.88)',
           backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          padding: '14px 20px',
+          padding: '12px 18px',
           display: 'flex',
           alignItems: 'center',
-          gap: '14px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+          justifyContent: 'space-between',
+          gap: '12px',
         }}
       >
-        <button
-          onClick={() => {
-            if (returnUrl) {
-              navigate(returnUrl);
-            } else {
-              navigate('/truyenh');
-            }
-          }}
-          style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '12px',
-            padding: '8px 14px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            color: '#f4f4f5',
-            cursor: 'pointer',
-            fontSize: '0.88rem',
-            fontWeight: 700,
-            transition: 'all 0.15s ease',
-            flexShrink: 0,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-          }}
-        >
-          <ArrowLeft size={16} />
-          {returnUrl ? 'Quay lại đọc tiếp' : 'Truyện H'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => {
+              if (returnUrl) {
+                navigate(returnUrl);
+              } else {
+                navigate('/truyenh');
+              }
+            }}
+            style={{
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '10px',
+              padding: '7px 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              color: '#f4f4f5',
+              cursor: 'pointer',
+              fontSize: '0.84rem',
+              fontWeight: 700,
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+            }}
+          >
+            <ArrowLeft size={16} />
+            {returnUrl ? 'Đọc tiếp' : 'Truyện H'}
+          </button>
 
-        <div
-          style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            flexShrink: 0,
-            boxShadow: '0 4px 14px rgba(236, 72, 153, 0.35)',
-          }}
-        >
-          <Camera size={20} />
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>📸 Kho ảnh chụp</span>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  backgroundColor: 'rgba(225, 29, 72, 0.2)',
+                  color: '#fb7185',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(225, 29, 72, 0.3)',
+                }}
+              >
+                {screenshots.length} ảnh
+              </span>
+            </h1>
+          </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#f4f4f5', letterSpacing: '-0.02em' }}>
-            Bộ sưu tập ảnh chụp trang ({screenshots.length})
-          </h1>
-          <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#a1a1aa' }}>
-            Ảnh trang full hình chữ nhật · Nhấn "Đọc tiếp" để nhảy ngay đến đúng trang và chương đó
-          </p>
+        {/* Search input right in header */}
+        <div style={{ position: 'relative', width: '220px', maxWidth: '40vw' }}>
+          <Search
+            size={14}
+            style={{
+              position: 'absolute',
+              left: '10px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#71717a',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Tìm truyện..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '6px 28px 6px 30px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              color: '#f4f4f5',
+              fontSize: '0.8rem',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: '6px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                color: '#71717a',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Filter & Search Bar */}
-      <div style={{ padding: '16px 20px 0', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Search box */}
-          <div style={{ position: 'relative', flex: '1 1 280px', maxWidth: '420px' }}>
-            <Search
-              size={16}
+      {/* Manga Filter Pills */}
+      {mangaList.length > 1 && (
+        <div
+          style={{
+            padding: '12px 18px 0',
+            maxWidth: '1400px',
+            margin: '0 auto',
+            display: 'flex',
+            gap: '8px',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+          }}
+        >
+          <button
+            onClick={() => setSelectedManga('ALL')}
+            style={{
+              padding: '5px 12px',
+              borderRadius: '8px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              border: selectedManga === 'ALL' ? '1.5px solid #e11d48' : '1px solid rgba(255, 255, 255, 0.08)',
+              background: selectedManga === 'ALL' ? 'rgba(225, 29, 72, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+              color: selectedManga === 'ALL' ? '#fb7185' : '#a1a1aa',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Tất cả ({screenshots.length})
+          </button>
+          {mangaList.map((m) => (
+            <button
+              key={m.slug}
+              onClick={() => setSelectedManga(m.slug)}
               style={{
-                position: 'absolute',
-                left: '14px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#71717a',
-                pointerEvents: 'none',
+                padding: '5px 12px',
+                borderRadius: '8px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                border: selectedManga === m.slug ? '1.5px solid #e11d48' : '1px solid rgba(255, 255, 255, 0.08)',
+                background: selectedManga === m.slug ? 'rgba(225, 29, 72, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                color: selectedManga === m.slug ? '#fb7185' : '#a1a1aa',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease',
               }}
-            />
-            <input
-              type="text"
-              placeholder="Tìm theo tên truyện, chapter, trang..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 38px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: '12px',
-                color: '#f4f4f5',
-                fontSize: '0.88rem',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                style={{
-                  position: 'absolute',
-                  right: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: '#71717a',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                }}
-              >
-                <X size={15} />
-              </button>
-            )}
-          </div>
-
-          {/* Manga Filter Pills */}
-          {mangaList.length > 1 && (
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', maxWidth: '100%' }}>
-              <button
-                onClick={() => setSelectedManga('ALL')}
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: '10px',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  border: selectedManga === 'ALL' ? '2px solid #ec4899' : '1px solid rgba(255, 255, 255, 0.1)',
-                  background: selectedManga === 'ALL' ? 'rgba(236, 72, 153, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                  color: selectedManga === 'ALL' ? '#f472b6' : '#d4d4d8',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                Tất cả ({screenshots.length})
-              </button>
-              {mangaList.map(m => (
-                <button
-                  key={m.slug}
-                  onClick={() => setSelectedManga(m.slug)}
-                  style={{
-                    padding: '7px 14px',
-                    borderRadius: '10px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
-                    border: selectedManga === m.slug ? '2px solid #ec4899' : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: selectedManga === m.slug ? 'rgba(236, 72, 153, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                    color: selectedManga === m.slug ? '#f472b6' : '#d4d4d8',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  {m.title} ({m.count})
-                </button>
-              ))}
-            </div>
-          )}
+            >
+              {m.title} ({m.count})
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Main Content Grid */}
-      <main style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* ── Main Grid Content ── */}
+      <main style={{ padding: '16px 18px', maxWidth: '1400px', margin: '0 auto' }}>
         {screenshots.length === 0 ? (
           /* Empty State */
           <div
@@ -275,9 +260,9 @@ export const HMangaScreenshotPage: React.FC = () => {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '100px 20px',
+              padding: '80px 20px',
               textAlign: 'center',
-              gap: '18px',
+              gap: '16px',
               background: 'rgba(255, 255, 255, 0.02)',
               borderRadius: '20px',
               border: '1px dashed rgba(255, 255, 255, 0.1)',
@@ -286,104 +271,102 @@ export const HMangaScreenshotPage: React.FC = () => {
           >
             <div
               style={{
-                width: '88px',
-                height: '88px',
-                borderRadius: '24px',
-                background: 'rgba(236, 72, 153, 0.12)',
+                width: '72px',
+                height: '72px',
+                borderRadius: '20px',
+                background: 'rgba(225, 29, 72, 0.12)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#ec4899',
+                color: '#e11d48',
               }}
             >
-              <Images size={42} />
+              <Images size={36} />
             </div>
             <div>
-              <h2 style={{ margin: '0 0 8px', fontSize: '1.3rem', fontWeight: 800, color: '#f4f4f5' }}>
-                Bộ sưu tập ảnh đang trống
+              <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem', fontWeight: 800, color: '#f4f4f5' }}>
+                Chưa có ảnh chụp nào
               </h2>
-              <p style={{ margin: 0, fontSize: '0.92rem', color: '#a1a1aa', maxWidth: '380px', lineHeight: 1.5 }}>
-                Khi bạn đang đọc truyện H, nhấn nút <span style={{ color: '#ec4899', fontWeight: 700 }}>📸 Chụp ảnh</span> ở thanh điều hướng để lưu lại nguyên trang ảnh khoảnh khắc đẹp!
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#a1a1aa', maxWidth: '360px', lineHeight: 1.5 }}>
+                Khi đang đọc truyện H, nhấn nút <span style={{ color: '#fb7185', fontWeight: 700 }}>📸 Chụp ảnh</span> để lưu lại các trang truyện bạn yêu thích.
               </p>
             </div>
             <button
               onClick={() => navigate('/truyenh')}
               style={{
-                marginTop: '6px',
-                padding: '12px 24px',
+                padding: '10px 20px',
                 borderRadius: '12px',
                 border: 'none',
-                background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                background: 'linear-gradient(135deg, #e11d48, #be123c)',
                 color: '#ffffff',
-                fontSize: '0.95rem',
+                fontSize: '0.9rem',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 6px 20px rgba(236, 72, 153, 0.35)',
+                boxShadow: '0 4px 16px rgba(225, 29, 72, 0.35)',
               }}
             >
-              <BookOpen size={18} /> Mở đọc truyện ngay
+              <BookOpen size={16} /> Mở đọc truyện H
             </button>
           </div>
         ) : filtered.length === 0 ? (
           <div
             style={{
               textAlign: 'center',
-              padding: '80px 20px',
+              padding: '60px 20px',
               color: '#a1a1aa',
               background: 'rgba(255, 255, 255, 0.02)',
-              borderRadius: '20px',
+              borderRadius: '16px',
             }}
           >
-            <p style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
-              Không tìm thấy ảnh chụp nào khớp với "{searchQuery}"
+            <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 600 }}>
+              Không tìm thấy ảnh chụp nào khớp với từ khóa "{searchQuery}"
             </p>
           </div>
         ) : (
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: '22px',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: '16px',
             }}
           >
             {filtered.map((shot) => (
               <div
                 key={shot.id}
                 style={{
-                  backgroundColor: '#121215',
-                  border: '1px solid rgba(255, 255, 255, 0.09)',
-                  borderRadius: '18px',
+                  backgroundColor: '#131318',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
                   overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  position: 'relative',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-                  transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
+                  transition: 'all 0.2s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(236, 72, 153, 0.6)';
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 16px 36px rgba(236, 72, 153, 0.2), 0 4px 12px rgba(0,0,0,0.5)';
+                  e.currentTarget.style.borderColor = 'rgba(225, 29, 72, 0.5)';
+                  e.currentTarget.style.transform = 'translateY(-3px)';
+                  e.currentTarget.style.boxShadow = '0 10px 28px rgba(225, 29, 72, 0.18)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.09)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.3)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.3)';
                 }}
               >
-                {/* Full Rectangular Manga Page Preview */}
+                {/* 1. KHU VỰC ẢNH */}
                 <div
                   onClick={() => setPreviewShot(shot)}
                   style={{
                     width: '100%',
-                    height: '380px',
+                    height: '280px',
                     backgroundColor: '#000000',
                     cursor: 'pointer',
-                    overflow: 'hidden',
                     position: 'relative',
+                    overflow: 'hidden',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -391,14 +374,13 @@ export const HMangaScreenshotPage: React.FC = () => {
                 >
                   <img
                     src={shot.imageData}
-                    alt={`${shot.mangaTitle} - ${shot.chapterName}`}
+                    alt={shot.mangaTitle}
                     referrerPolicy="no-referrer"
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'contain', // Hiển thị full trọn vẹn hình chữ nhật không cắt xén
+                      objectFit: 'contain',
                       display: 'block',
-                      backgroundColor: '#000000',
                     }}
                     onError={(e) => {
                       const target = e.currentTarget;
@@ -406,152 +388,147 @@ export const HMangaScreenshotPage: React.FC = () => {
                       const parent = target.parentElement;
                       if (parent) {
                         const fallback = document.createElement('div');
-                        fallback.style.cssText =
-                          'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:#71717a;font-size:0.85rem;';
-                        fallback.innerHTML =
-                          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span>Không tải được ảnh</span>';
+                        fallback.style.cssText = 'color:#71717a;font-size:0.78rem;text-align:center;padding:10px;';
+                        fallback.innerText = 'Không tải được ảnh';
                         parent.appendChild(fallback);
                       }
                     }}
                   />
 
-                  {/* Badges on image */}
+                  {/* Tag chương / trang góc ảnh */}
                   <div
                     style={{
                       position: 'absolute',
-                      top: '12px',
-                      left: '12px',
-                      display: 'flex',
-                      gap: '6px',
+                      top: '8px',
+                      left: '8px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                      backdropFilter: 'blur(6px)',
+                      color: '#fb7185',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(225, 29, 72, 0.3)',
                     }}
                   >
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 800,
-                        color: '#ffffff',
-                        backgroundColor: '#ec4899',
-                        padding: '4px 10px',
-                        borderRadius: '8px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-                        letterSpacing: '0.02em',
-                      }}
-                    >
-                      {shot.pageIndex ? `Trang ${shot.pageIndex}` : 'Ảnh trang'}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: '#f4f4f5',
-                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                        backdropFilter: 'blur(6px)',
-                        padding: '4px 10px',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                      }}
-                    >
-                      {shot.chapterName}
-                    </span>
+                    {shot.chapterName}
                   </div>
 
-                  {/* Hover View Zoom Icon */}
+                  {/* Nút xem nhanh icon trên ảnh */}
                   <div
                     style={{
                       position: 'absolute',
-                      top: '12px',
-                      right: '12px',
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.65)',
+                      bottom: '8px',
+                      right: '8px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.65)',
                       backdropFilter: 'blur(4px)',
+                      color: '#ffffff',
+                      borderRadius: '6px',
+                      width: '28px',
+                      height: '28px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#fff',
                     }}
                   >
-                    <Eye size={16} />
+                    <ZoomIn size={15} />
                   </div>
                 </div>
 
-                {/* Card Details & Action Buttons */}
-                <div style={{ padding: '14px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div>
-                    <h3
-                      title={shot.mangaTitle}
-                      style={{
-                        margin: '0 0 4px',
-                        fontSize: '0.98rem',
-                        fontWeight: 800,
-                        color: '#f4f4f5',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {shot.mangaTitle}
-                    </h3>
-                    <div
-                      style={{
-                        fontSize: '0.76rem',
-                        color: '#71717a',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <Calendar size={12} />
-                      {formatDate(shot.createdAt)}
-                    </div>
+                {/* 2. KHU VỰC THÔNG TIN TRUYỆN & 3 NÚT HÀNH ĐỘNG */}
+                <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, justifyContent: 'space-between' }}>
+                  {/* Tên truyện */}
+                  <div
+                    title={shot.mangaTitle}
+                    style={{
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      color: '#f4f4f5',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {shot.mangaTitle}
                   </div>
 
-                  {/* Large Prominent Action: QUAY LẠI ĐỌC TRUYỆN TIẾP */}
-                  <div style={{ marginTop: 'auto', display: 'flex', gap: '8px', paddingTop: '4px' }}>
+                  {/* 3 NÚT: XEM · ĐẾN TRUYỆN · XÓA */}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {/* Nút 1: Xem ảnh */}
                     <button
-                      onClick={() => handleOpenReader(shot)}
+                      type="button"
+                      onClick={() => setPreviewShot(shot)}
                       style={{
-                        flex: 1,
-                        padding: '10px 14px',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
-                        color: '#ffffff',
-                        fontSize: '0.88rem',
+                        flex: '1',
+                        padding: '6px 8px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: '#f4f4f5',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
                         cursor: 'pointer',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '7px',
-                        boxShadow: '0 4px 12px rgba(236, 72, 153, 0.3)',
-                        transition: 'all 0.15s ease',
+                        gap: '4px',
+                        transition: 'all 0.12s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      }}
+                    >
+                      <Eye size={13} /> Xem
+                    </button>
+
+                    {/* Nút 2: Đi tới truyện */}
+                    <button
+                      type="button"
+                      onClick={() => handleGoToManga(shot)}
+                      title="Đọc truyện này"
+                      style={{
+                        flex: '1.2',
+                        padding: '6px 8px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #e11d48, #be123c)',
+                        color: '#ffffff',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        boxShadow: '0 2px 8px rgba(225, 29, 72, 0.3)',
+                        transition: 'all 0.12s ease',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(236, 72, 153, 0.45)';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(236, 72, 153, 0.3)';
                       }}
                     >
-                      <BookOpen size={16} />
-                      Đọc tiếp chương này
+                      <BookOpen size={13} /> Đến truyện
                     </button>
 
-                    {deleteConfirm === shot.id ? (
-                      <div style={{ display: 'flex', gap: '4px' }}>
+                    {/* Nút 3: Xóa ảnh */}
+                    {deleteConfirmId === shot.id ? (
+                      <div style={{ display: 'flex', gap: '2px' }}>
                         <button
+                          type="button"
                           onClick={() => handleDelete(shot.id)}
                           style={{
-                            padding: '8px 12px',
-                            borderRadius: '10px',
+                            padding: '6px 8px',
+                            borderRadius: '8px',
                             border: 'none',
                             background: '#dc2626',
                             color: '#fff',
-                            fontSize: '0.78rem',
+                            fontSize: '0.74rem',
                             fontWeight: 700,
                             cursor: 'pointer',
                           }}
@@ -559,14 +536,15 @@ export const HMangaScreenshotPage: React.FC = () => {
                           Xóa
                         </button>
                         <button
-                          onClick={() => setDeleteConfirm(null)}
+                          type="button"
+                          onClick={() => setDeleteConfirmId(null)}
                           style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(255,255,255,0.15)',
+                            padding: '6px 6px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(255,255,255,0.12)',
                             background: 'transparent',
                             color: '#a1a1aa',
-                            fontSize: '0.78rem',
+                            fontSize: '0.74rem',
                             cursor: 'pointer',
                           }}
                         >
@@ -575,19 +553,20 @@ export const HMangaScreenshotPage: React.FC = () => {
                       </div>
                     ) : (
                       <button
-                        onClick={() => setDeleteConfirm(shot.id)}
-                        title="Xóa ảnh này"
+                        type="button"
+                        onClick={() => setDeleteConfirmId(shot.id)}
+                        title="Xóa ảnh"
                         style={{
-                          padding: '10px 12px',
-                          borderRadius: '12px',
+                          padding: '6px 8px',
+                          borderRadius: '8px',
                           border: '1px solid rgba(239, 68, 68, 0.25)',
                           background: 'rgba(239, 68, 68, 0.08)',
                           color: '#f87171',
                           cursor: 'pointer',
-                          display: 'flex',
+                          display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          transition: 'all 0.15s ease',
+                          transition: 'all 0.12s ease',
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
@@ -596,7 +575,7 @@ export const HMangaScreenshotPage: React.FC = () => {
                           e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
                         }}
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={13} />
                       </button>
                     )}
                   </div>
@@ -607,14 +586,15 @@ export const HMangaScreenshotPage: React.FC = () => {
         )}
       </main>
 
-      {/* Fullscreen Lightbox Modal */}
+      {/* ── Fullscreen Lightbox Modal (Phóng to ảnh) ── */}
       {previewShot && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.92)',
+            backgroundColor: 'rgba(0, 0, 0, 0.94)',
             backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             zIndex: 9999,
             display: 'flex',
             flexDirection: 'column',
@@ -624,50 +604,74 @@ export const HMangaScreenshotPage: React.FC = () => {
           {/* Lightbox Topbar */}
           <div
             style={{
-              padding: '14px 20px',
+              padding: '12px 18px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(0, 0, 0, 0.6)',
+              background: 'rgba(0, 0, 0, 0.7)',
               borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#f4f4f5' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#f4f4f5' }}>
                 {previewShot.mangaTitle}
               </h3>
-              <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#ec4899', fontWeight: 700 }}>
-                {previewShot.chapterName} {previewShot.pageIndex ? `· Trang ${previewShot.pageIndex}` : ''}
+              <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#fb7185', fontWeight: 700 }}>
+                {previewShot.chapterName}
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button
-                onClick={() => handleOpenReader(previewShot)}
+                type="button"
+                onClick={() => handleGoToManga(previewShot)}
                 style={{
-                  padding: '9px 18px',
-                  borderRadius: '10px',
+                  padding: '7px 14px',
+                  borderRadius: '8px',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                  background: 'linear-gradient(135deg, #e11d48, #be123c)',
                   color: '#ffffff',
-                  fontSize: '0.88rem',
+                  fontSize: '0.82rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '7px',
+                  gap: '6px',
                 }}
               >
-                <BookOpen size={16} /> Đọc tiếp chương này
+                <BookOpen size={14} /> Đến truyện
               </button>
 
               <button
+                type="button"
+                onClick={() => {
+                  if (previewShot) handleDelete(previewShot.id);
+                }}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  color: '#f87171',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Trash2 size={14} /> Xóa
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setPreviewShot(null)}
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                   background: 'rgba(255, 255, 255, 0.08)',
                   color: '#f4f4f5',
@@ -677,19 +681,19 @@ export const HMangaScreenshotPage: React.FC = () => {
                   justifyContent: 'center',
                 }}
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
           </div>
 
-          {/* Lightbox Image Container */}
+          {/* Lightbox Image View */}
           <div
             style={{
               flex: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '20px',
+              padding: '16px',
               overflow: 'auto',
             }}
             onClick={() => setPreviewShot(null)}
@@ -699,7 +703,7 @@ export const HMangaScreenshotPage: React.FC = () => {
               alt={previewShot.mangaTitle}
               style={{
                 maxWidth: '100%',
-                maxHeight: '85vh',
+                maxHeight: '88vh',
                 objectFit: 'contain',
                 borderRadius: '8px',
                 boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)',
