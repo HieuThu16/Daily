@@ -83,21 +83,7 @@ function isoDate(d: Date) {
 }
 
 const PHOTO_BUCKET = 'daily-photos'
-
 const QUICK_KEY = 'daily-quick-phrases'
-const DEFAULT_QUICK = [
-  'Chơi LQ',
-  'Xem YouTube',
-  'Lướt TikTok',
-  'Xem phim',
-  'Ăn sáng',
-  'Ăn trưa',
-  'Ăn tối',
-  'Đi làm',
-  'Học bài',
-  'Tập gym',
-  'Đi ngủ',
-]
 
 function viDate(s: string) {
   const d = new Date(s + 'T12:00:00')
@@ -138,11 +124,92 @@ export function DailyPage() {
   const [editText, setEditText] = useState('')
   const [editTime, setEditTime] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, DEFAULT_QUICK))
+  const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, []))
   const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
+  
+  // Lưu danh sách hành động chọn nhanh riêng cho từng người lên Supabase
+  const saveUserQuickPhrases = async (phrases: string[]) => {
+    let userKey = 'guest'
+    if (supabase?.auth) {
+      try {
+        const user = (await supabase.auth.getUser())?.data?.user
+        if (user) {
+          userKey = user.id
+          const { data: existing } = await supabase
+            .from('media_items')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('genre', 'DAILY_QUICK_ACTIONS')
+            .limit(1)
+
+          const payload = {
+            user_id: user.id,
+            type: 'STORY' as const,
+            genre: 'DAILY_QUICK_ACTIONS',
+            channel: 'quick_phrases',
+            name: 'Daily Quick Actions',
+            description: JSON.stringify(phrases),
+            is_public: false,
+          }
+
+          if (existing && existing.length > 0) {
+            await supabase.from('media_items').update(payload).eq('id', existing[0].id)
+          } else {
+            await supabase.from('media_items').insert(payload)
+          }
+        }
+      } catch (e) {
+        console.warn('Lỗi lưu danh sách hành động lên Supabase:', e)
+      }
+    }
+    saveLocal(`daily-quick-phrases-${userKey}`, phrases)
+    saveLocal(QUICK_KEY, phrases)
+  }
+
+  // Tải danh sách hành động riêng của từng người từ Supabase khi mở trang
+  useEffect(() => {
+    let alive = true
+    const loadPhrases = async () => {
+      let userKey = 'guest'
+      if (supabase?.auth) {
+        try {
+          const user = (await supabase.auth.getUser())?.data?.user
+          if (user) {
+            userKey = user.id
+            const { data } = await supabase
+              .from('media_items')
+              .select('description')
+              .eq('user_id', user.id)
+              .eq('genre', 'DAILY_QUICK_ACTIONS')
+              .is('deleted_at', null)
+              .maybeSingle()
+
+            if (data?.description && alive) {
+              try {
+                const parsed = JSON.parse(data.description)
+                if (Array.isArray(parsed)) {
+                  setQuickPhrases(parsed)
+                  saveLocal(`daily-quick-phrases-${userKey}`, parsed)
+                  saveLocal(QUICK_KEY, parsed)
+                  return
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+      if (alive) {
+        const local = loadLocal<string[]>(`daily-quick-phrases-${userKey}`, loadLocal<string[]>(QUICK_KEY, []))
+        if (local.length > 0) setQuickPhrases(local)
+      }
+    }
+    void loadPhrases()
+    return () => { alive = false }
+  }, [])
   
   // Action Combobox Modal state
   const [showActionModal, setShowActionModal] = useState(false)
+
   const [actionSearch, setActionSearch] = useState('')
   const [newActionInput, setNewActionInput] = useState('')
   
@@ -917,10 +984,11 @@ export function DailyPage() {
               onClick={() => {
                 const list = editQuick.split('\n').map((l) => l.trim()).filter(Boolean)
                 setQuickPhrases(list)
-                saveLocal(QUICK_KEY, list)
+                void saveUserQuickPhrases(list)
                 setEditQuick(null)
-                showToast('✅ Đã lưu danh sách chọn nhanh')
+                showToast('✅ Đã lưu danh sách hành động riêng vào Supabase')
               }}
+
             >
               <Save size={15} /> Lưu
             </button>
@@ -1223,9 +1291,15 @@ export function DailyPage() {
                 onClick={() => {
                   const phrase = actionSearch.trim()
                   insertQuickPhrase(phrase)
+                  if (!quickPhrases.includes(phrase)) {
+                    const next = [...quickPhrases, phrase]
+                    setQuickPhrases(next)
+                    void saveUserQuickPhrases(next)
+                  }
                   setShowActionModal(false)
                   setActionSearch('')
                 }}
+
                 style={{
                   display: 'flex',
                   alignItems: 'center',
