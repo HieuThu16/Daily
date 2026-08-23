@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BookOpen, Music, Play, Flame, RefreshCw, ExternalLink,
-  Headphones, PlusCircle
+  Headphones, PlusCircle, Sparkles, Clock, Compass, Heart
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { localDate } from '../../lib/date';
@@ -17,7 +17,7 @@ import { estimatePage } from '../../lib/book/repository';
 export interface SharedActivityItem {
   id: string;
   user_id?: string;
-  userName: 'Hiếu' | 'Kim Ý' | string;
+  userName: 'Hiếu' | 'Kim Ý';
   type: 'BOOK' | 'BL' | 'H_MANGA' | 'MUSIC';
   actionType: 'READING' | 'ADDED_MUSIC' | 'LISTENED_MUSIC' | 'ADDED_BOOK' | 'ADDED_MANGA';
   title: string;
@@ -29,67 +29,65 @@ export interface SharedActivityItem {
   currentChapterOrPage?: number;
   totalChaptersOrPages?: number;
   durationMinutes?: number;
-  audioUrl?: string;
-  artist?: string;
+  audioUrl?: string | null;
+  artist?: string | null;
   logDate: string;
   logTime?: string;
   updatedAt: string;
-  rawMedia?: Media;
+  rawMedia?: any;
 }
 
-export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?: (tab: string) => void; partnerPerson?: Person }) {
+// Mốc thời gian đặt lại Xem chung (chỉ lấy các hoạt động ghi nhận mới bắt đầu từ bây giờ)
+const RESET_CUTOFF_MS = new Date('2026-08-23T22:30:00+07:00').getTime();
+
+interface Props {
+  partnerPerson?: Person;
+}
+
+export function SharedActivityTab({ partnerPerson }: Props) {
   const navigate = useNavigate();
   const audioContext = useOptionalAudioPlayer();
   const { showToast } = useToast();
 
-  const [selectedDate, setSelectedDate] = useState<string>(localDate());
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
-  const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [activities, setActivities] = useState<SharedActivityItem[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => localDate());
   const [activePartnerFilter, setActivePartnerFilter] = useState<'ALL' | 'HIEU' | 'KIM_Y'>('ALL');
+  const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'BOOK' | 'MANGA' | 'MUSIC'>('ALL');
+  const [activities, setActivities] = useState<SharedActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Lấy user auth hiện tại
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+
+  const isHieu = useCallback((s?: string | null) => {
+    const str = (s || '').toLowerCase();
+    return str.includes('hieu') || str.includes('truongnguyenminhhieu');
+  }, []);
+
+  const isKimY = useCallback((s?: string | null) => {
+    const str = (s || '').toLowerCase();
+    return str.includes('kimy') || str.includes('nguyenkimy') || str.includes('ý');
+  }, []);
+
+  // Lấy thông tin user hiện tại
   useEffect(() => {
     if (supabase?.auth) {
       supabase.auth.getUser().then(({ data }) => {
-        if (data?.user?.email) setCurrentUserEmail(data.user.email.toLowerCase());
-        if (data?.user?.id) setCurrentUserId(data.user.id);
+        if (data?.user) {
+          setCurrentUserId(data.user.id);
+          if (data.user.email) setCurrentUserEmail(data.user.email.toLowerCase());
+        }
       }).catch(() => null);
     }
   }, []);
 
-  const isHieu = useCallback((emailOrName?: string) => {
-    const s = (emailOrName || '').toLowerCase();
-    return s.includes('hieu') || s.includes('truongnguyenminhhieu');
-  }, []);
-
-  const isKimY = useCallback((emailOrName?: string) => {
-    const s = (emailOrName || '').toLowerCase();
-    return s.includes('kimy') || s.includes('nguyenkimy') || s.includes('ý');
-  }, []);
-
+  // Tải dữ liệu hoạt động
   const fetchActivities = useCallback(async () => {
     setLoading(true);
     try {
-      // 0. Tạo từ điển bìa truyện H & Manga từ danh sách truyện sẵn có
-      const mangaCoverMap = new Map<string, { cover: string; title: string }>();
-      try {
-        const customManga = getCustomHMangaList();
-        for (const m of customManga) {
-          if (m.slug) mangaCoverMap.set(m.slug, { cover: m.cover || '', title: m.title || m.slug });
-        }
-        const hList = await fetchHMangaList();
-        for (const m of hList) {
-          if (m.slug && !mangaCoverMap.has(m.slug)) {
-            mangaCoverMap.set(m.slug, { cover: m.cover || '', title: m.title || m.slug });
-          }
-        }
-      } catch {}
-
       const itemsMap = new Map<string, SharedActivityItem>();
 
-      // 1. Fetch đồng thời từ Supabase: media_items, book_documents, manga_reading_logs, manga_interactions, profiles
+      // 1. Tải dữ liệu từ Supabase
       if (supabase) {
         const [
           { data: mediaRows },
@@ -101,51 +99,45 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           supabase
             .from('media_items')
             .select('*')
-            .is('deleted_at', null)
+            .or('status.eq.COMPLETED,status.eq.IN_PROGRESS')
             .order('updated_at', { ascending: false })
-            .limit(200),
+            .limit(150),
           supabase
             .from('book_documents')
-            .select('media_item_id, percent, page_count, est_pages, last_char_offset, total_chars, last_chapter_idx'),
-          Promise.resolve(
-            supabase
-              .from('manga_reading_logs')
-              .select('*')
-              .order('readAt', { ascending: false })
-              .limit(200),
-          ).catch(() => ({ data: null })),
-          Promise.resolve(
-            supabase
-              .from('manga_interactions')
-              .select('*')
-              .order('updated_at', { ascending: false })
-              .limit(200),
-          ).catch(() => ({ data: null })),
-          Promise.resolve(
-            supabase
-              .from('profiles')
-              .select('id, name, email'),
-          ).catch(() => ({ data: null }))
+            .select('id, media_item_id, percent, last_chapter_idx, page_count, est_pages, last_char_offset, total_chars, updated_at'),
+          supabase
+            .from('manga_reading_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(150),
+          supabase
+            .from('manga_interactions')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(100),
+          supabase
+            .from('profiles')
+            .select('id, email, name')
         ]);
 
         const profileMap = new Map<string, string>();
         if (profileRows) {
           for (const p of profileRows as any[]) {
             if (p.id) {
-              const name = isKimY(p.email || p.name) ? 'Kim Ý' : (isHieu(p.email || p.name) ? 'Hiếu' : p.name || 'Hiếu');
+              const name = isKimY(p.email || p.name) ? 'Kim Ý' : 'Hiếu';
               profileMap.set(p.id, name);
             }
           }
         }
 
-        const resolveUserName = (userId?: string | null, channelOrDesc?: string | null, fallbackArtistOrAuthor?: string | null) => {
+        const resolveUserName = (userId?: string | null, channelOrDesc?: string | null, artistOrAuthor?: string | null): 'Hiếu' | 'Kim Ý' => {
           if (channelOrDesc && isKimY(channelOrDesc)) return 'Kim Ý';
           if (channelOrDesc && isHieu(channelOrDesc)) return 'Hiếu';
-          if (userId && profileMap.has(userId)) return profileMap.get(userId)!;
+          if (userId && profileMap.has(userId)) return profileMap.get(userId) as any;
           if (userId && isKimY(userId)) return 'Kim Ý';
           if (userId && isHieu(userId)) return 'Hiếu';
-          if (fallbackArtistOrAuthor && isKimY(fallbackArtistOrAuthor)) return 'Kim Ý';
-          if (fallbackArtistOrAuthor && isHieu(fallbackArtistOrAuthor)) return 'Hiếu';
+          if (artistOrAuthor && isKimY(artistOrAuthor)) return 'Kim Ý';
+          if (artistOrAuthor && isHieu(artistOrAuthor)) return 'Hiếu';
           if (currentUserId && userId === currentUserId) {
             return isKimY(currentUserEmail) ? 'Kim Ý' : 'Hiếu';
           }
@@ -162,14 +154,24 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           }
         }
 
-        // Xử lý media_items
+        // Tải ảnh bìa manga
+        const mangaCoverMap = new Map<string, { cover?: string; title?: string }>();
+        try {
+          const [hList, customList] = await Promise.all([fetchHMangaList(), getCustomHMangaList()]);
+          for (const m of [...hList, ...customList]) {
+            if (m.slug) mangaCoverMap.set(m.slug, { cover: m.cover ?? undefined, title: m.title ?? undefined });
+          }
+        } catch {}
+
+        // A. Xử lý media_items (Sách, Truyện, Nhạc)
         if (mediaRows) {
           for (const m of mediaRows) {
-            const rowDate = m.log_date || (m.updated_at ? m.updated_at.split('T')[0] : '');
+            const rowDate = m.log_date || (m.updated_at ? m.updated_at.split('T')[0] : localDate());
             const logTime = m.log_time || (m.updated_at ? m.updated_at.split('T')[1]?.slice(0, 5) : '');
             const userName = resolveUserName(m.user_id, m.channel || m.description, m.artist || m.author);
+            const updatedAtIso = m.updated_at || m.created_at || `${rowDate}T${logTime || '00:00'}:00`;
 
-            // A. Sách (BOOK)
+            // 1. SÁCH (BOOK)
             if (m.type === 'BOOK') {
               const doc = bookDocMap.get(m.id);
               let current = m.current_page || m.current_chapter || 0;
@@ -179,45 +181,36 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
               if (doc) {
                 if (doc.last_char_offset && doc.total_chars > 0) {
                   current = estimatePage(doc.last_char_offset, doc.total_chars, doc.page_count);
+                } else if (doc.last_chapter_idx !== undefined && doc.last_chapter_idx !== null) {
+                  current = doc.last_chapter_idx + 1;
                 }
-                if (!total) {
-                  total = doc.page_count || doc.est_pages || 0;
-                }
-                if (pct === undefined && total > 0 && current > 0) {
-                  pct = Math.min(100, Math.round((current / total) * 100));
-                }
-              } else if (pct === undefined && total > 0 && current > 0) {
-                pct = Math.min(100, Math.round((current / total) * 100));
+                if (doc.percent) pct = Math.round(doc.percent);
               }
 
-              // Bất kỳ tiến độ nào của sách (dù chương 1 hay trang 1 hay %) đều hiển thị ngay
-              const isReadingBook = current > 0 || (pct !== undefined && pct > 0) || m.status === 'IN_PROGRESS' || m.status === 'COMPLETED' || Boolean(m.log_date);
-              if (isReadingBook) {
-                const key = `${userName}::BOOK::${m.name || m.id}`;
-                itemsMap.set(key, {
-                  id: `book-${m.id}`,
-                  user_id: m.user_id,
-                  userName,
-                  type: 'BOOK',
-                  actionType: 'READING',
-                  title: m.name || 'Sách',
-                  subtitle: m.author || m.description || '',
-                  cover: m.cover_url || m.cover || '',
-                  progressText: current > 0 
-                    ? `Trang ${current}${total ? ` / ${total}` : ''}${pct !== undefined ? ` (${pct}%)` : ''}${logTime ? ` · ${logTime}` : ''}`
-                    : (pct !== undefined ? `${pct}%${logTime ? ` · ${logTime}` : ''}` : (logTime ? `Đang đọc lúc ${logTime}` : 'Đang đọc')),
-                  progressPercent: pct,
-                  currentChapterOrPage: current,
-                  totalChaptersOrPages: total || undefined,
-                  logDate: rowDate,
-                  logTime: logTime,
-                  updatedAt: m.updated_at || m.created_at || '',
-                  rawMedia: m
-                });
-              }
+              const key = `${userName}::BOOK::${m.id || m.name}`;
+              itemsMap.set(key, {
+                id: `book-${m.id}`,
+                user_id: m.user_id,
+                userName,
+                type: 'BOOK',
+                actionType: 'READING',
+                title: m.name || 'Sách',
+                subtitle: m.author || m.description || '',
+                cover: m.cover_url || m.cover || '',
+                progressText: current > 0 
+                  ? `Trang ${current}${total ? ` / ${total}` : ''}${pct !== undefined ? ` (${pct}%)` : ''}${logTime ? ` · ${logTime}` : ''}`
+                  : (pct !== undefined ? `${pct}%${logTime ? ` · ${logTime}` : ''}` : (logTime ? `Đang đọc lúc ${logTime}` : 'Đang đọc')),
+                progressPercent: pct,
+                currentChapterOrPage: current,
+                totalChaptersOrPages: total || undefined,
+                logDate: rowDate,
+                logTime: logTime,
+                updatedAt: updatedAtIso,
+                rawMedia: m
+              });
             }
 
-            // B. Truyện H / BL / Ngôn tình (STORY / MANGA)
+            // 2. TRUYỆN H / BL / NGÔN TÌNH (STORY / MANGA)
             if (m.type === 'STORY' || m.type === 'MANGA') {
               const isBL = m.genre === 'BL' || m.source === 'bl';
               const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : 'H_MANGA';
@@ -231,7 +224,6 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 coverUrl = mangaCoverMap.get(slug)?.cover || '';
               }
 
-              // Chỉ cần đọc (dù chapter 1 hay chapter bất kỳ) là hiển thị ngay bên Xem chung
               const key = `${userName}::${storyType}::${slug || m.name}`;
               itemsMap.set(key, {
                 id: `manga-${m.id}`,
@@ -240,24 +232,22 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 type: storyType,
                 actionType: 'READING',
                 title: m.name || m.title || (slug && mangaCoverMap.get(slug)?.title) || 'Truyện tranh',
-                subtitle: m.channel ? `Bộ: ${m.channel}` : m.author || '',
+                subtitle: `Chapter ${current}`,
                 slug: slug,
                 cover: coverUrl,
-                progressText: `Chapter ${current}${total ? ` / ${total}` : ''}${pct ? ` (${pct}%)` : ''}${logTime ? ` · ${logTime}` : ''}`,
+                progressText: `Chapter ${current}${logTime ? ` · ${logTime}` : ''}`,
                 progressPercent: pct,
                 currentChapterOrPage: current,
-                totalChaptersOrPages: total,
+                totalChaptersOrPages: total || undefined,
                 logDate: rowDate,
                 logTime: logTime,
-                updatedAt: m.updated_at || m.created_at || '',
+                updatedAt: updatedAtIso,
                 rawMedia: m
               });
             }
 
-            // C. Nhạc MP3: Phân biệt rõ "Mới thêm nhạc" vs "Vừa nghe nhạc trên web"
+            // 3. NHẠC MP3 (MUSIC)
             if (m.type === 'MUSIC') {
-              // Nếu có log_time -> Vừa nghe nhạc trên web
-              // Nếu không có log_time -> Mới thêm nhạc vào kho
               const actionType: 'ADDED_MUSIC' | 'LISTENED_MUSIC' = m.log_time ? 'LISTENED_MUSIC' : 'ADDED_MUSIC';
               const key = `${userName}::MUSIC::${m.name || m.id}`;
               itemsMap.set(key, {
@@ -276,14 +266,14 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 artist: m.artist,
                 logDate: rowDate,
                 logTime: logTime,
-                updatedAt: m.updated_at || m.created_at || '',
+                updatedAt: updatedAtIso,
                 rawMedia: m
               });
             }
           }
         }
 
-        // Xử lý manga_reading_logs từ Supabase
+        // B. Xử lý manga_reading_logs
         if (mangaLogs && Array.isArray(mangaLogs)) {
           for (const log of mangaLogs as any[]) {
             const isH = log.manga_type === 'H_MANGA';
@@ -315,98 +305,33 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
             }
           }
         }
-
-        // Xử lý manga_interactions từ Supabase
-        if (mangaInteractions && Array.isArray(mangaInteractions)) {
-          for (const inter of mangaInteractions as any[]) {
-            if (!inter.last_chapter) continue;
-            const isH = inter.manga_type === 'H_MANGA';
-            const storyType: 'H_MANGA' | 'BL' = isH ? 'H_MANGA' : 'BL';
-            const userName = resolveUserName(inter.user_id);
-            const key = `${userName}::${storyType}::${inter.slug}`;
-            const coverUrl = inter.cover_url || mangaCoverMap.get(inter.slug)?.cover || '';
-            const interIso = inter.last_read_at || inter.updated_at || '';
-            const interDate = interIso.split('T')[0] || localDate();
-            const interTime = interIso.split('T')[1]?.slice(0, 5) || '';
-            const existing = itemsMap.get(key);
-
-            if (!existing || (interIso && new Date(interIso).getTime() > new Date(existing.updatedAt).getTime())) {
-              itemsMap.set(key, {
-                id: `manga-inter-${inter.id || inter.slug}`,
-                user_id: inter.user_id,
-                userName,
-                type: storyType,
-                actionType: 'READING',
-                title: inter.title || (mangaCoverMap.get(inter.slug)?.title) || inter.slug,
-                subtitle: inter.last_chapter_name || `Chapter ${inter.last_chapter}`,
-                slug: inter.slug,
-                cover: coverUrl || existing?.cover || '',
-                progressText: `Chapter ${inter.last_chapter}${interTime ? ` · ${interTime}` : ''}`,
-                currentChapterOrPage: inter.last_chapter,
-                logDate: interDate,
-                logTime: interTime,
-                updatedAt: interIso,
-              });
-            }
-          }
-        }
       }
 
-      // 2. Bổ sung từ Manga Reading Logs nội bộ (LocalStorage)
-      try {
-        const localMangaLogs = getMangaReadingLogs();
-        for (const log of localMangaLogs) {
-          const isH = log.mangaType === 'H_MANGA';
-          const storyType: 'H_MANGA' | 'BL' = isH ? 'H_MANGA' : 'BL';
-          const isMeHieu = isHieu(currentUserEmail);
-          const userName = isMeHieu ? 'Hiếu' : 'Kim Ý';
-          const key = `${userName}::${storyType}::${log.mangaSlug}`;
-          const coverUrl = mangaCoverMap.get(log.mangaSlug)?.cover || '';
-          const existing = itemsMap.get(key);
-
-          // Không cần điều kiện > 5 phút: Bất cứ chapter nào đọc đều ghi nhận ngay
-          if (!existing || new Date(log.readAt).getTime() > new Date(existing.updatedAt).getTime()) {
-            itemsMap.set(key, {
-              id: `manga-log-local-${log.id}`,
-              userName,
-              type: storyType,
-              actionType: 'READING',
-              title: log.mangaTitle || (mangaCoverMap.get(log.mangaSlug)?.title) || log.mangaSlug,
-              subtitle: log.chapterName || `Chapter ${log.chapterNumber}`,
-              slug: log.mangaSlug,
-              cover: coverUrl || existing?.cover || '',
-              progressText: `Chapter ${log.chapterNumber}${log.log_time ? ` · ${log.log_time}` : ''}`,
-              currentChapterOrPage: log.chapterNumber,
-              durationMinutes: log.durationMinutes,
-              logDate: log.log_date,
-              logTime: log.log_time,
-              updatedAt: log.readAt,
-            });
-          }
-        }
-      } catch {}
-
-      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất, chỉ lấy các hoạt động của Hiếu & Kim Ý
+      // 2. Chuyển map thành danh sách và lọc theo mốc thời gian bắt đầu lưu mới (Hiếu & Ý)
       const list = Array.from(itemsMap.values()).filter((it) => {
-        return it.userName === 'Hiếu' || it.userName === 'Kim Ý';
+        const isCouple = it.userName === 'Hiếu' || it.userName === 'Kim Ý';
+        const itemTime = new Date(it.updatedAt).getTime();
+        return isCouple && (isNaN(itemTime) || itemTime >= RESET_CUTOFF_MS);
       });
-      list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
+
+      // Sắp xếp theo thời gian mới nhất lên đầu
+      list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       setActivities(list);
     } catch (err) {
       console.warn('Lỗi tải dữ liệu xem chung:', err);
     } finally {
       setLoading(false);
     }
-  }, [currentUserEmail, currentUserId, isHieu, isKimY, partnerPerson]);
+  }, [currentUserEmail, currentUserId, isHieu, isKimY]);
 
   useEffect(() => {
     void fetchActivities();
 
-    // Lắng nghe Realtime từ Supabase trên tất cả bảng liên quan
+    // Lắng nghe Realtime từ Supabase
     if (supabase) {
       const sb = supabase;
       const channel = sb
-        .channel('shared-activity-realtime-channel')
+        .channel('shared-activity-realtime-channel-v2')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'media_items' }, () => {
           void fetchActivities();
         })
@@ -416,59 +341,55 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
         .on('postgres_changes', { event: '*', schema: 'public', table: 'manga_reading_logs' }, () => {
           void fetchActivities();
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'manga_interactions' }, () => {
-          void fetchActivities();
-        })
         .subscribe();
 
-      // Lắng nghe các sự kiện client nội bộ để cập nhật tức thì
       const handleLocalEvent = () => void fetchActivities();
       window.addEventListener('daily_music_listening_updated', handleLocalEvent);
       window.addEventListener('daily_manga_reading_updated', handleLocalEvent);
-      window.addEventListener('daily_h_history_updated', handleLocalEvent);
-      window.addEventListener('daily_book_progress_updated', handleLocalEvent);
-      window.addEventListener('storage', handleLocalEvent);
 
       return () => {
         void sb.removeChannel(channel);
         window.removeEventListener('daily_music_listening_updated', handleLocalEvent);
         window.removeEventListener('daily_manga_reading_updated', handleLocalEvent);
-        window.removeEventListener('daily_h_history_updated', handleLocalEvent);
-        window.removeEventListener('daily_book_progress_updated', handleLocalEvent);
-        window.removeEventListener('storage', handleLocalEvent);
       };
     }
   }, [fetchActivities]);
 
-  // Lọc hoạt động theo ngày được chọn
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchActivities();
+    setTimeout(() => setIsRefreshing(false), 800);
+  };
+
+  // Lọc theo bộ lọc
   const filteredActivities = useMemo(() => {
-    return activities.filter(act => {
-      // 1. Khớp ngày đang chọn
-      const matchesDate = act.logDate === selectedDate || act.updatedAt?.startsWith(selectedDate);
-      if (!matchesDate) return false;
+    return activities.filter((act) => {
+      // 1. Lọc theo ngày (nếu hoạt động thuộc ngày được chọn)
+      if (act.logDate && act.logDate !== selectedDate) return false;
 
       // 2. Lọc theo người
       if (activePartnerFilter === 'HIEU' && act.userName !== 'Hiếu') return false;
       if (activePartnerFilter === 'KIM_Y' && act.userName !== 'Kim Ý') return false;
 
+      // 3. Lọc theo loại nội dung
+      if (activeTypeFilter === 'BOOK' && act.type !== 'BOOK') return false;
+      if (activeTypeFilter === 'MANGA' && act.type !== 'BL' && act.type !== 'H_MANGA') return false;
+      if (activeTypeFilter === 'MUSIC' && act.type !== 'MUSIC') return false;
+
       return true;
     });
-  }, [activities, activePartnerFilter, selectedDate]);
+  }, [activities, selectedDate, activePartnerFilter, activeTypeFilter]);
 
-  // Mở truyện hoặc sách
+  // Điều hướng khi bấm vào thẻ
   const handleItemClick = (act: SharedActivityItem) => {
-    if (act.type === 'H_MANGA') {
-      const slug = act.slug || act.title;
-      if (act.currentChapterOrPage) {
-        navigate(`/truyenh/${slug}/read/${act.currentChapterOrPage}`);
-      } else {
-        navigate(`/truyenh/${slug}`);
-      }
-    } else if (act.type === 'BL') {
-      const slug = act.slug || act.title;
-      navigate(`/bl/${slug}`);
-    } else if (act.type === 'BOOK') {
+    if (act.type === 'BOOK') {
       navigate('/books');
+    } else if (act.type === 'BL') {
+      navigate('/bl');
+    } else if (act.type === 'H_MANGA') {
+      navigate('/truyenh');
+    } else if (act.type === 'MUSIC') {
+      navigate('/music');
     }
   };
 
@@ -496,15 +417,6 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
     }
   };
 
-  const formatTimeAgo = (iso?: string) => {
-    if (!iso) return '';
-    const date = new Date(iso);
-    if (isNaN(date.getTime())) return '';
-    const hours = date.getHours().toString().padStart(2, '0');
-    const mins = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${mins}`;
-  };
-
   return (
     <div className="shared-activity-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       
@@ -516,85 +428,125 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
         onChange={setSelectedDate}
       />
 
-      {/* Lọc theo người (Hiếu / Kim Ý / Cả hai) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+      {/* THANH BỘ LỌC NGƯỜI & NÚT LÀM MỚI */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: '6px' }}>
           <button
             type="button"
             onClick={() => setActivePartnerFilter('ALL')}
             style={{
-              padding: '5px 12px',
+              padding: '6px 12px',
               borderRadius: '8px',
               border: 'none',
-              background: activePartnerFilter === 'ALL' ? 'var(--primary)' : 'var(--card-bg)',
-              color: activePartnerFilter === 'ALL' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
+              background: activePartnerFilter === 'ALL' ? 'linear-gradient(135deg, #ec4899, #be123c)' : 'var(--card-bg)',
+              color: activePartnerFilter === 'ALL' ? '#ffffff' : 'var(--text-muted)',
+              fontSize: '0.78rem',
+              fontWeight: 800,
               cursor: 'pointer',
-              boxShadow: activePartnerFilter === 'ALL' ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
             }}
           >
-            Tất cả ({filteredActivities.length})
+            Cả hai ({activities.length})
           </button>
+
           <button
             type="button"
             onClick={() => setActivePartnerFilter('HIEU')}
             style={{
-              padding: '5px 12px',
+              padding: '6px 12px',
               borderRadius: '8px',
               border: 'none',
-              background: activePartnerFilter === 'HIEU' ? '#0284c7' : 'var(--card-bg)',
-              color: activePartnerFilter === 'HIEU' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer'
+              background: activePartnerFilter === 'HIEU' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'var(--card-bg)',
+              color: activePartnerFilter === 'HIEU' ? '#ffffff' : 'var(--text-muted)',
+              fontSize: '0.78rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
           >
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }} />
             Hiếu
           </button>
+
           <button
             type="button"
             onClick={() => setActivePartnerFilter('KIM_Y')}
             style={{
-              padding: '5px 12px',
+              padding: '6px 12px',
               borderRadius: '8px',
               border: 'none',
-              background: activePartnerFilter === 'KIM_Y' ? '#f43f5e' : 'var(--card-bg)',
-              color: activePartnerFilter === 'KIM_Y' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer'
+              background: activePartnerFilter === 'KIM_Y' ? 'linear-gradient(135deg, #f43f5e, #e11d48)' : 'var(--card-bg)',
+              color: activePartnerFilter === 'KIM_Y' ? '#ffffff' : 'var(--text-muted)',
+              fontSize: '0.78rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
           >
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fda4af' }} />
             Kim Ý
           </button>
         </div>
 
         <button
           type="button"
-          onClick={() => void fetchActivities()}
+          onClick={handleRefresh}
           style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--primary)',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            border: '1px solid var(--border)',
+            background: 'var(--card-bg)',
+            color: 'var(--text-main)',
+            fontSize: '0.76rem',
+            fontWeight: 700,
             cursor: 'pointer',
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
             gap: '4px',
-            fontSize: '0.8rem',
-            fontWeight: 700
           }}
-          title="Làm mới"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={13} className={isRefreshing || loading ? 'animate-spin' : ''} />
+          Làm mới
         </button>
       </div>
 
-      {/* DANH SÁCH TIẾN ĐỘ ĐỌC / NGHE TRONG NGÀY */}
+      {/* BỘ LỌC THỂ LOẠI (TẤT CẢ / SÁCH / TRUYỆN / NHẠC) */}
+      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+        {[
+          { key: 'ALL', label: 'Tất cả' },
+          { key: 'BOOK', label: '📖 Sách' },
+          { key: 'MANGA', label: '🔞 Truyện tranh' },
+          { key: 'MUSIC', label: '🎵 Âm nhạc' },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTypeFilter(tab.key as any)}
+            style={{
+              padding: '5px 10px',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              background: activeTypeFilter === tab.key ? 'rgba(255,255,255,0.1)' : 'transparent',
+              color: activeTypeFilter === tab.key ? 'var(--text-main)' : 'var(--text-muted)',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* DANH SÁCH HOẠT ĐỘNG */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
-          <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
-          <p>Đang tải tiến độ xem chung…</p>
+        <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px', color: '#ec4899' }} />
+          Đang cập nhật tiến độ xem chung…
         </div>
       ) : filteredActivities.length === 0 ? (
         <div
@@ -604,23 +556,33 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
             borderRadius: '16px',
             padding: '36px 20px',
             textAlign: 'center',
-            color: 'var(--text-muted)'
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '10px',
           }}
         >
-          <span style={{ fontSize: '2rem', display: 'block', marginBottom: '8px' }}>📖</span>
-          <strong style={{ display: 'block', fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '4px' }}>
-            Không có hoạt động nào trong ngày này
-          </strong>
-          <p style={{ fontSize: '0.82rem', margin: 0 }}>
-            Tiến độ đọc truyện, đọc sách hoặc nghe nhạc sẽ cập nhật tự động tại đây.
-          </p>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
+            <Sparkles size={24} />
+          </div>
+          <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)' }}>
+            Chưa có hoạt động mới nào
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', maxWidth: '320px' }}>
+            Khi Hiếu hoặc Kim Ý đọc sách, đọc truyện tranh hay nghe nhạc từ thời điểm này, tiến độ và thời gian sẽ xuất hiện ngay tại đây!
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredActivities.map((act) => {
-            const isStory = act.type === 'H_MANGA' || act.type === 'BL';
-            const isH = act.type === 'H_MANGA';
-            const timeFormatted = act.logTime || formatTimeAgo(act.updatedAt);
+            const isMeHieu = act.userName === 'Hiếu';
+            const userColor = isMeHieu ? '#0284c7' : '#f43f5e';
+            const tagBadge = (() => {
+              if (act.type === 'BOOK') return { label: 'SÁCH', bg: 'rgba(99, 102, 241, 0.15)', color: '#6366f1' };
+              if (act.type === 'H_MANGA') return { label: 'TRUYỆN H', bg: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' };
+              if (act.type === 'BL') return { label: 'TRUYỆN BL', bg: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' };
+              return { label: 'NHẠC MP3', bg: 'rgba(16, 185, 129, 0.15)', color: '#10b981' };
+            })();
 
             return (
               <div
@@ -628,32 +590,30 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 onClick={() => handleItemClick(act)}
                 style={{
                   background: 'var(--card-bg)',
-                  border: isH ? '1px solid rgba(244, 63, 94, 0.25)' : '1px solid var(--border)',
+                  border: '1px solid var(--border)',
                   borderRadius: '14px',
                   padding: '12px',
                   display: 'flex',
                   gap: '12px',
-                  cursor: isStory || act.type === 'BOOK' ? 'pointer' : 'default',
-                  transition: 'all 0.15s ease',
-                  position: 'relative'
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                  transition: 'transform 0.15s ease, border-color 0.15s ease',
                 }}
-                className="shared-activity-card"
               >
-                {/* Ảnh bìa: Nhỏ gọn (60x80px) */}
+                {/* BÌA ẢNH */}
                 <div
                   style={{
-                    width: '60px',
-                    height: '80px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
-                    border: '1px solid var(--border)',
+                    width: '56px',
+                    height: '76px',
+                    borderRadius: '8px',
                     overflow: 'hidden',
+                    background: 'var(--bg-secondary, #334155)',
                     flexShrink: 0,
-                    position: 'relative',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.12)'
+                    position: 'relative',
                   }}
                 >
                   {act.cover ? (
@@ -662,227 +622,127 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                       alt={act.title}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
                     />
+                  ) : act.type === 'MUSIC' ? (
+                    <Music size={26} color="#10b981" />
                   ) : (
-                    <div style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {act.type === 'BOOK' && <BookOpen size={24} color="#8b5cf6" />}
-                      {act.type === 'MUSIC' && <Music size={24} color="#10b981" />}
-                      {isStory && <Flame size={24} color="#f43f5e" />}
-                    </div>
+                    <BookOpen size={26} color="#6366f1" />
+                  )}
+
+                  {/* NÚT PHÁT NHANH ĐỐI VỚI NHẠC */}
+                  {act.type === 'MUSIC' && act.audioUrl && (
+                    <button
+                      type="button"
+                      onClick={(e) => handlePlayMusic(e, act)}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.4)',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        cursor: 'pointer',
+                      }}
+                      title="Phát bài hát này"
+                    >
+                      <Play size={20} fill="#ffffff" />
+                    </button>
                   )}
                 </div>
 
-                {/* Nội dung thông tin */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    {/* Hàng badge hành động */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                      {/* Badge Người */}
+                {/* NỘI DUNG CHI TIẾT */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  
+                  {/* DÒNG HEADER: TAG THỂ LOẠI + AVATAR NGƯỜI ĐỌC */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.66rem',
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: tagBadge.bg,
+                          color: tagBadge.color,
+                        }}
+                      >
+                        {tagBadge.label}
+                      </span>
+
                       <span
                         style={{
                           fontSize: '0.72rem',
                           fontWeight: 800,
-                          padding: '2px 7px',
-                          borderRadius: '6px',
-                          background: act.userName === 'Hiếu' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                          color: act.userName === 'Hiếu' ? '#0284c7' : '#f43f5e'
+                          color: userColor,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
                         }}
                       >
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: userColor }} />
                         {act.userName}
                       </span>
-
-                      {/* Phân biệt rõ: MỚI THÊM NHẠC vs VỪA NGHE NHẠC TRÊN WEB */}
-                      {act.type === 'MUSIC' && act.actionType === 'ADDED_MUSIC' && (
-                        <span
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                            color: '#ffffff',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px'
-                          }}
-                        >
-                          <PlusCircle size={10} /> Mới thêm nhạc
-                        </span>
-                      )}
-
-                      {act.type === 'MUSIC' && act.actionType === 'LISTENED_MUSIC' && (
-                        <span
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: 'linear-gradient(135deg, #10b981, #059669)',
-                            color: '#ffffff',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px'
-                          }}
-                        >
-                          <Headphones size={10} /> Mới nghe trên web
-                        </span>
-                      )}
-
-                      {/* Đang đọc truyện H */}
-                      {isH && (
-                        <span
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: 'linear-gradient(135deg, #e11d48, #be123c)',
-                            color: '#ffffff'
-                          }}
-                        >
-                          🔞 Truyện H
-                        </span>
-                      )}
-
-                      {/* Đang đọc BL */}
-                      {act.type === 'BL' && (
-                        <span
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: 'rgba(236, 72, 153, 0.15)',
-                            color: '#ec4899'
-                          }}
-                        >
-                          🌸 Truyện BL
-                        </span>
-                      )}
-
-                      {/* Đang đọc Sách */}
-                      {act.type === 'BOOK' && (
-                        <span
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: 'rgba(139, 92, 246, 0.15)',
-                            color: '#8b5cf6'
-                          }}
-                        >
-                          📚 Đang đọc Sách
-                        </span>
-                      )}
-
-                      {/* Thời gian thực hiện */}
-                      {timeFormatted && (
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                          {timeFormatted}
-                        </span>
-                      )}
                     </div>
 
-                    {/* Tiêu đề tác phẩm */}
+                    {act.logTime && (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Clock size={11} /> {act.logTime}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* TIÊU ĐỀ TÁC PHẨM */}
+                  <div
+                    style={{
+                      fontSize: '0.88rem',
+                      fontWeight: 800,
+                      color: 'var(--text-main)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                    title={act.title}
+                  >
+                    {act.title}
+                  </div>
+
+                  {/* TIẾN ĐỘ CHI TIẾT */}
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{act.progressText || act.subtitle || 'Đang cập nhật'}</span>
+                  </div>
+
+                  {/* THANH TIẾN ĐỘ (NẾU CÓ %) */}
+                  {act.progressPercent !== undefined && act.progressPercent > 0 && (
                     <div
                       style={{
-                        fontSize: '0.9rem',
-                        fontWeight: 800,
-                        color: 'var(--text-main)',
-                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        height: '4px',
+                        borderRadius: '2px',
+                        background: 'rgba(255,255,255,0.08)',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis'
+                        marginTop: '2px',
                       }}
-                      title={act.title}
                     >
-                      {act.title}
-                    </div>
-
-                    {/* Phụ đề */}
-                    {act.subtitle && (
                       <div
                         style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--text-muted)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          marginTop: '1px'
+                          width: `${act.progressPercent}%`,
+                          height: '100%',
+                          background: isMeHieu ? 'linear-gradient(90deg, #0284c7, #38bdf8)' : 'linear-gradient(90deg, #f43f5e, #fda4af)',
+                          borderRadius: '2px',
                         }}
-                      >
-                        {act.subtitle}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Tiến độ hoặc Nút nghe nhạc */}
-                  <div style={{ marginTop: '5px' }}>
-                    {act.type === 'MUSIC' ? (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ fontSize: '0.74rem', color: act.actionType === 'ADDED_MUSIC' ? '#0284c7' : '#10b981', fontWeight: 700 }}>
-                          {act.actionType === 'ADDED_MUSIC' 
-                            ? `${act.userName} vừa thêm vào kho` 
-                            : `${act.userName} vừa nghe trên web${act.logTime ? ` (${act.logTime})` : ''}`}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => handlePlayMusic(e, act)}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '8px',
-                            border: 'none',
-                            background: 'linear-gradient(135deg, #10b981, #059669)',
-                            color: '#ffffff',
-                            fontSize: '0.76rem',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)'
-                          }}
-                        >
-                          <Play size={11} fill="#ffffff" /> Nghe bài này
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '2px' }}>
-                          <span style={{ color: isH ? '#f43f5e' : 'var(--primary)', fontWeight: 700 }}>
-                            {act.progressText}
-                          </span>
-                          {isStory && (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                              Nhấn để đọc <ExternalLink size={9} />
-                            </span>
-                          )}
-                        </div>
-
-                        {act.progressPercent !== undefined && (
-                          <div style={{ width: '100%', height: '3px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div
-                              style={{
-                                width: `${act.progressPercent}%`,
-                                height: '100%',
-                                background: isH ? 'linear-gradient(90deg, #f43f5e, #be123c)' : 'var(--primary)',
-                                borderRadius: '2px'
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                      />
+                    </div>
+                  )}
                 </div>
+
               </div>
             );
           })}
         </div>
       )}
+
     </div>
   );
 }

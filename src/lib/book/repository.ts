@@ -194,8 +194,19 @@ export async function saveProgress(documentId: string, patch: ProgressPatch): Pr
     if (doc.total_chars > 0 && totalPages > 0) {
       currPage = Math.max(1, Math.round((patch.last_char_offset / doc.total_chars) * totalPages))
     }
+
+    let userEmail = ''
+    try {
+      const { data: userData } = await db.auth.getUser()
+      userEmail = userData?.user?.email?.toLowerCase() || ''
+    } catch {}
+    const isKimY = userEmail.includes('kimy') || userEmail.includes('nguyenkimy') || userEmail.includes('ý')
+    const userName = isKimY ? 'Kim Ý' : 'Hiếu'
+
     await db.from('media_items').update({
       status: 'IN_PROGRESS',
+      channel: userName,
+      description: `Đọc bởi ${userName}`,
       log_date: today,
       log_time: nowTime,
       current_chapter: patch.last_chapter_idx + 1,

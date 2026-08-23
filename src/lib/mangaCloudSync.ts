@@ -128,12 +128,17 @@ export async function syncMangaReadingLogToSupabase(log: MangaReadingLog): Promi
       .eq('channel', log.mangaSlug)
       .limit(1)
 
+    const userEmail = userData?.user?.email?.toLowerCase() || ''
+    const isKimY = userEmail.includes('kimy') || userEmail.includes('nguyenkimy') || userEmail.includes('ý')
+    const userName = isKimY ? 'Kim Ý' : 'Hiếu'
+
     const payload = {
       user_id: userId,
       type: mediaType,
       genre: log.mangaType,
       name: log.mangaTitle || log.mangaSlug,
       channel: log.mangaSlug,
+      description: `Đọc bởi ${userName}`,
       current_chapter: log.chapterNumber,
       status: log.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
       log_date: log.log_date,
