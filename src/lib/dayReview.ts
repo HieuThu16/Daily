@@ -173,7 +173,7 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
   const bookEvents = groupBookReadingLogs(todayBookLogs)
   events.push(...bookEvents)
 
-  media.filter((m) => m.log_date === date).forEach((m) => {
+  media.filter((m) => m.log_date === date && m.status === 'COMPLETED').forEach((m) => {
     // Nếu sách đã có phiên đọc chi tiết thì không cần thẻ media chung chung
     if (m.type === 'BOOK' && todayBookLogs.length > 0) return
     events.push({
@@ -184,6 +184,7 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
       is_favorite: !!m.is_favorite,
     })
   })
+
 
 
   // 2. Dữ liệu đọc truyện (Ngôn tình, BL, Truyện H) đã được gom nhóm phiên đọc thông minh

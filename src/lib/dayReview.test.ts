@@ -19,7 +19,7 @@ describe('buildDayReview', () => {
         { id: 't', title: 'Viết báo cáo', completed: true, created_at: at('09:00'), completed_at: at('17:00') },
         { id: 't2', title: 'Việc hôm qua', completed: false, created_at: new Date('2026-08-13T09:00:00').toISOString() },
       ],
-      media: [{ id: 'a', type: 'MUSIC', name: 'Lofi', artist: 'Ai đó', status: 'IN_PROGRESS', is_favorite: false, description: null, log_date: date, log_time: '22:00' }],
+      media: [{ id: 'a', type: 'MUSIC', name: 'Lofi', artist: 'Ai đó', status: 'COMPLETED', is_favorite: false, description: null, log_date: date, log_time: '22:00' }],
     })
 
     expect(events.map((e) => [e.time, e.kind])).toEqual([

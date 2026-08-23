@@ -570,12 +570,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       return
     }
 
+    const isDone = statusVal === 'COMPLETED'
     const payload: Partial<Media> = {
       type: kind,
       name: name.trim(),
       status: statusVal,
-      log_date: logDate,
-      log_time: logTime,
+      log_date: isDone ? (logDate || localDate()) : null,
+      log_time: isDone ? (logTime || getCurrentTimeString()) : null,
       channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
       artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
       author: (kind === 'BOOK' || kind === 'MANGA') ? extraVal.trim() || null : null,
@@ -588,7 +589,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       cover_url: normalizeStorageUrl(coverUrlVal) || null,
       current_chapter: (kind === 'MANGA' || kind === 'BOOK') ? (parseInt(currentChapterVal, 10) || null) : null,
       start_date: (kind === 'MANGA' || kind === 'BOOK') ? (startDateVal || null) : null,
-      end_date: (kind === 'MANGA' || kind === 'BOOK') ? (statusVal === 'COMPLETED' ? (endDateVal || localDate()) : (endDateVal || null)) : null,
+      end_date: (kind === 'MANGA' || kind === 'BOOK') ? (isDone ? (endDateVal || localDate()) : (endDateVal || null)) : null,
       ...(kind === 'BOOK' ? { book_format: bookFormat } : {}),
     }
 
@@ -598,7 +599,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       if (error) {
         console.error('[saveItem update error]', error)
         // Fallback: update without new columns that may not exist yet in DB
-        const safePayload = { name: name.trim(), status: statusVal, log_date: logDate, log_time: logTime }
+        const safePayload = { name: name.trim(), status: statusVal, log_date: isDone ? (logDate || localDate()) : null, log_time: isDone ? (logTime || getCurrentTimeString()) : null }
         const { error: e2 } = await supabase!.from('media_items').update(safePayload).eq('id', item.id)
         showSaveToast(!e2, 'mục thư viện')
       } else {
@@ -645,11 +646,12 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             genre: kind === 'MOVIE' ? extraVal.trim() || null : (kind === 'BOOK' ? bookGenreVal.trim() || null : null),
             youtube_url: youtubeUrlVal.trim() || null,
             audio_url: audioUrlVal.trim() || null,
-            log_date: logDate,
-            log_time: logTime,
+            log_date: isDone ? (logDate || localDate()) : null,
+            log_time: isDone ? (logTime || getCurrentTimeString()) : null,
           })
           .select()
           .single()
+
         if (fallbackRes.data) {
           setItems((prev) => [{ ...(fallbackRes.data as Media), ...payload }, ...prev])
           showSaveToast(true, 'mục thư viện')
