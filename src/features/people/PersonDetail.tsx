@@ -12,9 +12,10 @@ import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
 import { PersonSpending } from './PersonSpending'
 import { SharedActivityTab } from './SharedActivityTab'
+import { CoupleLocationTab } from './CoupleLocationTab'
 import type { NewOccasion } from './usePeopleData'
 
-type DetailTab = 'shared' | 'events' | 'info' | 'occasions' | 'journal'
+type DetailTab = 'location' | 'shared' | 'events' | 'info' | 'occasions' | 'journal'
 
 type Props = {
   person: Person
@@ -43,14 +44,17 @@ export function PersonDetail({
   useHideHeader(true)
 
   const availableTabs = [
-    ...(person.is_partner ? [{ key: 'shared' as const, label: 'Xem chung' }] : []),
+    ...(person.is_partner ? [
+      { key: 'location' as const, label: 'Vị trí' },
+      { key: 'shared' as const, label: 'Xem chung' },
+    ] : []),
     { key: 'events' as const, label: 'Kỷ niệm' },
     { key: 'info' as const, label: 'Thông tin' },
     { key: 'occasions' as const, label: 'Dịp' },
     { key: 'journal' as const, label: 'Nhật ký' },
   ]
 
-  const [tab, setTab] = useState<DetailTab>(person.is_partner ? 'shared' : 'info')
+  const [tab, setTab] = useState<DetailTab>(person.is_partner ? 'location' : 'info')
 
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(person.name)
@@ -176,6 +180,10 @@ export function PersonDetail({
           </button>
         ))}
       </div>
+
+      {tab === 'location' && (
+        <CoupleLocationTab partnerPerson={person} />
+      )}
 
       {tab === 'shared' && (
         <SharedActivityTab partnerPerson={person} />

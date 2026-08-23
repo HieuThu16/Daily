@@ -13,7 +13,6 @@ import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
 import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
 import type { Media, Person } from '../../types';
 import { estimatePage } from '../../lib/book/repository';
-import { CoupleLocationCard } from './CoupleLocationCard';
 
 export interface SharedActivityItem {
   id: string;
@@ -385,8 +384,12 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
         }
       } catch {}
 
-      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất lên đầu
-      const list = Array.from(itemsMap.values());
+      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất lên đầu, chỉ lấy từ 15h hôm nay trở đi
+      const CUTOFF_TIME_MS = new Date('2026-08-23T15:00:00+07:00').getTime();
+      const list = Array.from(itemsMap.values()).filter((it) => {
+        const itemTime = new Date(it.updatedAt || it.logDate).getTime();
+        return isNaN(itemTime) || itemTime >= CUTOFF_TIME_MS;
+      });
       list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
       setActivities(list);
     } catch (err) {
@@ -505,9 +508,6 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
   return (
     <div className="shared-activity-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       
-      {/* BẢN ĐỒ VỊ TRÍ ĐÔI LỨA TRỰC TIẾP */}
-      <CoupleLocationCard partnerPerson={partnerPerson} selectedDate={selectedDate} />
-
       {/* THANH ĐIỀU HƯỚNG LỊCH */}
       <DatePager
         dateKey={selectedDate}

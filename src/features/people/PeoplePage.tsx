@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarHeart, Check, ChevronRight, HeartHandshake, Mail, Plus, Search, SlidersHorizontal, UserRound, Users, X } from 'lucide-react'
+import { CalendarHeart, Check, ChevronRight, HeartHandshake, Mail, MapPin, Plus, Search, SlidersHorizontal, UserRound, Users, X } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { countdownLabel, daysUntil, isLunar, nextOccurrence, upcomingOccasions } from '../../lib/occasions'
 import { saveSourceLabel } from '../../lib/persistence'
@@ -14,6 +14,7 @@ import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
 import { SharedActivityTab } from './SharedActivityTab'
+import { CoupleLocationTab } from './CoupleLocationTab'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
 
 
@@ -45,7 +46,7 @@ export function PeoplePage() {
   } = usePeopleData()
 
   const partnerPerson = useMemo(() => people.find((p) => p.is_partner) || null, [people])
-  const [mainTab, setMainTab] = useState<'SHARED' | 'OCCASIONS' | 'PEOPLE'>('SHARED')
+  const [mainTab, setMainTab] = useState<'LOCATION' | 'SHARED' | 'OCCASIONS' | 'PEOPLE'>('LOCATION')
   const [selected, setSelected] = useState<Person | null>(null)
 
 
@@ -202,13 +203,13 @@ export function PeoplePage() {
 
   return (
     <section className="people-page">
-      {/* Thanh tab chính: Nếu có đối tác kết nối phòng -> Hiện 3 Tab: Xem chung / Kỷ niệm / Người thân */}
+      {/* Thanh tab chính: Nếu có đối tác kết nối phòng -> Hiện 4 Tab: Vị trí / Xem chung / Kỷ niệm / Người thân */}
       <div
         className="people-main-nav"
         style={{
           display: 'grid',
-          gridTemplateColumns: partnerPerson ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
-          gap: '8px',
+          gridTemplateColumns: partnerPerson ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)',
+          gap: '6px',
           marginBottom: '18px',
           background: 'var(--card-bg)',
           border: '1px solid var(--border)',
@@ -219,24 +220,48 @@ export function PeoplePage() {
         {partnerPerson && (
           <button
             type="button"
+            onClick={() => setMainTab('LOCATION')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              padding: '9px 8px',
+              borderRadius: '12px',
+              border: 'none',
+              background: mainTab === 'LOCATION' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+              color: mainTab === 'LOCATION' ? '#ffffff' : 'var(--text-muted)',
+              fontWeight: 800,
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <MapPin size={15} /> Vị trí
+          </button>
+        )}
+
+        {partnerPerson && (
+          <button
+            type="button"
             onClick={() => setMainTab('SHARED')}
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
-              padding: '10px 12px',
+              gap: '4px',
+              padding: '9px 8px',
               borderRadius: '12px',
               border: 'none',
               background: mainTab === 'SHARED' ? 'linear-gradient(135deg, #ec4899, #be123c)' : 'transparent',
               color: mainTab === 'SHARED' ? '#ffffff' : 'var(--text-muted)',
               fontWeight: 800,
-              fontSize: '0.88rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
           >
-            <HeartHandshake size={16} /> Xem chung
+            <HeartHandshake size={15} /> Xem chung
           </button>
         )}
 
@@ -247,27 +272,27 @@ export function PeoplePage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 12px',
+            gap: '4px',
+            padding: '9px 8px',
             borderRadius: '12px',
             border: 'none',
-            background: (mainTab === 'OCCASIONS' || (mainTab === 'SHARED' && !partnerPerson)) ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
-            color: (mainTab === 'OCCASIONS' || (mainTab === 'SHARED' && !partnerPerson)) ? '#ffffff' : 'var(--text-muted)',
+            background: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
+            color: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? '#ffffff' : 'var(--text-muted)',
             fontWeight: 800,
-            fontSize: '0.88rem',
+            fontSize: '0.82rem',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
           }}
         >
-          <CalendarHeart size={16} /> Kỷ niệm
+          <CalendarHeart size={15} /> Kỷ niệm
           {upcomingCount > 0 && (
             <span
               style={{
-                fontSize: '0.72rem',
-                padding: '1px 6px',
+                fontSize: '0.68rem',
+                padding: '1px 5px',
                 borderRadius: '10px',
-                background: (mainTab === 'OCCASIONS' || (mainTab === 'SHARED' && !partnerPerson)) ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
-                color: (mainTab === 'OCCASIONS' || (mainTab === 'SHARED' && !partnerPerson)) ? '#fff' : '#f43f5e',
+                background: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
+                color: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? '#fff' : '#f43f5e',
                 fontWeight: 700,
               }}
             >
@@ -283,26 +308,26 @@ export function PeoplePage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            padding: '10px 12px',
+            gap: '4px',
+            padding: '9px 8px',
             borderRadius: '12px',
             border: 'none',
-            background: mainTab === 'PEOPLE' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
+            background: mainTab === 'PEOPLE' ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : 'transparent',
             color: mainTab === 'PEOPLE' ? '#ffffff' : 'var(--text-muted)',
             fontWeight: 800,
-            fontSize: '0.88rem',
+            fontSize: '0.82rem',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
           }}
         >
-          <Users size={16} /> Người thân
+          <Users size={15} /> Người thân
           <span
             style={{
-              fontSize: '0.72rem',
-              padding: '1px 6px',
+              fontSize: '0.68rem',
+              padding: '1px 5px',
               borderRadius: '10px',
-              background: mainTab === 'PEOPLE' ? 'rgba(255,255,255,0.25)' : 'rgba(2,132,199,0.15)',
-              color: mainTab === 'PEOPLE' ? '#fff' : '#0284c7',
+              background: mainTab === 'PEOPLE' ? 'rgba(255,255,255,0.25)' : 'rgba(139,92,246,0.15)',
+              color: mainTab === 'PEOPLE' ? '#fff' : '#8b5cf6',
               fontWeight: 700,
             }}
           >
@@ -311,13 +336,18 @@ export function PeoplePage() {
         </button>
       </div>
 
-      {/* TAB 1: XEM CHUNG TRỰC TIẾP (KHI ĐÃ KẾT NỐI PHÒNG CHUNG) */}
+      {/* TAB 1: VỊ TRÍ ĐÔI LỨA TRỰC TIẾP */}
+      {mainTab === 'LOCATION' && partnerPerson && (
+        <CoupleLocationTab partnerPerson={partnerPerson} />
+      )}
+
+      {/* TAB 2: XEM CHUNG TRỰC TIẾP (KHI ĐÃ KẾT NỐI PHÒNG CHUNG) */}
       {mainTab === 'SHARED' && partnerPerson && (
         <SharedActivityTab partnerPerson={partnerPerson} />
       )}
 
-      {/* TAB 2: KỶ NIỆM */}
-      {(mainTab === 'OCCASIONS' || (mainTab === 'SHARED' && !partnerPerson)) && (
+      {/* TAB 3: KỶ NIỆM */}
+      {(mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="people-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <div className="people-stat rose">
