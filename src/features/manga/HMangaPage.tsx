@@ -5,7 +5,7 @@ import {
   X, Bookmark, ChevronRight,
   Flame, Sparkles, Loader2, Plus, Download,
   Link as LinkIcon, AlertCircle, Clipboard, ExternalLink,
-  CheckCircle2, Zap, Camera
+  CheckCircle2, Zap, Camera, Lock
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { 
@@ -18,6 +18,7 @@ import {
   getCustomHMangaList
 } from './hMangaService';
 import { RecentCrawledModal } from './RecentCrawledModal';
+import { lockH } from './HPinGate';
 import { useScrollRestore } from '../shared';
 import { useToast } from '../ToastContext';
 import './ngontinhManga.css';
@@ -729,6 +730,25 @@ export const HMangaPage: React.FC = () => {
             <Camera size={15} /> Kho ảnh chụp
           </button>
 
+          {/* Button Khóa mục Truyện H */}
+          <button
+            type="button"
+            className="ngontinh-nav-tab-btn"
+            onClick={() => {
+              lockH()
+              navigate('/home')
+            }}
+            style={{
+              background: 'rgba(225, 29, 72, 0.12)',
+              color: '#e11d48',
+              border: '1px solid rgba(225, 29, 72, 0.3)',
+              fontWeight: 600,
+            }}
+            title="Khóa lại mục Truyện H"
+          >
+            <Lock size={15} /> Khóa
+          </button>
+
           {/* Button Cào truyện mới */}
           <button
             type="button"
@@ -743,6 +763,7 @@ export const HMangaPage: React.FC = () => {
             <Plus size={15} /> Paste link cào truyện
           </button>
         </div>
+
 
         <div className="ngontinh-search-wrapper">
           <Search size={16} className="ngontinh-search-icon" />

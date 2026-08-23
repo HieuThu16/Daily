@@ -56,3 +56,16 @@ describe('hMangaService localStorage helpers', () => {
     expect(progress?.chapterName).toBe('Chapter 5');
   });
 });
+
+describe('HPinGate session lock and unlock', () => {
+  it('quản lý trạng thái mở khóa trong sessionStorage', async () => {
+    const { isHUnlocked, unlockH, lockH } = await import('./HPinGate');
+    sessionStorage.clear();
+    expect(isHUnlocked()).toBe(false);
+    unlockH();
+    expect(isHUnlocked()).toBe(true);
+    lockH();
+    expect(isHUnlocked()).toBe(false);
+  });
+});
+

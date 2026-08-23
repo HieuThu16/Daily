@@ -30,6 +30,7 @@ import { HMangaPage } from './features/manga/HMangaPage'
 import { HMangaDetailPage } from './features/manga/HMangaDetailPage'
 import { HMangaReaderPage } from './features/manga/HMangaReaderPage'
 import { HMangaScreenshotPage } from './features/manga/HMangaScreenshotPage'
+import { HPinGate } from './features/manga/HPinGate'
 import { EnglishPage } from './features/english/EnglishPage'
 import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
@@ -274,9 +275,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     }
   }
 
-  const isHAuthorized = isUserAuthorizedForH(user)
   const navigation = useMemo(() => {
-    if (!isHAuthorized) return BASE_NAVIGATION
     const list = [...BASE_NAVIGATION]
     const ngontinhIdx = list.findIndex((n) => n.id === 'ngontinh')
     if (ngontinhIdx >= 0) {
@@ -285,17 +284,17 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
       list.push(H_NAV_ITEM)
     }
     return list
-  }, [isHAuthorized])
+  }, [])
 
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
     { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] as Tab[] },
     { title: 'Giải trí & Video', ids: ['tvshow', 'reviews', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
-    { title: 'Sách & Truyện online', ids: (isHAuthorized ? ['books', 'bl', 'ngontinh', 'truyenh'] : ['books', 'bl', 'ngontinh']) as Tab[] },
+    { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] as Tab[] },
     { title: 'Hệ thống', ids: ['settings'] as Tab[] },
-  ], [isHAuthorized])
+  ], [])
 
   const activeTabItem = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/')) ?? navigation[0]
   const ActiveIcon = activeTabItem.icon
@@ -609,10 +608,10 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/ngontinh" element={<NgontinhMangaPage />} />
                       <Route path="/ngontinh/:slug" element={<NgontinhDetailPage />} />
                       <Route path="/ngontinh/:slug/read/:chapterNum" element={<NgontinhReaderPage />} />
-                      <Route path="/truyenh" element={isUserAuthorizedForH(user) ? <HMangaPage /> : <Navigate to="/home" replace />} />
-                      <Route path="/truyenh/screenshots" element={isUserAuthorizedForH(user) ? <HMangaScreenshotPage /> : <Navigate to="/home" replace />} />
-                      <Route path="/truyenh/:slug" element={isUserAuthorizedForH(user) ? <HMangaDetailPage /> : <Navigate to="/home" replace />} />
-                      <Route path="/truyenh/:slug/read/:chapterNum" element={isUserAuthorizedForH(user) ? <HMangaReaderPage /> : <Navigate to="/home" replace />} />
+                      <Route path="/truyenh" element={<HPinGate><HMangaPage /></HPinGate>} />
+                      <Route path="/truyenh/screenshots" element={<HPinGate><HMangaScreenshotPage /></HPinGate>} />
+                      <Route path="/truyenh/:slug" element={<HPinGate><HMangaDetailPage /></HPinGate>} />
+                      <Route path="/truyenh/:slug/read/:chapterNum" element={<HPinGate><HMangaReaderPage /></HPinGate>} />
                       <Route path="/english" element={<EnglishPage />} />
                       <Route path="/knowledge" element={<KnowledgePage />} />
                       <Route path="/people" element={<PeoplePage />} />
