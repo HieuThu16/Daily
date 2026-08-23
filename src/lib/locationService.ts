@@ -185,7 +185,9 @@ export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPl
     // Ưu tiên mốc của người đó hoặc mốc chung
     if (forUserName && p.user_name && p.user_name !== forUserName) continue;
     const distKm = calculateDistanceKm(lat, lon, p.latitude, p.longitude);
-    const radiusKm = (p.radius_meters || 200) / 1000;
+    // Bán kính nhận diện an toàn chống giật GPS: tối thiểu 350m
+    const effectiveRadiusMeters = Math.max(p.radius_meters || 200, 350);
+    const radiusKm = effectiveRadiusMeters / 1000;
     if (distKm <= radiusKm) {
       return p;
     }
@@ -195,13 +197,66 @@ export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPl
 
 /* ==========================================================================
  * 2. LỊCH TRÌNH VỊ TRÍ & QUÃNG ĐƯỜNG TRONG NGÀY (TIMELINE LOGS)
- * Chỉ ghi nhận chặng mới KHI DI CHUYỂN ra khỏi vị trí cũ (>200m)
  * ========================================================================== */
+
+/**
+ * Lọc bỏ các log rác/ảo do GPS bị giật (Đi từ Trọ đến Trọ, Di chuyển đến Trọ khi đang ở Trọ)
+ * và tự động gộp các mốc Ở (STAY) cùng một địa điểm trong ngày thành 1 dòng duy nhất (từ giờ sớm nhất -> giờ muộn nhất).
+ */
+export function cleanTimelineLogs(logs: LocationTimelineLog[]): LocationTimelineLog[] {
+  const cleaned: LocationTimelineLog[] = [];
+  const stayMap = new Map<string, LocationTimelineLog>();
+
+  for (const log of logs) {
+    // 1. Loại bỏ các log di chuyển ảo (GPS giật trong nhà)
+    if (log.event_type === 'MOVE') {
+      const lower = (log.place_name || '').toLowerCase().trim();
+      
+      // Bỏ các log "Đi từ X đến X" (VD: "Đi từ Trọ đến Trọ", "Đi từ Nhà đến Nhà")
+      if (lower.includes('đến') && lower.includes('từ')) {
+        const parts = lower.replace('đi từ', '').split('đến');
+        if (parts.length === 2 && parts[0].trim() === parts[1].trim()) {
+          continue;
+        }
+      }
+
+      // Bỏ các log "Di chuyển đến..." khi không có quãng đường hoặc quá ngắn (< 0.15 km)
+      if (log.distance_km !== undefined && log.distance_km < 0.15 && (lower.includes('di chuyển đến') || lower.includes('đang di chuyển'))) {
+        continue;
+      }
+    }
+
+    // 2. Gộp các mốc STAY của cùng 1 người tại cùng 1 địa điểm trong ngày
+    if (log.event_type === 'STAY') {
+      const stayKey = `${log.user_name}::${log.log_date}::${log.place_name}`;
+      const existing = stayMap.get(stayKey);
+      if (existing) {
+        // Cập nhật giờ sớm nhất và muộn nhất
+        const startTime = existing.start_time < log.start_time ? existing.start_time : log.start_time;
+        const existingEnd = existing.end_time || existing.start_time;
+        const currentEnd = log.end_time || log.start_time;
+        const endTime = existingEnd > currentEnd ? existingEnd : currentEnd;
+
+        existing.start_time = startTime;
+        existing.end_time = endTime;
+        continue;
+      } else {
+        stayMap.set(stayKey, log);
+      }
+    }
+
+    cleaned.push(log);
+  }
+
+  // Sắp xếp theo start_time tăng dần
+  return cleaned.sort((a, b) => a.start_time.localeCompare(b.start_time));
+}
 
 export function getLocalTimelineLogs(): LocationTimelineLog[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_TIMELINE);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return cleanTimelineLogs(Array.isArray(parsed) ? parsed : []);
   } catch {
     return [];
   }
@@ -219,10 +274,11 @@ export async function fetchLocationTimeline(date: string = localDate()): Promise
       .order('start_time', { ascending: true });
 
     if (!error && data && data.length > 0) {
+      const cleanedData = cleanTimelineLogs(data as LocationTimelineLog[]);
       const all = getLocalTimelineLogs().filter((l) => l.log_date !== date);
-      const combined = [...all, ...(data as LocationTimelineLog[])];
+      const combined = cleanTimelineLogs([...all, ...cleanedData]);
       localStorage.setItem(STORAGE_KEY_TIMELINE, JSON.stringify(combined));
-      return data as LocationTimelineLog[];
+      return cleanedData;
     }
   } catch {}
 
@@ -230,14 +286,39 @@ export async function fetchLocationTimeline(date: string = localDate()): Promise
 }
 
 export async function logTimelineEvent(log: LocationTimelineLog): Promise<void> {
+  // Bỏ qua log di chuyển ảo (VD: Đi từ Trọ đến Trọ)
+  if (log.event_type === 'MOVE') {
+    const lower = (log.place_name || '').toLowerCase().trim();
+    if (lower.includes('đến') && lower.includes('từ')) {
+      const parts = lower.replace('đi từ', '').split('đến');
+      if (parts.length === 2 && parts[0].trim() === parts[1].trim()) {
+        return;
+      }
+    }
+  }
+
   const current = getLocalTimelineLogs();
-  const index = current.findIndex((l) => l.id === log.id);
+  const index = current.findIndex((l) => l.id === log.id || (l.user_name === log.user_name && l.log_date === log.log_date && l.place_name === log.place_name && l.event_type === 'STAY'));
+  
   if (index >= 0) {
-    current[index] = log;
+    const existing = current[index];
+    const startTime = existing.start_time < log.start_time ? existing.start_time : log.start_time;
+    const existingEnd = existing.end_time || existing.start_time;
+    const currentEnd = log.end_time || log.start_time;
+    const endTime = existingEnd > currentEnd ? existingEnd : currentEnd;
+
+    current[index] = {
+      ...existing,
+      ...log,
+      start_time: startTime,
+      end_time: endTime,
+    };
   } else {
     current.push(log);
   }
-  localStorage.setItem(STORAGE_KEY_TIMELINE, JSON.stringify(current.slice(-300)));
+
+  const cleaned = cleanTimelineLogs(current);
+  localStorage.setItem(STORAGE_KEY_TIMELINE, JSON.stringify(cleaned.slice(-300)));
   window.dispatchEvent(new CustomEvent('daily_location_timeline_updated', { detail: log }));
 
   if (!supabase) return;

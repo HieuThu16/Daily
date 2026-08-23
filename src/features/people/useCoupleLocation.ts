@@ -15,6 +15,8 @@ import {
   findMatchingSavedPlace,
   getDeviceBattery,
   getCurrentTimeString,
+  getLocalTimelineLogs,
+  cleanTimelineLogs,
   isLocationSharingEnabled,
   logTimelineEvent,
   reverseGeocode,
@@ -70,7 +72,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
       ]);
       setLocations(locList);
       setSavedPlaces(places);
-      setTimelineLogs(logs);
+      setTimelineLogs(cleanTimelineLogs(logs));
     } catch {
     } finally {
       setLoading(false);
@@ -90,27 +92,35 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
 
       // 1. NẾU ĐANG Ở ĐỊA ĐIỂM QUEN THUỘC (Trọ / Nhà / Công ty...)
       if (matchingPlace) {
-        // Nếu trước đó đang có chặng di chuyển dở -> Chốt chặng di chuyển (VD: "Đi từ Trọ đến Công ty")
+        // Nếu trước đó đang có chặng di chuyển dở:
         if (activeMoveLogRef.current) {
           const move = activeMoveLogRef.current;
           const originName = lastDeparturePlaceRef.current?.name;
-          const finalMoveName = originName 
-            ? `Đi từ ${originName} đến ${matchingPlace.name}` 
-            : `Di chuyển đến ${matchingPlace.name}`;
 
-          const finalMoveLog: LocationTimelineLog = {
-            ...move,
-            place_name: finalMoveName,
-            end_time: time,
-            latitude: lat,
-            longitude: lon,
-          };
-          void logTimelineEvent(finalMoveLog);
-          activeMoveLogRef.current = null;
+          // NẾU ORIGIN VÀ DESTINATION LÀ CÙNG 1 ĐỊA ĐIỂM (VD: Đi từ Trọ đến Trọ do giật GPS):
+          if (originName === matchingPlace.name || !originName || (move.distance_km || 0) < 0.25) {
+            // Hủy bỏ hoàn toàn chặng di chuyển ảo này
+            activeMoveLogRef.current = null;
+          } else {
+            // Chốt chặng di chuyển thực sự giữa 2 nơi khác nhau
+            const finalMoveName = `Đi từ ${originName} đến ${matchingPlace.name}`;
+            const finalMoveLog: LocationTimelineLog = {
+              ...move,
+              place_name: finalMoveName,
+              end_time: time,
+              latitude: lat,
+              longitude: lon,
+            };
+            void logTimelineEvent(finalMoveLog);
+            activeMoveLogRef.current = null;
+          }
         }
 
-        // Tìm mốc STAY gần nhất của địa điểm này trong ngày để duy trì mốc thời gian "Từ ... đến ..."
-        const existingStay = timelineLogs.find(
+        // Tìm mốc STAY đã có của địa điểm này trong ngày để duy trì mốc thời gian "Từ ... đến ..."
+        const localLogs = getLocalTimelineLogs();
+        const existingStay = localLogs.find(
+          (l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === `Ở ${matchingPlace.name}`
+        ) || timelineLogs.find(
           (l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === `Ở ${matchingPlace.name}`
         );
 
@@ -136,8 +146,22 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
       } 
       // 2. NẾU KHÔNG Ở MỐC NÀO (Đang trên đường di chuyển)
       else {
-        // Vừa rời khỏi địa điểm quen thuộc
+        // Kiểm tra chống giật GPS: nếu vẫn < 400m so với mốc quen thuộc cũ thì vẫn coi là đang ở mốc đó
         if (lastKnownPlaceRef.current) {
+          const distToLastPlace = calculateDistanceKm(lat, lon, lastKnownPlaceRef.current.latitude, lastKnownPlaceRef.current.longitude);
+          if (distToLastPlace < 0.4) {
+            const oldPlace = lastKnownPlaceRef.current;
+            const existingStay = getLocalTimelineLogs().find(
+              (l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === `Ở ${oldPlace.name}`
+            );
+            if (existingStay) {
+              existingStay.end_time = time;
+              void logTimelineEvent(existingStay);
+              return oldPlace.name;
+            }
+          }
+
+          // Đã thực sự đi ra xa khỏi mốc cũ (> 400m)
           lastDeparturePlaceRef.current = lastKnownPlaceRef.current;
           lastKnownPlaceRef.current = null;
         }
@@ -145,25 +169,27 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
         const originName = lastDeparturePlaceRef.current?.name;
         const tripTitle = originName ? `Đi từ ${originName}` : (addressName || 'Đang di chuyển');
 
+        // Chỉ tạo chặng di chuyển khi đã đi một khoảng cách đáng kể (> 0.2km)
         if (!activeMoveLogRef.current) {
-          // Bắt đầu chặng di chuyển mới
-          const moveLogId = `trip_${myUserName}_${today}_${Date.now()}`;
-          const newMoveLog: LocationTimelineLog = {
-            id: moveLogId,
-            user_id: uid,
-            user_name: myUserName,
-            place_name: tripTitle,
-            event_type: 'MOVE',
-            latitude: lat,
-            longitude: lon,
-            log_date: today,
-            start_time: time,
-            end_time: time,
-            distance_km: movedDistanceKm > 0.05 ? Math.round(movedDistanceKm * 10) / 10 : 0,
-            created_at: new Date().toISOString(),
-          };
-          activeMoveLogRef.current = newMoveLog;
-          void logTimelineEvent(newMoveLog);
+          if (movedDistanceKm > 0.1) {
+            const moveLogId = `trip_${myUserName}_${today}_${Date.now()}`;
+            const newMoveLog: LocationTimelineLog = {
+              id: moveLogId,
+              user_id: uid,
+              user_name: myUserName,
+              place_name: tripTitle,
+              event_type: 'MOVE',
+              latitude: lat,
+              longitude: lon,
+              log_date: today,
+              start_time: time,
+              end_time: time,
+              distance_km: movedDistanceKm > 0.05 ? Math.round(movedDistanceKm * 10) / 10 : 0,
+              created_at: new Date().toISOString(),
+            };
+            activeMoveLogRef.current = newMoveLog;
+            void logTimelineEvent(newMoveLog);
+          }
         } else {
           // Cập nhật giờ đến và cộng dồn quãng đường của chặng di chuyển
           const currentMove = activeMoveLogRef.current;

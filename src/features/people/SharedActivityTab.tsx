@@ -11,14 +11,15 @@ import { useToast } from '../ToastContext';
 import { DatePager } from '../home/DatePager';
 import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
 import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
-import type { Media, Person } from '../../types';
 import { estimatePage } from '../../lib/book/repository';
+import { fetchNgontinhList } from '../manga/ngontinhService';
+import { fetchBLMangaList } from '../manga/mangaService';
 
 export interface SharedActivityItem {
   id: string;
   user_id?: string;
   userName: 'Hiếu' | 'Kim Ý';
-  type: 'BOOK' | 'BL' | 'H_MANGA' | 'MUSIC';
+  type: 'BOOK' | 'NGONTINH' | 'BL' | 'H_MANGA' | 'MUSIC';
   actionType: 'READING' | 'ADDED_MUSIC' | 'LISTENED_MUSIC' | 'ADDED_BOOK' | 'ADDED_MANGA';
   title: string;
   subtitle?: string;
@@ -159,14 +160,38 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           }
         }
 
-        // Tải ảnh bìa manga
-        const mangaCoverMap = new Map<string, { cover?: string; title?: string }>();
+        // Tải thông tin & ảnh bìa manga từ các nguồn (Ngôn tình, BL, Truyện H)
+        const mangaInfoMap = new Map<string, { type: 'NGONTINH' | 'BL' | 'H_MANGA'; cover?: string; title?: string }>();
         try {
-          const [hList, customList] = await Promise.all([fetchHMangaList(), getCustomHMangaList()]);
+          const [hList, customList, blList, ngontinhList] = await Promise.all([
+            fetchHMangaList().catch(() => []),
+            getCustomHMangaList().catch(() => []),
+            fetchBLMangaList().catch(() => []),
+            fetchNgontinhList().catch(() => []),
+          ]);
           for (const m of [...hList, ...customList]) {
-            if (m.slug) mangaCoverMap.set(m.slug, { cover: m.cover ?? undefined, title: m.title ?? undefined });
+            if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'H_MANGA', cover: m.cover ?? undefined, title: m.title ?? undefined });
+          }
+          for (const m of blList) {
+            if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'BL', cover: m.cover ?? undefined, title: m.title ?? undefined });
+          }
+          for (const m of ngontinhList) {
+            if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'NGONTINH', cover: m.cover ?? undefined, title: m.title ?? undefined });
           }
         } catch {}
+
+        const resolveMangaType = (slug?: string, genre?: string, type?: string, logType?: string): 'NGONTINH' | 'BL' | 'H_MANGA' => {
+          if (logType === 'NGONTINH' || genre === 'NGONTINH' || genre === 'ngontinh' || type === 'NGONTINH') return 'NGONTINH';
+          if (logType === 'BL' || genre === 'BL' || genre === 'bl' || type === 'BL') return 'BL';
+          if (logType === 'H_MANGA' || genre === 'H_MANGA' || genre === 'h_manga' || type === 'H_MANGA') return 'H_MANGA';
+          if (slug) {
+            const s = slug.toLowerCase().trim();
+            if (mangaInfoMap.has(s)) return mangaInfoMap.get(s)!.type;
+            if (s.includes('em-co-nghe') || s.includes('chong-yeu') || s.includes('ngontinh') || s.includes('romance')) return 'NGONTINH';
+            if (s.includes('bl') || s.includes('dam-my') || s.includes('shounen-ai')) return 'BL';
+          }
+          return 'NGONTINH';
+        };
 
         // A. Xử lý media_items (Sách, Truyện, Nhạc)
         if (mediaRows) {
@@ -215,17 +240,16 @@ export function SharedActivityTab({ partnerPerson }: Props) {
               });
             }
 
-            // 2. TRUYỆN H / BL / NGÔN TÌNH (STORY / MANGA)
-            if (m.type === 'STORY' || m.type === 'MANGA' || m.type === 'BL' || m.type === 'H_MANGA') {
-              const isBL = m.genre === 'BL' || m.source === 'bl' || m.type === 'BL';
-              const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : 'H_MANGA';
+            // 2. TRUYỆN TRANH (NGÔN TÌNH / BL / TRUYỆN H)
+            if (m.type === 'STORY' || m.type === 'MANGA' || m.type === 'BL' || m.type === 'H_MANGA' || m.type === 'NGONTINH') {
+              const slug = (m.channel || m.slug || m.name || '').toLowerCase().trim();
+              const storyType = resolveMangaType(slug, m.genre, m.type);
               const current = m.current_chapter || 1;
               const total = m.total_chapters;
-              const slug = (m.channel || m.slug || m.name || '').toLowerCase().trim();
 
               let coverUrl = m.cover_url || m.cover || '';
-              if (!coverUrl && slug && mangaCoverMap.has(slug)) {
-                coverUrl = mangaCoverMap.get(slug)?.cover || '';
+              if (!coverUrl && slug && mangaInfoMap.has(slug)) {
+                coverUrl = mangaInfoMap.get(slug)?.cover || '';
               }
 
               const mangaKey = `${userName}::MANGA::${slug || m.name}`;
@@ -248,7 +272,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
               const timeRangeText = startTime && endTime && startTime !== endTime ? `${startTime} - ${endTime}` : (endTime || startTime);
 
               const chapterRangeText = minCh && maxCh && minCh < maxCh ? `Chapter ${minCh} → Chapter ${maxCh}` : `Chapter ${maxCh || current}`;
-              const chosenType = existing?.type === 'BL' || storyType === 'BL' ? 'BL' : 'H_MANGA';
+              const chosenType = existing?.type && existing.type !== 'H_MANGA' ? existing.type : storyType;
 
               itemsMap.set(mangaKey, {
                 id: existing?.id || `manga-${m.id}`,
@@ -256,7 +280,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
                 userName,
                 type: chosenType,
                 actionType: 'READING',
-                title: m.name || m.title || (slug && mangaCoverMap.get(slug)?.title) || 'Truyện tranh',
+                title: m.name || m.title || (slug && mangaInfoMap.get(slug)?.title) || 'Truyện tranh',
                 subtitle: chapterRangeText,
                 slug: slug,
                 cover: coverUrl || existing?.cover || '',
@@ -322,13 +346,11 @@ export function SharedActivityTab({ partnerPerson }: Props) {
 
         for (const log of combinedMangaLogs as any[]) {
           if (!log.manga_slug) continue;
-          const isH = log.manga_type === 'H_MANGA';
-          const isBL = log.manga_type === 'BL' || (!isH && (log.manga_slug.includes('bl') || log.manga_slug.includes('em-co-nghe')));
-          const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : isH ? 'H_MANGA' : 'BL';
-          const userName = resolveUserName(log.user_id);
           const slug = (log.manga_slug || '').toLowerCase().trim();
+          const storyType = resolveMangaType(slug, undefined, undefined, log.manga_type);
+          const userName = resolveUserName(log.user_id);
           const mangaKey = `${userName}::MANGA::${slug}`;
-          const coverUrl = mangaCoverMap.get(slug)?.cover || '';
+          const coverUrl = mangaInfoMap.get(slug)?.cover || '';
           const logIso = log.readAt || log.created_at || `${log.log_date}T${log.log_time || '00:00'}:00`;
           const existing = itemsMap.get(mangaKey);
 
@@ -350,7 +372,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           const endTime = sortedTimes[sortedTimes.length - 1] || '';
           const timeRangeText = startTime && endTime && startTime !== endTime ? `${startTime} - ${endTime}` : (endTime || startTime);
           const chapterRangeText = minCh && maxCh && minCh < maxCh ? `Chapter ${minCh} → Chapter ${maxCh}` : `Chapter ${maxCh || chNum}`;
-          const chosenType = existing?.type === 'BL' || storyType === 'BL' ? 'BL' : 'H_MANGA';
+          const chosenType = existing?.type && existing.type !== 'H_MANGA' ? existing.type : storyType;
 
           const newestTimeIso = existing && new Date(existing.updatedAt).getTime() > new Date(logIso).getTime() 
             ? existing.updatedAt 
@@ -362,7 +384,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
             userName,
             type: chosenType,
             actionType: 'READING',
-            title: log.manga_title || (mangaCoverMap.get(slug)?.title) || existing?.title || slug,
+            title: log.manga_title || (mangaInfoMap.get(slug)?.title) || existing?.title || slug,
             subtitle: chapterRangeText,
             slug: slug,
             cover: coverUrl || existing?.cover || '',
@@ -447,7 +469,10 @@ export function SharedActivityTab({ partnerPerson }: Props) {
 
       // 3. Lọc theo loại nội dung
       if (activeTypeFilter === 'BOOK' && act.type !== 'BOOK') return false;
-      if (activeTypeFilter === 'MANGA' && act.type !== 'BL' && act.type !== 'H_MANGA') return false;
+      if (activeTypeFilter === 'NGONTINH' && act.type !== 'NGONTINH') return false;
+      if (activeTypeFilter === 'BL' && act.type !== 'BL') return false;
+      if (activeTypeFilter === 'H_MANGA' && act.type !== 'H_MANGA') return false;
+      if (activeTypeFilter === 'MANGA' && act.type !== 'BL' && act.type !== 'H_MANGA' && act.type !== 'NGONTINH') return false;
       if (activeTypeFilter === 'MUSIC' && act.type !== 'MUSIC') return false;
 
       return true;
@@ -458,10 +483,12 @@ export function SharedActivityTab({ partnerPerson }: Props) {
   const handleItemClick = (act: SharedActivityItem) => {
     if (act.type === 'BOOK') {
       navigate('/books');
+    } else if (act.type === 'NGONTINH') {
+      navigate(act.slug ? `/ngontinh/${act.slug}` : '/ngontinh');
     } else if (act.type === 'BL') {
-      navigate('/bl');
+      navigate(act.slug ? `/bl/${act.slug}` : '/bl');
     } else if (act.type === 'H_MANGA') {
-      navigate('/truyenh');
+      navigate(act.slug ? `/truyenh/${act.slug}` : '/truyenh');
     } else if (act.type === 'MUSIC') {
       navigate('/music');
     }
@@ -587,12 +614,14 @@ export function SharedActivityTab({ partnerPerson }: Props) {
         </button>
       </div>
 
-      {/* BỘ LỌC THỂ LOẠI (TẤT CẢ / SÁCH / TRUYỆN / NHẠC) */}
+      {/* BỘ LỌC THỂ LOẠI (TẤT CẢ / SÁCH / NGÔN TÌNH / BL / TRUYỆN H / NHẠC) */}
       <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
         {[
           { key: 'ALL', label: 'Tất cả' },
           { key: 'BOOK', label: '📖 Sách' },
-          { key: 'MANGA', label: '🔞 Truyện tranh' },
+          { key: 'NGONTINH', label: '🌸 Ngôn tình' },
+          { key: 'BL', label: '💜 Truyện BL' },
+          { key: 'H_MANGA', label: '🔞 Truyện H' },
           { key: 'MUSIC', label: '🎵 Âm nhạc' },
         ].map((tab) => (
           <button
@@ -653,8 +682,9 @@ export function SharedActivityTab({ partnerPerson }: Props) {
             const userColor = isMeHieu ? '#0284c7' : '#f43f5e';
             const tagBadge = (() => {
               if (act.type === 'BOOK') return { label: 'SÁCH', bg: 'rgba(99, 102, 241, 0.15)', color: '#6366f1' };
-              if (act.type === 'H_MANGA') return { label: 'TRUYỆN H', bg: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' };
+              if (act.type === 'NGONTINH') return { label: 'NGÔN TÌNH', bg: 'rgba(236, 72, 153, 0.15)', color: '#ec4899' };
               if (act.type === 'BL') return { label: 'TRUYỆN BL', bg: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' };
+              if (act.type === 'H_MANGA') return { label: 'TRUYỆN H', bg: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' };
               return { label: 'NHẠC MP3', bg: 'rgba(16, 185, 129, 0.15)', color: '#10b981' };
             })();
 
