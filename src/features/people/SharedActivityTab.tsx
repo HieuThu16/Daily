@@ -194,7 +194,8 @@ export function SharedActivityTab() {
 
     // Realtime subscription lắng nghe thay đổi tiến độ đọc / nghe
     if (supabase) {
-      const channel = supabase
+      const sb = supabase;
+      const channel = sb
         .channel('shared-activity-channel')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'media_items' }, () => {
           void fetchActivities();
@@ -202,7 +203,7 @@ export function SharedActivityTab() {
         .subscribe();
 
       return () => {
-        void supabase.removeChannel(channel);
+        void sb.removeChannel(channel);
       };
     }
   }, [currentUserEmail]);
@@ -226,18 +227,21 @@ export function SharedActivityTab() {
     }
     const track: Media = {
       id: act.id,
-      title: act.title,
+      name: act.title,
+      description: null,
       artist: act.artist || 'Nghệ sĩ',
-      url: act.audioUrl,
+      audio_url: act.audioUrl,
       type: 'MUSIC',
-      cover: act.cover,
-      status: 'COMPLETED'
+      cover_url: act.cover ?? null,
+      status: 'COMPLETED',
+      is_favorite: false,
     };
     if (player) {
       player.playTrack(track);
       showToast(`▶️ Đang phát: ${act.title}`);
     }
   };
+
 
   const getTypeBadge = (type: SharedActivityItem['type']) => {
     switch (type) {
