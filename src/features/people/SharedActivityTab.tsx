@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  BookOpen, Music, Play, Heart, Sparkles, Clock, 
-  Calendar, ChevronLeft, ChevronRight, RefreshCw, Flame,
-  BookMarked, Volume2, ExternalLink
+  BookOpen, Music, Play, Flame, RefreshCw, ExternalLink
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { localDate } from '../../lib/date';
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext';
 import { useToast } from '../ToastContext';
+import { DatePager } from '../home/DatePager';
+import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
 import type { Media, Person } from '../../types';
 
 export interface SharedActivityItem {
@@ -24,6 +24,7 @@ export interface SharedActivityItem {
   progressPercent?: number;
   currentChapterOrPage?: number;
   totalChaptersOrPages?: number;
+  durationMinutes?: number;
   audioUrl?: string;
   artist?: string;
   logDate: string;
@@ -40,9 +41,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
   const player = useOptionalAudioPlayer();
   const { showToast } = useToast();
 
-  const todayStr = localDate();
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
-  const [timeFilter, setTimeFilter] = useState<'TODAY' | '1_HOUR' | 'ALL'>('TODAY');
+  const [selectedDate, setSelectedDate] = useState<string>(localDate());
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [activities, setActivities] = useState<SharedActivityItem[]>([]);
@@ -70,16 +69,16 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
   const fetchActivities = async () => {
     setLoading(true);
     try {
-      const items: SharedActivityItem[] = [];
+      const itemsMap = new Map<string, SharedActivityItem>();
 
-      // 1. Fetch Media Items (Sách, Truyện H, BL, Nhạc MP3)
+      // 1. Fetch Media Items từ Supabase
       if (supabase) {
         const { data: mediaRows } = await supabase
           .from('media_items')
           .select('*')
           .is('deleted_at', null)
           .order('updated_at', { ascending: false })
-          .limit(150);
+          .limit(200);
 
         if (mediaRows) {
           for (const m of mediaRows) {
@@ -93,30 +92,36 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
               userName = 'Kim Ý';
             }
 
-            // A. Sách
+            // A. Sách: Chỉ tính khi có tiến độ thực tế (trang > 1 hoặc tiến độ > 5% hoặc hoàn thành)
             if (m.type === 'BOOK') {
-              const current = m.current_page || m.current_chapter || 1;
+              const current = m.current_page || m.current_chapter || 0;
               const total = m.total_pages || m.total_chapters || 100;
               const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : undefined;
-              items.push({
-                id: `book-${m.id}`,
-                user_id: m.user_id,
-                userName,
-                type: 'BOOK',
-                title: m.name || 'Sách',
-                subtitle: m.author || m.description || '',
-                cover: m.cover_url || m.cover || '',
-                progressText: `Trang ${current}${total ? ` / ${total}` : ''} (${pct || 0}%)`,
-                progressPercent: pct,
-                currentChapterOrPage: current,
-                totalChaptersOrPages: total,
-                logDate: rowDate,
-                updatedAt: m.updated_at || m.created_at || '',
-                rawMedia: m
-              });
+
+              // Điều kiện: Chỉ tính nếu đã đọc trang > 1 hoặc pct >= 5% hoặc status = COMPLETED/IN_PROGRESS
+              const isActuallyReading = current > 1 || (pct && pct >= 5) || m.status === 'COMPLETED' || m.status === 'IN_PROGRESS';
+              if (isActuallyReading) {
+                const key = `${userName}::BOOK::${m.name || m.id}`;
+                itemsMap.set(key, {
+                  id: `book-${m.id}`,
+                  user_id: m.user_id,
+                  userName,
+                  type: 'BOOK',
+                  title: m.name || 'Sách',
+                  subtitle: m.author || m.description || '',
+                  cover: m.cover_url || m.cover || '',
+                  progressText: `Trang ${current}${total ? ` / ${total}` : ''} (${pct || 0}%)`,
+                  progressPercent: pct,
+                  currentChapterOrPage: current,
+                  totalChaptersOrPages: total,
+                  logDate: rowDate,
+                  updatedAt: m.updated_at || m.created_at || '',
+                  rawMedia: m
+                });
+              }
             }
 
-            // B. Truyện H (Tuyệt đối là Truyện H, không để Ngôn tình) / Truyện BL
+            // B. Truyện H / BL: Chỉ tính khi đã đọc thực tế (> 5 phút hoặc chapter > 1 hoặc pct >= 5%)
             if (m.type === 'STORY' || m.type === 'MANGA') {
               const isBL = m.genre === 'BL' || m.source === 'bl';
               const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : 'H_MANGA';
@@ -124,30 +129,36 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
               const current = m.current_chapter || 1;
               const total = m.total_chapters;
               const pct = total ? Math.min(100, Math.round((current / total) * 100)) : undefined;
-              const slug = m.channel || m.slug || '';
+              const slug = m.channel || m.slug || m.name || '';
 
-              items.push({
-                id: `manga-${m.id}`,
-                user_id: m.user_id,
-                userName,
-                type: storyType,
-                title: m.name || m.title || 'Truyện tranh',
-                subtitle: m.channel ? `Bộ: ${m.channel}` : m.author || '',
-                slug: slug,
-                cover: m.cover_url || m.cover || '',
-                progressText: `Chapter ${current}${total ? ` / ${total}` : ''}${pct ? ` (${pct}%)` : ''}`,
-                progressPercent: pct,
-                currentChapterOrPage: current,
-                totalChaptersOrPages: total,
-                logDate: rowDate,
-                updatedAt: m.updated_at || m.created_at || '',
-                rawMedia: m
-              });
+              // Điều kiện: Không tính nếu chỉ bấm vào 1 giây (phải có chapter > 1 hoặc pct >= 5% hoặc in_progress)
+              const isActuallyReading = current > 1 || (pct && pct >= 5) || m.status === 'IN_PROGRESS' || m.status === 'COMPLETED';
+              if (isActuallyReading) {
+                const key = `${userName}::${storyType}::${slug}`;
+                itemsMap.set(key, {
+                  id: `manga-${m.id}`,
+                  user_id: m.user_id,
+                  userName,
+                  type: storyType,
+                  title: m.name || m.title || 'Truyện tranh',
+                  subtitle: m.channel ? `Bộ: ${m.channel}` : m.author || '',
+                  slug: slug,
+                  cover: m.cover_url || m.cover || '',
+                  progressText: `Chapter ${current}${total ? ` / ${total}` : ''}${pct ? ` (${pct}%)` : ''}`,
+                  progressPercent: pct,
+                  currentChapterOrPage: current,
+                  totalChaptersOrPages: total,
+                  logDate: rowDate,
+                  updatedAt: m.updated_at || m.created_at || '',
+                  rawMedia: m
+                });
+              }
             }
 
-            // C. Nhạc MP3 (Chỉ lấy bài có link MP3/audio để nghe được)
+            // C. Nhạc MP3: Có file âm thanh
             if (m.type === 'MUSIC' && (m.url?.endsWith('.mp3') || m.url?.includes('audio') || m.url?.includes('supabase') || m.url?.includes('mp3') || m.audio_url || m.status === 'COMPLETED')) {
-              items.push({
+              const key = `${userName}::MUSIC::${m.name || m.id}`;
+              itemsMap.set(key, {
                 id: `music-${m.id}`,
                 user_id: m.user_id,
                 userName,
@@ -155,7 +166,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                 title: m.name || 'Bài hát',
                 subtitle: m.artist || 'Nghệ sĩ',
                 cover: m.cover_url || m.cover || '',
-                progressText: m.log_time ? `Đã nghe lúc ${m.log_time}` : 'Vừa nghe gần đây',
+                progressText: m.log_time ? `Đã nghe lúc ${m.log_time}` : 'Đã nghe trong ngày',
                 audioUrl: m.audio_url || m.url,
                 artist: m.artist,
                 logDate: rowDate,
@@ -167,34 +178,43 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         }
       }
 
-      // 2. Bổ sung dữ liệu lịch sử đọc Truyện H cục bộ nếu có
+      // 2. Bổ sung từ Manga Reading Logs (Có theo dõi thời gian đọc thực tế > 5 phút)
       try {
-        const hHistory = JSON.parse(localStorage.getItem('daily_hmanga_history_v1') || '{}');
-        for (const slug of Object.keys(hHistory)) {
-          const prog = hHistory[slug];
-          if (prog && !items.some(it => it.slug === slug || it.id === `manga-local-${slug}`)) {
-            const isMeHieu = isHieu(currentUserEmail);
-            const rDate = prog.readAt ? prog.readAt.split('T')[0] : localDate();
-            items.push({
-              id: `manga-local-${slug}`,
-              userName: isMeHieu ? 'Hiếu' : 'Kim Ý',
-              type: 'H_MANGA',
-              title: prog.mangaTitle || prog.chapterName || slug,
-              subtitle: `Đọc chapter ${prog.chapterNumber || 1}`,
-              slug: slug,
-              cover: prog.coverUrl || '',
-              progressText: `Chapter ${prog.chapterNumber || 1}`,
-              currentChapterOrPage: prog.chapterNumber || 1,
-              logDate: rDate,
-              updatedAt: prog.readAt || new Date().toISOString(),
-            });
+        const localMangaLogs = getMangaReadingLogs();
+        for (const log of localMangaLogs) {
+          const isH = log.mangaType === 'H_MANGA';
+          const storyType: 'H_MANGA' | 'BL' = isH ? 'H_MANGA' : 'BL';
+          const isMeHieu = isHieu(currentUserEmail);
+          const userName = isMeHieu ? 'Hiếu' : 'Kim Ý';
+          const key = `${userName}::${storyType}::${log.mangaSlug}`;
+
+          // Chỉ tính nếu đọc >= 5 phút hoặc chapter > 1
+          const duration = log.durationMinutes || 0;
+          if (duration >= 5 || log.chapterNumber > 1) {
+            const existing = itemsMap.get(key);
+            if (!existing || new Date(log.readAt).getTime() > new Date(existing.updatedAt).getTime()) {
+              itemsMap.set(key, {
+                id: `manga-log-${log.id}`,
+                userName,
+                type: storyType,
+                title: log.mangaTitle || log.mangaSlug,
+                subtitle: `Đã đọc ${duration > 0 ? `${duration} phút` : ''} · ${log.chapterName || `Chapter ${log.chapterNumber}`}`,
+                slug: log.mangaSlug,
+                progressText: `Chapter ${log.chapterNumber}${duration > 0 ? ` (${duration} phút)` : ''}`,
+                currentChapterOrPage: log.chapterNumber,
+                durationMinutes: duration,
+                logDate: log.log_date,
+                updatedAt: log.readAt,
+              });
+            }
           }
         }
       } catch {}
 
-      // Sắp xếp mới nhất lên đầu
-      items.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
-      setActivities(items);
+      // 3. Chuyển map thành mảng và sắp xếp mới nhất lên đầu
+      const list = Array.from(itemsMap.values());
+      list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
+      setActivities(list);
     } catch (err) {
       console.warn('Lỗi tải dữ liệu xem chung:', err);
     } finally {
@@ -220,42 +240,19 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
     }
   }, [currentUserEmail]);
 
-  // Bộ lọc theo ngày và thời gian
+  // Lọc hoạt động theo đúng ngày được chọn (giống logic Home)
   const filteredActivities = useMemo(() => {
-    const now = Date.now();
-    const oneHourAgo = now - 60 * 60 * 1000;
-
     return activities.filter(act => {
-      // Lọc người
+      // 1. Phải khớp ngày đang chọn
+      if (act.logDate !== selectedDate) return false;
+
+      // 2. Lọc theo người
       if (activePartnerFilter === 'HIEU' && act.userName !== 'Hiếu') return false;
       if (activePartnerFilter === 'KIM_Y' && act.userName !== 'Kim Ý') return false;
 
-      // Lọc theo mốc thời gian 1 giờ qua
-      if (timeFilter === '1_HOUR') {
-        const itemTime = new Date(act.updatedAt || act.logDate).getTime();
-        return itemTime >= oneHourAgo;
-      }
-
-      // Lọc theo ngày (mặc định hôm nay từ 0h tới hiện tại)
-      if (timeFilter === 'TODAY') {
-        return act.logDate === selectedDate;
-      }
-
-      // ALL
       return true;
     });
-  }, [activities, activePartnerFilter, selectedDate, timeFilter]);
-
-  const hieuCount = useMemo(() => activities.filter(a => a.userName === 'Hiếu' && a.logDate === selectedDate).length, [activities, selectedDate]);
-  const kimYCount = useMemo(() => activities.filter(a => a.userName === 'Kim Ý' && a.logDate === selectedDate).length, [activities, selectedDate]);
-
-  // Đổi ngày
-  const handleShiftDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
-    setTimeFilter('TODAY');
-  };
+  }, [activities, activePartnerFilter, selectedDate]);
 
   // Mở truyện hoặc sách
   const handleItemClick = (act: SharedActivityItem) => {
@@ -307,275 +304,92 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
     return `${hours}:${mins}`;
   };
 
-  const isToday = selectedDate === todayStr;
-
   return (
-    <div className="shared-activity-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="shared-activity-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       
-      {/* Thẻ Header Trạng thái Xem chung */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(244, 63, 94, 0.1))',
-          border: '1px solid rgba(244, 63, 94, 0.25)',
-          borderRadius: '16px',
-          padding: '16px',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '1.2rem' }}>💖</span>
-            <strong style={{ fontSize: '1.05rem', color: 'var(--text-main)' }}>
-              Xem chung tiến độ {partnerPerson ? `với ${partnerPerson.name}` : '(Hiếu ❤️ Kim Ý)'}
-            </strong>
-          </div>
-          <button
-            type="button"
-            onClick={() => void fetchActivities()}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--primary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.8rem',
-              fontWeight: 700
-            }}
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Cập nhật
-          </button>
-        </div>
+      {/* THANH ĐIỀU HƯỚNG LỊCH CHUẨN (GIỐNG HỆT LOGIC TRANG HOME) */}
+      <DatePager
+        dateKey={selectedDate}
+        week={[]}
+        mode="day"
+        onChange={setSelectedDate}
+      />
 
-        <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-          Cùng xem tiến độ đọc Sách, Truyện H, BL và bài nhạc MP3 đã nghe trong ngày. Bấm vào truyện để đọc ngay!
-        </p>
-
-        {/* Thanh đếm số hoạt động trong ngày */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-          <div style={{ flex: 1, background: 'var(--card-bg)', padding: '8px 12px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#0284c7' }} />
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Hiếu:</span>
-            <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{hieuCount} hoạt động</strong>
-          </div>
-          <div style={{ flex: 1, background: 'var(--card-bg)', padding: '8px 12px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f43f5e' }} />
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Kim Ý:</span>
-            <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{kimYCount} hoạt động</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* THANH ĐIỀU HƯỚNG THỜI GIAN (0h - Hiện tại, Đổi ngày, 1h trước) */}
-      <div
-        style={{
-          background: 'var(--card-bg)',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px'
-        }}
-      >
-        {/* Nút lùi/tiến ngày */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => handleShiftDate(-1)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '10px',
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text-main)',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <ChevronLeft size={15} /> Hôm qua
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Calendar size={15} color="var(--primary)" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setSelectedDate(e.target.value);
-                  setTimeFilter('TODAY');
-                }
-              }}
-              style={{
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                color: 'var(--text-main)',
-                borderRadius: '8px',
-                padding: '4px 8px',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            />
-            {isToday && (
-              <span style={{ fontSize: '0.72rem', background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e', padding: '2px 8px', borderRadius: '10px', fontWeight: 800 }}>
-                Hôm nay
-              </span>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handleShiftDate(1)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '10px',
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text-main)',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            Ngày mai <ChevronRight size={15} />
-          </button>
-        </div>
-
-        {/* Các nút lọc nhanh: 1h trước, Hôm nay, Tất cả */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedDate(todayStr);
-              setTimeFilter('TODAY');
-            }}
-            style={{
-              flex: 1,
-              padding: '7px 10px',
-              borderRadius: '10px',
-              border: 'none',
-              background: timeFilter === 'TODAY' && selectedDate === todayStr ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
-              color: timeFilter === 'TODAY' && selectedDate === todayStr ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px'
-            }}
-          >
-            <Clock size={13} /> Hôm nay (0h - nay)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedDate(todayStr);
-              setTimeFilter('1_HOUR');
-            }}
-            style={{
-              flex: 1,
-              padding: '7px 10px',
-              borderRadius: '10px',
-              border: 'none',
-              background: timeFilter === '1_HOUR' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(255, 255, 255, 0.05)',
-              color: timeFilter === '1_HOUR' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px'
-            }}
-          >
-            <Sparkles size={13} /> 1 giờ qua
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTimeFilter('ALL')}
-            style={{
-              padding: '7px 12px',
-              borderRadius: '10px',
-              border: 'none',
-              background: timeFilter === 'ALL' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
-              color: timeFilter === 'ALL' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            Tất cả
-          </button>
-        </div>
-
-        {/* Lọc theo người */}
-        <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
+      {/* Lọc theo người (Hiếu / Kim Ý / Cả hai) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
           <button
             type="button"
             onClick={() => setActivePartnerFilter('ALL')}
             style={{
-              padding: '4px 10px',
+              padding: '5px 12px',
               borderRadius: '8px',
               border: 'none',
-              background: activePartnerFilter === 'ALL' ? 'var(--text-main)' : 'transparent',
-              color: activePartnerFilter === 'ALL' ? 'var(--card-bg)' : 'var(--text-muted)',
-              fontSize: '0.76rem',
+              background: activePartnerFilter === 'ALL' ? 'var(--primary)' : 'var(--card-bg)',
+              color: activePartnerFilter === 'ALL' ? '#fff' : 'var(--text-muted)',
+              fontSize: '0.8rem',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              boxShadow: activePartnerFilter === 'ALL' ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
             }}
           >
-            Cả hai ({activities.length})
+            Tất cả ({filteredActivities.length})
           </button>
           <button
             type="button"
             onClick={() => setActivePartnerFilter('HIEU')}
             style={{
-              padding: '4px 10px',
+              padding: '5px 12px',
               borderRadius: '8px',
               border: 'none',
-              background: activePartnerFilter === 'HIEU' ? '#0284c7' : 'transparent',
+              background: activePartnerFilter === 'HIEU' ? '#0284c7' : 'var(--card-bg)',
               color: activePartnerFilter === 'HIEU' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.76rem',
+              fontSize: '0.8rem',
               fontWeight: 700,
               cursor: 'pointer'
             }}
           >
-            Chỉ Hiếu
+            Hiếu
           </button>
           <button
             type="button"
             onClick={() => setActivePartnerFilter('KIM_Y')}
             style={{
-              padding: '4px 10px',
+              padding: '5px 12px',
               borderRadius: '8px',
               border: 'none',
-              background: activePartnerFilter === 'KIM_Y' ? '#f43f5e' : 'transparent',
+              background: activePartnerFilter === 'KIM_Y' ? '#f43f5e' : 'var(--card-bg)',
               color: activePartnerFilter === 'KIM_Y' ? '#fff' : 'var(--text-muted)',
-              fontSize: '0.76rem',
+              fontSize: '0.8rem',
               fontWeight: 700,
               cursor: 'pointer'
             }}
           >
-            Chỉ Kim Ý
+            Kim Ý
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void fetchActivities()}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--primary)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '0.8rem',
+            fontWeight: 700
+          }}
+          title="Làm mới"
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        </button>
       </div>
 
-      {/* DANH SÁCH HOẠT ĐỘNG */}
+      {/* DANH SÁCH TIẾN ĐỘ ĐỌC / NGHE TRONG NGÀY */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
           <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
@@ -594,16 +408,15 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
         >
           <span style={{ fontSize: '2rem', display: 'block', marginBottom: '8px' }}>📖</span>
           <strong style={{ display: 'block', fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '4px' }}>
-            Chưa có hoạt động nào {timeFilter === '1_HOUR' ? 'trong 1 giờ qua' : `trong ngày ${selectedDate}`}
+            Không có hoạt động đọc hoặc nghe nhạc trong ngày này
           </strong>
           <p style={{ fontSize: '0.82rem', margin: 0 }}>
-            Khi Hiếu hoặc Kim Ý đọc Sách, Truyện H, BL hoặc nghe nhạc MP3, tiến độ sẽ tự động hiển thị tại đây!
+            Tiến độ chỉ hiển thị khi đã đọc thực sự (trên 5 phút hoặc qua các chapter).
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filteredActivities.map((act) => {
-            const isMe = isHieu(currentUserEmail) ? act.userName === 'Hiếu' : act.userName === 'Kim Ý';
             const isStory = act.type === 'H_MANGA' || act.type === 'BL';
             const isH = act.type === 'H_MANGA';
             const timeFormatted = formatTimeAgo(act.updatedAt);
@@ -614,23 +427,22 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                 onClick={() => handleItemClick(act)}
                 style={{
                   background: 'var(--card-bg)',
-                  border: isH ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid var(--border)',
-                  borderRadius: '16px',
+                  border: isH ? '1px solid rgba(244, 63, 94, 0.25)' : '1px solid var(--border)',
+                  borderRadius: '14px',
                   padding: '12px',
                   display: 'flex',
                   gap: '12px',
                   cursor: isStory || act.type === 'BOOK' ? 'pointer' : 'default',
                   transition: 'all 0.15s ease',
-                  position: 'relative',
-                  overflow: 'hidden'
+                  position: 'relative'
                 }}
                 className="shared-activity-card"
               >
                 {/* Ảnh bìa */}
                 <div
                   style={{
-                    width: '64px',
-                    height: '84px',
+                    width: '60px',
+                    height: '78px',
                     borderRadius: '10px',
                     background: 'var(--border)',
                     overflow: 'hidden',
@@ -650,9 +462,9 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                     />
                   ) : (
                     <div style={{ color: 'var(--text-muted)' }}>
-                      {act.type === 'BOOK' && <BookOpen size={24} />}
-                      {act.type === 'MUSIC' && <Music size={24} />}
-                      {isStory && <Flame size={24} color="#f43f5e" />}
+                      {act.type === 'BOOK' && <BookOpen size={22} />}
+                      {act.type === 'MUSIC' && <Music size={22} />}
+                      {isStory && <Flame size={22} color="#f43f5e" />}
                     </div>
                   )}
                 </div>
@@ -660,15 +472,14 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                 {/* Nội dung thông tin */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
-                    {/* Hàng badge: Người + Loại nội dung + Giờ */}
+                    {/* Hàng badge */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                      {/* Badge Người */}
                       <span
                         style={{
                           fontSize: '0.72rem',
                           fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '8px',
+                          padding: '2px 7px',
+                          borderRadius: '6px',
                           background: act.userName === 'Hiếu' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(244, 63, 94, 0.15)',
                           color: act.userName === 'Hiếu' ? '#0284c7' : '#f43f5e'
                         }}
@@ -676,14 +487,13 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                         {act.userName}
                       </span>
 
-                      {/* Badge Thể loại: Đúng chuẩn Truyện H, không để Ngôn tình */}
                       {isH && (
                         <span
                           style={{
                             fontSize: '0.72rem',
                             fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '8px',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
                             background: 'linear-gradient(135deg, #e11d48, #be123c)',
                             color: '#ffffff'
                           }}
@@ -697,8 +507,8 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                           style={{
                             fontSize: '0.72rem',
                             fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '8px',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
                             background: 'rgba(236, 72, 153, 0.15)',
                             color: '#ec4899'
                           }}
@@ -712,8 +522,8 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                           style={{
                             fontSize: '0.72rem',
                             fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '8px',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
                             background: 'rgba(139, 92, 246, 0.15)',
                             color: '#8b5cf6'
                           }}
@@ -727,8 +537,8 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                           style={{
                             fontSize: '0.72rem',
                             fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '8px',
+                            padding: '2px 7px',
+                            borderRadius: '6px',
                             background: 'rgba(16, 185, 129, 0.15)',
                             color: '#10b981'
                           }}
@@ -737,7 +547,6 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                         </span>
                       )}
 
-                      {/* Thời gian */}
                       {timeFormatted && (
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
                           {timeFormatted}
@@ -745,10 +554,10 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                       )}
                     </div>
 
-                    {/* Tiêu đề tác phẩm */}
+                    {/* Tiêu đề */}
                     <div
                       style={{
-                        fontSize: '0.92rem',
+                        fontSize: '0.9rem',
                         fontWeight: 800,
                         color: 'var(--text-main)',
                         whiteSpace: 'nowrap',
@@ -764,7 +573,7 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                     {act.subtitle && (
                       <div
                         style={{
-                          fontSize: '0.76rem',
+                          fontSize: '0.75rem',
                           color: 'var(--text-muted)',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -777,44 +586,43 @@ export function SharedActivityTab({ partnerPerson }: SharedActivityTabProps) {
                     )}
                   </div>
 
-                  {/* Thanh tiến độ hoặc Nút nghe nhạc */}
-                  <div style={{ marginTop: '6px' }}>
+                  {/* Tiến độ / Nút nghe */}
+                  <div style={{ marginTop: '5px' }}>
                     {act.type === 'MUSIC' ? (
                       <button
                         type="button"
                         onClick={(e) => handlePlayMusic(e, act)}
                         style={{
-                          padding: '5px 12px',
+                          padding: '4px 10px',
                           borderRadius: '8px',
                           border: 'none',
                           background: 'linear-gradient(135deg, #10b981, #059669)',
                           color: '#ffffff',
-                          fontSize: '0.78rem',
+                          fontSize: '0.76rem',
                           fontWeight: 800,
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                          gap: '5px'
                         }}
                       >
-                        <Play size={12} fill="#ffffff" /> Nghe bài này
+                        <Play size={11} fill="#ffffff" /> Nghe bài này
                       </button>
                     ) : (
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: '3px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '2px' }}>
                           <span style={{ color: isH ? '#f43f5e' : 'var(--primary)', fontWeight: 700 }}>
                             {act.progressText}
                           </span>
                           {isStory && (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                              Nhấn để đọc <ExternalLink size={10} />
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                              Nhấn để đọc <ExternalLink size={9} />
                             </span>
                           )}
                         </div>
 
                         {act.progressPercent !== undefined && (
-                          <div style={{ width: '100%', height: '4px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div style={{ width: '100%', height: '3px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
                             <div
                               style={{
                                 width: `${act.progressPercent}%`,
