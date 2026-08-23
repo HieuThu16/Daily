@@ -1,18 +1,24 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { Sparkles, RefreshCw, X } from 'lucide-react';
+import { Sparkles, RefreshCw, X, ArrowUpCircle } from 'lucide-react';
 
 export function PwaUpdateNotification() {
+  const currentVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v2.4.0';
+  const currentBuildTime = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
+
+  const [newServerVersion, setNewServerVersion] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<boolean>(false);
+
   const {
-    needRefresh: [needRefresh, setNeedRefresh],
+    needRefresh: [swNeedRefresh, setSwNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(_swUrl?: string, r?: ServiceWorkerRegistration) {
       if (r) {
-        // Tự động kiểm tra bản build mới mỗi 30 giây
+        // Tự động kiểm tra ServiceWorker mỗi 20 giây
         setInterval(() => {
           r.update().catch(() => {});
-        }, 30_000);
+        }, 20_000);
       }
     },
     onRegisterError(error: unknown) {
@@ -20,33 +26,66 @@ export function PwaUpdateNotification() {
     },
   });
 
-
-  // Khi người dùng quay lại tab ứng dụng, lập tức kiểm tra cập nhật mới
+  // Polling /version.json để phát hiện ngay khi có bản build mới trên Vercel
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistration().then((reg) => {
-          reg?.update().catch(() => {});
+    const checkServerVersion = async () => {
+      try {
+        const res = await fetch(`/version.json?_t=${Date.now()}`, {
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.version && data.version !== currentVersion) {
+            setNewServerVersion(data.version);
+          } else if (data?.buildTime && currentBuildTime && new Date(data.buildTime).getTime() > new Date(currentBuildTime).getTime()) {
+            setNewServerVersion(data.version || 'Mới nhất');
+          }
+        }
+      } catch {}
+    };
+
+    void checkServerVersion();
+    const interval = setInterval(checkServerVersion, 20_000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void checkServerVersion();
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration().then((reg) => {
+            reg?.update().catch(() => {});
+          });
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentVersion, currentBuildTime]);
 
-  if (!needRefresh) return null;
+  const hasUpdate = Boolean((swNeedRefresh || newServerVersion) && !dismissed);
+
+  if (!hasUpdate) return null;
+
+  const handleUpdate = () => {
+    try {
+      void updateServiceWorker(true);
+    } catch {}
+    void forceReloadLatestVersion();
+  };
 
   return (
     <div
       style={{
         position: 'fixed',
-        top: '12px',
+        top: '14px',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 999999,
         maxWidth: '92vw',
-        width: '420px',
+        width: '430px',
         background: 'linear-gradient(135deg, #1e1b4b, #312e81)',
         color: '#ffffff',
         borderRadius: '16px',
@@ -78,10 +117,10 @@ export function PwaUpdateNotification() {
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Đã có phiên bản mới!
+            Đã có phiên bản mới {newServerVersion ? `(${newServerVersion})` : ''}!
           </div>
           <div style={{ fontSize: '0.74rem', color: '#c7d2fe', marginTop: '1px' }}>
-            Bấm cập nhật để nạp tính năng mới nhất
+            Nhấn cập nhật để tải tính năng mới nhất
           </div>
         </div>
       </div>
@@ -89,9 +128,7 @@ export function PwaUpdateNotification() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         <button
           type="button"
-          onClick={() => {
-            void updateServiceWorker(true);
-          }}
+          onClick={handleUpdate}
           style={{
             padding: '7px 14px',
             borderRadius: '10px',
@@ -119,7 +156,10 @@ export function PwaUpdateNotification() {
 
         <button
           type="button"
-          onClick={() => setNeedRefresh(false)}
+          onClick={() => {
+            setDismissed(true);
+            setSwNeedRefresh(false);
+          }}
           style={{
             width: '28px',
             height: '28px',

@@ -84,15 +84,26 @@ function apiDevServer(): Plugin {
   }
 }
 
-const APP_VERSION = 'v2.4.0'
-const BUILD_TIME = new Date().toISOString()
+import { writeFileSync } from 'node:fs'
+
+const now = new Date()
+const pad = (n: number) => String(n).padStart(2, '0')
+const dateCode = `${String(now.getFullYear()).slice(-2)}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+const timeCode = `${pad(now.getHours())}${pad(now.getMinutes())}`
+const APP_VERSION = `v2.4.${dateCode}.${timeCode}`
+const BUILD_TIME = now.toISOString()
+
+// Luôn ghi đè public/version.json trước khi build
+try {
+  const p = resolve(process.cwd(), 'public', 'version.json')
+  writeFileSync(p, JSON.stringify({ version: APP_VERSION, buildTime: BUILD_TIME }, null, 2))
+} catch {}
 
 function versionPlugin(): Plugin {
   return {
     name: 'version-generator',
     buildStart() {
       try {
-        const { writeFileSync } = require('node:fs')
         const p = resolve(process.cwd(), 'public', 'version.json')
         writeFileSync(p, JSON.stringify({ version: APP_VERSION, buildTime: BUILD_TIME }, null, 2))
       } catch {}
@@ -110,6 +121,7 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __BUILD_TIME__: JSON.stringify(BUILD_TIME),
     },
+
     plugins: [
       react(),
       apiDevServer(),
