@@ -366,8 +366,9 @@ export default async function handler(req: any, res: any) {
   const url = String(body?.url || '').trim();
   const existingChapters = Array.isArray(body?.existingChapters) ? body.existingChapters : undefined;
   if (!url) {
-    return res.status(400).json({ error: 'Vui lòng cung cấp đường dẫn truyện từ metruyen18.app hoặc vietmanhwa.com' });
+    return res.status(400).json({ error: 'Vui lòng cung cấp đường dẫn truyện từ sayhentai.cx, metruyen18.app hoặc vietmanhwa.com' });
   }
+
 
   try {
     const isVietManhwa = url.includes('vietmanhwa.com');

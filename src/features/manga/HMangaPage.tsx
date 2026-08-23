@@ -199,7 +199,7 @@ function CrawlModal({
   const handleCrawl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) {
-      setErrorMsg('Vui lòng nhập link truyện từ metruyen18.app hoặc vietmanhwa.com');
+      setErrorMsg('Vui lòng nhập link truyện từ sayhentai.cx, metruyen18.app hoặc vietmanhwa.com');
       return;
     }
 
@@ -252,8 +252,8 @@ function CrawlModal({
               <Download size={20} />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Cào truyện H (MeTruyen18 & VietManhwa)</h2>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>Hỗ trợ link từ metruyen18.app hoặc vietmanhwa.com</span>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Cào truyện H (SayHentai, MeTruyen18, VietManhwa)</h2>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>Hỗ trợ link từ sayhentai.cx, metruyen18.app hoặc vietmanhwa.com</span>
             </div>
           </div>
           <button 
@@ -269,7 +269,7 @@ function CrawlModal({
         <form onSubmit={handleCrawl}>
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-              Đường dẫn truyện (metruyen18.app hoặc vietmanhwa.com)
+              Đường dẫn truyện (sayhentai.cx, metruyen18.app, vietmanhwa.com)
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <LinkIcon size={16} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted, #64748b)' }} />
@@ -277,7 +277,7 @@ function CrawlModal({
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://vietmanhwa.com/manhwa-18/... hoặc https://metruyen18.app/..."
+                placeholder="Dán link sayhentai.cx, metruyen18.app hoặc vietmanhwa.com..."
                 disabled={loading}
                 style={{
                   width: '100%',
@@ -312,9 +312,10 @@ function CrawlModal({
               </button>
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted, #64748b)', marginTop: '6px' }}>
-              Ví dụ: <code>https://vietmanhwa.com/manhwa-18/toi-duoc-giao-nhiem-vu...</code>
+              Ví dụ: <code>https://sayhentai.cx/truyen-thoa-thuan-day-toi-loi...html</code>
             </div>
           </div>
+
 
           {/* Cảnh báo truyện trùng tên/slug ngay trên Frontend */}
           {existingMatch && !loading && (
