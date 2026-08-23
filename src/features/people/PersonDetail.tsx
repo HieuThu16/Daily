@@ -11,17 +11,10 @@ import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
 import { PersonSpending } from './PersonSpending'
+import { SharedActivityTab } from './SharedActivityTab'
 import type { NewOccasion } from './usePeopleData'
 
-type DetailTab = 'events' | 'info' | 'occasions' | 'journal'
-
-const TABS: { key: DetailTab; label: string }[] = [
-  { key: 'events', label: 'Kỷ niệm' },
-  { key: 'info', label: 'Thông tin' },
-  { key: 'occasions', label: 'Dịp' },
-  { key: 'journal', label: 'Nhật ký' },
-]
-
+type DetailTab = 'shared' | 'events' | 'info' | 'occasions' | 'journal'
 
 type Props = {
   person: Person
@@ -49,7 +42,16 @@ export function PersonDetail({
   // Ẩn Header chung của App khi xem chi tiết người thân, nhấn quay lại sẽ hiện lại
   useHideHeader(true)
 
-  const [tab, setTab] = useState<DetailTab>('info')
+  const availableTabs = [
+    ...(person.is_partner ? [{ key: 'shared' as const, label: 'Xem chung' }] : []),
+    { key: 'events' as const, label: 'Kỷ niệm' },
+    { key: 'info' as const, label: 'Thông tin' },
+    { key: 'occasions' as const, label: 'Dịp' },
+    { key: 'journal' as const, label: 'Nhật ký' },
+  ]
+
+  const [tab, setTab] = useState<DetailTab>(person.is_partner ? 'shared' : 'info')
+
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(person.name)
   const [group, setGroup] = useState<PersonGroup | null>(person.group_key ?? null)
@@ -57,6 +59,7 @@ export function PersonDetail({
 
   const [inviteModal, setInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+
 
   const birthday = occasions.find((o) => o.person_id === person.id && o.kind === 'BIRTHDAY')
   const nextBirthday = birthday ? nextOccurrence(birthday) : null
@@ -161,7 +164,7 @@ export function PersonDetail({
       </div>
 
       <div className="segmented" role="tablist" aria-label="Phần thông tin">
-        {TABS.map(({ key, label }) => (
+        {availableTabs.map(({ key, label }) => (
           <button
             key={key}
             role="tab"
@@ -173,6 +176,10 @@ export function PersonDetail({
           </button>
         ))}
       </div>
+
+      {tab === 'shared' && (
+        <SharedActivityTab partnerPerson={person} />
+      )}
 
       {tab === 'info' && (
         <>
@@ -218,6 +225,7 @@ export function PersonDetail({
           onSendInvite={onSendInvite ? () => setInviteModal(true) : undefined}
         />
       )}
+
 
       {editing && (
         <Modal title="Sửa thông tin" onClose={() => setEditing(false)}>

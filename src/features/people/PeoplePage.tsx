@@ -13,7 +13,6 @@ import { DualCalendarDate } from './DualCalendarDate'
 import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
-import { SharedActivityTab } from './SharedActivityTab'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
 
 
@@ -44,8 +43,9 @@ export function PeoplePage() {
     rejectPartnerInvitation,
   } = usePeopleData()
 
-  const [mainTab, setMainTab] = useState<'OCCASIONS' | 'SHARED' | 'PEOPLE'>('OCCASIONS')
+  const [mainTab, setMainTab] = useState<'OCCASIONS' | 'PEOPLE'>('OCCASIONS')
   const [selected, setSelected] = useState<Person | null>(null)
+
 
   const [search, setSearch] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
@@ -199,12 +199,12 @@ export function PeoplePage() {
 
   return (
     <section className="people-page">
-      {/* 3 Tab chính: Kỷ niệm (Đầu tiên), Xem chung (Mới), Người thân quen */}
+      {/* 2 Tab chính: Kỷ niệm (Đầu tiên), Người thân quen */}
       <div
         className="people-main-nav"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
+          gridTemplateColumns: 'repeat(2, 1fr)',
           gap: '8px',
           marginBottom: '18px',
           background: 'var(--card-bg)',
@@ -247,28 +247,6 @@ export function PeoplePage() {
               {upcomingCount}
             </span>
           )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setMainTab('SHARED')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            padding: '10px 14px',
-            borderRadius: '12px',
-            border: 'none',
-            background: mainTab === 'SHARED' ? 'linear-gradient(135deg, #ec4899, #831843)' : 'transparent',
-            color: mainTab === 'SHARED' ? '#ffffff' : 'var(--text-muted)',
-            fontWeight: 800,
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <HeartHandshake size={16} /> Xem chung
         </button>
 
         <button
@@ -331,13 +309,9 @@ export function PeoplePage() {
         </div>
       )}
 
-      {/* TAB 2: XEM CHUNG (ĐỒNG HÀNH HIẾU ❤️ KIM Ý) */}
-      {mainTab === 'SHARED' && (
-        <SharedActivityTab />
-      )}
-
-      {/* TAB 3: NGƯỜI THÂN QUEN */}
+      {/* TAB 2: NGƯỜI THÂN QUEN */}
       {mainTab === 'PEOPLE' && (
+
         <>
           <div className="people-search">
             <Search size={17} />

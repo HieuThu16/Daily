@@ -59,9 +59,9 @@ export function SharedEventsView({
   const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
 
   useEffect(() => {
-    supabase?.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null))
+    supabase?.auth?.getUser().then(({ data }) => setMyId(data?.user?.id ?? null)).catch(() => null)
 
-    if (!supabase) return
+    if (!supabase || typeof supabase.channel !== 'function') return
     const channel = supabase
       .channel('shared_events_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shared_events' }, () => {
