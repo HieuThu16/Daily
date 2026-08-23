@@ -255,37 +255,8 @@ export function DailyPage() {
     }
   }
 
-  const handleSelectVideo = async (video: { videoId: string; title: string; channelName?: string; youtubeUrl?: string }) => {
-    const duration = (timeFrom && timeTo) ? calculateMinutesBetween(timeFrom, timeTo) : 30
-    const startIso = timeFrom ? new Date(`${date}T${timeFrom}:00`).toISOString() : new Date().toISOString()
-    const endIso = timeTo ? new Date(`${date}T${timeTo}:00`).toISOString() : new Date().toISOString()
-
-    // 1. Lưu vào Video Watch Log (cho YouTube / TV Show)
-    recordVideoWatchSession({
-      videoId: video.videoId,
-      title: video.title,
-      channelName: video.channelName,
-      type: 'youtube',
-      durationMinutes: duration,
-      startTime: startIso,
-      endTime: endIso,
-    })
-
-    // 2. Lưu vào bảng media nếu có kết nối Supabase
-    if (supabase) {
-      supabase.from('media').insert([{
-        type: 'YOUTUBE',
-        name: video.title,
-        channel: video.channelName || null,
-        youtube_url: video.youtubeUrl || `https://www.youtube.com/watch?v=${video.videoId}`,
-        log_date: date,
-        log_time: timeOverride || (timeFrom ? `${timeFrom}${timeTo ? ` - ${timeTo}` : ''}` : clock),
-        status: 'COMPLETED',
-        is_favorite: false,
-      }]).then(() => {})
-    }
-
-    // 3. Điền vào nội dung nhật ký
+  const handleSelectVideo = (video: { videoId: string; title: string; channelName?: string; youtubeUrl?: string }) => {
+    // Chỉ lưu vào nội dung nhật ký để tránh bị ghi thành 2 mục trùng nhau
     const channelSuffix = video.channelName ? ` (${video.channelName})` : ''
     const diaryLine = `Xem YouTube: ${video.title}${channelSuffix}`
     insertQuickPhrase(diaryLine)
@@ -293,8 +264,9 @@ export function DailyPage() {
     setShowVideoModal(false)
     setVideoUrlInput('')
     setFetchedVideoMeta(null)
-    showToast('🎬 Đã liên kết video YouTube vào Nhật ký và Lịch sử xem!')
+    showToast('🎬 Đã thêm video YouTube vào Nhật ký!')
   }
+
 
 
   const saveEntries = async () => {
@@ -518,94 +490,52 @@ export function DailyPage() {
             </div>
 
             {/* Khung chọn 2 nút Giờ: Giờ từ ➔ Giờ đến */}
-            <div style={{ padding: '8px 10px', background: 'var(--bg-main)', borderRadius: 10, border: '1px solid var(--card-border)', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={13} color="var(--amber)" /> Khung giờ hoạt động:
+            <div style={{ padding: '8px 12px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={13} color="var(--amber)" /> Khung giờ nhật ký:
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {(timeFrom || timeTo || timeOverride) && (
-                    <button
-                      type="button"
-                      onClick={clearTimeRange}
-                      style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
-                    >
-                      Xóa giờ
-                    </button>
-                  )}
-                </div>
+                {(timeFrom || timeTo || timeOverride) && (
+                  <button
+                    type="button"
+                    onClick={clearTimeRange}
+                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    Xóa giờ
+                  </button>
+                )}
               </div>
 
               {/* 2 nút chọn giờ: Giờ từ & Giờ đến */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--amber)' }}>Từ:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
                   <input
                     type="time"
                     value={timeFrom}
                     onChange={(e) => handleTimeFromChange(e.target.value)}
-                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 72 }}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.86rem', fontWeight: 700, padding: 0, width: 76, outline: 'none' }}
                   />
                 </div>
 
-                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
+                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
 
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--emerald)' }}>Đến:</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
                   <input
                     type="time"
                     value={timeTo}
                     onChange={(e) => handleTimeToChange(e.target.value)}
-                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 72 }}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.86rem', fontWeight: 700, padding: 0, width: 76, outline: 'none' }}
                   />
                 </div>
 
-                {/* Hoặc dùng 1 mốc giờ cố định */}
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Mốc lưu:</span>
-                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '2px 6px', borderRadius: 6 }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Mốc:</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '2px 8px', borderRadius: 8 }}>
                     {timeOverride || clock}
                   </span>
                 </div>
-              </div>
-
-              {/* Các nút chọn nhanh khung giờ */}
-              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
-                <button
-                  type="button"
-                  onClick={() => setRecentPastTimeRange(60)}
-                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
-                >
-                  ⏱️ 1h trước ➔ Nay
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRecentPastTimeRange(30)}
-                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
-                >
-                  ⏱️ 30p trước ➔ Nay
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickTimeRange('08:00', '12:00')}
-                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
-                >
-                  🌅 8h ➔ 12h
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickTimeRange('13:00', '17:00')}
-                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
-                >
-                  ☀️ 13h ➔ 17h
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickTimeRange('19:00', '22:00')}
-                  style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
-                >
-                  🌙 19h ➔ 22h
-                </button>
               </div>
             </div>
 
@@ -677,6 +607,7 @@ export function DailyPage() {
                 <Youtube size={14} /> Gắn YouTube / TV Show
               </button>
             </div>
+
 
             <textarea
               value={content}
@@ -1058,20 +989,20 @@ export function DailyPage() {
         </Modal>
       )}
 
-      {/* ── MODAL: CHỌN & GẮN LINK YOUTUBE / TV SHOW VÀO NHẬT KÝ ── */}
+      {/* ── MODAL: CHỌN & GẮN LINK YOUTUBE VÀO NHẬT KÝ ── */}
       {showVideoModal && (
-        <Modal title="🎬 Gắn Video YouTube / TV Show vào Nhật ký" onClose={() => { setShowVideoModal(false); setFetchedVideoMeta(null); setVideoUrlInput('') }}>
-          <div style={{ display: 'grid', gap: 12 }}>
+        <Modal title="🎬 Gắn Video YouTube vào Nhật ký" onClose={() => { setShowVideoModal(false); setFetchedVideoMeta(null); setVideoUrlInput('') }}>
+          <div style={{ display: 'grid', gap: 12, maxWidth: '100%', boxSizing: 'border-box' }}>
             <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-              Chọn video bạn đã xem gần đây hoặc dán link YouTube. Hoạt động sẽ được tự động đồng bộ vào <strong>Lịch sử xem YouTube/TV Show</strong> và ghi vào <strong>Nhật ký</strong>!
+              Dán link video YouTube hoặc chọn từ danh sách video đã xem gần đây để thêm nhanh vào nội dung nhật ký.
             </p>
 
             {/* Khung Dán Link YouTube */}
-            <div style={{ padding: 10, background: 'var(--bg-main)', borderRadius: 10, border: '1px solid var(--card-border)' }}>
-              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: 4 }}>
+            <div style={{ padding: '10px 12px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'block', marginBottom: 6 }}>
                 🔗 Dán link video YouTube:
               </label>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
                   type="url"
                   placeholder="https://www.youtube.com/watch?v=... hoặc https://youtu.be/..."
@@ -1080,7 +1011,16 @@ export function DailyPage() {
                     setVideoUrlInput(e.target.value)
                     handleFetchUrlMeta(e.target.value)
                   }}
-                  style={{ flex: 1, padding: '7px 10px', fontSize: '0.82rem', borderRadius: 8, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)' }}
+                  style={{
+                    flex: '1 1 220px',
+                    minWidth: 0,
+                    padding: '8px 12px',
+                    fontSize: '0.84rem',
+                    borderRadius: 8,
+                    border: '1px solid var(--card-border)',
+                    background: 'var(--card-bg)',
+                    color: 'var(--text-main)',
+                  }}
                 />
                 <button
                   type="button"
@@ -1096,31 +1036,52 @@ export function DailyPage() {
                       })
                     }
                   }}
-                  style={{ whiteSpace: 'nowrap', padding: '0 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  style={{
+                    flex: '0 0 auto',
+                    whiteSpace: 'nowrap',
+                    padding: '8px 16px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    borderRadius: 8,
+                  }}
                 >
-                  <Plus size={14} /> Gắn video
+                  <Plus size={15} /> Gắn vào nhật ký
                 </button>
               </div>
 
               {videoFetching && (
-                <div style={{ fontSize: '0.74rem', color: 'var(--amber)', marginTop: 4 }}>
-                  ⏳ Đang đọc tiêu đề video…
+                <div style={{ fontSize: '0.74rem', color: 'var(--amber)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Loader2 size={13} className="spin" /> Đang lấy thông tin video…
                 </div>
               )}
 
               {fetchedVideoMeta && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '6px 8px', background: 'var(--card-bg)', borderRadius: 8, border: '1px solid var(--emerald)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginTop: 8,
+                    padding: '8px 10px',
+                    background: 'var(--card-bg)',
+                    borderRadius: 10,
+                    border: '1.5px solid var(--emerald)',
+                  }}
+                >
                   <img
                     src={`https://img.youtube.com/vi/${fetchedVideoMeta.videoId}/hqdefault.jpg`}
                     alt=""
-                    style={{ width: 48, height: 32, borderRadius: 4, objectFit: 'cover' }}
+                    style={{ width: 56, height: 38, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {fetchedVideoMeta.title}
                     </div>
                     {fetchedVideoMeta.author && (
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
                         Kênh: {fetchedVideoMeta.author}
                       </div>
                     )}
@@ -1141,11 +1102,11 @@ export function DailyPage() {
               </div>
 
               {recentVideos.length === 0 ? (
-                <div style={{ padding: '16px 8px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)', background: 'var(--bg-main)', borderRadius: 8 }}>
-                  Chưa có lịch sử video đã xem. Hãy dán link YouTube ở trên để thêm nhanh!
+                <div style={{ padding: '14px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)', background: 'var(--bg-main)', borderRadius: 10 }}>
+                  Chưa có video xem gần đây. Hãy dán link YouTube ở trên để thêm nhanh!
                 </div>
               ) : (
-                <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto', paddingRight: 2 }}>
                   {recentVideos.map((v) => (
                     <div
                       key={v.id}
@@ -1158,9 +1119,9 @@ export function DailyPage() {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
-                        padding: '6px 8px',
-                        borderRadius: 8,
+                        gap: 10,
+                        padding: '8px 10px',
+                        borderRadius: 10,
                         background: 'var(--bg-main)',
                         border: '1px solid var(--card-border)',
                         cursor: 'pointer',
@@ -1179,28 +1140,38 @@ export function DailyPage() {
                         src={`https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`}
                         alt=""
                         loading="lazy"
-                        style={{ width: 44, height: 30, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
+                        style={{ width: 50, height: 34, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div
+                          style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            color: 'var(--text-main)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {v.title}
                         </div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
                           {v.channelName && <span>{v.channelName}</span>}
-                          {v.durationMinutes > 0 && <span>• Đã xem ~{v.durationMinutes}p</span>}
+                          {v.durationMinutes > 0 && <span>• ~{v.durationMinutes}p</span>}
                         </div>
                       </div>
                       <button
                         type="button"
                         style={{
-                          fontSize: '0.7rem',
+                          fontSize: '0.72rem',
                           fontWeight: 700,
-                          padding: '3px 8px',
+                          padding: '4px 10px',
                           borderRadius: 6,
                           background: 'rgba(239, 68, 68, 0.12)',
                           color: '#ef4444',
                           border: 0,
                           flexShrink: 0,
+                          cursor: 'pointer',
                         }}
                       >
                         Chọn
@@ -1219,6 +1190,7 @@ export function DailyPage() {
           </div>
         </Modal>
       )}
+
 
       {/* ── MODAL: COMBOBOX CHỌN HÀNH ĐỘNG ── */}
       {showActionModal && (
