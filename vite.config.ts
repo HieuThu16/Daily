@@ -94,7 +94,7 @@ export default defineConfig(({ mode }) => {
       react(),
       apiDevServer(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         // pdfjs + jszip chỉ cần khi nhập sách và việc nhập luôn cần mạng (lưu lên Supabase).
         // Không precache để cài PWA không phải tải thêm ~1.8MB.
         // workbox tự sinh sw.js nên không sửa thẳng được; nạp thêm file xử lý Web Push
@@ -103,6 +103,10 @@ export default defineConfig(({ mode }) => {
           maximumFileSizeToCacheInBytes: 35 * 1024 * 1024,
           globIgnores: ['**/book-parsers-*.js', '**/pdf.worker*.mjs', '**/ngontinh_manga-*.js', '**/bl_manga-*.js'],
           importScripts: ['/push-sw.js'],
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
+
           // Ảnh truyện đã đọc giữ lại trong cache: mất mạng vẫn đọc lại được.
           // CacheFirst + trần 600 ảnh (~30 ngày) để khỏi phình bộ nhớ máy.
           runtimeCaching: [

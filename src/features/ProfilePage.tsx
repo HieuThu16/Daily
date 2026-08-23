@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Bell, BellOff, CheckCircle2, ChevronRight, Clock, Download,
-  HardDriveDownload, History, LogOut, Settings, Sparkles, Upload,
+  HardDriveDownload, History, LogOut, RefreshCw, Settings, Sparkles, Upload,
   SunMoon, X, Zap,
 } from 'lucide-react'
+
 import type { ChangelogEntry } from '../data/changelog'
 import { CHANGELOG, getUnseenLatest, markLatestSeen } from '../data/changelog'
 import { backupReminder, daysSinceBackup, exportBackup, getLastBackupAt, importBackup } from '../lib/backup'
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push'
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
+import { forceReloadLatestVersion } from './PwaUpdateNotification'
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -315,12 +318,28 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
                 <button className="settings-row" onClick={() => setShowChangelog(true)}>
                   <div className="sr-icon sr-icon--emerald"><History size={16} /></div>
                   <div className="sr-label-group">
-                    <span className="sr-label">Bản cập nhật v2.0 mới nhất</span>
+                    <span className="sr-label">Lịch sử bản cập nhật</span>
                     <span className="sr-sub">Xem các tính năng & cải tiến mới</span>
                   </div>
                   <ChevronRight size={15} />
                 </button>
+
+                <button
+                  className="settings-row"
+                  onClick={() => {
+                    showToast('🔄 Đang xóa sạch cache và nạp bản mới nhất...', 'info')
+                    void forceReloadLatestVersion()
+                  }}
+                >
+                  <div className="sr-icon sr-icon--primary"><RefreshCw size={16} /></div>
+                  <div className="sr-label-group">
+                    <span className="sr-label">Tải lại bản mới nhất (Xóa cache)</span>
+                    <span className="sr-sub">Ép trình duyệt xóa service worker cũ và tải code mới</span>
+                  </div>
+                  <ChevronRight size={15} />
+                </button>
               </div>
+
             </div>
 
 

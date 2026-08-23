@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Film, Frown, Heart, History, ImagePlus, Link as LinkIcon, NotebookPen, Pencil, Play, Plus, Save, Search, Sparkles, Star, Trash2, Tv, Video, Youtube, Zap } from 'lucide-react'
+import { BarChart3, Clock, Film, Frown, Heart, History, ImagePlus, Link as LinkIcon, Loader2, NotebookPen, Pencil, Play, Plus, Save, Search, Sparkles, Star, Trash2, Tv, Video, Youtube, Zap } from 'lucide-react'
+
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'

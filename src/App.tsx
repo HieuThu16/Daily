@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, Salad, Search, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, Sparkles, Tv, UserRound, Wallet, X } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
@@ -44,6 +44,8 @@ import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
 import { ShareTarget } from './features/ShareTarget'
 import { ToastProvider, useToast } from './features/ToastContext'
+import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaUpdateNotification'
+
 
 export function isUserAuthorizedForH(user: unknown): boolean {
   if (!user || typeof user !== 'object') return false
@@ -456,6 +458,16 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             <button className="header-action" aria-label="Tìm kiếm (Ctrl+K)" title="Tìm kiếm (Ctrl+K)" onClick={openCommandPalette}>
               <Search size={20} />
             </button>
+            <button
+              className="header-action"
+              aria-label="Tải lại bản mới nhất (F5)"
+              title="Tải lại bản mới nhất (Xóa cache PWA)"
+              onClick={() => {
+                void forceReloadLatestVersion()
+              }}
+            >
+              <RefreshCw size={18} />
+            </button>
             <NotificationCenter />
             {headerActions.map((a) => (
               <button key={a.label} className="header-action" aria-label={a.label} title={a.label} onClick={a.onClick}>
@@ -463,6 +475,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
               </button>
             ))}
           </div>
+
         </header>
       )}
 
@@ -629,7 +642,10 @@ function Protected({ user }: { user: unknown }) {
             <GlobalMiniPlayer />
             {/* Toast cập nhật: hiện toàn cục khi có bản cập nhật mới chưa xem */}
             <UpdateToast />
+            {/* PWA Service Worker Update Notification Banner */}
+            <PwaUpdateNotification />
           </AsideProvider>
+
         </HeaderActionProvider>
       </AudioPlayerProvider>
     </ToastProvider>
