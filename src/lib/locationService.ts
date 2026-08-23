@@ -7,11 +7,11 @@ import type {
   LocationAlertEvent 
 } from '../types/location';
 
-const STORAGE_KEY_LOCATION = 'daily_couple_locations';
+const STORAGE_KEY_LOCATION = 'daily_couple_locations_v2';
 const STORAGE_KEY_SHARING = 'daily_location_sharing_enabled';
-const STORAGE_KEY_SAVED_PLACES = 'daily_saved_places';
-const STORAGE_KEY_TIMELINE = 'daily_location_timeline_logs';
-const STORAGE_KEY_ALERTS = 'daily_location_alert_events';
+const STORAGE_KEY_SAVED_PLACES = 'daily_saved_places_v2';
+const STORAGE_KEY_TIMELINE = 'daily_location_timeline_logs_v2';
+const STORAGE_KEY_ALERTS = 'daily_location_alert_events_v2';
 
 const REVERSE_GEOCODE_CACHE = new Map<string, string>();
 
@@ -45,9 +45,6 @@ export function getCurrentTimeString(): string {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
-/**
- * Đọc trạng thái Bật/Tắt chia sẻ vị trí của người dùng
- */
 export function isLocationSharingEnabled(): boolean {
   try {
     const val = localStorage.getItem(STORAGE_KEY_SHARING);
@@ -64,9 +61,6 @@ export function setLocationSharingEnabled(enabled: boolean): void {
   } catch {}
 }
 
-/**
- * Đọc pin thiết bị an toàn
- */
 export async function getDeviceBattery(): Promise<{ batteryLevel?: number; isCharging?: boolean }> {
   try {
     if ('getBattery' in navigator) {
@@ -80,9 +74,6 @@ export async function getDeviceBattery(): Promise<{ batteryLevel?: number; isCha
   return {};
 }
 
-/**
- * Dịch tọa độ sang tên địa chỉ ngắn gọn (Reverse Geocoding OpenStreetMap Nominatim)
- */
 export async function reverseGeocode(lat: number, lon: number): Promise<string> {
   const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
   if (REVERSE_GEOCODE_CACHE.has(cacheKey)) {
@@ -103,14 +94,14 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
 
       let shortName = road ? `${road}, ${district || city}` : `${district || city}`;
       if (shortName.length > 40) shortName = shortName.slice(0, 40) + '…';
-      if (!shortName.trim()) shortName = 'Đang di chuyển';
+      if (!shortName.trim()) shortName = 'Đang ở vị trí hiện tại';
 
       REVERSE_GEOCODE_CACHE.set(cacheKey, shortName);
       return shortName;
     }
   } catch {}
 
-  const fallback = 'Đang di chuyển';
+  const fallback = 'Vị trí hiện tại';
   REVERSE_GEOCODE_CACHE.set(cacheKey, fallback);
   return fallback;
 }
@@ -149,7 +140,7 @@ export async function fetchSavedPlaces(): Promise<SavedPlace[]> {
 
 export async function savePlace(place: SavedPlace): Promise<void> {
   const current = getLocalSavedPlaces();
-  const index = current.findIndex((p) => p.id === place.id || (p.user_id === place.user_id && p.name.toLowerCase() === place.name.toLowerCase()));
+  const index = current.findIndex((p) => p.id === place.id || (p.user_name === place.user_name && p.name.toLowerCase() === place.name.toLowerCase()));
   if (index >= 0) {
     current[index] = place;
   } else {
@@ -189,11 +180,10 @@ export async function deletePlace(placeId: string): Promise<void> {
   }
 }
 
-/**
- * Kiểm tra xem vị trí hiện tại có nằm trong bán kính 200m của địa điểm quen thuộc nào không
- */
-export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPlace[]): SavedPlace | null {
+export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPlace[], forUserName?: string): SavedPlace | null {
   for (const p of places) {
+    // Ưu tiên mốc của người đó hoặc mốc chung
+    if (forUserName && p.user_name && p.user_name !== forUserName) continue;
     const distKm = calculateDistanceKm(lat, lon, p.latitude, p.longitude);
     const radiusKm = (p.radius_meters || 200) / 1000;
     if (distKm <= radiusKm) {
@@ -205,6 +195,7 @@ export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPl
 
 /* ==========================================================================
  * 2. LỊCH TRÌNH VỊ TRÍ & QUÃNG ĐƯỜNG TRONG NGÀY (TIMELINE LOGS)
+ * Chỉ ghi nhận chặng mới KHI DI CHUYỂN ra khỏi vị trí cũ (>200m)
  * ========================================================================== */
 
 export function getLocalTimelineLogs(): LocationTimelineLog[] {
@@ -246,7 +237,7 @@ export async function logTimelineEvent(log: LocationTimelineLog): Promise<void> 
   } else {
     current.push(log);
   }
-  localStorage.setItem(STORAGE_KEY_TIMELINE, JSON.stringify(current.slice(-500)));
+  localStorage.setItem(STORAGE_KEY_TIMELINE, JSON.stringify(current.slice(-300)));
   window.dispatchEvent(new CustomEvent('daily_location_timeline_updated', { detail: log }));
 
   if (!supabase) return;
@@ -268,65 +259,20 @@ export async function logTimelineEvent(log: LocationTimelineLog): Promise<void> 
       updated_at: new Date().toISOString(),
     }, { onConflict: 'id' });
   } catch (err) {
-    console.warn('[logTimelineEvent] Lỗi lưu log hành trình:', err);
+    console.warn('[logTimelineEvent] Lỗi lưu timeline:', err);
   }
 }
 
 /* ==========================================================================
- * 3. THÔNG BÁO & CẢNH BÁO RỜI KHỎI / ĐẾN NƠI (GEOFENCE ALERTS)
- * ========================================================================== */
-
-export function getLocalAlertEvents(): LocationAlertEvent[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_ALERTS);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export async function broadcastLocationAlert(alert: LocationAlertEvent): Promise<void> {
-  const current = getLocalAlertEvents();
-  current.unshift(alert);
-  localStorage.setItem(STORAGE_KEY_ALERTS, JSON.stringify(current.slice(0, 50)));
-
-  // Bắn event trên client để UI nhận và hiển thị thông báo tức thì
-  window.dispatchEvent(new CustomEvent('daily_location_alert', { detail: alert }));
-
-  // Gửi Web Notification nếu trình duyệt hỗ trợ và người dùng đã cho phép
-  if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      new Notification(`📍 Vị trí: ${alert.user_name}`, {
-        body: alert.message,
-        icon: '/pwa-192x192.png',
-      });
-    } catch {}
-  }
-
-  if (supabase) {
-    try {
-      await supabase.from('partner_alerts').insert({
-        id: alert.id,
-        user_id: alert.user_id,
-        user_name: alert.user_name,
-        message: alert.message,
-        type: alert.type,
-        place_name: alert.place_name || null,
-        created_at: alert.created_at,
-      });
-    } catch {}
-  }
-}
-
-/* ==========================================================================
- * 4. ĐỒNG BỘ VỊ TRÍ HIỆN TẠI (PARTNER LOCATIONS)
+ * 3. ĐỒNG BỘ VỊ TRÍ HIỆN TẠI DUY NHẤT LÊN SUPABASE (PARTNER LOCATIONS)
  * ========================================================================== */
 
 export async function syncLocationToSupabase(location: PartnerLocation): Promise<void> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_LOCATION);
     const map: Record<string, PartnerLocation> = raw ? JSON.parse(raw) : {};
-    map[location.user_id] = location;
+    const key = location.user_name || location.user_id;
+    map[key] = location;
     localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(map));
     window.dispatchEvent(new CustomEvent('daily_partner_location_updated', { detail: location }));
   } catch {}
@@ -334,6 +280,7 @@ export async function syncLocationToSupabase(location: PartnerLocation): Promise
   if (!supabase) return;
 
   try {
+    // Upsert chỉ 1 dòng duy nhất cho người này theo user_name hoặc user_id
     await supabase.from('partner_locations').upsert({
       user_id: location.user_id,
       user_name: location.user_name || null,
@@ -372,11 +319,13 @@ export async function fetchCoupleLocations(): Promise<PartnerLocation[]> {
       .order('updated_at', { ascending: false });
 
     if (!error && data && data.length > 0) {
+      const remoteMap: Record<string, PartnerLocation> = {};
       for (const row of data as PartnerLocation[]) {
-        localMap[row.user_id] = row;
+        const key = row.user_name || row.user_id;
+        remoteMap[key] = row;
       }
-      localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(localMap));
-      return data as PartnerLocation[];
+      localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(remoteMap));
+      return Object.values(remoteMap);
     }
   } catch {}
 

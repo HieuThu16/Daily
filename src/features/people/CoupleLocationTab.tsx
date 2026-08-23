@@ -3,8 +3,7 @@ import L from 'leaflet';
 import { 
   Navigation, Battery, BatteryCharging, RefreshCw, 
   MapPin, Heart, ShieldCheck, ShieldOff, Plus, Trash2,
-  Clock, Route, ChevronDown, ChevronUp, Map as MapIcon,
-  Sparkles
+  Clock, Route, ChevronDown, ChevronUp, Map as MapIcon
 } from 'lucide-react';
 import { formatDistance } from '../../lib/locationService';
 import { useCoupleLocation } from './useCoupleLocation';
@@ -16,8 +15,8 @@ interface Props {
 
 export function CoupleLocationTab({ partnerPerson }: Props) {
   const {
-    myLocation,
-    partnerLocation,
+    hieuLocation,
+    kimYLocation,
     savedPlaces,
     timelineLogs,
     distanceKm,
@@ -28,7 +27,6 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     removePlace,
     loading,
     myUserName,
-    partnerUserName,
   } = useCoupleLocation(partnerPerson?.name);
 
   const [showMap, setShowMap] = useState(false);
@@ -41,7 +39,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
 
-  // Khởi tạo bản đồ khi mở showMap
+  // Khởi tạo bản đồ khi showMap = true
   useEffect(() => {
     if (!showMap || !mapContainerRef.current) return;
 
@@ -65,7 +63,6 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
       mapInstanceRef.current = map;
     }
 
-    // Resize map sau khi mount container
     setTimeout(() => {
       mapInstanceRef.current?.invalidateSize();
     }, 150);
@@ -78,7 +75,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     };
   }, [showMap]);
 
-  // Vẽ marker lên bản đồ khi có tọa độ
+  // Vẽ marker trên bản đồ
   useEffect(() => {
     if (!showMap) return;
     const map = mapInstanceRef.current;
@@ -89,8 +86,8 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     const bounds: L.LatLngTuple[] = [];
 
     const createAvatarIcon = (name: string, isMe: boolean, currentPlace?: string) => {
-      const bgColor = isMe ? '#0284c7' : '#f43f5e';
-      const initial = name ? name.charAt(0).toUpperCase() : (isMe ? 'H' : 'Ý');
+      const bgColor = name === 'Hiếu' ? '#0284c7' : '#f43f5e';
+      const initial = name.charAt(0).toUpperCase();
 
       return L.divIcon({
         className: 'custom-couple-marker',
@@ -126,32 +123,32 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
       }
     }
 
-    // 2. Marker Tôi
-    if (myLocation?.latitude && myLocation?.longitude) {
-      const myLatLng: L.LatLngTuple = [myLocation.latitude, myLocation.longitude];
-      bounds.push(myLatLng);
-      L.marker(myLatLng, {
-        icon: createAvatarIcon(myUserName, true, myLocation.current_place),
+    // 2. Marker Hiếu (nếu có)
+    if (hieuLocation?.latitude && hieuLocation?.longitude) {
+      const hieuLatLng: L.LatLngTuple = [hieuLocation.latitude, hieuLocation.longitude];
+      bounds.push(hieuLatLng);
+      L.marker(hieuLatLng, {
+        icon: createAvatarIcon('Hiếu', myUserName === 'Hiếu', hieuLocation.current_place),
       }).addTo(markersLayer);
     }
 
-    // 3. Marker Đối phương
-    if (partnerLocation?.latitude && partnerLocation?.longitude) {
-      const partnerLatLng: L.LatLngTuple = [partnerLocation.latitude, partnerLocation.longitude];
-      bounds.push(partnerLatLng);
-      L.marker(partnerLatLng, {
-        icon: createAvatarIcon(partnerLocation.user_name || partnerUserName, false, partnerLocation.current_place),
+    // 3. Marker Kim Ý (nếu có)
+    if (kimYLocation?.latitude && kimYLocation?.longitude) {
+      const kimYLatLng: L.LatLngTuple = [kimYLocation.latitude, kimYLocation.longitude];
+      bounds.push(kimYLatLng);
+      L.marker(kimYLatLng, {
+        icon: createAvatarIcon('Kim Ý', myUserName === 'Kim Ý', kimYLocation.current_place),
       }).addTo(markersLayer);
     }
 
-    // 4. Nối 2 điểm
+    // 4. Căn chỉnh khung nhìn
     if (bounds.length === 2) {
       L.polyline(bounds, { color: '#f43f5e', weight: 3, dashArray: '6, 8', opacity: 0.8 }).addTo(markersLayer);
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
     } else if (bounds.length === 1) {
       map.setView(bounds[0], 15);
     }
-  }, [showMap, myLocation, partnerLocation, savedPlaces, myUserName, partnerUserName]);
+  }, [showMap, hieuLocation, kimYLocation, savedPlaces, myUserName]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -166,9 +163,11 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     setCustomPlaceName('');
   };
 
+  const partnerTargetLocation = myUserName === 'Hiếu' ? kimYLocation : hieuLocation;
+
   const openGoogleMapsDirections = () => {
-    if (!partnerLocation) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${partnerLocation.latitude},${partnerLocation.longitude}`;
+    if (!partnerTargetLocation) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${partnerTargetLocation.latitude},${partnerTargetLocation.longitude}`;
     window.open(url, '_blank');
   };
 
@@ -180,10 +179,6 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     const hours = Math.floor(diffMin / 60);
     return `${hours} giờ trước`;
   };
-
-  // Xác định thông tin của Hiếu và Kim Ý
-  const hieuInfo = myUserName === 'Hiếu' ? myLocation : partnerLocation;
-  const kimYInfo = myUserName === 'Kim Ý' ? myLocation : partnerLocation;
 
   return (
     <div className="couple-location-tab-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -219,7 +214,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: isSharing ? '#10b981' : '#94a3b8', display: 'inline-block' }} />
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-              {distanceKm !== null ? formatDistance(distanceKm) : 'Đang tìm vị trí đối phương…'}
+              {distanceKm !== null ? formatDistance(distanceKm) : (hieuLocation && kimYLocation ? 'Đang xác định…' : 'Chờ kết nối vị trí cả 2…')}
             </div>
           </div>
         </div>
@@ -290,7 +285,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
         </div>
       </div>
 
-      {/* DANH SÁCH MỐC ĐỊA ĐIỂM (CHIPS GỌN) */}
+      {/* DANH SÁCH MỐC ĐỊA ĐIỂM */}
       {savedPlaces.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
           {savedPlaces.map((p) => (
@@ -326,14 +321,9 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
         </div>
       )}
 
-      {/* BẢNG SO SÁNH 2 BÊN: HIẾU vs KIM Ý (VỊ TRÍ & PIN) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '10px',
-        }}
-      >
+      {/* BẢNG SO SÁNH 2 BÊN: HIẾU vs KIM Ý */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        
         {/* CỘT HIẾU */}
         <div
           style={{
@@ -365,47 +355,59 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
               >
                 H
               </div>
-              <strong style={{ fontSize: '0.88rem', color: '#0284c7' }}>Hiếu</strong>
+              <strong style={{ fontSize: '0.88rem', color: '#0284c7' }}>
+                Hiếu {myUserName === 'Hiếu' ? '(Bạn)' : ''}
+              </strong>
             </div>
 
-            {hieuInfo?.battery_level !== undefined && (
+            {hieuLocation && hieuLocation.battery_level !== undefined ? (
               <span
                 style={{
                   fontSize: '0.72rem',
                   fontWeight: 800,
-                  color: hieuInfo.battery_level <= 20 ? '#ef4444' : '#10b981',
+                  color: hieuLocation.battery_level <= 20 ? '#ef4444' : '#10b981',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '3px',
                 }}
               >
-                {hieuInfo.is_charging ? <BatteryCharging size={13} /> : <Battery size={13} />}
-                {hieuInfo.battery_level}%
+                {hieuLocation.is_charging ? <BatteryCharging size={13} /> : <Battery size={13} />}
+                {hieuLocation.battery_level}%
               </span>
+            ) : (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>--</span>
             )}
           </div>
 
           <div style={{ minHeight: '38px' }}>
-            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              {hieuInfo?.current_place ? `🏠 ${hieuInfo.current_place}` : '📍 Đang ở'}
-            </div>
-            <div
-              style={{
-                fontSize: '0.72rem',
-                color: 'var(--text-muted)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                marginTop: '1px',
-              }}
-              title={hieuInfo?.address_name}
-            >
-              {hieuInfo?.address_name || 'Chưa có tọa độ'}
-            </div>
+            {hieuLocation ? (
+              <>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  {hieuLocation.current_place ? `🏠 Ở ${hieuLocation.current_place}` : '📍 Vị trí hiện tại'}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    marginTop: '1px',
+                  }}
+                  title={hieuLocation.address_name}
+                >
+                  {hieuLocation.address_name || 'Đang xác định…'}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Chưa có dữ liệu vị trí
+              </div>
+            )}
           </div>
 
           <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'right', borderTop: '1px solid var(--border)', paddingTop: '4px' }}>
-            {formatLastSeen(hieuInfo?.updated_at)}
+            {hieuLocation ? formatLastSeen(hieuLocation.updated_at) : 'Chưa cập nhật'}
           </div>
         </div>
 
@@ -440,53 +442,66 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
               >
                 Ý
               </div>
-              <strong style={{ fontSize: '0.88rem', color: '#f43f5e' }}>Kim Ý</strong>
+              <strong style={{ fontSize: '0.88rem', color: '#f43f5e' }}>
+                Kim Ý {myUserName === 'Kim Ý' ? '(Bạn)' : ''}
+              </strong>
             </div>
 
-            {kimYInfo?.battery_level !== undefined && (
+            {kimYLocation && kimYLocation.battery_level !== undefined ? (
               <span
                 style={{
                   fontSize: '0.72rem',
                   fontWeight: 800,
-                  color: kimYInfo.battery_level <= 20 ? '#ef4444' : '#10b981',
+                  color: kimYLocation.battery_level <= 20 ? '#ef4444' : '#10b981',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '3px',
                 }}
               >
-                {kimYInfo.is_charging ? <BatteryCharging size={13} /> : <Battery size={13} />}
-                {kimYInfo.battery_level}%
+                {kimYLocation.is_charging ? <BatteryCharging size={13} /> : <Battery size={13} />}
+                {kimYLocation.battery_level}%
               </span>
+            ) : (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>--</span>
             )}
           </div>
 
           <div style={{ minHeight: '38px' }}>
-            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              {kimYInfo?.current_place ? `🏡 ${kimYInfo.current_place}` : '📍 Đang ở'}
-            </div>
-            <div
-              style={{
-                fontSize: '0.72rem',
-                color: 'var(--text-muted)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                marginTop: '1px',
-              }}
-              title={kimYInfo?.address_name}
-            >
-              {kimYInfo?.address_name || 'Chưa có tọa độ'}
-            </div>
+            {kimYLocation ? (
+              <>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  {kimYLocation.current_place ? `🏡 Ở ${kimYLocation.current_place}` : '📍 Vị trí hiện tại'}
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    marginTop: '1px',
+                  }}
+                  title={kimYLocation.address_name}
+                >
+                  {kimYLocation.address_name || 'Đang xác định…'}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Đang chờ Ý mở app…
+              </div>
+            )}
           </div>
 
           <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'right', borderTop: '1px solid var(--border)', paddingTop: '4px' }}>
-            {formatLastSeen(kimYInfo?.updated_at)}
+            {kimYLocation ? formatLastSeen(kimYLocation.updated_at) : 'Chưa cập nhật'}
           </div>
         </div>
+
       </div>
 
       {/* THANH NÚT: MỞ BẢN ĐỒ & CHỈ ĐƯỜNG */}
-      <div style={{ display: 'grid', gridTemplateColumns: partnerLocation ? '1fr 1fr' : '1fr', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: partnerTargetLocation ? '1fr 1fr' : '1fr', gap: '8px' }}>
         <button
           type="button"
           onClick={() => setShowMap(!showMap)}
@@ -510,7 +525,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
           {showMap ? 'Thu gọn Bản đồ' : '🗺️ Xem trên Bản đồ'}
         </button>
 
-        {partnerLocation && (
+        {partnerTargetLocation && (
           <button
             type="button"
             onClick={openGoogleMapsDirections}
@@ -530,12 +545,12 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
               boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
             }}
           >
-            <Navigation size={14} /> Chỉ đường đến người ấy
+            <Navigation size={14} /> Chỉ đường đến {myUserName === 'Hiếu' ? 'Kim Ý' : 'Hiếu'}
           </button>
         )}
       </div>
 
-      {/* BẢN ĐỒ LEAFLET TRỰC TIẾP (HIỆN KHI BẤM NÚT) */}
+      {/* BẢN ĐỒ LEAFLET TRỰC TIẾP */}
       {showMap && (
         <div
           style={{
@@ -616,8 +631,8 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
                           fontSize: '0.68rem',
                           padding: '2px 6px',
                           borderRadius: '4px',
-                          background: isMe ? 'rgba(2, 132, 199, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                          color: isMe ? '#0284c7' : '#f43f5e',
+                          background: log.user_name === 'Hiếu' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                          color: log.user_name === 'Hiếu' ? '#0284c7' : '#f43f5e',
                           flexShrink: 0,
                         }}
                       >
@@ -640,7 +655,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
         )}
       </div>
 
-      {/* MODAL LƯU VỊ TRÍ LÀM MỐC */}
+      {/* MODAL LƯU VỊ TRÍ HIỆN TẠI LÀM MỐC */}
       {showAddPlaceModal && (
         <div
           style={{

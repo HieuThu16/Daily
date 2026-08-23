@@ -17,7 +17,6 @@ import {
   getCurrentTimeString,
   isLocationSharingEnabled,
   logTimelineEvent,
-  broadcastLocationAlert,
   reverseGeocode,
   savePlace,
   deletePlace,
@@ -38,11 +37,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
   const lastSyncTimeRef = useRef<number>(0);
   const lastKnownPlaceRef = useRef<SavedPlace | null>(null);
   const activeStayLogIdRef = useRef<string | null>(null);
-
-  const isHieu = useCallback((s?: string) => {
-    const str = (s || '').toLowerCase();
-    return str.includes('hieu') || str.includes('truongnguyenminhhieu');
-  }, []);
+  const lastCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
 
   const isKimY = useCallback((s?: string) => {
     const str = (s || '').toLowerCase();
@@ -81,64 +76,24 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     }
   }, [selectedDate]);
 
-  // Xử lý logic Geofence & Lịch trình hành trình khi tọa độ thay đổi
+  // Xử lý logic Geofence & Lịch trình hành trình: chỉ ghi nhận chặng mới khi DI CHUYỂN
   const processGeofenceAndTimeline = useCallback(
     async (lat: number, lon: number, addressName: string, time: string, today: string) => {
-      const matchingPlace = findMatchingSavedPlace(lat, lon, savedPlaces);
+      const matchingPlace = findMatchingSavedPlace(lat, lon, savedPlaces, myUserName);
       const lastPlace = lastKnownPlaceRef.current;
-      const uid = currentUserId || 'current_user';
+      const uid = currentUserId || `user_${myUserName}`;
 
-      // 1. Phát hiện RỜI KHỎI (DEPARTURE) khi di chuyển ra xa > 200m so với địa điểm trước đó
-      if (lastPlace && (!matchingPlace || matchingPlace.id !== lastPlace.id)) {
-        const departureMsg = `${myUserName} đã rời khỏi ${lastPlace.name} lúc ${time}`;
-        const alertEvent: LocationAlertEvent = {
-          id: `alert_dep_${Date.now()}`,
-          user_id: uid,
-          user_name: myUserName,
-          message: departureMsg,
-          type: 'DEPARTURE',
-          place_name: lastPlace.name,
-          created_at: new Date().toISOString(),
-        };
-        void broadcastLocationAlert(alertEvent);
+      // Kiểm tra khoảng cách so với tọa độ trước đó
+      const prevCoords = lastCoordsRef.current;
+      const movedDistanceKm = prevCoords ? calculateDistanceKm(prevCoords.lat, prevCoords.lon, lat, lon) : 0;
+      lastCoordsRef.current = { lat, lon };
 
-        // Đóng session ở địa điểm trước đó
-        if (activeStayLogIdRef.current) {
-          const prevLog: LocationTimelineLog = {
-            id: activeStayLogIdRef.current,
-            user_id: uid,
-            user_name: myUserName,
-            place_name: `Ở ${lastPlace.name}`,
-            event_type: 'STAY',
-            latitude: lastPlace.latitude,
-            longitude: lastPlace.longitude,
-            log_date: today,
-            start_time: time,
-            end_time: time,
-            created_at: new Date().toISOString(),
-          };
-          void logTimelineEvent(prevLog);
-          activeStayLogIdRef.current = null;
-        }
-      }
-
-      // 2. Phát hiện ĐẾN NƠI (ARRIVAL) khi bước vào bán kính 200m của địa điểm mới
-      if (matchingPlace && (!lastPlace || lastPlace.id !== matchingPlace.id)) {
-        const arrivalMsg = `${myUserName} vừa đến ${matchingPlace.name} lúc ${time}`;
-        const alertEvent: LocationAlertEvent = {
-          id: `alert_arr_${Date.now()}`,
-          user_id: uid,
-          user_name: myUserName,
-          message: arrivalMsg,
-          type: 'ARRIVAL',
-          place_name: matchingPlace.name,
-          created_at: new Date().toISOString(),
-        };
-        void broadcastLocationAlert(alertEvent);
-
-        // Mở session mới tại địa điểm vừa đến
-        const stayLogId = `stay_${uid}_${matchingPlace.id}_${today}`;
+      // 1. Nếu đang ở một địa điểm quen thuộc (Trọ / Nhà / Công ty...)
+      if (matchingPlace) {
+        const stayLogId = `stay_${myUserName}_${matchingPlace.id}_${today}`;
         activeStayLogIdRef.current = stayLogId;
+
+        // Chỉ cập nhật giờ kết thúc của mốc hiện tại nếu vẫn ở cùng 1 nơi
         const stayLog: LocationTimelineLog = {
           id: stayLogId,
           user_id: uid,
@@ -153,9 +108,10 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
           created_at: new Date().toISOString(),
         };
         void logTimelineEvent(stayLog);
-      } else if (!matchingPlace) {
-        // Đang di chuyển trên đường
-        const moveLogId = `move_${uid}_${today}_${time.slice(0, 3)}0`;
+      } 
+      // 2. Chỉ khi di chuyển ra xa (> 200m) và không ở mốc nào thì mới ghi nhận đang di chuyển
+      else if (movedDistanceKm > 0.2) {
+        const moveLogId = `move_${myUserName}_${today}_${time.slice(0, 4)}0`;
         const moveLog: LocationTimelineLog = {
           id: moveLogId,
           user_id: uid,
@@ -170,22 +126,6 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
           created_at: new Date().toISOString(),
         };
         void logTimelineEvent(moveLog);
-      } else if (matchingPlace && activeStayLogIdRef.current) {
-        // Cập nhật giờ kết thúc cho địa điểm đang ở (VD: 9h -> 10h)
-        const updatedLog: LocationTimelineLog = {
-          id: activeStayLogIdRef.current,
-          user_id: uid,
-          user_name: myUserName,
-          place_name: `Ở ${matchingPlace.name}`,
-          event_type: 'STAY',
-          latitude: matchingPlace.latitude,
-          longitude: matchingPlace.longitude,
-          log_date: today,
-          start_time: time,
-          end_time: time,
-          created_at: new Date().toISOString(),
-        };
-        void logTimelineEvent(updatedLog);
       }
 
       lastKnownPlaceRef.current = matchingPlace;
@@ -207,7 +147,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
       const today = localDate();
       const time = getCurrentTimeString();
 
-      const uid = currentUserId || 'current_user';
+      const uid = currentUserId || `user_${myUserName}`;
       const battery = await getDeviceBattery();
       const addressName = await reverseGeocode(lat, lon);
       const currentPlaceName = await processGeofenceAndTimeline(lat, lon, addressName, time, today);
@@ -245,7 +185,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     );
   }, [isSharing, updateCurrentPosition]);
 
-  // Bắt đầu theo dõi vị trí liên tục
+  // Bắt đầu theo dõi vị trí
   useEffect(() => {
     if (!isSharing || !('geolocation' in navigator)) {
       if (watchIdRef.current !== null) {
@@ -259,7 +199,6 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        // Cập nhật khi có thay đổi tọa độ
         if (Date.now() - lastSyncTimeRef.current > 12000) {
           void updateCurrentPosition(pos);
         }
@@ -298,7 +237,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     if (supabase) {
       const sb = supabase;
       const channel = sb
-        .channel('partner-locations-full-realtime')
+        .channel('partner-locations-full-realtime-v2')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_locations' }, () => {
           void reloadAllData();
         })
@@ -336,15 +275,16 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
 
   // Lưu vị trí hiện tại làm mốc (Trọ, Nhà, Công ty...)
   const saveCurrentLocationAsPlace = async (placeName: string, icon = '🏠') => {
-    if (!myLocation) return;
+    const loc = myUserName === 'Hiếu' ? hieuLocation : kimYLocation;
+    if (!loc) return;
     const newPlace: SavedPlace = {
-      id: `place_${currentUserId || 'me'}_${Date.now()}`,
-      user_id: currentUserId || 'current_user',
+      id: `place_${myUserName}_${Date.now()}`,
+      user_id: currentUserId || `user_${myUserName}`,
       user_name: myUserName,
       name: placeName.trim(),
       icon,
-      latitude: myLocation.latitude,
-      longitude: myLocation.longitude,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
       radius_meters: 200,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -358,30 +298,20 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     void reloadAllData();
   };
 
-  // Phân loại vị trí
-  const myLocation = locations.find((l) => {
-    if (currentUserId && l.user_id === currentUserId) return true;
-    if (l.user_name && isKimY(currentUserEmail) && isKimY(l.user_name)) return true;
-    if (l.user_name && isHieu(currentUserEmail) && isHieu(l.user_name)) return true;
-    return false;
-  }) || (locations.length > 0 && isSharing ? locations[0] : null);
+  // Phân loại vị trí CHÍNH XÁC 100% THEO TÊN NGƯỜI DÙNG - KHÔNG LẤY NHẦM CỦA NHAU
+  const hieuLocation = locations.find((l) => l.user_name === 'Hiếu') || null;
+  const kimYLocation = locations.find((l) => l.user_name === 'Kim Ý') || null;
 
-  const partnerLocation = locations.find((l) => {
-    if (currentUserId && l.user_id === currentUserId) return false;
-    if (myLocation && l.user_id === myLocation.user_id) return false;
-    if (partnerPersonName && l.user_name?.toLowerCase().includes(partnerPersonName.toLowerCase())) return true;
-    if (isKimY(currentUserEmail) && isHieu(l.user_name)) return true;
-    if (isHieu(currentUserEmail) && isKimY(l.user_name)) return true;
-    return true;
-  }) || null;
+  const myLocation = myUserName === 'Hiếu' ? hieuLocation : kimYLocation;
+  const partnerLocation = myUserName === 'Hiếu' ? kimYLocation : hieuLocation;
 
   const distanceKm =
-    myLocation && partnerLocation
+    hieuLocation && kimYLocation
       ? calculateDistanceKm(
-          myLocation.latitude,
-          myLocation.longitude,
-          partnerLocation.latitude,
-          partnerLocation.longitude
+          hieuLocation.latitude,
+          hieuLocation.longitude,
+          kimYLocation.latitude,
+          kimYLocation.longitude
         )
       : null;
 
@@ -389,6 +319,8 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     locations,
     savedPlaces,
     timelineLogs,
+    hieuLocation,
+    kimYLocation,
     myLocation,
     partnerLocation,
     distanceKm,

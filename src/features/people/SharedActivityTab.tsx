@@ -384,11 +384,12 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
         }
       } catch {}
 
-      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất lên đầu, chỉ lấy từ 15h hôm nay trở đi
-      const CUTOFF_TIME_MS = new Date('2026-08-23T15:00:00+07:00').getTime();
+      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất, chỉ lấy từ mốc thời gian bắt đầu lưu mới (22:20 hôm nay) và chỉ cho Hiếu & Kim Ý
+      const CUTOFF_TIME_MS = new Date('2026-08-23T22:20:00+07:00').getTime();
       const list = Array.from(itemsMap.values()).filter((it) => {
         const itemTime = new Date(it.updatedAt || it.logDate).getTime();
-        return isNaN(itemTime) || itemTime >= CUTOFF_TIME_MS;
+        const isCouple = it.userName === 'Hiếu' || it.userName === 'Kim Ý';
+        return isCouple && (isNaN(itemTime) || itemTime >= CUTOFF_TIME_MS);
       });
       list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
       setActivities(list);
