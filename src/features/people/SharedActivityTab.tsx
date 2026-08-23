@@ -14,6 +14,7 @@ import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
 import { estimatePage } from '../../lib/book/repository';
 import { fetchNgontinhList } from '../manga/ngontinhService';
 import { fetchBLMangaList } from '../manga/mangaService';
+import type { Media, Person } from '../../types';
 
 export interface SharedActivityItem {
   id: string;
@@ -57,7 +58,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
 
   const [selectedDate, setSelectedDate] = useState<string>(() => localDate());
   const [activePartnerFilter, setActivePartnerFilter] = useState<'ALL' | 'HIEU' | 'KIM_Y'>('ALL');
-  const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'BOOK' | 'MANGA' | 'MUSIC'>('ALL');
+  const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'BOOK' | 'MANGA' | 'NGONTINH' | 'BL' | 'H_MANGA' | 'MUSIC'>('ALL');
   const [activities, setActivities] = useState<SharedActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -163,12 +164,12 @@ export function SharedActivityTab({ partnerPerson }: Props) {
         // Tải thông tin & ảnh bìa manga từ các nguồn (Ngôn tình, BL, Truyện H)
         const mangaInfoMap = new Map<string, { type: 'NGONTINH' | 'BL' | 'H_MANGA'; cover?: string; title?: string }>();
         try {
-          const [hList, customList, blList, ngontinhList] = await Promise.all([
+          const [hList, blList, ngontinhList] = await Promise.all([
             fetchHMangaList().catch(() => []),
-            getCustomHMangaList().catch(() => []),
             fetchBLMangaList().catch(() => []),
             fetchNgontinhList().catch(() => []),
           ]);
+          const customList = getCustomHMangaList();
           for (const m of [...hList, ...customList]) {
             if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'H_MANGA', cover: m.cover ?? undefined, title: m.title ?? undefined });
           }
