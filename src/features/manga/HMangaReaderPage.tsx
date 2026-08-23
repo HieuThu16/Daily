@@ -14,7 +14,6 @@ import {
 import { useToast } from '../ToastContext';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
-import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 import './ngontinhReader.css';
 
 export const HMangaReaderPage: React.FC = () => {
@@ -80,11 +79,9 @@ export const HMangaReaderPage: React.FC = () => {
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
-  const { prefs, update: updatePrefs, readerStyle } = useReaderPrefs();
-  const autoScroll = useAutoScroll(useCallback(() => null, []), prefs.speed);
-
   const isNavigatingRef = useRef(false);
   const lastChapterNumRef = useRef(currentChapterNum);
+
 
   // Tự động theo dõi thời gian đọc trên màn hình
   useMangaReadingTracker({
@@ -478,10 +475,8 @@ export const HMangaReaderPage: React.FC = () => {
       {/* Progress Line */}
       <div className="ngontinh-reader-progress-line" style={{ width: `${scrollProgress}%` }} />
 
-      {/* Floating Reader Settings */}
-      <ReaderControls running={autoScroll.running} onToggle={autoScroll.toggle} prefs={prefs} onChange={updatePrefs} />
+      <main className={`ngontinh-reader-main-stream fit-${fitMode}`}>
 
-      <main className={`ngontinh-reader-main-stream fit-${fitMode}`} style={readerStyle}>
         {images.length > 0 ? (
           images.map((img, idx) => {
             const imgUrl = img.url || '';

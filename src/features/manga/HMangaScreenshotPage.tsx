@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, Download, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, ZoomOut, RotateCcw, Plus, Minus } from 'lucide-react';
 import { getHMangaScreenshots, syncHMangaScreenshotsWithSupabase, deleteHMangaScreenshot, type HMangaScreenshot } from './hMangaScreenshot';
 import { useToast } from '../ToastContext';
 
@@ -15,7 +15,9 @@ export const HMangaScreenshotPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [previewShot, setPreviewShot] = useState<HMangaScreenshot | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [selectedManga, setSelectedManga] = useState<string>(filterSlug || 'ALL');
+
 
   useEffect(() => {
     setScreenshots(getHMangaScreenshots());
@@ -586,15 +588,15 @@ export const HMangaScreenshotPage: React.FC = () => {
         )}
       </main>
 
-      {/* ── Fullscreen Lightbox Modal (Phóng to ảnh) ── */}
+      {/* ── Fullscreen Lightbox Modal (Phóng to / Thu nhỏ ảnh) ── */}
       {previewShot && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.94)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.95)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
             zIndex: 9999,
             display: 'flex',
             flexDirection: 'column',
@@ -604,57 +606,139 @@ export const HMangaScreenshotPage: React.FC = () => {
           {/* Lightbox Topbar */}
           <div
             style={{
-              padding: '12px 18px',
+              padding: '10px 18px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(0, 0, 0, 0.7)',
+              background: 'rgba(0, 0, 0, 0.8)',
               borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              flexWrap: 'wrap',
+              gap: '8px',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#f4f4f5' }}>
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#f4f4f5' }}>
                 {previewShot.mangaTitle}
               </h3>
-              <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#fb7185', fontWeight: 700 }}>
+              <p style={{ margin: '1px 0 0', fontSize: '0.76rem', color: '#fb7185', fontWeight: 700 }}>
                 {previewShot.chapterName}
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Zoom Controls & Action Buttons */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* Zoom Buttons */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  padding: '3px 6px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+                  title="Thu nhỏ (-)"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#f4f4f5',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Minus size={15} />
+                </button>
+
+                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#fb7185', minWidth: '42px', textAlign: 'center' }}>
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((z) => Math.min(3.5, Number((z + 0.25).toFixed(2))))}
+                  title="Phóng to (+)"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#f4f4f5',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Plus size={15} />
+                </button>
+
+                {zoomLevel !== 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(1)}
+                    title="Đặt lại 100%"
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: 'rgba(255, 255, 255, 0.12)',
+                      color: '#d4d4d8',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              {/* Nút Đến truyện */}
               <button
                 type="button"
                 onClick={() => handleGoToManga(previewShot)}
                 style={{
-                  padding: '7px 14px',
+                  padding: '6px 12px',
                   borderRadius: '8px',
                   border: 'none',
                   background: 'linear-gradient(135deg, #e11d48, #be123c)',
                   color: '#ffffff',
-                  fontSize: '0.82rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                 }}
               >
-                <BookOpen size={14} /> Đến truyện
+                <BookOpen size={13} /> Đến truyện
               </button>
 
+              {/* Nút Xóa */}
               <button
                 type="button"
                 onClick={() => {
                   if (previewShot) handleDelete(previewShot.id);
                 }}
                 style={{
-                  padding: '7px 10px',
+                  padding: '6px 10px',
                   borderRadius: '8px',
                   border: '1px solid rgba(239, 68, 68, 0.3)',
                   background: 'rgba(239, 68, 68, 0.12)',
                   color: '#f87171',
-                  fontSize: '0.82rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   display: 'inline-flex',
@@ -662,15 +746,16 @@ export const HMangaScreenshotPage: React.FC = () => {
                   gap: '4px',
                 }}
               >
-                <Trash2 size={14} /> Xóa
+                <Trash2 size={13} /> Xóa
               </button>
 
+              {/* Nút Đóng */}
               <button
                 type="button"
                 onClick={() => setPreviewShot(null)}
                 style={{
-                  width: '32px',
-                  height: '32px',
+                  width: '30px',
+                  height: '30px',
                   borderRadius: '8px',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                   background: 'rgba(255, 255, 255, 0.08)',
@@ -681,12 +766,12 @@ export const HMangaScreenshotPage: React.FC = () => {
                   justifyContent: 'center',
                 }}
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
           </div>
 
-          {/* Lightbox Image View */}
+          {/* Lightbox Image View with Zoom */}
           <div
             style={{
               flex: 1,
@@ -695,6 +780,7 @@ export const HMangaScreenshotPage: React.FC = () => {
               justifyContent: 'center',
               padding: '16px',
               overflow: 'auto',
+              cursor: zoomLevel > 1 ? 'grab' : 'default',
             }}
             onClick={() => setPreviewShot(null)}
           >
@@ -702,13 +788,20 @@ export const HMangaScreenshotPage: React.FC = () => {
               src={previewShot.imageData}
               alt={previewShot.mangaTitle}
               style={{
-                maxWidth: '100%',
-                maxHeight: '88vh',
+                maxWidth: zoomLevel === 1 ? '100%' : 'none',
+                maxHeight: zoomLevel === 1 ? '88vh' : 'none',
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: 'center center',
+                transition: 'transform 0.18s cubic-bezier(0.2, 0, 0, 1)',
                 objectFit: 'contain',
                 borderRadius: '8px',
                 boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)',
               }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Click to toggle 1x / 1.75x zoom
+                setZoomLevel((z) => (z === 1 ? 1.75 : 1));
+              }}
             />
           </div>
         </div>
@@ -716,3 +809,4 @@ export const HMangaScreenshotPage: React.FC = () => {
     </div>
   );
 };
+
