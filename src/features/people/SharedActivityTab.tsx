@@ -27,6 +27,11 @@ export interface SharedActivityItem {
   progressText?: string;
   progressPercent?: number;
   currentChapterOrPage?: number;
+  minChapter?: number;
+  maxChapter?: number;
+  startTime?: string;
+  endTime?: string;
+  timeRangeText?: string;
   totalChaptersOrPages?: number;
   durationMinutes?: number;
   audioUrl?: string | null;
@@ -211,37 +216,61 @@ export function SharedActivityTab({ partnerPerson }: Props) {
             }
 
             // 2. TRUYỆN H / BL / NGÔN TÌNH (STORY / MANGA)
-            if (m.type === 'STORY' || m.type === 'MANGA') {
-              const isBL = m.genre === 'BL' || m.source === 'bl';
+            if (m.type === 'STORY' || m.type === 'MANGA' || m.type === 'BL' || m.type === 'H_MANGA') {
+              const isBL = m.genre === 'BL' || m.source === 'bl' || m.type === 'BL';
               const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : 'H_MANGA';
               const current = m.current_chapter || 1;
               const total = m.total_chapters;
-              const pct = total ? Math.min(100, Math.round((current / total) * 100)) : undefined;
-              const slug = m.channel || m.slug || m.name || '';
+              const slug = (m.channel || m.slug || m.name || '').toLowerCase().trim();
 
               let coverUrl = m.cover_url || m.cover || '';
               if (!coverUrl && slug && mangaCoverMap.has(slug)) {
                 coverUrl = mangaCoverMap.get(slug)?.cover || '';
               }
 
-              const key = `${userName}::${storyType}::${slug || m.name}`;
-              itemsMap.set(key, {
-                id: `manga-${m.id}`,
+              const mangaKey = `${userName}::MANGA::${slug || m.name}`;
+              const existing = itemsMap.get(mangaKey);
+
+              const chapters = [current];
+              const times = logTime ? [logTime] : [];
+              if (existing?.currentChapterOrPage) chapters.push(existing.currentChapterOrPage);
+              if (existing?.minChapter) chapters.push(existing.minChapter);
+              if (existing?.maxChapter) chapters.push(existing.maxChapter);
+              if (existing?.logTime) times.push(existing.logTime);
+              if (existing?.startTime) times.push(existing.startTime);
+              if (existing?.endTime) times.push(existing.endTime);
+
+              const minCh = Math.min(...chapters.filter((c) => c > 0));
+              const maxCh = Math.max(...chapters.filter((c) => c > 0));
+              const sortedTimes = Array.from(new Set(times.filter(Boolean))).sort();
+              const startTime = sortedTimes[0] || '';
+              const endTime = sortedTimes[sortedTimes.length - 1] || '';
+              const timeRangeText = startTime && endTime && startTime !== endTime ? `${startTime} - ${endTime}` : (endTime || startTime);
+
+              const chapterRangeText = minCh && maxCh && minCh < maxCh ? `Chapter ${minCh} → Chapter ${maxCh}` : `Chapter ${maxCh || current}`;
+              const chosenType = existing?.type === 'BL' || storyType === 'BL' ? 'BL' : 'H_MANGA';
+
+              itemsMap.set(mangaKey, {
+                id: existing?.id || `manga-${m.id}`,
                 user_id: m.user_id,
                 userName,
-                type: storyType,
+                type: chosenType,
                 actionType: 'READING',
                 title: m.name || m.title || (slug && mangaCoverMap.get(slug)?.title) || 'Truyện tranh',
-                subtitle: `Chapter ${current}`,
+                subtitle: chapterRangeText,
                 slug: slug,
-                cover: coverUrl,
-                progressText: `Chapter ${current}${logTime ? ` · ${logTime}` : ''}`,
-                progressPercent: pct,
-                currentChapterOrPage: current,
-                totalChaptersOrPages: total || undefined,
+                cover: coverUrl || existing?.cover || '',
+                progressText: `${chapterRangeText}${timeRangeText ? ` · ${timeRangeText}` : ''}`,
+                currentChapterOrPage: maxCh,
+                minChapter: minCh,
+                maxChapter: maxCh,
+                startTime,
+                endTime,
+                timeRangeText,
+                totalChaptersOrPages: total || existing?.totalChaptersOrPages,
                 logDate: rowDate,
-                logTime: logTime,
-                updatedAt: updatedAtIso,
+                logTime: endTime || logTime,
+                updatedAt: existing && new Date(existing.updatedAt).getTime() > new Date(updatedAtIso).getTime() ? existing.updatedAt : updatedAtIso,
                 rawMedia: m
               });
             }
@@ -273,37 +302,82 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           }
         }
 
-        // B. Xử lý manga_reading_logs
-        if (mangaLogs && Array.isArray(mangaLogs)) {
-          for (const log of mangaLogs as any[]) {
-            const isH = log.manga_type === 'H_MANGA';
-            const storyType: 'H_MANGA' | 'BL' = isH ? 'H_MANGA' : 'BL';
-            const userName = resolveUserName(log.user_id);
-            const key = `${userName}::${storyType}::${log.manga_slug}`;
-            const coverUrl = mangaCoverMap.get(log.manga_slug)?.cover || '';
-            const logIso = log.readAt || log.created_at || `${log.log_date}T${log.log_time || '00:00'}:00`;
-            const existing = itemsMap.get(key);
+        // B. Xử lý manga_reading_logs (kết hợp cả Supabase và LocalStorage)
+        const combinedMangaLogs = [
+          ...(Array.isArray(mangaLogs) ? mangaLogs : []),
+          ...getMangaReadingLogs().map((l) => ({
+            id: l.id,
+            user_id: currentUserId,
+            manga_slug: l.mangaSlug,
+            manga_title: l.mangaTitle,
+            manga_type: l.mangaType,
+            chapter_number: l.chapterNumber,
+            chapter_name: l.chapterName,
+            duration_minutes: l.durationMinutes,
+            log_date: l.log_date,
+            log_time: l.log_time,
+            created_at: l.readAt,
+          }))
+        ];
 
-            if (!existing || new Date(logIso).getTime() > new Date(existing.updatedAt).getTime()) {
-              itemsMap.set(key, {
-                id: `manga-log-remote-${log.id}`,
-                user_id: log.user_id,
-                userName,
-                type: storyType,
-                actionType: 'READING',
-                title: log.manga_title || (mangaCoverMap.get(log.manga_slug)?.title) || log.manga_slug,
-                subtitle: log.chapter_name || `Chapter ${log.chapter_number}`,
-                slug: log.manga_slug,
-                cover: coverUrl || existing?.cover || '',
-                progressText: `Chapter ${log.chapter_number}${log.log_time ? ` · ${log.log_time}` : ''}`,
-                currentChapterOrPage: log.chapter_number,
-                durationMinutes: log.duration_minutes,
-                logDate: log.log_date,
-                logTime: log.log_time,
-                updatedAt: logIso,
-              });
-            }
-          }
+        for (const log of combinedMangaLogs as any[]) {
+          if (!log.manga_slug) continue;
+          const isH = log.manga_type === 'H_MANGA';
+          const isBL = log.manga_type === 'BL' || (!isH && (log.manga_slug.includes('bl') || log.manga_slug.includes('em-co-nghe')));
+          const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : isH ? 'H_MANGA' : 'BL';
+          const userName = resolveUserName(log.user_id);
+          const slug = (log.manga_slug || '').toLowerCase().trim();
+          const mangaKey = `${userName}::MANGA::${slug}`;
+          const coverUrl = mangaCoverMap.get(slug)?.cover || '';
+          const logIso = log.readAt || log.created_at || `${log.log_date}T${log.log_time || '00:00'}:00`;
+          const existing = itemsMap.get(mangaKey);
+
+          const chNum = Number(log.chapter_number) || 1;
+          const chapters = [chNum];
+          const times = log.log_time ? [log.log_time] : [];
+
+          if (existing?.currentChapterOrPage) chapters.push(existing.currentChapterOrPage);
+          if (existing?.minChapter) chapters.push(existing.minChapter);
+          if (existing?.maxChapter) chapters.push(existing.maxChapter);
+          if (existing?.logTime) times.push(existing.logTime);
+          if (existing?.startTime) times.push(existing.startTime);
+          if (existing?.endTime) times.push(existing.endTime);
+
+          const minCh = Math.min(...chapters.filter((c) => c > 0));
+          const maxCh = Math.max(...chapters.filter((c) => c > 0));
+          const sortedTimes = Array.from(new Set(times.filter(Boolean))).sort();
+          const startTime = sortedTimes[0] || '';
+          const endTime = sortedTimes[sortedTimes.length - 1] || '';
+          const timeRangeText = startTime && endTime && startTime !== endTime ? `${startTime} - ${endTime}` : (endTime || startTime);
+          const chapterRangeText = minCh && maxCh && minCh < maxCh ? `Chapter ${minCh} → Chapter ${maxCh}` : `Chapter ${maxCh || chNum}`;
+          const chosenType = existing?.type === 'BL' || storyType === 'BL' ? 'BL' : 'H_MANGA';
+
+          const newestTimeIso = existing && new Date(existing.updatedAt).getTime() > new Date(logIso).getTime() 
+            ? existing.updatedAt 
+            : logIso;
+
+          itemsMap.set(mangaKey, {
+            id: existing?.id || `manga-log-${log.id}`,
+            user_id: log.user_id,
+            userName,
+            type: chosenType,
+            actionType: 'READING',
+            title: log.manga_title || (mangaCoverMap.get(slug)?.title) || existing?.title || slug,
+            subtitle: chapterRangeText,
+            slug: slug,
+            cover: coverUrl || existing?.cover || '',
+            progressText: `${chapterRangeText}${timeRangeText ? ` · ${timeRangeText}` : ''}`,
+            currentChapterOrPage: maxCh,
+            minChapter: minCh,
+            maxChapter: maxCh,
+            startTime,
+            endTime,
+            timeRangeText,
+            durationMinutes: log.duration_minutes || existing?.durationMinutes,
+            logDate: log.log_date || existing?.logDate || localDate(),
+            logTime: endTime || log.log_time,
+            updatedAt: newestTimeIso,
+          });
         }
       }
 
@@ -686,9 +760,9 @@ export function SharedActivityTab({ partnerPerson }: Props) {
                       </span>
                     </div>
 
-                    {act.logTime && (
+                    {(act.timeRangeText || act.logTime) && (
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <Clock size={11} /> {act.logTime}
+                        <Clock size={11} /> {act.timeRangeText || act.logTime}
                       </span>
                     )}
                   </div>

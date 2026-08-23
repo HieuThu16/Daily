@@ -759,7 +759,9 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
                         {log.user_name}
                       </span>
                       <span style={{ color: 'var(--text-main)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {log.event_type === 'STAY' ? '🏠 ' : '🚗 '}
                         {log.place_name}
+                        {log.distance_km && log.distance_km > 0 ? ` (${log.distance_km} km)` : ''}
                       </span>
                     </div>
 
