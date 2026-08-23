@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Media } from '../../types'
+import { recordMusicListening } from '../../lib/musicSync'
 
 export type RepeatMode = 'OFF' | 'ALL' | 'ONE'
 
@@ -67,6 +68,9 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     setCurrentTrack(track)
     setCurrentTime(0)
     setAudioError(false)
+
+    // Gửi cập nhật tức thì lên Supabase & Xem chung
+    void recordMusicListening(track)
 
     if (queue && queue.length > 0) {
       setPlaylist(queue)

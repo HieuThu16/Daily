@@ -571,12 +571,15 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     }
 
     const isDone = statusVal === 'COMPLETED'
+    // Đối với MUSIC: Khi thêm bài hát mới vào kho, không tự gán log_time để phân biệt rõ "Mới thêm nhạc" với "Vừa nghe trên web"
+    const effectiveLogTime = logTime || (kind === 'MUSIC' && !item ? null : getCurrentTimeString())
+
     const payload: Partial<Media> = {
       type: kind,
       name: name.trim(),
       status: statusVal,
       log_date: isDone ? (logDate || localDate()) : null,
-      log_time: isDone ? (logTime || getCurrentTimeString()) : null,
+      log_time: isDone ? effectiveLogTime : null,
       channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
       artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
       author: (kind === 'BOOK' || kind === 'MANGA') ? extraVal.trim() || null : null,
@@ -599,7 +602,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       if (error) {
         console.error('[saveItem update error]', error)
         // Fallback: update without new columns that may not exist yet in DB
-        const safePayload = { name: name.trim(), status: statusVal, log_date: isDone ? (logDate || localDate()) : null, log_time: isDone ? (logTime || getCurrentTimeString()) : null }
+        const safePayload = { name: name.trim(), status: statusVal, log_date: isDone ? (logDate || localDate()) : null, log_time: isDone ? effectiveLogTime : null }
         const { error: e2 } = await supabase!.from('media_items').update(safePayload).eq('id', item.id)
         showSaveToast(!e2, 'mục thư viện')
       } else {
@@ -647,7 +650,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             youtube_url: youtubeUrlVal.trim() || null,
             audio_url: audioUrlVal.trim() || null,
             log_date: isDone ? (logDate || localDate()) : null,
-            log_time: isDone ? (logTime || getCurrentTimeString()) : null,
+            log_time: isDone ? effectiveLogTime : null,
           })
           .select()
           .single()

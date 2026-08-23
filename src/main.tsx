@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './styles.css'
+import 'leaflet/dist/leaflet.css'
 
 // Lắng nghe khi Service Worker mới chiếm quyền điều khiển (claim clients) để làm mới mượt mà
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

@@ -42,6 +42,9 @@ export async function syncMangaInteraction(interaction: MangaInteractionRow): Pr
     const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
     const userId = userData?.user?.id || null
     const rowId = `${interaction.manga_type}::${interaction.slug}`
+    const nowIso = new Date().toISOString()
+    const today = new Date().toLocaleDateString('sv-SE')
+    const nowTime = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`
 
     await supabase
       .from('manga_interactions')
@@ -56,9 +59,38 @@ export async function syncMangaInteraction(interaction: MangaInteractionRow): Pr
         is_following: interaction.is_following ?? false,
         last_chapter: interaction.last_chapter ?? null,
         last_chapter_name: interaction.last_chapter_name ?? null,
-        last_read_at: interaction.last_read_at ?? new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        last_read_at: interaction.last_read_at ?? nowIso,
+        updated_at: nowIso,
       }, { onConflict: 'id' })
+
+    if (interaction.last_chapter) {
+      const mediaType = interaction.manga_type === 'H_MANGA' ? 'STORY' : 'MANGA'
+      const { data: existing } = await supabase
+        .from('media_items')
+        .select('id')
+        .eq('channel', interaction.slug)
+        .limit(1)
+
+      const payload = {
+        user_id: userId,
+        type: mediaType,
+        genre: interaction.manga_type,
+        name: interaction.title || interaction.slug,
+        channel: interaction.slug,
+        current_chapter: interaction.last_chapter,
+        status: 'IN_PROGRESS',
+        log_date: today,
+        log_time: nowTime,
+        updated_at: nowIso,
+        ...(interaction.cover_url ? { cover_url: interaction.cover_url } : {}),
+      }
+
+      if (existing && existing.length > 0) {
+        await supabase.from('media_items').update(payload).eq('id', existing[0].id)
+      } else {
+        await supabase.from('media_items').insert(payload)
+      }
+    }
   } catch (err) {
     console.warn('[syncMangaInteraction] Lỗi lưu tương tác manga:', err)
   }
@@ -70,6 +102,7 @@ export async function syncMangaReadingLogToSupabase(log: MangaReadingLog): Promi
   try {
     const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
     const userId = userData?.user?.id || null
+    const nowIso = new Date().toISOString()
 
     await supabase
       .from('manga_reading_logs')
@@ -86,6 +119,33 @@ export async function syncMangaReadingLogToSupabase(log: MangaReadingLog): Promi
         log_time: log.log_time || null,
         status: log.status || 'READING',
       }, { onConflict: 'id' })
+
+    // Đồng bộ sang bảng media_items để kích hoạt Realtime cho tab Xem chung
+    const mediaType = log.mangaType === 'H_MANGA' ? 'STORY' : 'MANGA'
+    const { data: existing } = await supabase
+      .from('media_items')
+      .select('id')
+      .eq('channel', log.mangaSlug)
+      .limit(1)
+
+    const payload = {
+      user_id: userId,
+      type: mediaType,
+      genre: log.mangaType,
+      name: log.mangaTitle || log.mangaSlug,
+      channel: log.mangaSlug,
+      current_chapter: log.chapterNumber,
+      status: log.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+      log_date: log.log_date,
+      log_time: log.log_time,
+      updated_at: nowIso,
+    }
+
+    if (existing && existing.length > 0) {
+      await supabase.from('media_items').update(payload).eq('id', existing[0].id)
+    } else {
+      await supabase.from('media_items').insert(payload)
+    }
   } catch (err) {
     console.warn('[syncMangaReadingLog] Lỗi lưu log manga:', err)
   }

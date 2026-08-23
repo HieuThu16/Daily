@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BookOpen, Music, Play, Flame, RefreshCw, ExternalLink,
-  Headphones, PlusCircle, Sparkles, Heart
+  Headphones, PlusCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { localDate } from '../../lib/date';
@@ -12,8 +12,8 @@ import { DatePager } from '../home/DatePager';
 import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
 import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
 import type { Media, Person } from '../../types';
-
 import { estimatePage } from '../../lib/book/repository';
+import { CoupleLocationCard } from './CoupleLocationCard';
 
 export interface SharedActivityItem {
   id: string;
@@ -45,33 +45,35 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
 
   const [selectedDate, setSelectedDate] = useState<string>(localDate());
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [activities, setActivities] = useState<SharedActivityItem[]>([]);
   const [activePartnerFilter, setActivePartnerFilter] = useState<'ALL' | 'HIEU' | 'KIM_Y'>('ALL');
 
-  // Lấy email user hiện tại
+  // Lấy user auth hiện tại
   useEffect(() => {
     if (supabase?.auth) {
       supabase.auth.getUser().then(({ data }) => {
         if (data?.user?.email) setCurrentUserEmail(data.user.email.toLowerCase());
+        if (data?.user?.id) setCurrentUserId(data.user.id);
       }).catch(() => null);
     }
   }, []);
 
-  const isHieu = (emailOrName?: string) => {
+  const isHieu = useCallback((emailOrName?: string) => {
     const s = (emailOrName || '').toLowerCase();
     return s.includes('hieu') || s.includes('truongnguyenminhhieu');
-  };
+  }, []);
 
-  const isKimY = (emailOrName?: string) => {
+  const isKimY = useCallback((emailOrName?: string) => {
     const s = (emailOrName || '').toLowerCase();
     return s.includes('kimy') || s.includes('nguyenkimy') || s.includes('ý');
-  };
+  }, []);
 
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     setLoading(true);
     try {
-      // 0. Tạo từ điển bìa truyện H từ danh sách truyện sẵn có
+      // 0. Tạo từ điển bìa truyện H & Manga từ danh sách truyện sẵn có
       const mangaCoverMap = new Map<string, { cover: string; title: string }>();
       try {
         const customManga = getCustomHMangaList();
@@ -88,9 +90,15 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
 
       const itemsMap = new Map<string, SharedActivityItem>();
 
-      // 1. Fetch Media Items và Book Documents từ Supabase
+      // 1. Fetch đồng thời từ Supabase: media_items, book_documents, manga_reading_logs, manga_interactions, profiles
       if (supabase) {
-        const [{ data: mediaRows }, { data: bookDocs }] = await Promise.all([
+        const [
+          { data: mediaRows },
+          { data: bookDocs },
+          { data: mangaLogs },
+          { data: mangaInteractions },
+          { data: profileRows }
+        ] = await Promise.all([
           supabase
             .from('media_items')
             .select('*')
@@ -99,8 +107,52 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
             .limit(200),
           supabase
             .from('book_documents')
-            .select('media_item_id, percent, page_count, est_pages, last_char_offset, total_chars, last_chapter_idx')
+            .select('media_item_id, percent, page_count, est_pages, last_char_offset, total_chars, last_chapter_idx'),
+          Promise.resolve(
+            supabase
+              .from('manga_reading_logs')
+              .select('*')
+              .order('readAt', { ascending: false })
+              .limit(200),
+          ).catch(() => ({ data: null })),
+          Promise.resolve(
+            supabase
+              .from('manga_interactions')
+              .select('*')
+              .order('updated_at', { ascending: false })
+              .limit(200),
+          ).catch(() => ({ data: null })),
+          Promise.resolve(
+            supabase
+              .from('profiles')
+              .select('id, name, email'),
+          ).catch(() => ({ data: null }))
         ]);
+
+        const profileMap = new Map<string, string>();
+        if (profileRows) {
+          for (const p of profileRows as any[]) {
+            if (p.id) {
+              const name = isKimY(p.email || p.name) ? 'Kim Ý' : (isHieu(p.email || p.name) ? 'Hiếu' : p.name || 'Hiếu');
+              profileMap.set(p.id, name);
+            }
+          }
+        }
+
+        const resolveUserName = (userId?: string | null, fallbackArtistOrAuthor?: string | null) => {
+          if (userId && profileMap.has(userId)) return profileMap.get(userId)!;
+          if (userId && isKimY(userId)) return 'Kim Ý';
+          if (userId && isHieu(userId)) return 'Hiếu';
+          if (fallbackArtistOrAuthor && isKimY(fallbackArtistOrAuthor)) return 'Kim Ý';
+          if (fallbackArtistOrAuthor && isHieu(fallbackArtistOrAuthor)) return 'Hiếu';
+          if (currentUserId && userId === currentUserId) {
+            return isKimY(currentUserEmail) ? 'Kim Ý' : 'Hiếu';
+          }
+          if (partnerPerson?.name && isKimY(partnerPerson.name)) {
+            if (userId && userId === partnerPerson.id) return 'Kim Ý';
+          }
+          return 'Hiếu';
+        };
 
         const bookDocMap = new Map<string, any>();
         if (bookDocs) {
@@ -109,20 +161,14 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           }
         }
 
+        // Xử lý media_items
         if (mediaRows) {
           for (const m of mediaRows) {
             const rowDate = m.log_date || (m.updated_at ? m.updated_at.split('T')[0] : '');
             const logTime = m.log_time || (m.updated_at ? m.updated_at.split('T')[1]?.slice(0, 5) : '');
-            
-            // Xác định tên người
-            let userName = 'Hiếu';
-            if (m.user_id && isKimY(m.user_id)) {
-              userName = 'Kim Ý';
-            } else if (m.artist && isKimY(m.artist)) {
-              userName = 'Kim Ý';
-            }
+            const userName = resolveUserName(m.user_id, m.artist || m.author);
 
-            // A. Sách
+            // A. Sách (BOOK)
             if (m.type === 'BOOK') {
               const doc = bookDocMap.get(m.id);
               let current = m.current_page || m.current_chapter || 0;
@@ -143,8 +189,9 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 pct = Math.min(100, Math.round((current / total) * 100));
               }
 
-              const isActuallyReading = current > 0 || (pct !== undefined && pct > 0) || m.status === 'COMPLETED' || m.status === 'IN_PROGRESS';
-              if (isActuallyReading) {
+              // Bất kỳ tiến độ nào của sách (dù chương 1 hay trang 1 hay %) đều hiển thị ngay
+              const isReadingBook = current > 0 || (pct !== undefined && pct > 0) || m.status === 'IN_PROGRESS' || m.status === 'COMPLETED' || Boolean(m.log_date);
+              if (isReadingBook) {
                 const key = `${userName}::BOOK::${m.name || m.id}`;
                 itemsMap.set(key, {
                   id: `book-${m.id}`,
@@ -156,8 +203,8 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                   subtitle: m.author || m.description || '',
                   cover: m.cover_url || m.cover || '',
                   progressText: current > 0 
-                    ? `Trang ${current}${total ? ` / ${total}` : ''}${pct !== undefined ? ` (${pct}%)` : ''}`
-                    : (pct !== undefined ? `${pct}%` : 'Đang đọc'),
+                    ? `Trang ${current}${total ? ` / ${total}` : ''}${pct !== undefined ? ` (${pct}%)` : ''}${logTime ? ` · ${logTime}` : ''}`
+                    : (pct !== undefined ? `${pct}%${logTime ? ` · ${logTime}` : ''}` : (logTime ? `Đang đọc lúc ${logTime}` : 'Đang đọc')),
                   progressPercent: pct,
                   currentChapterOrPage: current,
                   totalChaptersOrPages: total || undefined,
@@ -169,54 +216,48 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
               }
             }
 
-            // B. Truyện H / BL
+            // B. Truyện H / BL / Ngôn tình (STORY / MANGA)
             if (m.type === 'STORY' || m.type === 'MANGA') {
               const isBL = m.genre === 'BL' || m.source === 'bl';
               const storyType: 'H_MANGA' | 'BL' = isBL ? 'BL' : 'H_MANGA';
-
               const current = m.current_chapter || 1;
               const total = m.total_chapters;
               const pct = total ? Math.min(100, Math.round((current / total) * 100)) : undefined;
               const slug = m.channel || m.slug || m.name || '';
 
-              // Tìm ảnh bìa chuẩn từ từ điển hoặc dữ liệu dòng
               let coverUrl = m.cover_url || m.cover || '';
               if (!coverUrl && slug && mangaCoverMap.has(slug)) {
                 coverUrl = mangaCoverMap.get(slug)?.cover || '';
               }
 
-              const isActuallyReading = current > 1 || (pct && pct >= 5) || m.status === 'IN_PROGRESS' || m.status === 'COMPLETED';
-              if (isActuallyReading) {
-                const key = `${userName}::${storyType}::${slug}`;
-                itemsMap.set(key, {
-                  id: `manga-${m.id}`,
-                  user_id: m.user_id,
-                  userName,
-                  type: storyType,
-                  actionType: 'READING',
-                  title: m.name || m.title || (slug && mangaCoverMap.get(slug)?.title) || 'Truyện tranh',
-                  subtitle: m.channel ? `Bộ: ${m.channel}` : m.author || '',
-                  slug: slug,
-                  cover: coverUrl,
-                  progressText: `Chapter ${current}${total ? ` / ${total}` : ''}${pct ? ` (${pct}%)` : ''}`,
-                  progressPercent: pct,
-                  currentChapterOrPage: current,
-                  totalChaptersOrPages: total,
-                  logDate: rowDate,
-                  logTime: logTime,
-                  updatedAt: m.updated_at || m.created_at || '',
-                  rawMedia: m
-                });
-              }
+              // Chỉ cần đọc (dù chapter 1 hay chapter bất kỳ) là hiển thị ngay bên Xem chung
+              const key = `${userName}::${storyType}::${slug || m.name}`;
+              itemsMap.set(key, {
+                id: `manga-${m.id}`,
+                user_id: m.user_id,
+                userName,
+                type: storyType,
+                actionType: 'READING',
+                title: m.name || m.title || (slug && mangaCoverMap.get(slug)?.title) || 'Truyện tranh',
+                subtitle: m.channel ? `Bộ: ${m.channel}` : m.author || '',
+                slug: slug,
+                cover: coverUrl,
+                progressText: `Chapter ${current}${total ? ` / ${total}` : ''}${pct ? ` (${pct}%)` : ''}${logTime ? ` · ${logTime}` : ''}`,
+                progressPercent: pct,
+                currentChapterOrPage: current,
+                totalChaptersOrPages: total,
+                logDate: rowDate,
+                logTime: logTime,
+                updatedAt: m.updated_at || m.created_at || '',
+                rawMedia: m
+              });
             }
 
             // C. Nhạc MP3: Phân biệt rõ "Mới thêm nhạc" vs "Vừa nghe nhạc trên web"
-            if (m.type === 'MUSIC' && (m.url?.endsWith('.mp3') || m.url?.includes('audio') || m.url?.includes('supabase') || m.url?.includes('mp3') || m.audio_url || m.status === 'COMPLETED')) {
-              // Nếu có log_time hoặc updated_at khác created_at -> Vừa nghe nhạc
-              // Nếu mới tạo trong ngày và log_time trống -> Mới thêm nhạc vào kho
-              const isNewlyAdded = !m.log_time && m.created_at && m.updated_at && Math.abs(new Date(m.updated_at).getTime() - new Date(m.created_at).getTime()) < 60000;
-              const actionType: 'ADDED_MUSIC' | 'LISTENED_MUSIC' = isNewlyAdded ? 'ADDED_MUSIC' : 'LISTENED_MUSIC';
-
+            if (m.type === 'MUSIC') {
+              // Nếu có log_time -> Vừa nghe nhạc trên web
+              // Nếu không có log_time -> Mới thêm nhạc vào kho
+              const actionType: 'ADDED_MUSIC' | 'LISTENED_MUSIC' = m.log_time ? 'LISTENED_MUSIC' : 'ADDED_MUSIC';
               const key = `${userName}::MUSIC::${m.name || m.id}`;
               itemsMap.set(key, {
                 id: `music-${m.id}`,
@@ -240,9 +281,77 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
             }
           }
         }
+
+        // Xử lý manga_reading_logs từ Supabase
+        if (mangaLogs && Array.isArray(mangaLogs)) {
+          for (const log of mangaLogs as any[]) {
+            const isH = log.manga_type === 'H_MANGA';
+            const storyType: 'H_MANGA' | 'BL' = isH ? 'H_MANGA' : 'BL';
+            const userName = resolveUserName(log.user_id);
+            const key = `${userName}::${storyType}::${log.manga_slug}`;
+            const coverUrl = mangaCoverMap.get(log.manga_slug)?.cover || '';
+            const logIso = log.readAt || log.created_at || `${log.log_date}T${log.log_time || '00:00'}:00`;
+            const existing = itemsMap.get(key);
+
+            if (!existing || new Date(logIso).getTime() > new Date(existing.updatedAt).getTime()) {
+              itemsMap.set(key, {
+                id: `manga-log-remote-${log.id}`,
+                user_id: log.user_id,
+                userName,
+                type: storyType,
+                actionType: 'READING',
+                title: log.manga_title || (mangaCoverMap.get(log.manga_slug)?.title) || log.manga_slug,
+                subtitle: log.chapter_name || `Chapter ${log.chapter_number}`,
+                slug: log.manga_slug,
+                cover: coverUrl || existing?.cover || '',
+                progressText: `Chapter ${log.chapter_number}${log.log_time ? ` · ${log.log_time}` : ''}`,
+                currentChapterOrPage: log.chapter_number,
+                durationMinutes: log.duration_minutes,
+                logDate: log.log_date,
+                logTime: log.log_time,
+                updatedAt: logIso,
+              });
+            }
+          }
+        }
+
+        // Xử lý manga_interactions từ Supabase
+        if (mangaInteractions && Array.isArray(mangaInteractions)) {
+          for (const inter of mangaInteractions as any[]) {
+            if (!inter.last_chapter) continue;
+            const isH = inter.manga_type === 'H_MANGA';
+            const storyType: 'H_MANGA' | 'BL' = isH ? 'H_MANGA' : 'BL';
+            const userName = resolveUserName(inter.user_id);
+            const key = `${userName}::${storyType}::${inter.slug}`;
+            const coverUrl = inter.cover_url || mangaCoverMap.get(inter.slug)?.cover || '';
+            const interIso = inter.last_read_at || inter.updated_at || '';
+            const interDate = interIso.split('T')[0] || localDate();
+            const interTime = interIso.split('T')[1]?.slice(0, 5) || '';
+            const existing = itemsMap.get(key);
+
+            if (!existing || (interIso && new Date(interIso).getTime() > new Date(existing.updatedAt).getTime())) {
+              itemsMap.set(key, {
+                id: `manga-inter-${inter.id || inter.slug}`,
+                user_id: inter.user_id,
+                userName,
+                type: storyType,
+                actionType: 'READING',
+                title: inter.title || (mangaCoverMap.get(inter.slug)?.title) || inter.slug,
+                subtitle: inter.last_chapter_name || `Chapter ${inter.last_chapter}`,
+                slug: inter.slug,
+                cover: coverUrl || existing?.cover || '',
+                progressText: `Chapter ${inter.last_chapter}${interTime ? ` · ${interTime}` : ''}`,
+                currentChapterOrPage: inter.last_chapter,
+                logDate: interDate,
+                logTime: interTime,
+                updatedAt: interIso,
+              });
+            }
+          }
+        }
       }
 
-      // 2. Bổ sung từ Manga Reading Logs (Gắn bìa chuẩn từ từ điển manga)
+      // 2. Bổ sung từ Manga Reading Logs nội bộ (LocalStorage)
       try {
         const localMangaLogs = getMangaReadingLogs();
         for (const log of localMangaLogs) {
@@ -251,40 +360,33 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           const isMeHieu = isHieu(currentUserEmail);
           const userName = isMeHieu ? 'Hiếu' : 'Kim Ý';
           const key = `${userName}::${storyType}::${log.mangaSlug}`;
+          const coverUrl = mangaCoverMap.get(log.mangaSlug)?.cover || '';
+          const existing = itemsMap.get(key);
 
-          const duration = log.durationMinutes || 0;
-          if (duration >= 5 || log.chapterNumber > 1) {
-            const coverUrl = mangaCoverMap.get(log.mangaSlug)?.cover || '';
-            const existing = itemsMap.get(key);
-            if (!existing || new Date(log.readAt).getTime() > new Date(existing.updatedAt).getTime()) {
-              itemsMap.set(key, {
-                id: `manga-log-${log.id}`,
-                userName,
-                type: storyType,
-                actionType: 'READING',
-                title: log.mangaTitle || (mangaCoverMap.get(log.mangaSlug)?.title) || log.mangaSlug,
-                subtitle: `Đã đọc ${duration > 0 ? `${duration} phút` : ''} · ${log.chapterName || `Chapter ${log.chapterNumber}`}`,
-                slug: log.mangaSlug,
-                cover: coverUrl || existing?.cover || '',
-                progressText: `Chapter ${log.chapterNumber}${duration > 0 ? ` (${duration} phút)` : ''}`,
-                currentChapterOrPage: log.chapterNumber,
-                durationMinutes: duration,
-                logDate: log.log_date,
-                logTime: log.log_time,
-                updatedAt: log.readAt,
-              });
-            }
+          // Không cần điều kiện > 5 phút: Bất cứ chapter nào đọc đều ghi nhận ngay
+          if (!existing || new Date(log.readAt).getTime() > new Date(existing.updatedAt).getTime()) {
+            itemsMap.set(key, {
+              id: `manga-log-local-${log.id}`,
+              userName,
+              type: storyType,
+              actionType: 'READING',
+              title: log.mangaTitle || (mangaCoverMap.get(log.mangaSlug)?.title) || log.mangaSlug,
+              subtitle: log.chapterName || `Chapter ${log.chapterNumber}`,
+              slug: log.mangaSlug,
+              cover: coverUrl || existing?.cover || '',
+              progressText: `Chapter ${log.chapterNumber}${log.log_time ? ` · ${log.log_time}` : ''}`,
+              currentChapterOrPage: log.chapterNumber,
+              durationMinutes: log.durationMinutes,
+              logDate: log.log_date,
+              logTime: log.log_time,
+              updatedAt: log.readAt,
+            });
           }
         }
       } catch {}
 
-      // 3. Chuyển map thành danh sách, chỉ lấy các hoạt động từ 19:00 ngày 23/08/2026 trở đi
-      const ACTIVITY_START_CUTOFF = new Date('2026-08-23T19:00:00+07:00').getTime();
-      const list = Array.from(itemsMap.values()).filter(it => {
-        const itemTime = new Date(it.updatedAt || it.logDate).getTime();
-        return !isNaN(itemTime) && itemTime >= ACTIVITY_START_CUTOFF;
-      });
-
+      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất lên đầu
+      const list = Array.from(itemsMap.values());
       list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
       setActivities(list);
     } catch (err) {
@@ -292,32 +394,55 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
     } finally {
       setLoading(false);
     }
-  };
-
+  }, [currentUserEmail, currentUserId, isHieu, isKimY, partnerPerson]);
 
   useEffect(() => {
     void fetchActivities();
 
+    // Lắng nghe Realtime từ Supabase trên tất cả bảng liên quan
     if (supabase) {
       const sb = supabase;
       const channel = sb
-        .channel('shared-activity-channel')
+        .channel('shared-activity-realtime-channel')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'media_items' }, () => {
+          void fetchActivities();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'book_documents' }, () => {
+          void fetchActivities();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'manga_reading_logs' }, () => {
+          void fetchActivities();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'manga_interactions' }, () => {
           void fetchActivities();
         })
         .subscribe();
 
+      // Lắng nghe các sự kiện client nội bộ để cập nhật tức thì
+      const handleLocalEvent = () => void fetchActivities();
+      window.addEventListener('daily_music_listening_updated', handleLocalEvent);
+      window.addEventListener('daily_manga_reading_updated', handleLocalEvent);
+      window.addEventListener('daily_h_history_updated', handleLocalEvent);
+      window.addEventListener('daily_book_progress_updated', handleLocalEvent);
+      window.addEventListener('storage', handleLocalEvent);
+
       return () => {
         void sb.removeChannel(channel);
+        window.removeEventListener('daily_music_listening_updated', handleLocalEvent);
+        window.removeEventListener('daily_manga_reading_updated', handleLocalEvent);
+        window.removeEventListener('daily_h_history_updated', handleLocalEvent);
+        window.removeEventListener('daily_book_progress_updated', handleLocalEvent);
+        window.removeEventListener('storage', handleLocalEvent);
       };
     }
-  }, [currentUserEmail]);
+  }, [fetchActivities]);
 
-  // Lọc hoạt động theo đúng ngày được chọn (giống logic Home)
+  // Lọc hoạt động theo ngày được chọn
   const filteredActivities = useMemo(() => {
     return activities.filter(act => {
-      // 1. Phải khớp ngày đang chọn
-      if (act.logDate !== selectedDate) return false;
+      // 1. Khớp ngày đang chọn
+      const matchesDate = act.logDate === selectedDate || act.updatedAt?.startsWith(selectedDate);
+      if (!matchesDate) return false;
 
       // 2. Lọc theo người
       if (activePartnerFilter === 'HIEU' && act.userName !== 'Hiếu') return false;
@@ -380,7 +505,10 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
   return (
     <div className="shared-activity-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       
-      {/* THANH ĐIỀU HƯỚNG LỊCH CHUẨN (GIỐNG HỆT LOGIC TRANG HOME) */}
+      {/* BẢN ĐỒ VỊ TRÍ ĐÔI LỨA TRỰC TIẾP */}
+      <CoupleLocationCard partnerPerson={partnerPerson} selectedDate={selectedDate} />
+
+      {/* THANH ĐIỀU HƯỚNG LỊCH */}
       <DatePager
         dateKey={selectedDate}
         week={[]}
@@ -484,7 +612,7 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
             Không có hoạt động nào trong ngày này
           </strong>
           <p style={{ fontSize: '0.82rem', margin: 0 }}>
-            Tiến độ chỉ hiển thị khi đã đọc thực sự (trên 5 phút) hoặc vừa thêm/nghe nhạc trên web.
+            Tiến độ đọc truyện, đọc sách hoặc nghe nhạc sẽ cập nhật tự động tại đây.
           </p>
         </div>
       ) : (
@@ -511,7 +639,7 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 }}
                 className="shared-activity-card"
               >
-                {/* Ảnh bìa: Nhỏ gọn, vừa khít khung (60x80px) với bo góc đẹp mắt */}
+                {/* Ảnh bìa: Nhỏ gọn (60x80px) */}
                 <div
                   style={{
                     width: '60px',
@@ -535,7 +663,6 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       loading="lazy"
                       onError={(e) => {
-                        // Fallback icon khi link ảnh lỗi
                         e.currentTarget.style.display = 'none';
                       }}
                     />
@@ -551,7 +678,7 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                 {/* Nội dung thông tin */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
-                    {/* Hàng badge hành động rõ ràng: Mới thêm nhạc / Mới nghe nhạc / Đang đọc */}
+                    {/* Hàng badge hành động */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                       {/* Badge Người */}
                       <span
@@ -699,7 +826,7 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
                         <span style={{ fontSize: '0.74rem', color: act.actionType === 'ADDED_MUSIC' ? '#0284c7' : '#10b981', fontWeight: 700 }}>
                           {act.actionType === 'ADDED_MUSIC' 
                             ? `${act.userName} vừa thêm vào kho` 
-                            : `${act.userName} vừa nghe trên web`}
+                            : `${act.userName} vừa nghe trên web${act.logTime ? ` (${act.logTime})` : ''}`}
                         </span>
                         <button
                           type="button"

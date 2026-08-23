@@ -178,10 +178,31 @@ export type ProgressPatch = {
 
 export async function saveProgress(documentId: string, patch: ProgressPatch): Promise<void> {
   const now = new Date().toISOString()
-  await client()
+  const db = client()
+  const { data: doc } = await db
     .from('book_documents')
     .update({ ...patch, last_read_at: now, updated_at: now })
     .eq('id', documentId)
+    .select('media_item_id, page_count, est_pages, total_chars')
+    .maybeSingle()
+
+  if (doc?.media_item_id) {
+    const today = new Date().toLocaleDateString('sv-SE')
+    const nowTime = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`
+    const totalPages = doc.page_count || doc.est_pages || 0
+    let currPage = patch.last_chapter_idx + 1
+    if (doc.total_chars > 0 && totalPages > 0) {
+      currPage = Math.max(1, Math.round((patch.last_char_offset / doc.total_chars) * totalPages))
+    }
+    await db.from('media_items').update({
+      status: 'IN_PROGRESS',
+      log_date: today,
+      log_time: nowTime,
+      current_chapter: patch.last_chapter_idx + 1,
+      current_page: currPage,
+      updated_at: now,
+    }).eq('id', doc.media_item_id)
+  }
 }
 
 /** Danh sách media item đã có sách nhập, để Library biết thẻ nào hiện nút Đọc. */
