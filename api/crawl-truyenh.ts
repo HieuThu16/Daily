@@ -26,6 +26,16 @@ async function fetchWithRetry(url: string, referer?: string, retries = 3): Promi
 export function normalizeStoryUrl(inputUrl: string): { storyUrl: string; slug: string; isVietManhwa: boolean } {
   let url = inputUrl.trim();
   const isVietManhwa = url.includes('vietmanhwa.com');
+  const isSayHentai = url.includes('sayhentai');
+
+  if (isSayHentai) {
+    // SayHentai URL format: https://sayhentai.cx/truyen-thoa-thuan-day-toi-loi-vi-bong-hong-sat-vach.html
+    const sayMatch = url.match(/truyen-([a-zA-Z0-9-]+?)(?:\.html|\/chuong|\/chap|$)/i);
+    const extractedSlug = sayMatch ? sayMatch[1] : '';
+    if (extractedSlug) {
+      url = `https://metruyen18.app/truyen/${extractedSlug}`;
+    }
+  }
 
   if (!url.startsWith('http')) {
     url = isVietManhwa 
@@ -45,10 +55,12 @@ export function normalizeStoryUrl(inputUrl: string): { storyUrl: string; slug: s
 
   const urlObj = new URL(url);
   const segments = urlObj.pathname.split('/').filter(Boolean);
-  const slug = segments[segments.length - 1] || 'truyen-h';
+  let slug = segments[segments.length - 1] || 'truyen-h';
+  slug = slug.replace(/^truyen-/, '').replace(/\.html$/, '');
 
   return { storyUrl: url, slug, isVietManhwa };
 }
+
 
 export async function crawlVietManhwaStory(inputUrl: string, existingChapters?: any[]) {
   const { storyUrl, slug } = normalizeStoryUrl(inputUrl);
