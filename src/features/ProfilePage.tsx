@@ -12,7 +12,7 @@ import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
 import { forceReloadLatestVersion } from './PwaUpdateNotification'
-import { VersionSettingsCard } from './VersionSettingsCard'
+
 
 
 
@@ -313,11 +313,9 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
 
       <div className="settings-page-container">
         <div className="settings-page-body">
-            {/* Card thông tin phiên bản & Cập nhật */}
-            <VersionSettingsCard onOpenChangelog={() => setShowChangelog(true)} />
-
             {/* Lịch sử & Thông tin cập nhật */}
             <div className="settings-section">
+
 
               <div className="settings-section-label">Cập nhật ứng dụng</div>
               <div className="settings-group">
