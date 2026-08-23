@@ -3,11 +3,13 @@ import L from 'leaflet';
 import { 
   Navigation, Battery, BatteryCharging, RefreshCw, 
   MapPin, Heart, ShieldCheck, ShieldOff, Plus, Trash2,
-  Clock, Route, ChevronDown, ChevronUp, Map as MapIcon
+  Clock, Route, ChevronDown, ChevronUp, Map as MapIcon,
+  Eye, ExternalLink
 } from 'lucide-react';
 import { formatDistance } from '../../lib/locationService';
 import { useCoupleLocation } from './useCoupleLocation';
 import type { Person } from '../../types';
+import type { SavedPlace } from '../../types/location';
 
 interface Props {
   partnerPerson?: Person;
@@ -34,6 +36,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
   const [showAddPlaceModal, setShowAddPlaceModal] = useState(false);
   const [customPlaceName, setCustomPlaceName] = useState('');
   const [showTimeline, setShowTimeline] = useState(true);
+  const [selectedPlaceDetail, setSelectedPlaceDetail] = useState<SavedPlace | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -114,11 +117,11 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
           radius: p.radius_meters || 200,
           color: '#8b5cf6',
           fillColor: '#8b5cf6',
-          fillOpacity: 0.1,
-          weight: 1.5,
+          fillOpacity: 0.12,
+          weight: 2,
           dashArray: '4, 6',
         })
-          .bindPopup(`<strong>${p.icon || '📍'} ${p.name}</strong> (${p.user_name || 'Địa điểm'})`)
+          .bindPopup(`<strong>${p.icon || '📍'} ${p.name}</strong><br/>(${p.user_name ? `Mốc của ${p.user_name}` : 'Mốc chung'})`)
           .addTo(markersLayer);
       }
     }
@@ -163,11 +166,24 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     setCustomPlaceName('');
   };
 
+  // Xem chi tiết mốc và bay tới mốc trên bản đồ
+  const handleViewPlace = (place: SavedPlace) => {
+    setSelectedPlaceDetail(place);
+    setShowMap(true);
+    setTimeout(() => {
+      if (mapInstanceRef.current && place.latitude && place.longitude) {
+        mapInstanceRef.current.setView([place.latitude, place.longitude], 17);
+      }
+    }, 200);
+  };
+
   const partnerTargetLocation = myUserName === 'Hiếu' ? kimYLocation : hieuLocation;
 
-  const openGoogleMapsDirections = () => {
-    if (!partnerTargetLocation) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${partnerTargetLocation.latitude},${partnerTargetLocation.longitude}`;
+  const openGoogleMapsDirections = (lat?: number, lon?: number) => {
+    const targetLat = lat ?? partnerTargetLocation?.latitude;
+    const targetLon = lon ?? partnerTargetLocation?.longitude;
+    if (!targetLat || !targetLon) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLon}`;
     window.open(url, '_blank');
   };
 
@@ -285,39 +301,143 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
         </div>
       </div>
 
-      {/* DANH SÁCH MỐC ĐỊA ĐIỂM */}
+      {/* DANH SÁCH MỐC ĐỊA ĐIỂM (CẢ 2 CÙNG THẤY VÀ CÓ NÚT XEM TRỰC TIẾP) */}
       {savedPlaces.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
-          {savedPlaces.map((p) => (
-            <div
-              key={p.id}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <MapPin size={13} color="#8b5cf6" /> Các mốc địa điểm đã lưu (nhấn để xem vị trí):
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+            {savedPlaces.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => handleViewPlace(p)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 10px',
+                  borderRadius: '10px',
+                  background: selectedPlaceDetail?.id === p.id ? 'rgba(139, 92, 246, 0.2)' : 'var(--card-bg)',
+                  border: selectedPlaceDetail?.id === p.id ? '1px solid #8b5cf6' : '1px solid var(--border)',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: 'var(--text-main)',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                  transition: 'all 0.15s ease',
+                }}
+                title="Nhấn để xem trên bản đồ"
+              >
+                <span>{p.icon || '📍'}</span>
+                <span>{p.name}</span>
+                <span
+                  style={{
+                    fontSize: '0.66rem',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: p.user_name === 'Hiếu' ? 'rgba(2, 132, 199, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                    color: p.user_name === 'Hiếu' ? '#0284c7' : '#f43f5e',
+                  }}
+                >
+                  {p.user_name || 'Mốc'}
+                </span>
+                <Eye size={12} color="#8b5cf6" style={{ marginLeft: '2px' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* THẺ XEM CHI TIẾT MỐC ĐÃ CHỌN */}
+      {selectedPlaceDetail && (
+        <div
+          style={{
+            background: 'var(--card-bg)',
+            border: '1px solid #8b5cf6',
+            borderRadius: '12px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.2rem' }}>{selectedPlaceDetail.icon || '📍'}</span>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                {selectedPlaceDetail.name} ({selectedPlaceDetail.user_name ? `Mốc của ${selectedPlaceDetail.user_name}` : 'Mốc chung'})
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Bán kính phát hiện: {selectedPlaceDetail.radius_meters || 200}m
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={() => openGoogleMapsDirections(selectedPlaceDetail.latitude, selectedPlaceDetail.longitude)}
               style={{
+                padding: '5px 9px',
+                borderRadius: '6px',
+                border: 'none',
+                background: '#10b981',
+                color: '#ffffff',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '5px',
-                padding: '4px 9px',
-                borderRadius: '8px',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--border)',
-                fontSize: '0.74rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                whiteSpace: 'nowrap',
+                gap: '3px',
               }}
             >
-              <span>{p.icon || '📍'}</span>
-              <span>{p.name}</span>
-              <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>({p.user_name || 'Mốc'})</span>
+              <Navigation size={11} /> Chỉ đường
+            </button>
+
+            {selectedPlaceDetail.user_name === myUserName && (
               <button
                 type="button"
-                onClick={() => void removePlace(p.id)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0, marginLeft: '2px', display: 'flex', alignItems: 'center' }}
-                title="Xóa mốc"
+                onClick={() => {
+                  void removePlace(selectedPlaceDetail.id);
+                  setSelectedPlaceDetail(null);
+                }}
+                style={{
+                  padding: '5px 9px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  color: '#ef4444',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
               >
-                <Trash2 size={11} />
+                <Trash2 size={11} /> Xóa mốc
               </button>
-            </div>
-          ))}
+            )}
+
+            <button
+              type="button"
+              onClick={() => setSelectedPlaceDetail(null)}
+              style={{
+                padding: '4px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: '0.72rem',
+                cursor: 'pointer',
+              }}
+            >
+              Đóng
+            </button>
+          </div>
         </div>
       )}
 
@@ -528,7 +648,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
         {partnerTargetLocation && (
           <button
             type="button"
-            onClick={openGoogleMapsDirections}
+            onClick={() => openGoogleMapsDirections()}
             style={{
               padding: '9px 14px',
               borderRadius: '10px',
@@ -555,7 +675,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
         <div
           style={{
             width: '100%',
-            height: '240px',
+            height: '250px',
             borderRadius: '14px',
             overflow: 'hidden',
             border: '1px solid var(--border)',
@@ -689,7 +809,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
               📍 Lưu vị trí hiện tại làm mốc
             </div>
             <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-              Khi rời khỏi hoặc đến mốc này (bán kính 200m), app sẽ tự động ghi nhận và thông báo cho người ấy.
+              Mốc địa điểm này sẽ hiển thị cho cả 2 cùng thấy và dùng để nhận diện khi rời khỏi / đến nơi (bán kính 200m).
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>

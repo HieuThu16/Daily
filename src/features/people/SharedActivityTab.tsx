@@ -138,7 +138,9 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           }
         }
 
-        const resolveUserName = (userId?: string | null, fallbackArtistOrAuthor?: string | null) => {
+        const resolveUserName = (userId?: string | null, channelOrDesc?: string | null, fallbackArtistOrAuthor?: string | null) => {
+          if (channelOrDesc && isKimY(channelOrDesc)) return 'Kim Ý';
+          if (channelOrDesc && isHieu(channelOrDesc)) return 'Hiếu';
           if (userId && profileMap.has(userId)) return profileMap.get(userId)!;
           if (userId && isKimY(userId)) return 'Kim Ý';
           if (userId && isHieu(userId)) return 'Hiếu';
@@ -147,10 +149,10 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           if (currentUserId && userId === currentUserId) {
             return isKimY(currentUserEmail) ? 'Kim Ý' : 'Hiếu';
           }
-          if (partnerPerson?.name && isKimY(partnerPerson.name)) {
-            if (userId && userId === partnerPerson.id) return 'Kim Ý';
+          if (currentUserId && userId && userId !== currentUserId) {
+            return isKimY(currentUserEmail) ? 'Hiếu' : 'Kim Ý';
           }
-          return 'Hiếu';
+          return isKimY(currentUserEmail) ? 'Kim Ý' : 'Hiếu';
         };
 
         const bookDocMap = new Map<string, any>();
@@ -165,7 +167,7 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
           for (const m of mediaRows) {
             const rowDate = m.log_date || (m.updated_at ? m.updated_at.split('T')[0] : '');
             const logTime = m.log_time || (m.updated_at ? m.updated_at.split('T')[1]?.slice(0, 5) : '');
-            const userName = resolveUserName(m.user_id, m.artist || m.author);
+            const userName = resolveUserName(m.user_id, m.channel || m.description, m.artist || m.author);
 
             // A. Sách (BOOK)
             if (m.type === 'BOOK') {
@@ -384,12 +386,9 @@ export function SharedActivityTab({ onTabChange, partnerPerson }: { onTabChange?
         }
       } catch {}
 
-      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất, chỉ lấy từ mốc thời gian bắt đầu lưu mới (22:20 hôm nay) và chỉ cho Hiếu & Kim Ý
-      const CUTOFF_TIME_MS = new Date('2026-08-23T22:20:00+07:00').getTime();
+      // 3. Sắp xếp toàn bộ hoạt động theo thời gian mới nhất, chỉ lấy các hoạt động của Hiếu & Kim Ý
       const list = Array.from(itemsMap.values()).filter((it) => {
-        const itemTime = new Date(it.updatedAt || it.logDate).getTime();
-        const isCouple = it.userName === 'Hiếu' || it.userName === 'Kim Ý';
-        return isCouple && (isNaN(itemTime) || itemTime >= CUTOFF_TIME_MS);
+        return it.userName === 'Hiếu' || it.userName === 'Kim Ý';
       });
       list.sort((a, b) => new Date(b.updatedAt || b.logDate).getTime() - new Date(a.updatedAt || a.logDate).getTime());
       setActivities(list);
