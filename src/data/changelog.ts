@@ -14,23 +14,23 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: 'v2.4-sayhentai-pwa-cover-cache',
+    id: 'v2.4-speed-pwa-review-update',
     date: '2026-08-23',
     version: '2.4',
-    title: 'Hỗ trợ cào SayHentai, Cache ảnh bìa 0ms, Quản lý phiên bản PWA & Review ngày tối ưu',
-    description: 'Nâng cấp v2.4 mang đến hỗ trợ cào truyện đa nguồn từ SayHentai, tăng tốc tải ảnh bìa với IndexedDB và Supabase CDN, thông báo cập nhật phiên bản tự động, và hoàn thiện dòng thời gian Review ngày.',
+    title: 'Tăng tốc tải ảnh 0ms, Quản lý phiên bản PWA & Hoàn thiện Review ngày',
+    description: 'Bản nâng cấp v2.4 tối ưu hóa vượt bậc tốc độ tải hình ảnh với bộ nhớ đệm IndexedDB và CDN đám mây, bổ sung hệ thống thông báo cập nhật PWA tự động, thẻ quản lý phiên bản trong Cài đặt và tinh chỉnh dòng thời gian Review ngày.',
     highlights: [
-      'Cào truyện H đa nguồn: Hỗ trợ link SayHentai, Mê Truyện 18 và VietManhwa',
-      'Tăng tốc ảnh bìa Truyện H: Lưu đệm IndexedDB cục bộ (0ms) và tải lên Supabase CDN',
-      'Quản lý phiên bản & Cập nhật: Tự động phát hiện bản mới, nút cập nhật 1-chạm xóa sạch cache PWA',
-      'Thẻ thông tin phiên bản trong Cài đặt: Hiển thị phiên bản đang dùng và kiểm tra server trực tiếp',
-      'Dòng thời gian Review ngày: Sắp xếp giờ gần hiện tại nhất lên đầu, gắn video YouTube chỉ lưu vào nhật ký',
-      'Bảo mật Truyện H: Mã PIN 2580 bảo vệ phiên an toàn',
+      'Tăng tốc tải ảnh siêu tốc (0ms): Lưu đệm IndexedDB cục bộ kết hợp CDN đám mây',
+      'Quản lý phiên bản & Cập nhật PWA: Tự động phát hiện bản mới, nút cập nhật 1-chạm xóa sạch cache',
+      'Thẻ thông tin phiên bản trong Cài đặt: Hiển thị phiên bản đang dùng và kiểm tra máy chủ trực tiếp',
+      'Dòng thời gian Review ngày: Sắp xếp theo mốc thời gian mới nhất, gắn video YouTube chỉ lưu vào nhật ký',
+      'Tối ưu hóa bảo mật: Tăng cường mã khóa bảo vệ phiên an toàn và riêng tư',
     ],
     type: 'feature',
   },
   {
     id: 'v2.1-srs-search-inbox',
+
     date: '2026-08-18',
     version: '2.1',
 
