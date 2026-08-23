@@ -14,9 +14,26 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 'v2.4-sayhentai-pwa-cover-cache',
+    date: '2026-08-23',
+    version: '2.4',
+    title: 'Hỗ trợ cào SayHentai, Cache ảnh bìa 0ms, Quản lý phiên bản PWA & Review ngày tối ưu',
+    description: 'Nâng cấp v2.4 mang đến hỗ trợ cào truyện đa nguồn từ SayHentai, tăng tốc tải ảnh bìa với IndexedDB và Supabase CDN, thông báo cập nhật phiên bản tự động, và hoàn thiện dòng thời gian Review ngày.',
+    highlights: [
+      'Cào truyện H đa nguồn: Hỗ trợ link SayHentai, Mê Truyện 18 và VietManhwa',
+      'Tăng tốc ảnh bìa Truyện H: Lưu đệm IndexedDB cục bộ (0ms) và tải lên Supabase CDN',
+      'Quản lý phiên bản & Cập nhật: Tự động phát hiện bản mới, nút cập nhật 1-chạm xóa sạch cache PWA',
+      'Thẻ thông tin phiên bản trong Cài đặt: Hiển thị phiên bản đang dùng và kiểm tra server trực tiếp',
+      'Dòng thời gian Review ngày: Sắp xếp giờ gần hiện tại nhất lên đầu, gắn video YouTube chỉ lưu vào nhật ký',
+      'Bảo mật Truyện H: Mã PIN 2580 bảo vệ phiên an toàn',
+    ],
+    type: 'feature',
+  },
+  {
     id: 'v2.1-srs-search-inbox',
     date: '2026-08-18',
     version: '2.1',
+
     title: 'Học thẻ thông minh, tìm kiếm toàn app và một hộp thư duy nhất',
     description: 'Bản 2.1 biến tab Tiếng Anh và Kiến thức thành công cụ học thật sự với lịch lặp lại ngắt quãng, gộp hai chuông thông báo thành một hộp thư, thêm tìm kiếm xuyên nghiệp vụ bằng Ctrl+K và cho phép thêm việc ngay trên lịch.',
     highlights: [

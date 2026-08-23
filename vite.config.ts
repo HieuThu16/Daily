@@ -84,16 +84,38 @@ function apiDevServer(): Plugin {
   }
 }
 
+const APP_VERSION = 'v2.4.0'
+const BUILD_TIME = new Date().toISOString()
+
+function versionPlugin(): Plugin {
+  return {
+    name: 'version-generator',
+    buildStart() {
+      try {
+        const { writeFileSync } = require('node:fs')
+        const p = resolve(process.cwd(), 'public', 'version.json')
+        writeFileSync(p, JSON.stringify({ version: APP_VERSION, buildTime: BUILD_TIME }, null, 2))
+      } catch {}
+    }
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // Handler đọc process.env.YOUTUBE_API_KEY / SUPABASE_SERVICE_ROLE_KEY (không có
   // tiền tố VITE_) nên phải nạp .env vào process.env cho chế độ dev.
   Object.assign(process.env, loadEnv(mode, process.cwd(), ''))
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    },
     plugins: [
       react(),
       apiDevServer(),
+      versionPlugin(),
       VitePWA({
+
         registerType: 'prompt',
         // pdfjs + jszip chỉ cần khi nhập sách và việc nhập luôn cần mạng (lưu lên Supabase).
         // Không precache để cài PWA không phải tải thêm ~1.8MB.
