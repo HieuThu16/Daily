@@ -90,7 +90,11 @@ export function DayReviewTimeline({ events, dateKey: _dateKey, isToday, onOpen }
             return (
               <div
                 key={i}
-                onClick={() => baseStyle.route && onOpen?.(baseStyle.route)}
+                onClick={() => {
+                  if (!baseStyle.route) return
+                  // Có id thì mở thẳng đúng mục đó trong thư viện, không chỉ mở tab.
+                  onOpen?.(ev.mediaId ? `${baseStyle.route}?item=${ev.mediaId}` : baseStyle.route)
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',

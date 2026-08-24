@@ -10,6 +10,8 @@ export type DayEvent = {
   label: string
   detail: string
   is_favorite?: boolean
+  /** id của mục thư viện, để bấm vào là mở đúng bài nhạc/sách/phim đó. */
+  mediaId?: string
 }
 
 const mealLabel: Record<NutritionLog['meal_slot'], string> = {
@@ -208,6 +210,7 @@ export function buildDayReview({ date, entries, meals, sleeps, todos, media, man
       label: mediaLabel[m.type],
       detail: m.artist || m.channel ? `${m.name} — ${m.artist || m.channel}` : m.name,
       is_favorite: !!m.is_favorite,
+      mediaId: m.id,
     })
   })
 

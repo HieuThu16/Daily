@@ -30,6 +30,8 @@ describe('buildDayReview', () => {
       ['09:00', 'TASK_ADD'],
       ['07:00', 'WAKE'],
     ])
+    // Mốc nhạc mang theo id để Review ngày mở đúng bài đó.
+    expect(events.find((e) => e.kind === 'MEDIA')?.mediaId).toBe('a')
   })
 
   it('mục chưa có giờ vẫn hiện, xếp cuối', () => {

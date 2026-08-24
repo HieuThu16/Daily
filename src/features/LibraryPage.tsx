@@ -371,6 +371,18 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     window.history.replaceState(null, '', window.location.pathname)
   }, [])
 
+  /** Từ Review ngày bấm vào một mục (/music?item=…): mở thẳng chi tiết mục đó. */
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('item')
+    if (!wanted) return
+    const target = items.find((i) => i.id === wanted)
+    if (!target) return
+    if (target.type === 'BOOK') setSelectedBookItemId(wanted)
+    else if (target.type === 'MUSIC' || target.audio_url) setSelectedAudioItemId(wanted)
+    else setSelectedVideoItemId(wanted)
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [items])
+
   const openAdd = (kind: Kind) => {
     setActiveModal({ kind })
     setName('')

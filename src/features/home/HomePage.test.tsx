@@ -125,20 +125,22 @@ describe('HomePage', () => {
 
   it('làm nổi bật nhật ký và bài nhạc đã yêu thích trong ngày', async () => {
     renderHome()
+    await userEvent.click(await screen.findByRole('tab', { name: /Review ngày/i }))
     expect(await screen.findByText('Câu nói đáng nhớ hôm nay')).toBeInTheDocument()
     expect(screen.getAllByText(/Yêu thích/).length).toBeGreaterThan(0)
   })
 
 
-  it('mở Home là vào thẳng Review ngày, bấm qua lại được', async () => {
+  it('mở Home là vào thẳng Thống kê ngày, có nút ghi nhanh và bấm qua lại được', async () => {
     renderHome()
-    // Mặc định đã là Review ngày.
+    // Mặc định đã là Thống kê ngày, kèm nút ghi nhanh ăn/ngủ.
+    expect(await screen.findByRole('button', { name: /Thêm bữa ăn/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Thêm giấc ngủ/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
     expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: /Thống kê ngày/i }))
     expect(await screen.findByText('Thói quen')).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
-    expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()
   })
 })

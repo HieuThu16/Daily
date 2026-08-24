@@ -15,6 +15,7 @@ import { ProgressRing } from './ProgressRing'
 import { ReportDay } from './ReportDay'
 import { ReportWeek } from './ReportWeek'
 import { useHomeData } from './useHomeData'
+import { QuickLog } from './QuickLog'
 import { SkeletonList } from '../Skeleton'
 
 type ReportTab = 'day' | 'week'
@@ -23,8 +24,8 @@ type DaySubTab = 'review' | 'stats'
 export function HomePage() {
   const nav = useNavigate()
   const [tab, setTab] = useState<ReportTab>('day')
-  // Mở Home là thấy dòng thời gian của ngày trước, số liệu để ở tab bên cạnh.
-  const [daySubTab, setDaySubTab] = useState<DaySubTab>('review')
+  // Mở Home là thấy thống kê ngày; dòng thời gian nằm ở tab bên cạnh.
+  const [daySubTab, setDaySubTab] = useState<DaySubTab>('stats')
   const [dateKey, setDateKey] = useState(localDate())
   const data = useHomeData(dateKey)
   const mangaLogs = useMangaReadingLogs()
@@ -309,6 +310,8 @@ export function HomePage() {
             onOpen={nav}
           />
         ) : (
+          <>
+          <QuickLog dateKey={dateKey} onSaved={data.reload} />
           <ReportDay
             completion={completion}
             habits={data.habits}
@@ -324,6 +327,7 @@ export function HomePage() {
             nextOccasion={nextOccasion}
             onOpen={nav}
           />
+          </>
         )
       ) : (
         <ReportWeek
