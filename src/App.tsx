@@ -40,6 +40,7 @@ import { startQueueAutoFlush } from './lib/offlineQueue'
 import { ErrorBoundary } from './features/ErrorBoundary'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
+import { VideoMiniPlayer, VideoMiniPlayerProvider } from './features/youtube/VideoMiniPlayer'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
@@ -603,6 +604,7 @@ function Protected({ user }: { user: unknown }) {
       <AudioPlayerProvider>
         <HeaderActionProvider>
           <AsideProvider>
+          <VideoMiniPlayerProvider>
             <Routes>
               {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
               <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
@@ -651,11 +653,13 @@ function Protected({ user }: { user: unknown }) {
               />
             </Routes>
             <GlobalMiniPlayer />
+            <VideoMiniPlayer />
             {/* Toast cập nhật: hiện toàn cục khi có bản cập nhật mới chưa xem */}
             <UpdateToast />
             {/* PWA Service Worker Update Notification Banner */}
             <PwaUpdateNotification />
-          </AsideProvider>
+          </VideoMiniPlayerProvider>
+        </AsideProvider>
 
         </HeaderActionProvider>
       </AudioPlayerProvider>

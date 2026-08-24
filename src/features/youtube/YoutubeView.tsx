@@ -5,7 +5,7 @@ import {
   Youtube, Clock, Settings, Gauge, Zap, Sliders, MoreVertical, 
   Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
   Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers, BookOpen, Bookmark,
-  Edit3, FolderPlus, Compass, Globe, BookmarkPlus, Users
+  Edit3, FolderPlus, Compass, Globe, BookmarkPlus, Users, PictureInPicture2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
@@ -33,6 +33,7 @@ import {
   useYouTubeProgress,
 } from '../../lib/videoProgress'
 import { AddYoutubeModal } from './AddYoutubeModal'
+import { useVideoMiniPlayer } from './VideoMiniPlayer'
 import '../tvshow/tvShow.css'
 
 /** Mỗi lượt kéo bấy nhiêu video; trang đầu về là hiện được ngay. */
@@ -171,6 +172,7 @@ export function YoutubeView() {
   const [reloadKey, setReloadKey] = useState(0)
   
   const progressMap = useVideoProgressMap()
+  const { playInMini } = useVideoMiniPlayer()
   const savedScroll = useRef(0)
   const tabsScrollRef = useRef<HTMLDivElement>(null)
 
@@ -1007,6 +1009,15 @@ export function YoutubeView() {
                   playing={playingVideoId === video.video_id}
                   onPlay={() => setPlayingVideoId(video.video_id)}
                   onToggleWatched={() => void handleToggleWatched(video)}
+                  onPlayMini={() =>
+                    playInMini({
+                      videoId: video.video_id,
+                      title: video.title,
+                      channelName: video.creator_name,
+                      thumbnail: video.thumbnail,
+                      startSeconds: progressMap[video.video_id]?.seconds,
+                    })
+                  }
                   onShare={() => {
                     void shareVideosToWatchTogether([
                       { videoId: video.video_id, title: video.title, channelName: video.creator_name || undefined, thumbnail: video.thumbnail },
@@ -1104,6 +1115,7 @@ function ChannelDetailView({
 
   const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
   const progressMap = useVideoProgressMap()
+  const { playInMini } = useVideoMiniPlayer()
 
   useEffect(() => {
     void (async () => {
@@ -1200,6 +1212,25 @@ function ChannelDetailView({
             </div>
           </div>
         </div>
+        <button
+          type="button"
+          className="tv-btn"
+          onClick={() => {
+            if (!currentVideo) return
+            playInMini({
+              videoId: currentVideo.video_id,
+              title: currentVideo.title,
+              channelName: currentVideo.creator_name,
+              thumbnail: currentVideo.thumbnail,
+              startSeconds: progressMap[currentVideo.video_id]?.seconds,
+            })
+          }}
+          disabled={!currentVideo}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 700 }}
+          title="Phát ở khung nhỏ, đi tab khác vẫn chạy"
+        >
+          <PictureInPicture2 size={14} /> Phát nền
+        </button>
         <button
           type="button"
           className="tv-btn"
@@ -1372,6 +1403,7 @@ function YoutubeVideoCard({
   onPlay,
   onToggleWatched,
   onShare,
+  onPlayMini,
 }: {
   video: VideoRow
   watched: boolean
@@ -1381,6 +1413,7 @@ function YoutubeVideoCard({
   onPlay: () => void
   onToggleWatched: () => void
   onShare: () => void
+  onPlayMini: () => void
 }) {
   const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
   useYouTubeProgress(playing ? iframeEl : null, {
@@ -1427,6 +1460,9 @@ function YoutubeVideoCard({
             </p>
           )}
           <div className="yt-actions">
+            <button type="button" className="yt-action" onClick={onPlayMini} title="Phát ở khung nhỏ, đi tab khác vẫn chạy">
+              <PictureInPicture2 size={13} /> Phát nền
+            </button>
             <button type="button" className={`yt-action ${watched ? 'on' : ''}`} onClick={onToggleWatched}>
               {watched ? <CheckCircle2 size={13} /> : <Circle size={13} />}
               {watched ? 'Đã xem' : 'Đánh dấu đã xem'}
