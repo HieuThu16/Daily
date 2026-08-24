@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Play, Plus, Search, Video, RefreshCw, ExternalLink,
   ChevronRight, CheckCircle2, Circle, Clock, Check, Copy, Sparkles,
   Layers, User, Flame, Film, Download, AlertCircle, Share2, Link as LinkIcon,
-  Loader2, Trash2, ListPlus
+  Loader2, Trash2, ListPlus, X, ChevronUp, ChevronDown, MessageCircle, Shuffle
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Modal } from '../shared'
@@ -119,6 +119,226 @@ const SAMPLE_TIKTOK_DATA: TikTokSeries[] = [
   },
 ]
 
+/** Feed xem video fullscreen kiểu TikTok thật: cuộn dọc snap từng video, action rail bên phải. */
+function TikTokFeed({
+  videos,
+  startIndex,
+  watchedIds,
+  onToggleWatched,
+  onClose,
+}: {
+  videos: TikTokVideo[]
+  startIndex: number
+  watchedIds: Set<string>
+  onToggleWatched: (videoId: string) => void
+  onClose: () => void
+}) {
+  const { showToast } = useToast()
+  const [index, setIndex] = useState(startIndex)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Bình luận thật lấy từ TikTok, cache theo video_id
+  type CommentState = { loading: boolean; items: any[]; error?: string }
+  const [showComments, setShowComments] = useState(false)
+  const [comments, setComments] = useState<Record<string, CommentState>>({})
+
+  const loadComments = async (vid: TikTokVideo) => {
+    if (comments[vid.video_id]) return
+    setComments((p) => ({ ...p, [vid.video_id]: { loading: true, items: [] } }))
+    try {
+      const res = await fetch('/api/crawl-tiktok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_comments', videoId: vid.video_id }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Không tải được bình luận')
+      setComments((p) => ({ ...p, [vid.video_id]: { loading: false, items: data.comments || [] } }))
+    } catch (err: any) {
+      setComments((p) => ({ ...p, [vid.video_id]: { loading: false, items: [], error: err.message } }))
+    }
+  }
+
+  useEffect(() => {
+    if (showComments && videos[index]) void loadComments(videos[index])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showComments, index])
+
+  const scrollToIndex = (i: number, smooth = true) => {
+    const el = containerRef.current
+    if (!el) return
+    const target = Math.max(0, Math.min(videos.length - 1, i))
+    el.scrollTo({ top: target * el.clientHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }
+
+  useEffect(() => {
+    scrollToIndex(startIndex, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowDown') scrollToIndex(index + 1)
+      if (e.key === 'ArrowUp') scrollToIndex(index - 1)
+    }
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, onClose])
+
+  const handleScroll = () => {
+    const el = containerRef.current
+    if (!el || el.clientHeight === 0) return
+    const i = Math.round(el.scrollTop / el.clientHeight)
+    if (i !== index) setIndex(Math.max(0, Math.min(videos.length - 1, i)))
+  }
+
+  const copyLink = (url: string) => {
+    void navigator.clipboard.writeText(url)
+    showToast('📋 Đã copy link video', 'supabase')
+  }
+
+  return (
+    <div className="tiktok-feed-overlay">
+      <div className="tiktok-feed-topbar">
+        <span className="tiktok-feed-counter">{index + 1} / {videos.length}</span>
+        <button className="tiktok-feed-close" onClick={onClose} title="Đóng (Esc)">
+          <X size={22} />
+        </button>
+      </div>
+
+      <div className="tiktok-feed-scroll" ref={containerRef} onScroll={handleScroll}>
+        {videos.map((vid, i) => {
+          const isNear = Math.abs(i - index) <= 1
+          const isWatched = watchedIds.has(vid.video_id)
+          return (
+            <div key={vid.video_id} className="tiktok-feed-item">
+              <div className="tiktok-feed-frame-wrap">
+                {isNear ? (
+                  <iframe
+                    src={vid.embed_url}
+                    className="tiktok-feed-frame"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    title={vid.title}
+                  />
+                ) : (
+                  <div className="tiktok-feed-frame tiktok-feed-placeholder">
+                    {vid.thumbnail && <img src={vid.thumbnail} alt="" loading="lazy" />}
+                  </div>
+                )}
+
+                <div className="tiktok-feed-caption">
+                  <span className="tiktok-feed-author">@{vid.creator_name || 'tiktok'}</span>
+                  <p>{vid.title}</p>
+                  {vid.part_number && (
+                    <span className="tiktok-feed-part">Phần {vid.part_number}{vid.is_final ? ' 🏁' : ''}</span>
+                  )}
+                </div>
+
+                <div className="tiktok-feed-rail">
+                  <div className="tiktok-feed-avatar">{(vid.creator_name || 'T')[0].toUpperCase()}</div>
+                  <button
+                    className={`tiktok-feed-rail-btn ${isWatched ? 'active' : ''}`}
+                    onClick={() => onToggleWatched(vid.video_id)}
+                    title={isWatched ? 'Bỏ đánh dấu đã xem' : 'Đánh dấu đã xem'}
+                  >
+                    <CheckCircle2 size={26} />
+                    <span>{isWatched ? 'Đã xem' : 'Xem'}</span>
+                  </button>
+                  <button
+                    className={`tiktok-feed-rail-btn ${showComments ? 'active' : ''}`}
+                    onClick={() => setShowComments((s) => !s)}
+                    title="Xem bình luận"
+                  >
+                    <MessageCircle size={26} />
+                    <span>Bình luận</span>
+                  </button>
+                  <button className="tiktok-feed-rail-btn" onClick={() => copyLink(vid.canonical_url)} title="Copy link">
+                    <Share2 size={26} />
+                    <span>Chia sẻ</span>
+                  </button>
+                  <a
+                    className="tiktok-feed-rail-btn"
+                    href={vid.canonical_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Mở trên TikTok"
+                  >
+                    <ExternalLink size={26} />
+                    <span>TikTok</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="tiktok-feed-navbtns">
+        <button onClick={() => scrollToIndex(index - 1)} disabled={index === 0} title="Video trước (↑)">
+          <ChevronUp size={22} />
+        </button>
+        <button onClick={() => scrollToIndex(index + 1)} disabled={index === videos.length - 1} title="Video sau (↓)">
+          <ChevronDown size={22} />
+        </button>
+      </div>
+
+      {/* Panel bình luận thật, lấy từ TikTok */}
+      {showComments && videos[index] && (() => {
+        const state = comments[videos[index].video_id]
+        return (
+          <div className="tiktok-comments-panel">
+            <div className="tiktok-comments-header">
+              <span>
+                <MessageCircle size={16} /> Bình luận
+                {state && !state.loading && !state.error ? ` (${state.items.length})` : ''}
+              </span>
+              <button onClick={() => setShowComments(false)} title="Đóng">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="tiktok-comments-body">
+              {(!state || state.loading) && (
+                <div className="tiktok-comments-empty">
+                  <Loader2 size={22} className="tv-spin" /> Đang tải bình luận...
+                </div>
+              )}
+              {state?.error && <div className="tiktok-comments-empty">⚠️ {state.error}</div>}
+              {state && !state.loading && !state.error && state.items.length === 0 && (
+                <div className="tiktok-comments-empty">Video chưa có bình luận nào.</div>
+              )}
+              {state?.items.map((c: any) => (
+                <div key={c.id} className="tiktok-comment">
+                  {c.avatar ? (
+                    <img className="tiktok-comment-avatar" src={c.avatar} alt="" loading="lazy" />
+                  ) : (
+                    <div className="tiktok-comment-avatar fallback">{(c.author || '?')[0].toUpperCase()}</div>
+                  )}
+                  <div className="tiktok-comment-content">
+                    <span className="tiktok-comment-author">{c.author}</span>
+                    <p>{c.text}</p>
+                    <span className="tiktok-comment-meta">
+                      {c.created_at ? new Date(c.created_at).toLocaleDateString('vi-VN') : ''}
+                      {c.likes > 0 && ` · ${c.likes} thích`}
+                      {c.reply_count > 0 && ` · ${c.reply_count} trả lời`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+    </div>
+  )
+}
+
 export function TikTokPage() {
   const { showToast } = useToast()
   const [viewMode, setViewMode] = useState<'series' | 'creators' | 'videos'>('series')
@@ -131,9 +351,8 @@ export function TikTokPage() {
 
   const [loading, setLoading] = useState(true)
 
-  // Player state
-  const [activeVideo, setActiveVideo] = useState<TikTokVideo | null>(null)
-  const [activeSeries, setActiveSeries] = useState<TikTokSeries | null>(null)
+  // Feed player state (fullscreen kiểu TikTok)
+  const [feed, setFeed] = useState<{ videos: TikTokVideo[]; index: number } | null>(null)
   const [watchedIds, setWatchedIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('daily_tiktok_watched')
@@ -334,6 +553,37 @@ export function TikTokPage() {
         creator_url: `https://www.tiktok.com/@${creatorName}`,
       }
 
+      // Làm giàu metadata thật (title/thumbnail chính chủ) qua oEmbed rồi gom lại series
+      let seriesToSave = previewSeries
+      try {
+        const urls = previewSeries.flatMap((s) => s.videos.map((v: any) => v.url)).filter((u: string) => u.includes('tiktok.com'))
+        if (urls.length > 0) {
+          const res = await fetch('/api/crawl-tiktok', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'resolve_links', urls }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const metaByUrl = new Map<string, any>((data.items || []).map((m: any) => [m.url, m]))
+            const entries = previewSeries.flatMap((s) =>
+              s.videos.map((v: any) => {
+                const meta = metaByUrl.get(v.url)
+                return {
+                  id: v.video_id,
+                  title: meta?.title || v.title,
+                  url: v.url,
+                  thumbnail: meta?.thumbnail || v.thumbnail,
+                }
+              }),
+            )
+            seriesToSave = groupVideosIntoSeries(entries, creatorInfo)
+          }
+        }
+      } catch {
+        // oEmbed thất bại thì vẫn lưu bản parse local
+      }
+
       if (supabase) {
         await supabase.from('review_creators').upsert({
           platform: 'tiktok',
@@ -343,7 +593,7 @@ export function TikTokPage() {
           last_synced_at: new Date().toISOString(),
         }, { onConflict: 'platform,creator_url' })
 
-        for (const s of previewSeries) {
+        for (const s of seriesToSave) {
           await supabase.from('review_series').upsert({
             series_key: s.series_key,
             platform: 'tiktok',
@@ -377,7 +627,7 @@ export function TikTokPage() {
         }
       }
 
-      showToast(`🎉 Đã gom & lưu ${previewSeries.length} bộ series thành công!`, 'supabase')
+      showToast(`🎉 Đã gom & lưu ${seriesToSave.length} bộ series thành công!`, 'supabase')
       setShowImportModal(false)
       setLinksInput('')
       setPreviewSeries([])
@@ -413,7 +663,8 @@ export function TikTokPage() {
         throw new Error(data.error || 'Cào kênh thất bại')
       }
 
-      showToast(`🎉 Đã cào thành công ${data.total_series} series (${data.total_videos} video)!`, 'supabase')
+      const who = data.creator?.creator_name ? ` từ @${data.creator.creator_id}` : ''
+      showToast(`🎉 Đã cào${who}: ${data.total_series} series (${data.total_videos} video)!`, 'supabase')
       setShowImportModal(false)
       setChannelUrlInput('')
       await loadData()
@@ -499,24 +750,22 @@ export function TikTokPage() {
   }
 
   const playVideoInSeries = (series: TikTokSeries, video: TikTokVideo) => {
-    setActiveSeries(series)
-    setActiveVideo(video)
+    const index = Math.max(0, series.videos.findIndex((v) => v.video_id === video.video_id))
+    setFeed({ videos: series.videos, index })
   }
 
-  const playNextVideo = () => {
-    if (!activeSeries || !activeVideo) return
-    const currentIndex = activeSeries.videos.findIndex((v) => v.video_id === activeVideo.video_id)
-    if (currentIndex >= 0 && currentIndex < activeSeries.videos.length - 1) {
-      setActiveVideo(activeSeries.videos[currentIndex + 1])
+  // "Dành cho bạn": xáo trộn toàn bộ video như thuật toán đề xuất của TikTok,
+  // ưu tiên video chưa xem lên trước
+  const openFeedForYou = () => {
+    if (allVideos.length === 0) return
+    const shuffled = [...allVideos]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
     }
-  }
-
-  const playPrevVideo = () => {
-    if (!activeSeries || !activeVideo) return
-    const currentIndex = activeSeries.videos.findIndex((v) => v.video_id === activeVideo.video_id)
-    if (currentIndex > 0) {
-      setActiveVideo(activeSeries.videos[currentIndex - 1])
-    }
+    const unwatched = shuffled.filter((v) => !watchedIds.has(v.video_id))
+    const watched = shuffled.filter((v) => watchedIds.has(v.video_id))
+    setFeed({ videos: [...unwatched, ...watched], index: 0 })
   }
 
   return (
@@ -582,6 +831,10 @@ export function TikTokPage() {
         </div>
 
         {/* Action Buttons */}
+        <button className="tiktok-btn cyan" onClick={openFeedForYou} disabled={allVideos.length === 0}>
+          <Shuffle size={16} /> Dành cho bạn
+        </button>
+
         <button className="tiktok-btn primary" onClick={() => setShowImportModal(true)}>
           <Plus size={16} /> Cào / Paste Link
         </button>
@@ -715,78 +968,15 @@ export function TikTokPage() {
         </div>
       )}
 
-      {/* Video Player Modal */}
-      {activeVideo && activeSeries && (
-        <Modal
-          title={`🎬 ${activeSeries.title} ${activeVideo.part_number ? `— Phần ${activeVideo.part_number}` : ''}`}
-          onClose={() => setActiveVideo(null)}
-        >
-          <div className="tiktok-player-modal">
-            <iframe
-              src={activeVideo.embed_url}
-              className="tiktok-player-frame"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              title={activeVideo.title}
-            />
-
-            <div className="tiktok-player-controls">
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="tiktok-btn"
-                  onClick={playPrevVideo}
-                  disabled={activeSeries.videos.findIndex((v) => v.video_id === activeVideo.video_id) === 0}
-                >
-                  ← Tập trước
-                </button>
-                <button
-                  className="tiktok-btn primary"
-                  onClick={playNextVideo}
-                  disabled={activeSeries.videos.findIndex((v) => v.video_id === activeVideo.video_id) === activeSeries.videos.length - 1}
-                >
-                  Tập tiếp theo →
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className={`tiktok-btn ${watchedIds.has(activeVideo.video_id) ? 'primary' : ''}`}
-                  onClick={() => toggleWatched(activeVideo.video_id)}
-                >
-                  <Check size={16} />
-                  {watchedIds.has(activeVideo.video_id) ? 'Đã xem' : 'Đánh dấu đã xem'}
-                </button>
-                <a
-                  href={activeVideo.canonical_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="tiktok-btn"
-                >
-                  <ExternalLink size={15} /> Mở TikTok
-                </a>
-              </div>
-            </div>
-
-            {/* Series episode selector in player */}
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-muted)' }}>
-                Tất cả các phần trong bộ ({activeSeries.videos.length} tập):
-              </div>
-              <div className="tiktok-parts-strip">
-                {activeSeries.videos.map((v) => (
-                  <button
-                    key={v.video_id}
-                    className={`tiktok-part-pill ${v.video_id === activeVideo.video_id ? 'is-active' : ''}`}
-                    onClick={() => setActiveVideo(v)}
-                  >
-                    {v.part_number ? `Phần ${v.part_number}` : 'Tập'}
-                    {v.is_final && ' 🏁'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Modal>
+      {/* Fullscreen TikTok-style Feed Player */}
+      {feed && (
+        <TikTokFeed
+          videos={feed.videos}
+          startIndex={feed.index}
+          watchedIds={watchedIds}
+          onToggleWatched={toggleWatched}
+          onClose={() => setFeed(null)}
+        />
       )}
 
       {/* Cào & Nhập Video Modal */}
