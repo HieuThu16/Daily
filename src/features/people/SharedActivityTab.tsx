@@ -20,8 +20,8 @@ export interface SharedActivityItem {
   id: string;
   user_id?: string;
   userName: 'Hiếu' | 'Kim Ý';
-  type: 'BOOK' | 'NGONTINH' | 'BL' | 'H_MANGA' | 'MUSIC';
-  actionType: 'READING' | 'ADDED_MUSIC' | 'LISTENED_MUSIC' | 'ADDED_BOOK' | 'ADDED_MANGA';
+  type: 'BOOK' | 'NGONTINH' | 'BL' | 'H_MANGA' | 'MUSIC' | 'VIDEO';
+  actionType: 'READING' | 'ADDED_MUSIC' | 'LISTENED_MUSIC' | 'ADDED_BOOK' | 'ADDED_MANGA' | 'WATCHING' | 'SHARED_VIDEO';
   title: string;
   subtitle?: string;
   slug?: string;
@@ -58,7 +58,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
 
   const [selectedDate, setSelectedDate] = useState<string>(() => localDate());
   const [activePartnerFilter, setActivePartnerFilter] = useState<'ALL' | 'HIEU' | 'KIM_Y'>('ALL');
-  const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'BOOK' | 'MANGA' | 'NGONTINH' | 'BL' | 'H_MANGA' | 'MUSIC'>('ALL');
+  const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'BOOK' | 'MANGA' | 'NGONTINH' | 'BL' | 'H_MANGA' | 'MUSIC' | 'VIDEO'>('ALL');
   const [activities, setActivities] = useState<SharedActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -126,6 +126,13 @@ export function SharedActivityTab({ partnerPerson }: Props) {
             .from('profiles')
             .select('id, email, name')
         ]);
+
+        // Tiến độ xem video YouTube của cả hai người (bảng đọc chung)
+        const { data: videoRows } = await supabase
+          .from('video_watch_progress')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(150);
 
         const profileMap = new Map<string, string>();
         if (profileRows) {
@@ -402,6 +409,33 @@ export function SharedActivityTab({ partnerPerson }: Props) {
             updatedAt: newestTimeIso,
           });
         }
+
+        // C. Video YouTube: đang xem bao nhiêu %, đã xem hết, hay vừa được đưa sang Xem chung
+        for (const v of (videoRows ?? []) as any[]) {
+          const userName = resolveUserName(v.user_id, v.user_email, null);
+          const percent = Number(v.percent) || 0;
+          const updatedAtIso = v.updated_at || new Date().toISOString();
+          itemsMap.set(`${userName}::VIDEO::${v.video_id}`, {
+            id: `video-${v.id}`,
+            user_id: v.user_id,
+            userName,
+            type: 'VIDEO',
+            actionType: v.status === 'PLANNED' ? 'SHARED_VIDEO' : 'WATCHING',
+            title: v.title || 'Video YouTube',
+            subtitle: v.channel_name || 'YouTube',
+            cover: v.thumbnail || '',
+            progressText:
+              v.status === 'COMPLETED'
+                ? 'Đã xem hết'
+                : v.status === 'PLANNED'
+                  ? 'Vừa đưa sang xem chung'
+                  : `Đang xem ${percent}%`,
+            progressPercent: percent,
+            logDate: v.log_date || (updatedAtIso ? String(updatedAtIso).split('T')[0] : localDate()),
+            updatedAt: updatedAtIso,
+            rawMedia: v,
+          });
+        }
       }
 
       // 2. Chuyển map thành danh sách và lọc theo mốc thời gian bắt đầu lưu mới (Hiếu & Ý)
@@ -436,6 +470,9 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           void fetchActivities();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'manga_reading_logs' }, () => {
+          void fetchActivities();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'video_watch_progress' }, () => {
           void fetchActivities();
         })
         .subscribe();
@@ -475,6 +512,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
       if (activeTypeFilter === 'H_MANGA' && act.type !== 'H_MANGA') return false;
       if (activeTypeFilter === 'MANGA' && act.type !== 'BL' && act.type !== 'H_MANGA' && act.type !== 'NGONTINH') return false;
       if (activeTypeFilter === 'MUSIC' && act.type !== 'MUSIC') return false;
+      if (activeTypeFilter === 'VIDEO' && act.type !== 'VIDEO') return false;
 
       return true;
     });
@@ -492,6 +530,8 @@ export function SharedActivityTab({ partnerPerson }: Props) {
       navigate(act.slug ? `/truyenh/${act.slug}` : '/truyenh');
     } else if (act.type === 'MUSIC') {
       navigate('/music');
+    } else if (act.type === 'VIDEO') {
+      navigate('/youtube');
     }
   };
 
@@ -624,6 +664,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           { key: 'BL', label: '💜 Truyện BL' },
           { key: 'H_MANGA', label: '🔞 Truyện H' },
           { key: 'MUSIC', label: '🎵 Âm nhạc' },
+          { key: 'VIDEO', label: '📺 Video' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -686,6 +727,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
               if (act.type === 'NGONTINH') return { label: 'NGÔN TÌNH', bg: 'rgba(236, 72, 153, 0.15)', color: '#ec4899' };
               if (act.type === 'BL') return { label: 'TRUYỆN BL', bg: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' };
               if (act.type === 'H_MANGA') return { label: 'TRUYỆN H', bg: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' };
+              if (act.type === 'VIDEO') return { label: 'VIDEO', bg: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' };
               return { label: 'NHẠC MP3', bg: 'rgba(16, 185, 129, 0.15)', color: '#10b981' };
             })();
 

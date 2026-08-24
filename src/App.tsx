@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, Sparkles, Tv, UserRound, Wallet, X, Youtube } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, Tv, UserRound, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
@@ -16,6 +16,7 @@ import { ReviewSeriesView } from './features/library/ReviewSeriesView'
 import { TikTokPage } from './features/tiktok/TikTokPage'
 import { TvShowView } from './features/tvshow/TvShowView'
 import { NutritionPage } from './features/NutritionPage'
+import { UsageStatsPage } from './features/UsageStatsPage'
 import { PeoplePage } from './features/people/PeoplePage'
 import { BookReaderPage } from './features/library/BookReaderPage'
 import { QuotesPage } from './features/library/QuotesPage'
@@ -71,6 +72,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
+  { id: 'usage', label: 'Thống kê', icon: BarChart3, colorClass: 'icon-box-cyan' },
   { id: 'settings', label: 'Cài đặt', icon: Settings, colorClass: 'icon-box-slate' },
 ]
 
@@ -286,7 +288,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] as Tab[] },
-    { title: 'Hệ thống', ids: ['settings'] as Tab[] },
+    { title: 'Hệ thống', ids: ['usage', 'settings'] as Tab[] },
   ], [])
 
   const activeTabItem = navigation.find((n) => path === '/' + n.id || path.startsWith('/' + n.id + '/')) ?? navigation[0]
@@ -640,6 +642,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/nutrition" element={<NutritionPage />} />
                       <Route path="/money" element={<MoneyPage />} />
                       <Route path="/calendar" element={<CalendarPage />} />
+                      <Route path="/usage" element={<UsageStatsPage />} />
                       <Route path="/settings" element={null} />
                       <Route path="*" element={<Navigate to="/home" replace />} />
                     </Routes>

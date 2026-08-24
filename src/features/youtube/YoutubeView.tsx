@@ -5,7 +5,7 @@ import {
   Youtube, Clock, Settings, Gauge, Zap, Sliders, MoreVertical, 
   Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
   Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers, BookOpen, Bookmark,
-  Edit3, FolderPlus, Compass, Globe, BookmarkPlus
+  Edit3, FolderPlus, Compass, Globe, BookmarkPlus, Users
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
@@ -25,6 +25,13 @@ import {
   type VideoStatus
 } from '../../lib/videoStatus'
 import { summarizeVideo, toKnowledgeRows } from '../../lib/videoLesson'
+import {
+  progressLabel,
+  shareVideosToWatchTogether,
+  useVideoProgressMap,
+  useYouTubeProgress,
+} from '../../lib/videoProgress'
+import { AddYoutubeModal } from './AddYoutubeModal'
 import '../tvshow/tvShow.css'
 
 /** Mỗi lượt kéo bấy nhiêu video; trang đầu về là hiện được ngay. */
@@ -138,7 +145,7 @@ export function YoutubeView() {
   const [loading, setLoading] = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'channel' | 'video'>('channel')
+  const [viewMode, setViewMode] = useState<'channel' | 'video'>('video')
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
   const [selectedVideoForMenu, setSelectedVideoForMenu] = useState<VideoRow | null>(null)
   const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
@@ -156,19 +163,42 @@ export function YoutubeView() {
   const [savingVideoId, setSavingVideoId] = useState<string | null>(null)
 
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
-  const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [sharedUrl] = useState(() => new URLSearchParams(window.location.search).get('youtube') ?? '')
-  const [addVideoOpen, setAddVideoOpen] = useState(Boolean(sharedUrl))
+  const [addOpen, setAddOpen] = useState(Boolean(sharedUrl))
+  const [syncingAll, setSyncingAll] = useState(false)
   const [editingChannelCategory, setEditingChannelCategory] = useState<ChannelItem | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   
+  const progressMap = useVideoProgressMap()
   const savedScroll = useRef(0)
   const tabsScrollRef = useRef<HTMLDivElement>(null)
 
-  // 2 nút Thêm trên header
+  /** Cào video chưa có ở TẤT CẢ kênh đã thêm, rồi đưa video mới sang Xem chung. */
+  const handleSyncAllChannels = async () => {
+    if (syncingAll) return
+    setSyncingAll(true)
+    showToast('Đang cào video mới ở tất cả kênh…', 'info')
+    try {
+      const { data } = await supabase!.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) throw new Error('Cần đăng nhập')
+      const res = await fetch('/api/cron-sync?scope=youtube', { headers: { Authorization: `Bearer ${token}` } })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
+      const saved = (json.report ?? []).reduce((sum: number, r: any) => sum + (Number(r.saved) || 0), 0)
+      showToast(saved > 0 ? `Đã thêm ${saved} video mới` : 'Không có video mới', saved > 0 ? 'success' : 'info')
+      setReloadKey((k) => k + 1)
+    } catch (err: any) {
+      showToast(`Cào thất bại: ${err?.message ?? err}`, 'error')
+    } finally {
+      setSyncingAll(false)
+    }
+  }
+
+  // 1 nút thêm (tự phân biệt kênh / video lẻ) + 1 nút cào toàn bộ kênh
   useHeaderActions([
-    { label: 'Thêm kênh', icon: 'radio', onClick: () => setAddChannelOpen(true) },
-    { label: 'Thêm video lẻ', icon: 'plus', onClick: () => setAddVideoOpen(true) },
+    { label: 'Thêm kênh / video', icon: 'plus', onClick: () => setAddOpen(true) },
+    { label: syncingAll ? 'Đang cào…' : 'Cào video mới tất cả kênh', icon: 'radio', onClick: () => void handleSyncAllChannels() },
   ])
 
   useVideoStatusListener(() => {
@@ -560,6 +590,17 @@ export function YoutubeView() {
     })
   }
 
+  /** Nút "Đã xem": bật/tắt trạng thái xem hết của đúng video đó. */
+  const handleToggleWatched = async (video: VideoRow) => {
+    const next: VideoStatus = watchedSet.has(video.video_id) ? 'UNWATCHED' : 'COMPLETED'
+    await updateVideoStatusRecord(video.video_id, video.sourceType || 'tvshow', next, {
+      title: video.title,
+      channel_name: video.creator_name || undefined,
+      series_key: video.series_key,
+    })
+    showToast(next === 'COMPLETED' ? 'Đã đánh dấu xem xong' : 'Bỏ đánh dấu đã xem', 'info')
+  }
+
   const handleCycleStatus = async (videoId: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
     const currentSt = statusMap.get(videoId) || (watchedSet.has(videoId) ? 'COMPLETED' : (inProgressSet.has(videoId) ? 'IN_PROGRESS' : 'UNWATCHED'))
@@ -688,16 +729,8 @@ export function YoutubeView() {
             </button>
           </div>
         ) : (
-          /* Chuyển chế độ Xem theo Kênh vs Xem theo Video khi không tìm kiếm */
+          /* Xem theo Video (mặc định, giống YouTube) hay gom theo Kênh */
           <div style={{ display: 'inline-flex', background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 12, padding: 3 }}>
-            <button
-              type="button"
-              className={`tv-btn ${viewMode === 'channel' ? 'primary' : ''}`}
-              style={{ padding: '6px 12px', fontSize: '0.78rem', border: 'none', borderRadius: 9 }}
-              onClick={() => setViewMode('channel')}
-            >
-              <LayoutGrid size={14} /> Kênh ({filteredChannels.length})
-            </button>
             <button
               type="button"
               className={`tv-btn ${viewMode === 'video' ? 'primary' : ''}`}
@@ -705,6 +738,14 @@ export function YoutubeView() {
               onClick={() => setViewMode('video')}
             >
               <Video size={14} /> Video ({filteredSavedVideos.length})
+            </button>
+            <button
+              type="button"
+              className={`tv-btn ${viewMode === 'channel' ? 'primary' : ''}`}
+              style={{ padding: '6px 12px', fontSize: '0.78rem', border: 'none', borderRadius: 9 }}
+              onClick={() => setViewMode('channel')}
+            >
+              <LayoutGrid size={14} /> Kênh ({filteredChannels.length})
             </button>
           </div>
         )}
@@ -954,92 +995,36 @@ export function YoutubeView() {
             </div>
           ) : (
             /* CHẾ ĐỘ XEM THEO DANH SÁCH VIDEO */
-            <div className="tv-videos-flow" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-              {filteredSavedVideos.slice(0, videoList.visibleCount).map((video) => {
-                const isWatched = watchedSet.has(video.video_id)
-                const isInProgress = inProgressSet.has(video.video_id)
-                const st: VideoStatus = isWatched ? 'COMPLETED' : isInProgress ? 'IN_PROGRESS' : 'UNWATCHED'
-
-                return (
-                  <div
-                    key={video.id}
-                    className="tv-video-card-item"
-                    style={{
-                      background: 'var(--card-bg)',
-                      border: '1px solid var(--card-border)',
-                      borderRadius: 14,
-                      overflow: 'hidden',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-                    }}
-                  >
-                    {/* Thumbnail video & Nút phát */}
-                    <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000', overflow: 'hidden' }}>
-                      {video.thumbnail && (
-                        <img src={video.thumbnail} alt="" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                      )}
-                      {/* Badge thể loại theo kênh */}
-                      {video.channel_category && (
-                        <span
-                          style={{
-                            position: 'absolute',
-                            top: 6,
-                            left: 6,
-                            padding: '2px 8px',
-                            borderRadius: 6,
-                            background: 'rgba(0, 0, 0, 0.72)',
-                            color: '#fff',
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            backdropFilter: 'blur(6px)',
-                          }}
-                        >
-                          {video.channel_category}
-                        </span>
-                      )}
-                      {/* Nút đánh dấu đã xem nhanh */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleCycleStatus(video.video_id, e)}
-                        style={{
-                          position: 'absolute',
-                          top: 6,
-                          right: 6,
-                          width: 28,
-                          height: 28,
-                          borderRadius: '50%',
-                          background: isWatched ? '#10b981' : isInProgress ? '#f59e0b' : 'rgba(0, 0, 0, 0.65)',
-                          border: 'none',
-                          color: '#fff',
-                          display: 'grid',
-                          placeItems: 'center',
-                          cursor: 'pointer',
-                          backdropFilter: 'blur(6px)',
-                        }}
-                        title={isWatched ? 'Đã xem xong' : isInProgress ? 'Đang xem' : 'Chưa xem'}
-                      >
-                        {isWatched ? <Check size={14} /> : isInProgress ? <Play size={12} fill="#fff" /> : <Circle size={14} />}
-                      </button>
-                    </div>
-
-                    <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {video.title}
-                      </div>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span>{video.creator_name || 'Kênh YouTube'}</span>
-                        <a href={video.canonical_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                          Xem <ExternalLink size={10} />
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="yt-grid">
+              {filteredSavedVideos.slice(0, videoList.visibleCount).map((video) => (
+                <YoutubeVideoCard
+                  key={video.id}
+                  video={video}
+                  watched={watchedSet.has(video.video_id)}
+                  inProgress={inProgressSet.has(video.video_id)}
+                  progress={progressMap[video.video_id]}
+                  playing={playingVideoId === video.video_id}
+                  onPlay={() => setPlayingVideoId(video.video_id)}
+                  onToggleWatched={() => void handleToggleWatched(video)}
+                  onShare={() => {
+                    void shareVideosToWatchTogether([
+                      { videoId: video.video_id, title: video.title, channelName: video.creator_name || undefined, thumbnail: video.thumbnail },
+                    ]).then(() => showToast('Đã đưa sang Xem chung', 'success'))
+                  }}
+                />
+              ))}
             </div>
           )}
         </>
+      )}
+
+      {/* MODAL THÊM KÊNH / VIDEO (tự phân biệt link) */}
+      {addOpen && (
+        <AddYoutubeModal
+          initialUrl={sharedUrl}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
       )}
 
       {/* MODAL ĐỔI THỂ LOẠI CHO KÊNH */}
@@ -1116,7 +1101,8 @@ function ChannelDetailView({
   const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
 
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  const progressMap = useVideoProgressMap()
 
   useEffect(() => {
     void (async () => {
@@ -1168,6 +1154,13 @@ function ChannelDetailView({
   }, [videos, search, filterMode, watched, inProgress])
 
   const currentVideo = videos.find((v) => v.video_id === playingId) || videos[0]
+  // Tự ghi "đang xem" + % đã xem; lưu ngay khi thu nhỏ hoặc tắt app.
+  useYouTubeProgress(iframeEl, {
+    videoId: currentVideo?.video_id ?? null,
+    title: currentVideo?.title,
+    channelName: currentVideo?.creator_name ?? undefined,
+    thumbnail: currentVideo?.thumbnail,
+  })
   const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube-nocookie.com/embed/${currentVideo.video_id}` : '')
   const embedSrc = embedBase ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1` : ''
 
@@ -1206,13 +1199,32 @@ function ChannelDetailView({
             </div>
           </div>
         </div>
+        <button
+          type="button"
+          className="tv-btn"
+          onClick={() => {
+            if (!currentVideo) return
+            void shareVideosToWatchTogether([
+              {
+                videoId: currentVideo.video_id,
+                title: currentVideo.title,
+                channelName: currentVideo.creator_name ?? undefined,
+                thumbnail: currentVideo.thumbnail,
+              },
+            ]).then(() => showToast('Đã đưa sang Xem chung', 'success'))
+          }}
+          disabled={!currentVideo}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 700 }}
+        >
+          <Users size={14} /> Xem chung
+        </button>
       </div>
 
       {/* Trình phát Video */}
       {currentVideo && (
         <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000', borderRadius: 16, overflow: 'hidden', marginBottom: 16, boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)' }}>
           <iframe
-            ref={iframeRef}
+            ref={setIframeEl}
             src={embedSrc}
             title={currentVideo.title}
             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
@@ -1274,7 +1286,17 @@ function ChannelDetailView({
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {v.title}
                 </div>
-                {isWatched && <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 800 }}>✓ Đã xem</span>}
+                {(() => {
+                  const p = progressMap[v.video_id]
+                  if (p) {
+                    return (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: p.status === 'COMPLETED' ? '#10b981' : '#f59e0b' }}>
+                        {progressLabel(p)}
+                      </span>
+                    )
+                  }
+                  return isWatched ? <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 800 }}>✓ Đã xem hết</span> : null
+                })()}
               </div>
             </div>
           )
@@ -1309,5 +1331,113 @@ function ChannelDetailView({
         </Modal>
       )}
     </div>
+  )
+}
+
+
+/** Thời lượng kiểu YouTube: 12:34 hoặc 1:02:03. */
+export function formatVideoDuration(sec: number | null | undefined): string {
+  if (!sec || isNaN(Number(sec))) return ''
+  const total = Math.floor(Number(sec))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+/** "3 ngày trước" — dòng phụ dưới tên kênh cho giống YouTube. */
+export function timeAgo(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (isNaN(then)) return ''
+  const days = Math.floor((now.getTime() - then) / 86400000)
+  if (days < 1) return 'Hôm nay'
+  if (days < 7) return `${days} ngày trước`
+  if (days < 30) return `${Math.floor(days / 7)} tuần trước`
+  if (days < 365) return `${Math.floor(days / 30)} tháng trước`
+  return `${Math.floor(days / 365)} năm trước`
+}
+
+/** Thẻ video kiểu YouTube: bấm vào là phát ngay tại chỗ. */
+function YoutubeVideoCard({
+  video,
+  watched,
+  inProgress,
+  progress,
+  playing,
+  onPlay,
+  onToggleWatched,
+  onShare,
+}: {
+  video: VideoRow
+  watched: boolean
+  inProgress: boolean
+  progress?: { percent: number; status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' }
+  playing: boolean
+  onPlay: () => void
+  onToggleWatched: () => void
+  onShare: () => void
+}) {
+  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  useYouTubeProgress(playing ? iframeEl : null, {
+    videoId: video.video_id,
+    title: video.title,
+    channelName: video.creator_name ?? undefined,
+    thumbnail: video.thumbnail,
+  })
+
+  const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
+  const src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1`
+  const percent = progress?.percent ?? (watched ? 100 : 0)
+  const meta = [video.creator_name || 'Kênh YouTube', timeAgo(video.published_at)].filter(Boolean).join(' · ')
+
+  return (
+    <article className="yt-card">
+      <div className="yt-thumb" onClick={playing ? undefined : onPlay}>
+        {playing ? (
+          <iframe
+            ref={setIframeEl}
+            src={src}
+            title={video.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <>
+            {video.thumbnail && <img src={video.thumbnail} alt="" loading="lazy" />}
+            <span className="yt-play"><Play size={22} fill="#fff" /></span>
+            {video.duration ? <span className="yt-duration">{formatVideoDuration(video.duration)}</span> : null}
+            {percent > 0 && <span className="yt-seen-bar"><i style={{ width: `${Math.min(100, percent)}%` }} /></span>}
+          </>
+        )}
+      </div>
+
+      <div className="yt-body">
+        <span className="yt-avatar" aria-hidden>{(video.creator_name || 'Y').trim().charAt(0).toUpperCase()}</span>
+        <div className="yt-text">
+          <h3 className="yt-title" title={video.title}>{video.title}</h3>
+          <p className="yt-meta">{meta}</p>
+          {(watched || inProgress || (progress && progress.percent > 0)) && (
+            <p className={`yt-status ${watched || progress?.status === 'COMPLETED' ? 'done' : ''}`}>
+              {progress ? progressLabel(progress) : watched ? 'Đã xem hết' : 'Đang xem'}
+            </p>
+          )}
+          <div className="yt-actions">
+            <button type="button" className={`yt-action ${watched ? 'on' : ''}`} onClick={onToggleWatched}>
+              {watched ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+              {watched ? 'Đã xem' : 'Đánh dấu đã xem'}
+            </button>
+            <button type="button" className="yt-action" onClick={onShare} title="Đưa sang Xem chung">
+              <Users size={13} /> Xem chung
+            </button>
+            <a className="yt-action" href={video.canonical_url} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={12} /> YouTube
+            </a>
+          </div>
+        </div>
+      </div>
+    </article>
   )
 }

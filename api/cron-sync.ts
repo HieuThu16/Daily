@@ -22,15 +22,25 @@ const MAX_PAGES = 5
 
 export default async function handler(req: any, res: any) {
   const { CRON_SECRET, YOUTUBE_API_KEY, VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env
-  if (CRON_SECRET && req.headers?.authorization !== `Bearer ${CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Không có quyền' })
-  }
   if (!VITE_SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return res.status(500).json({ error: 'Server thiếu khoá Supabase' })
   }
 
+  // Hai đường vào: Vercel Cron (CRON_SECRET) hoặc người dùng đã đăng nhập bấm nút trong app.
+  const token = String(req.headers?.authorization ?? '').replace(/^Bearer /, '')
+  const isCron = Boolean(CRON_SECRET) && token === CRON_SECRET
+  if (!isCron) {
+    if (!token) return res.status(401).json({ error: 'Không có quyền' })
+    const auth = createClient(VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+    const { data, error } = await auth.auth.getUser(token)
+    if (error || !data?.user) return res.status(401).json({ error: 'Không có quyền' })
+  }
+
   const db = createClient(VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
   const report: any[] = []
+
+  // Nút "Cào video mới ở tất cả kênh" trong app gọi kèm ?scope=youtube để bỏ qua phần truyện.
+  const youtubeOnly = String(req.query?.scope ?? '') === 'youtube'
 
   // 1. Đồng bộ YouTube (Review + TV Show)
   if (YOUTUBE_API_KEY) {
@@ -62,6 +72,8 @@ export default async function handler(req: any, res: any) {
       }
     }
   }
+
+  if (youtubeOnly) return res.status(200).json({ ok: true, report })
 
   // 2. Tự động cào chapter mới cho Truyện H trên đám mây Supabase
   try {
