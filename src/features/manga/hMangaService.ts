@@ -116,6 +116,63 @@ export function saveCustomHManga(manga: HManga): void {
 }
 
 
+/** Chỉ tài khoản này được xoá truyện H khỏi kho chung. RLS trên Supabase chốt lại lần nữa. */
+export const H_MANGA_OWNER_EMAIL = 'truongnguyenminhhieu100@gmail.com'
+
+export async function canDeleteHManga(): Promise<boolean> {
+  if (!supabase) return false
+  try {
+    const { data } = await supabase.auth.getUser()
+    return (data?.user?.email ?? '').toLowerCase() === H_MANGA_OWNER_EMAIL
+  } catch {
+    return false
+  }
+}
+
+/** Slug đã xoá vĩnh viễn — mọi máy đều lọc theo danh sách này. */
+export async function fetchDeletedHMangaSlugs(): Promise<Set<string>> {
+  if (!supabase) return new Set()
+  try {
+    const { data } = await supabase.from('h_manga_deleted').select('slug')
+    return new Set(((data ?? []) as { slug: string }[]).map((r) => r.slug))
+  } catch {
+    return new Set()
+  }
+}
+
+/**
+ * Xoá vĩnh viễn một truyện H: ghi vào sổ đen dùng chung, xoá bản ghi đám mây
+ * và bản lưu trên máy. Không phải chủ kho thì Supabase trả lỗi ngay.
+ */
+export async function deleteHMangaForever(manga: { slug: string; title?: string }): Promise<void> {
+  if (!supabase) throw new Error('Chưa kết nối Supabase')
+
+  const { data: auth } = await supabase.auth.getUser()
+  const email = auth?.user?.email ?? ''
+  if (email.toLowerCase() !== H_MANGA_OWNER_EMAIL) {
+    throw new Error('Chỉ tài khoản Hieu100 mới được xoá truyện')
+  }
+
+  const { error } = await supabase
+    .from('h_manga_deleted')
+    .upsert({ slug: manga.slug, title: manga.title ?? null, deleted_by: email }, { onConflict: 'slug' })
+  if (error) throw new Error(error.message)
+
+  // Truyện tự thêm còn nằm ở media_items — xoá hẳn, không để lại rác.
+  try {
+    await supabase.from('media_items').delete().eq('channel', manga.slug).in('type', ['STORY', 'MANGA'])
+  } catch (err) {
+    console.warn('Không xoá được bản ghi media_items:', err)
+  }
+
+  try {
+    const rest = getCustomHMangaList().filter((m) => m.slug !== manga.slug)
+    localStorage.setItem(CUSTOM_H_MANGA_KEY, JSON.stringify(rest))
+  } catch (err) {
+    console.warn('Không xoá được bản lưu trên máy:', err)
+  }
+}
+
 export async function fetchHMangaList(): Promise<HManga[]> {
   const customList = getCustomHMangaList();
   const seen = new Set<string>();
@@ -226,7 +283,9 @@ export async function fetchHMangaList(): Promise<HManga[]> {
     }
   }
 
-  return combined;
+  // Bỏ hẳn truyện đã xoá vĩnh viễn, kể cả bản đến từ file tĩnh h_manga.json.
+  const deleted = await fetchDeletedHMangaSlugs();
+  return deleted.size > 0 ? combined.filter((m) => !deleted.has(m.slug)) : combined;
 }
 
 export async function crawlAndSaveStory(url: string, onProgress?: (msg: string) => void): Promise<HManga> {

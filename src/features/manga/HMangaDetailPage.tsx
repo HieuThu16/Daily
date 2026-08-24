@@ -5,7 +5,7 @@ import {
   Search, ArrowUpDown, ChevronRight,
   CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
   Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
-  Bell, RefreshCw
+  Bell, RefreshCw, Trash2
 } from 'lucide-react';
 import type { MangaChapter } from '../../types/manga';
 import type { HManga } from './hMangaService';
@@ -16,7 +16,9 @@ import {
   getHMangaFollows, toggleHMangaFollow,
   getChapterImageUrl,
   isValidHMangaCover,
-  syncHMangaChapters
+  syncHMangaChapters,
+  canDeleteHManga,
+  deleteHMangaForever
 } from './hMangaService';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
@@ -35,6 +37,9 @@ export const HMangaDetailPage: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [follows, setFollows] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
+  // Chỉ chủ kho (Hieu100) mới thấy nút xoá vĩnh viễn.
+  const [canDelete, setCanDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showAllTags, setShowAllTags] = useState<boolean>(false);
   const [isShareCopied, setIsShareCopied] = useState<boolean>(false);
   
@@ -42,6 +47,30 @@ export const HMangaDetailPage: React.FC = () => {
   const [chapterSearch, setChapterSearch] = useState<string>('');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [showAllChapters, setShowAllChapters] = useState<boolean>(false);
+
+  useEffect(() => {
+    void canDeleteHManga().then(setCanDelete);
+  }, []);
+
+  /** Xoá hẳn truyện khỏi kho chung: hỏi lại một lần rồi mới làm. */
+  const handleDeleteForever = async () => {
+    if (!manga || deleting) return;
+    const ok = window.confirm(
+      `Xoá vĩnh viễn "${manga.title}"?
+
+Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục lại được.`,
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await deleteHMangaForever({ slug: manga.slug, title: manga.title });
+      showToast(`🗑️ Đã xoá vĩnh viễn "${manga.title}"`);
+      navigate('/truyenh');
+    } catch (err: any) {
+      showToast(`❌ Không xoá được: ${err?.message ?? err}`);
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -492,6 +521,21 @@ export const HMangaDetailPage: React.FC = () => {
             <span className="ngontinh-qa-subtitle">{isFollowed ? 'Báo chương mới' : 'Nhận báo mới'}</span>
           </div>
         </button>
+
+        {canDelete && (
+          <button
+            className="ngontinh-quick-action-card"
+            style={{ color: '#ef4444' }}
+            disabled={deleting}
+            onClick={() => void handleDeleteForever()}
+          >
+            <Trash2 size={19} className="ngontinh-qa-icon" />
+            <div className="ngontinh-qa-text">
+              <span className="ngontinh-qa-title">{deleting ? 'Đang xoá…' : 'Xoá vĩnh viễn'}</span>
+              <span className="ngontinh-qa-subtitle">Gỡ khỏi kho trên mọi máy</span>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Collapsible Description & Genres Card */}
