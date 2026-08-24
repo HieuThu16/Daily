@@ -609,6 +609,8 @@ function Protected({ user }: { user: unknown }) {
             <Routes>
               {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
               <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
+              {/* TikTok chạy toàn màn hình như app thật nên cũng nằm ngoài Shell. */}
+              <Route path="/tiktok" element={<TikTokPage />} />
               <Route path="/quotes/:mediaItemId" element={<QuotesPage />} />
               <Route path="/quotes" element={<QuotesPage />} />
               <Route
@@ -628,7 +630,6 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
                       <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
-                      <Route path="/tiktok" element={<TikTokPage />} />
                       <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
                       <Route path="/bl" element={<BLMangaPage />} />
                       <Route path="/bl/:slug" element={<BLMangaDetailPage />} />

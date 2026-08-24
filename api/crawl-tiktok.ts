@@ -70,6 +70,30 @@ function mapTikTokItem(item: any, username: string): RawEntry | null {
   }
 }
 
+/** Map item TikTok sang video cho feed, giữ đủ stats/nhạc để hiển thị y như app thật. */
+function mapFeedItem(item: any) {
+  const id = String(item?.id || '')
+  if (!id) return null
+  const author = item?.author?.uniqueId || 'tiktok'
+  return {
+    video_id: id,
+    title: item?.desc || '',
+    canonical_url: `https://www.tiktok.com/@${author}/video/${id}`,
+    embed_url: `https://www.tiktok.com/embed/v2/${id}`,
+    thumbnail: item?.video?.cover || item?.video?.dynamicCover || item?.video?.originCover || null,
+    duration: item?.video?.duration || null,
+    creator_id: author,
+    creator_name: item?.author?.nickname || author,
+    avatar: item?.author?.avatarThumb || item?.author?.avatarMedium || null,
+    like_count: item?.stats?.diggCount ?? null,
+    comment_count: item?.stats?.commentCount ?? null,
+    share_count: item?.stats?.shareCount ?? null,
+    play_count: item?.stats?.playCount ?? null,
+    music: item?.music?.title ? `${item.music.title} - ${item.music.authorName || author}` : null,
+    published_at: item?.createTime ? new Date(Number(item.createTime) * 1000).toISOString() : null,
+  }
+}
+
 /** Bước 1: tải HTML profile → lấy hồ sơ creator (secUid, avatar, stats) + video nhúng sẵn trong trang. */
 async function fetchProfile(username: string): Promise<{ profile: CreatorProfile; entries: RawEntry[] }> {
   const url = `https://www.tiktok.com/@${username}`
@@ -264,6 +288,70 @@ export default async function handler(req: any, res: any) {
   const action = req.body?.action || 'crawl_channel'
 
   try {
+    // Feed ngẫu nhiên "Dành cho bạn": lấy video đề xuất công khai từ TikTok
+    if (action === 'feed') {
+      const count = Math.min(Number(req.body?.count) || 20, 30)
+      const endpoints = [
+        `https://www.tiktok.com/api/recommend/item_list/?aid=1988&app_language=vi&region=VN&count=${count}`,
+        `https://www.tiktok.com/api/explore/item_list/?aid=1988&app_language=vi&region=VN&count=${count}&categoryType=119`,
+      ]
+
+      for (const endpoint of endpoints) {
+        try {
+          const r = await fetch(endpoint, { headers: BASE_HEADERS })
+          if (!r.ok) continue
+          const text = await r.text()
+          if (!text) continue
+          const data = JSON.parse(text)
+          const items = (data.itemList || data.body?.itemList || []).map(mapFeedItem).filter(Boolean)
+          if (items.length > 0) {
+            return res.status(200).json({ success: true, source: 'tiktok', videos: items })
+          }
+        } catch {
+          // thử endpoint tiếp theo
+        }
+      }
+
+      // TikTok chặn → dùng kho video đã lưu trong Supabase, xáo trộn cho giống feed
+      if (db) {
+        const { data: rows } = await db
+          .from('review_videos')
+          .select('*')
+          .eq('platform', 'tiktok')
+          .limit(300)
+        if (rows && rows.length > 0) {
+          const shuffled = [...rows]
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1))
+            ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+          }
+          const videos = shuffled.slice(0, count).map((v: any) => ({
+            video_id: v.video_id,
+            title: v.title,
+            canonical_url: v.canonical_url,
+            embed_url: v.embed_url || `https://www.tiktok.com/embed/v2/${v.video_id}`,
+            thumbnail: v.thumbnail,
+            duration: v.duration,
+            creator_id: v.creator_id,
+            creator_name: v.creator_name,
+            avatar: null,
+            like_count: null,
+            comment_count: null,
+            share_count: null,
+            play_count: null,
+            music: null,
+            published_at: v.published_at,
+          }))
+          return res.status(200).json({ success: true, source: 'library', videos })
+        }
+      }
+
+      return res.status(502).json({
+        error: 'Không lấy được video đề xuất từ TikTok lúc này. Thử lại sau ít phút.',
+        videos: [],
+      })
+    }
+
     // Lấy bình luận thật của một video qua API comment nội bộ của TikTok
     if (action === 'get_comments') {
       const videoId = String(req.body?.videoId || '').trim()
