@@ -17,6 +17,18 @@ function viDate(s: string) {
  * Nhật ký chung: sự kiện của hai người. Ai thêm email mình vào danh sách
  * "người chung" thì mình thấy sự kiện của họ (xem được, không sửa được).
  */
+/**
+ * Bảng shared_events thiếu cột mảng `images` (migration
+ * 20260920000004_shared_events_multiple_images.sql chưa chạy) nên chỉ giữ được
+ * ảnh đầu. Nhắc một lần mỗi phiên thay vì âm thầm nuốt mất ảnh.
+ */
+let warnedMissingImages = false
+function warnMissingImagesColumn(showToast: (msg: string, type?: any) => void) {
+  if (warnedMissingImages) return
+  warnedMissingImages = true
+  showToast('⚠️ Chỉ lưu được 1 ảnh — cần chạy migration shared_events_multiple_images trên Supabase', 'delete')
+}
+
 export function SharedEventsView({
   personId,
   personName,
@@ -48,6 +60,7 @@ export function SharedEventsView({
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLDivElement>(null)
 
   const [partnerEmail, setPartnerEmail] = useState('')
   const [managePartners, setManagePartners] = useState(false)
@@ -252,7 +265,9 @@ export function SharedEventsView({
         }
         const { data, error } = await supabase.from('shared_events').insert(fullPayload).select().single()
         if (error) {
-          // Schema cũ chưa có cột mảng images, thử lại với basePayload
+          // Schema cũ chưa có cột mảng images, thử lại với basePayload.
+          // Phải nói ra: nếu im lặng thì tải lại trang là mất sạch ảnh từ ảnh thứ hai.
+          if (urls.length > 1) warnMissingImagesColumn(showToast)
           const retryRes = await supabase.from('shared_events').insert(basePayload).select().single()
           if (retryRes.data) {
             created = {
@@ -322,6 +337,7 @@ export function SharedEventsView({
       const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
       if (error) {
         // Schema cũ chưa có cột mảng images, thử lại với baseUpdateData
+        if (currentImages.length > 1) warnMissingImagesColumn(showToast)
         await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
       }
     }
@@ -714,38 +730,51 @@ export function SharedEventsView({
             return (
               <div style={{ display: 'grid', gap: 12 }}>
                 {allImages.length > 0 && (
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <img
-                      src={allImages[selectedImageIdx] || allImages[0]}
-                      alt={viewingEvent.title}
-                      style={{
-                        width: '100%',
-                        maxHeight: 280,
-                        objectFit: 'contain',
-                        borderRadius: 12,
-                        background: 'var(--bg-main)',
+                  <div className="mem-gallery">
+                    {/* Vuốt ngang để đổi ảnh; mỗi ảnh chiếm trọn bề ngang khung. */}
+                    <div
+                      className="mem-gallery-track"
+                      ref={galleryRef}
+                      onScroll={(e) => {
+                        const el = e.currentTarget
+                        const idx = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+                        if (idx !== selectedImageIdx) setSelectedImageIdx(idx)
                       }}
-                    />
+                    >
+                      {allImages.map((imgUrl, idx) => (
+                        <div className="mem-gallery-slide" key={idx}>
+                          <img src={imgUrl} alt={`${viewingEvent.title} — ảnh ${idx + 1}`} loading="lazy" />
+                        </div>
+                      ))}
+                    </div>
+
                     {allImages.length > 1 && (
-                      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-                        {allImages.map((imgUrl, idx) => (
-                          <img
-                            key={idx}
-                            src={imgUrl}
-                            alt=""
-                            onClick={() => setSelectedImageIdx(idx)}
-                            style={{
-                              width: 50,
-                              height: 50,
-                              objectFit: 'cover',
-                              borderRadius: 8,
-                              cursor: 'pointer',
-                              border: selectedImageIdx === idx ? '2px solid var(--primary)' : '1px solid var(--border)',
-                              opacity: selectedImageIdx === idx ? 1 : 0.7,
-                            }}
-                          />
-                        ))}
-                      </div>
+                      <>
+                        <span className="mem-gallery-count">
+                          {selectedImageIdx + 1}/{allImages.length}
+                        </span>
+                        <div className="mem-gallery-dots">
+                          {allImages.map((_, idx) => (
+                            <i key={idx} className={idx === selectedImageIdx ? 'on' : undefined} />
+                          ))}
+                        </div>
+                        <div className="mem-gallery-thumbs">
+                          {allImages.map((imgUrl, idx) => (
+                            <img
+                              key={idx}
+                              src={imgUrl}
+                              alt=""
+                              loading="lazy"
+                              className={idx === selectedImageIdx ? 'on' : undefined}
+                              onClick={() => {
+                                setSelectedImageIdx(idx)
+                                const track = galleryRef.current
+                                track?.scrollTo({ left: idx * track.clientWidth, behavior: 'smooth' })
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
