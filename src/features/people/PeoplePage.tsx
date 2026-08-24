@@ -13,7 +13,7 @@ import { DualCalendarDate } from './DualCalendarDate'
 import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
-import { SharedActivityTab } from './SharedActivityTab'
+import { WatchTogetherTab } from '../watch/WatchTogetherTab'
 import { CoupleLocationTab } from './CoupleLocationTab'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
 
@@ -342,12 +342,10 @@ export function PeoplePage() {
       )}
 
       {/* TAB 2: XEM CHUNG TRỰC TIẾP (KHI ĐÃ KẾT NỐI PHÒNG CHUNG) */}
-      {mainTab === 'SHARED' && partnerPerson && (
-        <SharedActivityTab partnerPerson={partnerPerson} />
-      )}
+      {mainTab === 'SHARED' && <WatchTogetherTab />}
 
       {/* TAB 3: KỶ NIỆM */}
-      {(mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) && (
+      {(mainTab === 'OCCASIONS' || (mainTab === 'LOCATION' && !partnerPerson)) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="people-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <div className="people-stat rose">

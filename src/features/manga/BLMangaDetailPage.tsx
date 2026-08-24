@@ -20,6 +20,7 @@ import { notifyFollowsChanged } from './mangaUpdates';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './blMangaDetail.css';
+import { WatchTogetherButton } from '../watch/WatchTogetherButton';
 
 export const BLMangaDetailPage: React.FC = () => {
   useHideHeader(true);
@@ -478,6 +479,19 @@ export const BLMangaDetailPage: React.FC = () => {
 
       {/* 5 Quick Actions Row */}
       <div className="bl-quick-actions-row">
+        <WatchTogetherButton
+          className="bl-quick-action-card"
+          label="Xem chung"
+          size={19}
+          item={{
+            kind: 'MANGA',
+            refId: manga.slug,
+            title: manga.title,
+            thumbnail: manga.cover ?? null,
+            url: window.location.href,
+          }}
+        />
+
         {/* Action 2: Resume read */}
         <button className="bl-quick-action-card" onClick={handleStartRead}>
           <Clock size={19} className="bl-qa-icon" />

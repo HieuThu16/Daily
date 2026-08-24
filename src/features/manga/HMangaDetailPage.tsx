@@ -24,6 +24,7 @@ import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import { getCachedCoverBlobUrl, fetchAndCacheCover } from '../../lib/mangaCoverCache';
 import './ngontinhDetail.css';
+import { WatchTogetherButton } from '../watch/WatchTogetherButton';
 
 
 export const HMangaDetailPage: React.FC = () => {
@@ -444,6 +445,19 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
 
       {/* 5 Quick Actions Row */}
       <div className="ngontinh-quick-actions-row">
+        <WatchTogetherButton
+          className="ngontinh-quick-action-card"
+          label="Xem chung"
+          size={19}
+          item={{
+            kind: 'MANGA',
+            refId: manga.slug,
+            title: manga.title,
+            thumbnail: manga.cover ?? null,
+            url: window.location.href,
+          }}
+        />
+
         {/* Action 1: Resume read */}
         <button className="ngontinh-quick-action-card" onClick={handleStartRead}>
           <Clock size={19} className="ngontinh-qa-icon" />

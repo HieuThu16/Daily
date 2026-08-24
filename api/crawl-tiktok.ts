@@ -94,6 +94,42 @@ function mapFeedItem(item: any) {
   }
 }
 
+
+/** Trang /embed/... của TikTok vẫn nhúng sẵn dữ liệu video (không cần chữ ký msToken/X-Bogus). */
+async function fetchFeedFromEmbed(path: string): Promise<any[]> {
+  const res = await fetch(`https://www.tiktok.com/embed/${path}`, { headers: BASE_HEADERS })
+  if (!res.ok) return []
+  const state = extractJsonScript(await res.text(), '__FRONTITY_CONNECT_STATE__')
+  const data = state?.source?.data || {}
+  const list = Object.values<any>(data).map((d) => d?.videoList).find(Array.isArray) || []
+  return list
+    .filter((v: any) => v?.id && !v.privateItem)
+    .map((v: any) => {
+      const author = v.authorUniqueId || 'tiktok'
+      return {
+        video_id: String(v.id),
+        title: v.desc || '',
+        canonical_url: `https://www.tiktok.com/@${author}/video/${v.id}`,
+        embed_url: `https://www.tiktok.com/embed/v2/${v.id}`,
+        play_url: v.playAddr || null,
+        thumbnail: v.coverUrl || v.dynamicCoverUrl || v.originCoverUrl || null,
+        duration: null,
+        creator_id: author,
+        creator_name: author,
+        avatar: null,
+        like_count: null,
+        comment_count: null,
+        share_count: null,
+        play_count: v.playCount ?? null,
+        music: null,
+        published_at: null,
+      }
+    })
+}
+
+/** ponytail: seed hashtag cứng, chuyển sang bảng cấu hình nếu cần đổi mà không deploy. */
+const FEED_SEEDS = ['tag/xuhuong', 'tag/reviewphim', 'tag/phimhay', 'tag/giaitri', 'tag/anvat']
+
 /** Bước 1: tải HTML profile → lấy hồ sơ creator (secUid, avatar, stats) + video nhúng sẵn trong trang. */
 async function fetchProfile(username: string): Promise<{ profile: CreatorProfile; entries: RawEntry[] }> {
   const url = `https://www.tiktok.com/@${username}`
@@ -310,6 +346,30 @@ export default async function handler(req: any, res: any) {
         } catch {
           // thử endpoint tiếp theo
         }
+      }
+
+      // Lớp 2: trang /embed công khai — không cần chữ ký
+      const htmlItems: any[] = []
+      const seenFeed = new Set<string>()
+      for (const seed of FEED_SEEDS) {
+        try {
+          for (const v of await fetchFeedFromEmbed(seed)) {
+            if (!seenFeed.has(v.video_id)) {
+              seenFeed.add(v.video_id)
+              htmlItems.push(v)
+            }
+          }
+        } catch {
+          // thử seed tiếp theo
+        }
+        if (htmlItems.length >= count * 2) break
+      }
+      if (htmlItems.length > 0) {
+        for (let i = htmlItems.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[htmlItems[i], htmlItems[j]] = [htmlItems[j], htmlItems[i]]
+        }
+        return res.status(200).json({ success: true, source: 'tiktok_embed', videos: htmlItems.slice(0, count) })
       }
 
       // TikTok chặn → dùng kho video đã lưu trong Supabase, xáo trộn cho giống feed

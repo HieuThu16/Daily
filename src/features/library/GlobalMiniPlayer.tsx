@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ListMusic, Music2, Pause, Play, Repeat, Repeat1, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react'
 import { useAudioPlayer } from './AudioPlayerContext'
 import { MarqueeText } from './MarqueeText'
+import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 
 type MiniPlayerPosition = {
   top: number | null
@@ -370,6 +371,24 @@ export function GlobalMiniPlayer() {
         >
           <ListMusic size={16} />
         </button>
+
+        <WatchTogetherButton
+          className="mini-ctrl-btn"
+          label=""
+          size={16}
+          item={() =>
+            currentTrack
+              ? {
+                  kind: 'MUSIC' as const,
+                  refId: currentTrack.id,
+                  title: currentTrack.name,
+                  subtitle: currentTrack.artist ?? undefined,
+                  thumbnail: currentTrack.cover_url ?? null,
+                  url: currentTrack.audio_url ?? null,
+                }
+              : null
+          }
+        />
 
         <button
           type="button"

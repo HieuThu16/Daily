@@ -15,6 +15,7 @@ export type FeedVideo = {
   title: string
   canonical_url: string
   embed_url: string
+  play_url?: string | null
   thumbnail: string | null
   duration: number | null
   creator_id: string | null
@@ -70,6 +71,9 @@ export function TikTokPage() {
       return new Set<string>()
     }
   })
+
+  const [muted, setMuted] = useState(true)
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({})
 
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState<Record<string, CommentState>>({})
@@ -182,6 +186,16 @@ export function TikTokPage() {
   useEffect(() => {
     void loadFeed('replace')
   }, [loadFeed])
+
+  // Chỉ slide đang xem mới phát, các slide khác dừng lại cho đỡ tốn băng thông
+  useEffect(() => {
+    videos.forEach((v, i) => {
+      const el = videoRefs.current[v.video_id]
+      if (!el) return
+      if (i === index) void el.play().catch(() => {})
+      else el.pause()
+    })
+  }, [index, videos])
 
   const scrollToIndex = (i: number, smooth = true) => {
     const el = scrollRef.current
@@ -341,7 +355,20 @@ export function TikTokPage() {
                 <section className="tt-slide" key={`${vid.video_id}-${i}`}>
                   <div className="tt-stage">
                     <div className="tt-player">
-                      {near ? (
+                      {near && vid.play_url ? (
+                        <video
+                          ref={(el) => {
+                            videoRefs.current[vid.video_id] = el
+                          }}
+                          src={`/api/tiktok-video?url=${encodeURIComponent(vid.play_url)}`}
+                          poster={vid.thumbnail || undefined}
+                          loop
+                          playsInline
+                          muted={muted}
+                          autoPlay={i === index}
+                          onClick={() => setMuted((m) => !m)}
+                        />
+                      ) : near ? (
                         <iframe
                           src={vid.embed_url}
                           title={vid.title || vid.video_id}
@@ -352,6 +379,12 @@ export function TikTokPage() {
                         <div className="tt-player-ph">
                           {vid.thumbnail && <img src={vid.thumbnail} alt="" loading="lazy" />}
                         </div>
+                      )}
+
+                      {i === index && vid.play_url && muted && (
+                        <button className="tt-unmute" onClick={() => setMuted(false)}>
+                          🔇 Chạm để bật tiếng
+                        </button>
                       )}
 
                       <div className="tt-overlay">

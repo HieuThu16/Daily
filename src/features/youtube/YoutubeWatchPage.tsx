@@ -7,8 +7,9 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
 import { useHideHeader } from '../HeaderAction'
+import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import {
-  progressLabel, shareVideosToWatchTogether, useVideoProgressMap, useYouTubeProgress,
+  progressLabel, useVideoProgressMap, useYouTubeProgress,
 } from '../../lib/videoProgress'
 import {
   getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener,
@@ -249,22 +250,16 @@ export function YoutubeWatchPage() {
             <PictureInPicture2 size={15} /> Phát nền
           </button>
 
-          <button
-            type="button"
-            className="yt-chip"
-            onClick={() =>
-              void shareVideosToWatchTogether([
-                {
-                  videoId: video.video_id,
-                  title: video.title,
-                  channelName: video.creator_name ?? undefined,
-                  thumbnail: video.thumbnail,
-                },
-              ]).then(() => showToast('Đã đưa sang Xem chung', 'success'))
-            }
-          >
-            <Users size={15} /> Xem chung
-          </button>
+          <WatchTogetherButton
+            item={{
+              kind: 'VIDEO',
+              refId: video.video_id,
+              title: video.title,
+              subtitle: video.creator_name ?? undefined,
+              thumbnail: video.thumbnail,
+              url: `https://www.youtube.com/watch?v=${video.video_id}`,
+            }}
+          />
 
           <button type="button" className="yt-chip" onClick={() => void share()}>
             <Share2 size={15} /> Chia sẻ

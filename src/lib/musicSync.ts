@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { localDate } from './date'
 import type { Media } from '../types'
+import { updateMyShareProgress } from './watchTogether'
 
 export function getCurrentTimeString(): string {
   const now = new Date()
@@ -12,6 +13,7 @@ export function getCurrentTimeString(): string {
  * Cập nhật log_date, log_time, status, channel='Hiếu'/'Kim Ý' và updated_at để hiển thị ngay tức thì bên tab Xem chung.
  */
 export async function recordMusicListening(track: Media): Promise<void> {
+  void updateMyShareProgress('MUSIC', track.id, 100, `Đang nghe · ${track.name}`)
   if (!track || !track.name) return
 
   const nowIso = new Date().toISOString()

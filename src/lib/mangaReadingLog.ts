@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { updateMyShareProgress } from './watchTogether'
 
 export interface MangaReadingLog {
   id: string
@@ -44,6 +45,13 @@ export function recordMangaReading(params: {
   const log_time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const chapterName = params.chapterName || `Chương ${params.chapterNumber}`
   const status = params.status || 'READING'
+
+  void updateMyShareProgress(
+    'MANGA',
+    params.mangaSlug,
+    status === 'COMPLETED' ? 100 : 0,
+    status === 'COMPLETED' ? `Đã đọc hết · ${chapterName}` : `Đang đọc · ${chapterName}`,
+  )
 
   const current = getMangaReadingLogs()
 

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Check, CheckCircle2, Loader2, Pause, Play, Save, Search, Users } from 'lucide-react'
+import { AlertCircle, Check, CheckCircle2, Loader2, Pause, Play, Save, Search } from 'lucide-react'
 import { Modal } from '../shared'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
-import { shareVideosToWatchTogether } from '../../lib/videoProgress'
 import { useToast } from '../ToastContext'
 
 export type YoutubeLinkKind = 'channel' | 'video' | 'invalid'
@@ -159,7 +158,6 @@ export function AddYoutubeModal({
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'fresh' | 'known'>('all')
   const [savingProgress, setSavingProgress] = useState<{ current: number; total: number } | null>(null)
-  const [alsoShare, setAlsoShare] = useState(true)
   const [error, setError] = useState('')
   const stopRef = useRef(false)
 
@@ -302,9 +300,6 @@ export function AddYoutubeModal({
         },
         { concurrency: 5, onProgress: (current, total) => setSavingProgress({ current, total }) },
       )
-      if (alsoShare) {
-        await shareVideosToWatchTogether(chosen)
-      }
       setState('saved')
       onSaved()
       setTimeout(onClose, 900)
@@ -485,10 +480,6 @@ export function AddYoutubeModal({
               )}
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', fontWeight: 600, margin: '8px 0' }}>
-              <input type="checkbox" checked={alsoShare} onChange={(e) => setAlsoShare(e.target.checked)} />
-              <Users size={14} /> Đưa luôn sang tab "Xem chung"
-            </label>
 
             <div className="tv-sync-actions">
               <button

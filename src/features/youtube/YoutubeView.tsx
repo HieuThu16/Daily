@@ -29,10 +29,10 @@ import {
 import { summarizeVideo, toKnowledgeRows } from '../../lib/videoLesson'
 import {
   progressLabel,
-  shareVideosToWatchTogether,
   useVideoProgressMap,
   useYouTubeProgress,
 } from '../../lib/videoProgress'
+import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { AddYoutubeModal } from './AddYoutubeModal'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
 import { OfflineVideoModal } from './OfflineVideoModal'
@@ -1024,11 +1024,6 @@ export function YoutubeView() {
                       startSeconds: progressMap[video.video_id]?.seconds,
                     })
                   }
-                  onShare={() => {
-                    void shareVideosToWatchTogether([
-                      { videoId: video.video_id, title: video.title, channelName: video.creator_name || undefined, thumbnail: video.thumbnail },
-                    ]).then(() => showToast('Đã đưa sang Xem chung', 'success'))
-                  }}
                 />
               ))}
             </div>
@@ -1239,25 +1234,21 @@ function ChannelDetailView({
         >
           <PictureInPicture2 size={14} /> Phát nền
         </button>
-        <button
-          type="button"
-          className="tv-btn"
-          onClick={() => {
-            if (!currentVideo) return
-            void shareVideosToWatchTogether([
-              {
-                videoId: currentVideo.video_id,
-                title: currentVideo.title,
-                channelName: currentVideo.creator_name ?? undefined,
-                thumbnail: currentVideo.thumbnail,
-              },
-            ]).then(() => showToast('Đã đưa sang Xem chung', 'success'))
-          }}
-          disabled={!currentVideo}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 700 }}
-        >
-          <Users size={14} /> Xem chung
-        </button>
+        {currentVideo && (
+          <WatchTogetherButton
+            className="tv-btn"
+            size={14}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 700 }}
+            item={{
+              kind: 'VIDEO',
+              refId: currentVideo.video_id,
+              title: currentVideo.title,
+              subtitle: currentVideo.creator_name ?? undefined,
+              thumbnail: currentVideo.thumbnail,
+              url: currentVideo.canonical_url,
+            }}
+          />
+        )}
       </div>
 
       {/* Trình phát Video */}
@@ -1410,7 +1401,6 @@ function YoutubeVideoCard({
   playing,
   onPlay,
   onToggleWatched,
-  onShare,
   onPlayMini,
   onOpen,
 }: {
@@ -1421,7 +1411,6 @@ function YoutubeVideoCard({
   playing: boolean
   onPlay: () => void
   onToggleWatched: () => void
-  onShare: () => void
   onPlayMini: () => void
   onOpen: () => void
 }) {
@@ -1482,9 +1471,18 @@ function YoutubeVideoCard({
               {watched ? <CheckCircle2 size={13} /> : <Circle size={13} />}
               {watched ? 'Đã xem' : 'Đánh dấu đã xem'}
             </button>
-            <button type="button" className="yt-action" onClick={onShare} title="Đưa sang Xem chung">
-              <Users size={13} /> Xem chung
-            </button>
+            <WatchTogetherButton
+              className="yt-action"
+              size={13}
+              item={{
+                kind: 'VIDEO',
+                refId: video.video_id,
+                title: video.title,
+                subtitle: video.creator_name ?? undefined,
+                thumbnail: video.thumbnail,
+                url: video.canonical_url,
+              }}
+            />
             <a className="yt-action" href={video.canonical_url} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={12} /> YouTube
             </a>

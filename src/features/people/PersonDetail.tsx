@@ -11,7 +11,7 @@ import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
 import { PersonSpending } from './PersonSpending'
-import { SharedActivityTab } from './SharedActivityTab'
+import { WatchTogetherTab } from '../watch/WatchTogetherTab'
 import { CoupleLocationTab } from './CoupleLocationTab'
 import type { NewOccasion } from './usePeopleData'
 
@@ -185,9 +185,7 @@ export function PersonDetail({
         <CoupleLocationTab partnerPerson={person} />
       )}
 
-      {tab === 'shared' && (
-        <SharedActivityTab partnerPerson={person} />
-      )}
+      {tab === 'shared' && <WatchTogetherTab />}
 
       {tab === 'info' && (
         <>

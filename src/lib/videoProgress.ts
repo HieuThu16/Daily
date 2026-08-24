@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { setVideoStatus } from './videoStatus'
+import { updateMyShareProgress } from './watchTogether'
 
 /** Xem tới đây coi như xem hết — phần đuôi thường là credit/quảng cáo. */
 export const COMPLETE_AT_PERCENT = 90
@@ -123,28 +124,8 @@ export async function saveVideoProgress(input: {
     channel_name: input.channelName,
   })
   await upsertRemote([row])
+  void updateMyShareProgress('VIDEO', input.videoId, percent, progressLabel(row))
   return row
-}
-
-/** Đưa video sang tab "Xem chung" cho người kia thấy (chưa xem, 0%). */
-export async function shareVideosToWatchTogether(
-  videos: Array<{ videoId: string; title?: string; channelName?: string; thumbnail?: string | null }>,
-): Promise<number> {
-  const rows: VideoProgress[] = videos.map((v) => ({
-    videoId: v.videoId,
-    title: v.title,
-    channelName: v.channelName,
-    thumbnail: v.thumbnail ?? null,
-    seconds: 0,
-    durationSeconds: null,
-    percent: 0,
-    status: 'PLANNED',
-  }))
-  // Video đã xem rồi thì đừng ghi đè tiến độ về 0.
-  const known = getLocalProgress()
-  const fresh = rows.filter((r) => !known[r.videoId])
-  await upsertRemote(fresh)
-  return fresh.length
 }
 
 export function useVideoProgressMap(): Record<string, VideoProgress> {

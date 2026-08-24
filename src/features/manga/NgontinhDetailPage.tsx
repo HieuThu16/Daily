@@ -19,6 +19,7 @@ import { notifyFollowsChanged } from './mangaUpdates';
 import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhDetail.css';
+import { WatchTogetherButton } from '../watch/WatchTogetherButton';
 
 export const NgontinhDetailPage: React.FC = () => {
   useHideHeader(true);
@@ -408,6 +409,19 @@ export const NgontinhDetailPage: React.FC = () => {
 
       {/* 5 Quick Actions Row */}
       <div className="ngontinh-quick-actions-row">
+        <WatchTogetherButton
+          className="ngontinh-quick-action-card"
+          label="Xem chung"
+          size={19}
+          item={{
+            kind: 'MANGA',
+            refId: manga.slug,
+            title: manga.title,
+            thumbnail: manga.cover ?? null,
+            url: window.location.href,
+          }}
+        />
+
         {/* Action 2: Resume read */}
         <button className="ngontinh-quick-action-card" onClick={handleStartRead}>
           <Clock size={19} className="ngontinh-qa-icon" />
