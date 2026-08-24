@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Home, Compass, Bookmark, RefreshCw, ExternalLink,
   CheckCircle2, Share2, Loader2, X, ChevronUp, ChevronDown,
-  MessageCircle, Music2, ArrowLeft, Play,
+  MessageCircle, Music2, ArrowLeft, Play, Search, Download,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
@@ -28,7 +28,7 @@ export type FeedVideo = {
   published_at: string | null
 }
 
-type FeedTab = 'foryou' | 'library'
+type FeedTab = 'foryou' | 'library' | 'search'
 
 type CommentState = { loading: boolean; items: any[]; error?: string }
 
@@ -72,7 +72,9 @@ export function TikTokPage() {
     }
   })
 
-  const [muted, setMuted] = useState(true)
+  const [muted, setMuted] = useState(false)
+  const [query, setQuery] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({})
 
   const [showComments, setShowComments] = useState(false)
@@ -145,6 +147,19 @@ export function TikTokPage() {
     }))
   }, [])
 
+  /** Tìm kiếm thật trên TikTok theo từ khoá hoặc @kênh. */
+  const fetchSearch = useCallback(async (): Promise<FeedVideo[]> => {
+    if (!searchTerm) return []
+    const res = await fetch('/api/crawl-tiktok', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'search', query: searchTerm }),
+    })
+    const data = await res.json()
+    if (!res.ok || data.error) throw new Error(data.error || 'Không tìm được video')
+    return data.videos || []
+  }, [searchTerm])
+
   const loadFeed = useCallback(
     async (mode: 'replace' | 'append') => {
       if (mode === 'replace') {
@@ -154,7 +169,8 @@ export function TikTokPage() {
         setLoadingMore(true)
       }
       try {
-        const fresh = tab === 'foryou' ? await fetchForYou() : await fetchLibrary()
+        const fresh =
+          tab === 'search' ? await fetchSearch() : tab === 'foryou' ? await fetchForYou() : await fetchLibrary()
         if (mode === 'replace') {
           seenIds.current = new Set(fresh.map((v) => v.video_id))
           setVideos(fresh)
@@ -164,7 +180,9 @@ export function TikTokPage() {
             setError(
               tab === 'library'
                 ? 'Kho của bạn chưa có video TikTok nào.'
-                : 'Chưa lấy được video đề xuất. Thử làm mới lại nhé.',
+                : tab === 'search'
+                  ? `Không tìm thấy video nào cho "${searchTerm}".`
+                  : 'Chưa lấy được video đề xuất. Thử làm mới lại nhé.',
             )
           }
         } else {
@@ -180,7 +198,7 @@ export function TikTokPage() {
         setLoadingMore(false)
       }
     },
-    [tab, fetchForYou, fetchLibrary, showToast],
+    [tab, searchTerm, fetchForYou, fetchLibrary, fetchSearch, showToast],
   )
 
   useEffect(() => {
@@ -192,10 +210,18 @@ export function TikTokPage() {
     videos.forEach((v, i) => {
       const el = videoRefs.current[v.video_id]
       if (!el) return
-      if (i === index) void el.play().catch(() => {})
+      if (i === index) {
+        el.muted = muted
+        void el.play().catch(() => {
+          // Trình duyệt chặn autoplay có tiếng -> phát im lặng, hiện nút bật tiếng
+          el.muted = true
+          setMuted(true)
+          void el.play().catch(() => {})
+        })
+      }
       else el.pause()
     })
-  }, [index, videos])
+  }, [index, videos, muted])
 
   const scrollToIndex = (i: number, smooth = true) => {
     const el = scrollRef.current
@@ -210,7 +236,7 @@ export function TikTokPage() {
     const i = Math.max(0, Math.min(videos.length - 1, Math.round(el.scrollTop / el.clientHeight)))
     if (i !== index) setIndex(i)
     // Feed vô tận: gần cuối thì xin thêm video mới
-    if (i >= videos.length - 3 && !loadingMore && videos.length > 0) {
+    if (tab !== 'search' && i >= videos.length - 3 && !loadingMore && videos.length > 0) {
       void loadFeed('append')
     }
   }
@@ -262,6 +288,52 @@ export function TikTokPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showComments, current?.video_id])
+
+  const [crawling, setCrawling] = useState(false)
+  const [crawlProgress, setCrawlProgress] = useState('')
+
+  /**
+   * Cào cả kênh: gom ID từ embed + kho lưu trữ Wayback, rồi lấy metadata theo từng lô
+   * (TikTok chặn tốc độ nên phải chia nhỏ, chạy vài phút cho kênh nhiều video).
+   */
+  const crawlChannel = async () => {
+    const username = current?.creator_id || current?.creator_name
+    if (!username) return
+    setCrawling(true)
+    setCrawlProgress('đang tìm video...')
+    try {
+      const idsRes = await fetch('/api/crawl-tiktok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'channel_ids', channelUrl: `https://www.tiktok.com/@${username}` }),
+      })
+      const idsData = await idsRes.json()
+      if (!idsRes.ok || idsData.error) throw new Error(idsData.error || 'Không tìm được video của kênh')
+      const ids: string[] = idsData.ids || []
+      if (ids.length === 0) throw new Error(`Không tìm thấy video nào của @${username}`)
+
+      showToast(`🔎 Tìm thấy ${ids.length} video của @${username}, bắt đầu lưu...`, 'supabase')
+      let saved = 0
+      for (let i = 0; i < ids.length; i += 20) {
+        const batch = ids.slice(i, i + 20)
+        const res = await fetch('/api/crawl-tiktok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'channel_meta', username, ids: batch }),
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) throw new Error(data.error || 'Lỗi khi lưu video')
+        saved += data.saved || 0
+        setCrawlProgress(`${saved}/${ids.length}`)
+      }
+      showToast(`✅ Đã lưu ${saved} video của @${username} vào Kho`, 'supabase')
+    } catch (err: any) {
+      showToast(`⚠️ ${err.message}`, 'delete')
+    } finally {
+      setCrawling(false)
+      setCrawlProgress('')
+    }
+  }
 
   const copyLink = (url: string) => {
     void navigator.clipboard.writeText(url)
@@ -323,7 +395,45 @@ export function TikTokPage() {
             <button className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>
               Kho của tôi
             </button>
+            {searchTerm && (
+              <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
+                🔍 {searchTerm}
+              </button>
+            )}
           </div>
+          <form
+            className="tt-search"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const q = query.trim()
+              if (!q) return
+              setSearchTerm(q)
+              setTab('search')
+            }}
+          >
+            <Search size={16} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Tìm trên TikTok: từ khoá hoặc @kênh"
+            />
+          </form>
+          {current && (
+            <button
+              className="tt-top-refresh"
+              onClick={() => void crawlChannel()}
+              disabled={crawling}
+              title={`Cào toàn bộ kênh @${current.creator_id || current.creator_name} về Kho`}
+            >
+              {crawling ? (
+                <span className="tt-crawl-progress">
+                  <Loader2 size={16} className="tv-spin" /> {crawlProgress}
+                </span>
+              ) : (
+                <Download size={20} />
+              )}
+            </button>
+          )}
           <button className="tt-top-refresh" onClick={() => loadFeed('replace')} title="Làm mới">
             <RefreshCw size={20} className={loading ? 'tv-spin' : ''} />
           </button>

@@ -95,6 +95,62 @@ function mapFeedItem(item: any) {
 }
 
 
+/**
+ * Lấy toàn bộ video ID cũ của kênh từ kho lưu trữ Wayback Machine.
+ * TikTok chỉ để lộ 10 video mới nhất, nhưng archive.org đã lưu link video từ nhiều năm trước.
+ */
+async function fetchArchivedIds(username: string): Promise<string[]> {
+  const url =
+    `http://web.archive.org/cdx/search/cdx?url=tiktok.com/@${encodeURIComponent(username)}/video/*` +
+    '&output=json&fl=original&collapse=urlkey&limit=3000'
+  const res = await fetch(url)
+  if (!res.ok) return []
+  let rows: any[]
+  try {
+    rows = JSON.parse(await res.text())
+  } catch {
+    return []
+  }
+  const ids = new Set<string>()
+  for (const row of rows.slice(1)) {
+    const m = String(row[0] || '').match(/video\/(\d{15,25})/)
+    if (m) ids.add(m[1])
+  }
+  return [...ids]
+}
+
+/** Bổ sung tiêu đề + ảnh bìa cho từng ID qua oEmbed (TikTok chặn tốc độ nên phải giãn nhịp). */
+async function resolveIds(username: string, ids: string[]): Promise<RawEntry[]> {
+  const out: RawEntry[] = []
+  for (const id of ids) {
+    const url = `https://www.tiktok.com/@${username}/video/${id}`
+    const meta = await fetchOembed(url)
+    out.push({
+      id,
+      title: meta?.title || '',
+      url,
+      thumbnail: meta?.thumbnail || null,
+      duration: null,
+      timestamp: (() => {
+        const d = idToDate(id)
+        return d ? Math.floor(new Date(d).getTime() / 1000) : null
+      })(),
+    })
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  return out
+}
+
+/** ID video TikTok mã hoá sẵn thời điểm đăng ở 32 bit cao. */
+function idToDate(id: string): string | null {
+  try {
+    const sec = Number(BigInt(id) >> 32n)
+    return sec > 1_000_000_000 ? new Date(sec * 1000).toISOString() : null
+  } catch {
+    return null
+  }
+}
+
 /** Trang /embed/... của TikTok vẫn nhúng sẵn dữ liệu video (không cần chữ ký msToken/X-Bogus). */
 async function fetchFeedFromEmbed(path: string): Promise<any[]> {
   const res = await fetch(`https://www.tiktok.com/embed/${path}`, { headers: BASE_HEADERS })
@@ -122,9 +178,46 @@ async function fetchFeedFromEmbed(path: string): Promise<any[]> {
         share_count: null,
         play_count: v.playCount ?? null,
         music: null,
-        published_at: null,
+        published_at: idToDate(String(v.id)),
       }
     })
+}
+
+/**
+ * Cào sâu một kênh: trang /embed chỉ trả 10 video mới nhất, nên lần theo hashtag
+ * trong mô tả để tìm tiếp video cũ hơn của cùng kênh, lặp cho tới khi hết hoặc hết giờ.
+ * ponytail: BFS theo hashtag, đổi sang API ký msToken nếu cần lấy đủ 100%.
+ */
+async function crawlChannelDeep(username: string, budgetMs = 45_000) {
+  const deadline = Date.now() + budgetMs
+  const found = new Map<string, any>()
+  const doneTags = new Set<string>()
+  const queue: string[] = []
+
+  const absorb = (list: any[]) => {
+    for (const v of list) {
+      if (v.creator_id !== username || found.has(v.video_id)) continue
+      found.set(v.video_id, { ...v, published_at: v.published_at || idToDate(v.video_id) })
+      for (const m of String(v.title || '').matchAll(/#([\p{L}\p{N}_]+)/gu)) {
+        const tag = m[1]
+        if (!doneTags.has(tag) && !queue.includes(tag)) queue.push(tag)
+      }
+    }
+  }
+
+  absorb(await fetchFeedFromEmbed(`@${username}`))
+
+  while (queue.length > 0 && Date.now() < deadline && found.size < 600) {
+    const tag = queue.shift() as string
+    doneTags.add(tag)
+    try {
+      absorb(await fetchFeedFromEmbed(`tag/${encodeURIComponent(tag)}`))
+    } catch {
+      // hashtag lỗi thì bỏ qua, đi tiếp
+    }
+  }
+
+  return { videos: [...found.values()], scannedTags: doneTags.size, pendingTags: queue.length }
 }
 
 /** ponytail: seed hashtag cứng, chuyển sang bảng cấu hình nếu cần đổi mà không deploy. */
@@ -412,6 +505,60 @@ export default async function handler(req: any, res: any) {
       })
     }
 
+    // Bước 1 của nút "cào cả kênh": gom mọi video ID biết được (embed mới nhất + kho lưu trữ)
+    if (action === 'channel_ids') {
+      const username = extractUsername(String(req.body?.channelUrl || ''))
+      if (!username) return res.status(400).json({ error: 'Thiếu link kênh TikTok' })
+      const [recent, archived] = await Promise.all([
+        fetchFeedFromEmbed(`@${username}`).catch(() => []),
+        fetchArchivedIds(username).catch(() => []),
+      ])
+      const ids = [...new Set([...recent.map((v: any) => v.video_id), ...archived])].sort((a, b) =>
+        a < b ? 1 : -1,
+      )
+      return res.status(200).json({ success: true, username, total: ids.length, ids })
+    }
+
+    // Bước 2: xử lý từng lô ID -> lấy metadata rồi lưu vào kho
+    if (action === 'channel_meta') {
+      const username = extractUsername(String(req.body?.username || req.body?.channelUrl || ''))
+      const ids: string[] = (req.body?.ids || []).slice(0, 40)
+      if (!username || ids.length === 0) return res.status(400).json({ error: 'Thiếu username hoặc ids' })
+
+      const entries = await resolveIds(username, ids)
+      const creatorInfo = {
+        creator_id: username,
+        creator_name: username,
+        creator_url: `https://www.tiktok.com/@${username}`,
+      }
+      const grouped = groupVideosIntoSeries(entries, creatorInfo)
+      if (db) await saveGroupedSeries(db, grouped, creatorInfo)
+      return res.status(200).json({
+        success: true,
+        saved: entries.length,
+        with_title: entries.filter((e) => e.title).length,
+      })
+    }
+
+    // Tìm kiếm thật trên TikTok: "@user" -> kênh, còn lại -> hashtag tương ứng
+    if (action === 'search') {
+      const q = String(req.body?.query || '').trim()
+      if (!q) return res.status(400).json({ error: 'Thiếu từ khoá tìm kiếm' })
+      const paths = q.startsWith('@')
+        ? [`@${extractUsername(q)}`]
+        : [`tag/${encodeURIComponent(q.replace(/[#\s]+/g, ''))}`, `@${extractUsername(q)}`]
+
+      for (const path of paths) {
+        try {
+          const videos = await fetchFeedFromEmbed(path)
+          if (videos.length > 0) return res.status(200).json({ success: true, source: path, videos })
+        } catch {
+          // thử kiểu tìm tiếp theo
+        }
+      }
+      return res.status(200).json({ success: true, source: 'empty', videos: [] })
+    }
+
     // Lấy bình luận thật của một video qua API comment nội bộ của TikTok
     if (action === 'get_comments') {
       const videoId = String(req.body?.videoId || '').trim()
@@ -504,7 +651,30 @@ export default async function handler(req: any, res: any) {
         }
       }
 
-      // Lớp 3: yt-dlp (chỉ hoạt động ở local dev có cài yt-dlp)
+      // Lớp 3: /embed + lần theo hashtag để moi cả video cũ của kênh
+      if (entries.length === 0) {
+        try {
+          const deep = await crawlChannelDeep(username, Number(req.body?.budgetMs) || 45_000)
+          if (deep.videos.length > 0) {
+            entries = deep.videos.map((v: any) => ({
+              id: v.video_id,
+              title: v.title,
+              url: v.canonical_url,
+              thumbnail: v.thumbnail,
+              duration: v.duration,
+              timestamp: v.published_at ? Math.floor(new Date(v.published_at).getTime() / 1000) : null,
+            }))
+            if (profile.creator_name === username && deep.videos[0].creator_name) {
+              profile.creator_name = deep.videos[0].creator_name
+            }
+            sources.push(`embed+tags(${deep.scannedTags} tag, còn ${deep.pendingTags})`)
+          }
+        } catch {
+          sources.push('embed_failed')
+        }
+      }
+
+      // Lớp 4: yt-dlp (chỉ hoạt động ở local dev có cài yt-dlp)
       if (entries.length === 0) {
         try {
           entries = await fetchViaYtDlp(profile.creator_url)
