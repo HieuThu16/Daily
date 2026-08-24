@@ -1,167 +1,23 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Search, Heart, BookOpen, Clock, Play, 
-  X, Bookmark, ChevronRight,
-  Flame, Sparkles, Loader2, Plus, Download,
-  Link as LinkIcon, AlertCircle, Clipboard, ExternalLink,
-  CheckCircle2, Zap, Camera, Lock
-} from 'lucide-react';
-import type { HManga } from './hMangaService';
-import { 
+import React, { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  X, Loader2, Plus, Download, Link as LinkIcon, AlertCircle, Clipboard,
+  ExternalLink, CheckCircle2, Camera, Lock,
+} from 'lucide-react'
+import type { HManga } from './hMangaService'
+import {
   fetchHMangaList,
-  getHMangaFavorites, toggleHMangaFavorite, 
+  getHMangaFavorites, toggleHMangaFavorite,
   getHMangaHistory,
   crawlAndSaveStory,
   getChapterImageUrl,
   isValidHMangaCover,
-  getCustomHMangaList
-} from './hMangaService';
-import { RecentCrawledModal } from './RecentCrawledModal';
-import { lockH } from './HPinGate';
-import { useScrollRestore } from '../shared';
-import { useToast } from '../ToastContext';
-import { getCachedCoverBlobUrl, fetchAndCacheCover } from '../../lib/mangaCoverCache';
-import './ngontinhManga.css';
-
-type MainTab = 'all' | 'history' | 'favorites';
-
-const BATCH_SIZE = 36;
-
-interface CardProps {
-  manga: HManga;
-  isFav: boolean;
-  userProgress?: { chapterNumber: number };
-  onToggleFav: (e: React.MouseEvent, slug: string) => void;
-  onOpenReader: (manga: HManga, chapterNum: number) => void;
-  onClick: () => void;
-}
-
-const HMangaCardItem: React.FC<CardProps> = React.memo(({
-  manga,
-  isFav,
-  userProgress,
-  onToggleFav,
-  onOpenReader,
-  onClick,
-}) => {
-  const ch1Img = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-  const fallbackCover = (isValidHMangaCover(manga.cover) ? manga.cover : ch1Img) || manga.cover || '';
-  const [currentCover, setCurrentCover] = useState<string>(fallbackCover);
-  const [imgLoaded, setImgLoaded] = useState<boolean>(false);
-  const [imgError, setImgError] = useState<boolean>(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-    const valid = (isValidHMangaCover(manga.cover) ? manga.cover : ch1) || manga.cover || '';
-
-    // Check instant local memory / IndexedDB blob cache for 0ms loading
-    void getCachedCoverBlobUrl(manga.slug).then((cachedBlob) => {
-      if (isMounted) {
-        if (cachedBlob) {
-          setCurrentCover(cachedBlob);
-          setImgLoaded(true);
-        } else {
-          setCurrentCover(valid);
-          setImgError(false);
-          setImgLoaded(false);
-          if (valid) void fetchAndCacheCover(valid, manga.slug);
-        }
-      }
-    });
-
-    return () => { isMounted = false; };
-  }, [manga.slug, manga.cover, manga.chapters]);
-
-  const sortedChs = useMemo(() => {
-    return [...(manga.chapters || [])].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
-  }, [manga.chapters]);
-  const firstCh = sortedChs[0]?.number ?? 1;
-
-  const handleImgError = () => {
-    const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0]);
-    if (ch1 && currentCover !== ch1) {
-      setCurrentCover(ch1);
-      void fetchAndCacheCover(ch1, manga.slug);
-    } else {
-      setImgError(true);
-      setImgLoaded(true);
-    }
-  };
-
-  return (
-    <div className="ngontinh-manga-card" onClick={onClick}>
-      {/* Cover Wrap */}
-      <div className="ngontinh-cover-wrap">
-        {!imgLoaded && !imgError && <div className="ngontinh-cover-skeleton" />}
-
-        {currentCover && !imgError ? (
-          <img
-            src={currentCover}
-            alt={manga.title}
-            className={`ngontinh-cover-img ${imgLoaded ? 'loaded' : 'loading'}`}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onLoad={() => setImgLoaded(true)}
-            onError={handleImgError}
-          />
-        ) : (
-          <div className="ngontinh-cover-placeholder">
-            <BookOpen size={32} />
-          </div>
-        )}
-
-        {/* 18+ Hot Tag */}
-        <div className="ngontinh-hot-tag" style={{ background: '#e11d48', color: '#fff', fontWeight: 800 }}>
-          🔞 18+
-        </div>
-
-        {/* Favorite Button */}
-        <button
-          className={`ngontinh-card-fav-btn ${isFav ? 'favorited' : ''}`}
-          onClick={(e) => onToggleFav(e, manga.slug)}
-          title={isFav ? 'Bỏ yêu thích' : 'Yêu thích'}
-        >
-          <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
-        </button>
-
-        {/* Total Chapters Badge */}
-        <div className="ngontinh-card-chapter-badge">
-          {manga.totalChapters || manga.chapters?.length || 0} Ch
-        </div>
-
-        {/* Reading Status Badge */}
-        {userProgress && (
-          <div className="ngontinh-reading-ribbon">
-            Đang đọc #{userProgress.chapterNumber}
-          </div>
-        )}
-      </div>
-
-      {/* Card Info */}
-      <div className="ngontinh-card-details">
-        <h3 className="ngontinh-card-title" title={manga.title || ''}>
-          {manga.title}
-        </h3>
-
-        <div className="ngontinh-card-actions">
-          <button
-            className="ngontinh-btn-read-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenReader(manga, userProgress?.chapterNumber ?? firstCh);
-            }}
-          >
-            <Play size={13} fill="currentColor" />
-            {userProgress ? `Đọc tiếp #${userProgress.chapterNumber}` : 'Đọc ngay'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-});
+  getCustomHMangaList,
+} from './hMangaService'
+import { lockH } from './HPinGate'
+import { useToast } from '../ToastContext'
+import { MangaLibraryPage, type MangaLibraryConfig } from './MangaLibraryPage'
+import './ngontinhManga.css'
 
 function extractSlugFromUrl(rawUrl: string): string {
   let u = rawUrl.trim();
@@ -478,261 +334,48 @@ function CrawlModal({
 }
 
 export const HMangaPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { showToast } = useToast();
+  const navigate = useNavigate()
+  const { showToast } = useToast()
+  const [showCrawlModal, setShowCrawlModal] = useState(false)
 
-  const [mangaList, setMangaList] = useState<HManga[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<MainTab>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [history, setHistory] = useState<Record<string, any>>({});
-  const [showCrawlModal, setShowCrawlModal] = useState<boolean>(false);
-  const [showRecentModal, setShowRecentModal] = useState<boolean>(false);
+  const config = useMemo<MangaLibraryConfig<HManga>>(
+    () => ({
+      cssPrefix: 'ngontinh',
+      kindLabel: 'H',
+      routeBase: '/truyenh',
+      scrollKey: 'truyenh-list',
+      recentTitle: 'Truyện H đã cào gần đây',
+      accentColor: '#a855f7',
 
-  const recentCrawledStories = useMemo(() => {
-    const customList = getCustomHMangaList();
-    const map = new Map<string, HManga>();
-    for (const m of customList) map.set(m.slug, m);
-    for (const m of mangaList) {
-      if (m.updatedAt && !map.has(m.slug)) map.set(m.slug, m);
-    }
-    return Array.from(map.values());
-  }, [mangaList]);
+      loadList: fetchHMangaList,
+      getFavorites: getHMangaFavorites,
+      toggleFavorite: toggleHMangaFavorite,
+      getHistory: getHMangaHistory,
+      historyEvent: 'daily_h_history_updated',
 
-  // Progressive batching count
-  const [visibleCount, setVisibleCount] = useState<number>(
-    () => Number(sessionStorage.getItem('daily_count_h-list') ?? BATCH_SIZE) || BATCH_SIZE,
-  );
-
-  useEffect(() => {
-    sessionStorage.setItem('daily_count_h-list', String(visibleCount));
-  }, [visibleCount]);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  useScrollRestore('truyenh-list', mangaList.length > 0);
-
-  const loadData = async () => {
-    try {
-      const list = await fetchHMangaList();
-      if (list && list.length > 0) {
-        setMangaList(list);
-      }
-      setFavorites(getHMangaFavorites());
-      setHistory(getHMangaHistory());
-    } catch (err) {
-      console.error('Failed to load H manga list', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-    setFavorites(getHMangaFavorites());
-    setHistory(getHMangaHistory());
-
-    const onHistoryUpdate = (e: any) => {
-      setHistory(e.detail || getHMangaHistory());
-    };
-    window.addEventListener('daily_h_history_updated', onHistoryUpdate);
-    return () => window.removeEventListener('daily_h_history_updated', onHistoryUpdate);
-  }, []);
-
-  // Reset pagination on tab/search change
-  useEffect(() => {
-    setVisibleCount(BATCH_SIZE);
-  }, [activeTab, searchQuery]);
-
-  const handleToggleFav = (e: React.MouseEvent, slug: string) => {
-    e.stopPropagation();
-    toggleHMangaFavorite(slug);
-    setFavorites(getHMangaFavorites());
-  };
-
-  const openReader = (manga: HManga, chapterNum: number) => {
-    navigate(`/truyenh/${manga.slug}/read/${chapterNum}`);
-  };
-
-  const handleCrawlSuccess = (manga: HManga) => {
-    showToast(`🎉 Đã cào thành công truyện "${manga.title}" (${manga.totalChapters} chương)!`);
-    loadData();
-    navigate(`/truyenh/${manga.slug}`);
-  };
-
-  // Map slug to full manga details
-  const mangaMap = useMemo(() => {
-    const map = new Map<string, HManga>();
-    for (const m of (mangaList || [])) {
-      if (m?.slug) map.set(m.slug, m);
-    }
-    return map;
-  }, [mangaList]);
-
-  // Filtered list
-  const filteredList = useMemo(() => {
-    let result: { manga: HManga }[] = [];
-    const list = mangaList || [];
-    const favs = favorites || [];
-    const hist = history || {};
-
-    if (activeTab === 'favorites') {
-      result = list.filter(m => m?.slug && favs.includes(m.slug)).map(m => ({ manga: m }));
-    } else if (activeTab === 'history') {
-      result = list
-        .filter(m => m?.slug && hist[m.slug])
-        .sort((a, b) => {
-          const tA = new Date(hist[a.slug]?.readAt || 0).getTime();
-          const tB = new Date(hist[b.slug]?.readAt || 0).getTime();
-          return tB - tA;
-        })
-        .map(m => ({ manga: m }));
-    } else {
-      result = list.map(m => ({ manga: m }));
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(item => 
-        (item.manga?.title || '').toLowerCase().includes(q) || 
-        (item.manga?.author || '').toLowerCase().includes(q) ||
-        item.manga?.genres?.some(g => (g || '').toLowerCase().includes(q))
-      );
-    }
-
-    return result;
-  }, [mangaList, activeTab, favorites, history, searchQuery]);
-
-  // Paginated visible list
-  const visibleItems = useMemo(() => {
-    return (filteredList || []).slice(0, visibleCount);
-  }, [filteredList, visibleCount]);
-
-  // Infinite Scroll Intersection Observer
-  useEffect(() => {
-    if (!sentinelRef.current || visibleCount >= (filteredList || []).length) return;
-    
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, (filteredList || []).length));
-        }
+      // Bìa hay hỏng: rơi về trang đầu của chương 1.
+      coverOf: (manga) => {
+        const ch1 = getChapterImageUrl(manga.chapters?.[0]?.images?.[0] as any)
+        return (isValidHMangaCover(manga.cover) ? manga.cover : ch1) || manga.cover || ''
       },
-      { rootMargin: '400px' }
-    );
+      cardBadge: () => (
+        <div className="ngontinh-hot-tag" style={{ background: '#e11d48', color: '#fff', fontWeight: 800 }}>
+          🔞 18+
+        </div>
+      ),
 
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [visibleCount, filteredList]);
+      recentCrawled: (list) => {
+        const map = new Map<string, HManga>()
+        for (const m of getCustomHMangaList()) map.set(m.slug, m)
+        for (const m of list) if (m.updatedAt && !map.has(m.slug)) map.set(m.slug, m)
+        return [...map.values()]
+      },
 
-  /** Truyện đang đọc dở gần nhất */
-  const continueReading = useMemo(() => {
-    const entries = Object.values(history || {}) as Array<{ slug: string; chapterNumber: number; chapterName?: string; readAt?: string }>;
-    const latest = entries
-      .filter((h) => h?.slug && mangaMap.has(h.slug))
-      .sort((a, b) => (b.readAt ?? '').localeCompare(a.readAt ?? ''))[0];
-    return latest && latest.slug ? { progress: latest, manga: mangaMap.get(latest.slug)! } : null;
-  }, [history, mangaMap]);
+      // Truyện H đọc ở trang riêng (có khóa PIN, chụp ảnh màn hình), không mở modal.
+      onRead: (manga, chapterNum) => navigate(`/truyenh/${manga.slug}/read/${chapterNum}`),
 
-  return (
-    <div className="ngontinh-page-container">
-      <CrawlModal
-        isOpen={showCrawlModal}
-        onClose={() => setShowCrawlModal(false)}
-        onSuccess={handleCrawlSuccess}
-        existingMangaList={mangaList}
-        onOpenExisting={(slug) => {
-          setShowCrawlModal(false);
-          navigate(`/truyenh/${slug}`);
-        }}
-      />
-
-      <RecentCrawledModal
-        isOpen={showRecentModal}
-        onClose={() => setShowRecentModal(false)}
-        title="Truyện H đã cào gần đây"
-        items={recentCrawledStories}
-        onSelectStory={(story) => navigate(`/truyenh/${story.slug}`)}
-        accentColor="#e11d48"
-      />
-
-
-      {/* Continue reading banner if available */}
-      {continueReading && (() => {
-        const ch1 = getChapterImageUrl(continueReading.manga.chapters?.[0]?.images?.[0]);
-        const cover = (isValidHMangaCover(continueReading.manga.cover) ? continueReading.manga.cover : ch1) || continueReading.manga.cover || '';
-        return (
-          <button
-            type="button"
-            className="continue-reading"
-            onClick={() => void openReader(continueReading.manga, continueReading.progress.chapterNumber)}
-          >
-            {cover && (
-              <img 
-                className="continue-reading-cover" 
-                src={cover} 
-                alt="" 
-                loading="lazy" 
-                referrerPolicy="no-referrer"
-              />
-            )}
-            <span className="continue-reading-body">
-              <span className="continue-reading-label">▶ Đọc tiếp</span>
-              <span className="continue-reading-title">{continueReading.manga.title}</span>
-              <span className="continue-reading-sub">
-                {continueReading.progress.chapterName || `Chương ${continueReading.progress.chapterNumber}`}
-              </span>
-            </span>
-          </button>
-        );
-      })()}
-
-      {/* Top Header & Main Navigation Bar */}
-      <div className="ngontinh-top-nav-bar">
-        <div className="ngontinh-nav-tabs">
-          <button
-            className={`ngontinh-nav-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
-          >
-            <BookOpen size={16} /> Tất cả <span className="ngontinh-count-pill">{(mangaList || []).length}</span>
-          </button>
-
-          <button
-            className={`ngontinh-nav-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-            onClick={() => setActiveTab('history')}
-          >
-            <Clock size={16} /> Đang đọc <span className="ngontinh-count-pill">{Object.keys(history || {}).length}</span>
-          </button>
-
-          <button
-            className={`ngontinh-nav-tab-btn ${activeTab === 'favorites' ? 'active' : ''}`}
-            onClick={() => setActiveTab('favorites')}
-          >
-            <Heart size={16} /> Yêu thích <span className="ngontinh-count-pill">{(favorites || []).length}</span>
-          </button>
-
-          {/* Button Vừa cào gần đây */}
-          <button
-            type="button"
-            className="ngontinh-nav-tab-btn"
-            onClick={() => setShowRecentModal(true)}
-            style={{
-              background: 'rgba(168, 85, 247, 0.15)',
-              color: '#c084fc',
-              border: '1px solid rgba(168, 85, 247, 0.3)',
-              fontWeight: 600,
-            }}
-            title="Xem danh sách truyện đã cào gần đây (trong 1h trước hoặc tất cả)"
-          >
-            <Zap size={15} /> Vừa cào gần đây
-            {(recentCrawledStories || []).length > 0 && (
-              <span className="ngontinh-count-pill" style={{ backgroundColor: 'rgba(168, 85, 247, 0.3)', color: '#e9d5ff' }}>
-                {(recentCrawledStories || []).length}
-              </span>
-            )}
-          </button>
-
-          {/* Button Kho ảnh chụp */}
+      navExtras: () => (
+        <>
           <button
             type="button"
             className="ngontinh-nav-tab-btn"
@@ -748,7 +391,6 @@ export const HMangaPage: React.FC = () => {
             <Camera size={15} /> Kho ảnh chụp
           </button>
 
-          {/* Button Khóa mục Truyện H */}
           <button
             type="button"
             className="ngontinh-nav-tab-btn"
@@ -756,101 +398,43 @@ export const HMangaPage: React.FC = () => {
               lockH()
               navigate('/home')
             }}
-            style={{
-              background: 'rgba(225, 29, 72, 0.12)',
-              color: '#e11d48',
-              border: '1px solid rgba(225, 29, 72, 0.3)',
-              fontWeight: 600,
-            }}
+            style={{ background: 'rgba(225, 29, 72, 0.12)', color: '#fb7185', fontWeight: 600 }}
             title="Khóa lại mục Truyện H"
           >
             <Lock size={15} /> Khóa
           </button>
 
-          {/* Button Cào truyện mới */}
           <button
             type="button"
             className="ngontinh-nav-tab-btn"
             onClick={() => setShowCrawlModal(true)}
-            style={{
-              background: 'linear-gradient(135deg, #e11d48, #be123c)',
-              color: '#ffffff',
-              fontWeight: 700,
-            }}
+            style={{ background: 'linear-gradient(135deg, #e11d48, #be123c)', color: '#ffffff', fontWeight: 700 }}
           >
             <Plus size={15} /> Paste link cào truyện
           </button>
-        </div>
-
-
-        <div className="ngontinh-search-wrapper">
-          <Search size={16} className="ngontinh-search-icon" />
-          <input
-            type="text"
-            placeholder={`Tìm kiếm trong ${(mangaList || []).length || 'kho'} bộ truyện H...`}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="ngontinh-search-input"
-          />
-          {searchQuery && (
-            <button className="ngontinh-search-clear" onClick={() => setSearchQuery('')}>
-              <X size={15} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Manga Grid View */}
-      {loading && (mangaList || []).length === 0 ? (
-        <div className="ngontinh-loading-box">
-          <div className="ngontinh-spinner" />
-          <p>Đang tải danh sách truyện H...</p>
-        </div>
-      ) : (filteredList || []).length === 0 ? (
-        <div className="ngontinh-empty-state">
-          <Bookmark size={40} className="ngontinh-empty-icon" />
-          <h3>Không tìm thấy truyện phù hợp</h3>
-          <p>Thử tìm kiếm với từ khóa khác hoặc bấm nút <strong>"Paste link cào truyện"</strong> ở trên.</p>
-        </div>
-      ) : (
-        <>
-          <div className="ngontinh-manga-grid">
-            {(visibleItems || []).map(({ manga }) => {
-              if (!manga || !manga.slug) return null;
-              const isFav = (favorites || []).includes(manga.slug);
-              const userProgress = history?.[manga.slug];
-
-              return (
-                <HMangaCardItem
-                  key={manga.slug}
-                  manga={manga}
-                  isFav={isFav}
-                  userProgress={userProgress}
-                  onToggleFav={handleToggleFav}
-                  onOpenReader={openReader}
-                  onClick={() => navigate(`/truyenh/${manga.slug}`)}
-                />
-              );
-            })}
-          </div>
-
-          {/* Load More & Infinite Scroll Sentinel */}
-          {visibleCount < filteredList.length && (
-            <div className="ngontinh-pagination-footer">
-              <div ref={sentinelRef} style={{ height: 10 }} />
-              <button
-                className="ngontinh-btn-load-more"
-                onClick={() => setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, filteredList.length))}
-              >
-                <Loader2 size={16} className="ngontinh-spin-icon" />
-                <span>
-                  Hiển thị thêm (+{Math.min(BATCH_SIZE, filteredList.length - visibleCount)}) · Còn lại {filteredList.length - visibleCount} truyện
-                </span>
-              </button>
-            </div>
-          )}
         </>
-      )}
-    </div>
-  );
-};
+      ),
+
+      extras: (ctx) => (
+        <CrawlModal
+          isOpen={showCrawlModal}
+          onClose={() => setShowCrawlModal(false)}
+          existingMangaList={ctx.list}
+          onOpenExisting={(slug: string) => {
+            setShowCrawlModal(false)
+            navigate(`/truyenh/${slug}`)
+          }}
+          onSuccess={(manga: HManga) => {
+            showToast(`🎉 Đã cào thành công truyện "${manga.title}" (${manga.totalChapters} chương)!`)
+            ctx.reload()
+            navigate(`/truyenh/${manga.slug}`)
+          }}
+        />
+      ),
+    }),
+    // showCrawlModal đổi thì phải dựng lại config để modal mở/đóng theo.
+    [showCrawlModal],
+  )
+
+  return <MangaLibraryPage config={config} />
+}
