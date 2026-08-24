@@ -4,14 +4,12 @@ import type {
   PartnerLocation, 
   SavedPlace, 
   LocationTimelineLog, 
-  LocationAlertEvent 
 } from '../types/location';
 
 const STORAGE_KEY_LOCATION = 'daily_couple_locations_v2';
 const STORAGE_KEY_SHARING = 'daily_location_sharing_enabled';
 const STORAGE_KEY_SAVED_PLACES = 'daily_saved_places_v2';
 const STORAGE_KEY_TIMELINE = 'daily_location_timeline_logs_v2';
-const STORAGE_KEY_ALERTS = 'daily_location_alert_events_v2';
 
 const REVERSE_GEOCODE_CACHE = new Map<string, string>();
 
@@ -101,9 +99,11 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
     }
   } catch {}
 
-  const fallback = 'Vị trí hiện tại';
-  REVERSE_GEOCODE_CACHE.set(cacheKey, fallback);
-  return fallback;
+  /*
+   * KHÔNG cache nhánh này: trước đây mạng chập một lần là ô toạ độ đó bị đóng đinh
+   * 'Vị trí hiện tại' vĩnh viễn, không bao giờ hỏi lại Nominatim nữa.
+   */
+  return 'Vị trí hiện tại';
 }
 
 /* ==========================================================================

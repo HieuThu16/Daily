@@ -114,6 +114,7 @@ describe('blobToCover', () => {
       type?: string,
       quality?: number,
     ) {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias -- stub cua toBlob can chinh `this`
       capturedCanvas = this
       stubbedToBlob.call(this, callback, type, quality)
     } as never

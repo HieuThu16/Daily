@@ -3,10 +3,8 @@ import {
   autoMarkVideoWatching,
   cycleNextVideoStatus,
   getStoredVideoStatuses,
-  getVideoStatus,
   getVideoStatusSets,
   setVideoStatus,
-  type VideoStatus
 } from './videoStatus'
 
 describe('videoStatus logic', () => {

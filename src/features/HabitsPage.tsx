@@ -27,7 +27,8 @@ const FILTER_CHIPS: Array<{ key: Filter; label: string }> = [
 
 const HABIT_ORDER_STORAGE_KEY = 'daily_habit_priority_order'
 
-import { getRemoteAppSetting, saveAppSetting } from '../lib/userAppSettings'
+import { saveAppSetting } from '../lib/userAppSettings'
+import { Z } from '../lib/zLayers'
 
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
 const now = new Date()
@@ -289,7 +290,7 @@ export function HabitsPage() {
       position: nextPosition,
     }
 
-    let { data, error } = await supabase!.from('habits').insert(payload).select().single()
+    const { data, error } = await supabase!.from('habits').insert(payload).select().single()
 
     if (!error && data) {
       const created = { ...(data as Habit), habit_type: habitType, position: nextPosition }
@@ -330,7 +331,7 @@ export function HabitsPage() {
     habits.setItems((xs) => xs.map((h) => (h.id === editing.id ? { ...h, ...payload } : h)))
     setEditing(null)
 
-    let { error } = await supabase!.from('habits').update(payload).eq('id', editing.id)
+    const { error } = await supabase!.from('habits').update(payload).eq('id', editing.id)
     if (!error) {
       showSaveToast(true, `cập nhật thói quen "${payload.name}"`)
     } else {
@@ -648,7 +649,7 @@ export function HabitsPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 1200,
+            zIndex: Z.fullscreen,
             background: 'rgba(0, 0, 0, 0.72)',
             backdropFilter: 'blur(8px)',
             display: 'flex',

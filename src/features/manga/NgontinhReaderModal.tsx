@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, Sparkles } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
 import { getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
@@ -24,7 +24,6 @@ export const NgontinhReaderModal: React.FC<Props> = ({
   const [currentChapterNum, setCurrentChapterNum] = useState<number>(startNum);
   const [fetchingChapterImages, setFetchingChapterImages] = useState<boolean>(false);
   const [dynamicChapterImages, setDynamicChapterImages] = useState<Record<number, any[]>>({});
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -241,15 +240,6 @@ export const NgontinhReaderModal: React.FC<Props> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNext, handlePrev, onClose]);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
 
   const images = (currentChapter?.images && currentChapter.images.length > 0)
     ? currentChapter.images
@@ -272,6 +262,7 @@ export const NgontinhReaderModal: React.FC<Props> = ({
         <div className="ngontinh-reader-header-right">
           {/* Quick Chapter Selector */}
           <select
+            aria-label="Chọn chương"
             value={currentChapterNum}
             onChange={(e) => {
               const val = Number(e.target.value);

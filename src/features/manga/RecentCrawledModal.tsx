@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { X, Clock, Zap, BookOpen, ChevronRight, Calendar, Sparkles } from 'lucide-react';
+import { X, Clock, Zap, BookOpen, ChevronRight, Calendar } from 'lucide-react';
 import type { BLManga } from '../../types/manga';
 import type { HManga } from './hMangaService';
 import { getChapterImageUrl, isValidHMangaCover } from './hMangaService';
+import { Z } from '../../lib/zLayers'
 
 interface StoryItem {
   slug: string;
@@ -85,7 +86,7 @@ export const RecentCrawledModal: React.FC<Props> = ({
         inset: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.75)',
         backdropFilter: 'blur(8px)',
-        zIndex: 9999,
+        zIndex: Z.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -144,6 +145,7 @@ export const RecentCrawledModal: React.FC<Props> = ({
             </div>
           </div>
           <button
+            aria-label="Đóng"
             onClick={onClose}
             style={{
               background: 'rgba(255, 255, 255, 0.06)',

@@ -6,6 +6,7 @@ import { anniversariesOn, yearsAgoLabel } from '../../lib/anniversary'
 import type { SharedEvent, SharedPartner } from '../../types'
 import { DeleteButton, Empty, Modal, useQuery } from '../shared'
 import { useToast } from '../ToastContext'
+import { notifyPartner } from '../../lib/push'
 
 const PHOTO_BUCKET = 'daily-photos'
 
@@ -32,7 +33,6 @@ function warnMissingImagesColumn(showToast: (msg: string, type?: any) => void) {
 export function SharedEventsView({
   personId,
   personName,
-  isPartner = false,
   roomCode = 'HIEU-Y-2026',
   onSendInvite,
 }: {
@@ -58,7 +58,6 @@ export function SharedEventsView({
   /** "Thông tin thêm" mặc định đóng: giờ và vị trí chỉ hiện khi cần điền. */
   const [showExtra, setShowExtra] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLDivElement>(null)
 
@@ -287,6 +286,10 @@ export function SharedEventsView({
       }
     }
 
+    // Không lưu được lên máy chủ: vẫn hiện ra để khỏi mất công gõ lại, nhưng phải
+    // nói thẳng là chưa lưu — trước đây toast báo thành công rồi tải lại trang là mất.
+    const savedRemotely = created !== null
+
     if (!created) {
       created = {
         id: `local-${Date.now()}`,
@@ -302,7 +305,12 @@ export function SharedEventsView({
 
     setBusy(false)
     events.setItems((prev) => [created!, ...prev])
-    showToast('💞 Đã thêm kỷ niệm mới')
+    if (savedRemotely) {
+      void notifyPartner('Có kỷ niệm mới được chia sẻ', created.title, '/daily', `share-${created.id}`)
+      showToast('💞 Đã thêm kỷ niệm mới')
+    } else {
+      showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
+    }
     setAdding(false)
     resetForm()
   }
@@ -564,14 +572,14 @@ export function SharedEventsView({
             <CalendarHeart size={15} /> Ngày này những năm trước ({anniversaries.length})
           </h3>
           <div style={{ display: 'grid', gap: 6 }}>
-            {anniversaries.map(({ event, yearsAgo }) => (
+            {anniversaries.map(({ event, monthsAgo }) => (
               <button
                 key={event.id}
                 type="button"
                 onClick={() => setViewing(event)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}
               >
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--rose)', flexShrink: 0 }}>{yearsAgoLabel(yearsAgo)}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--rose)', flexShrink: 0 }}>{yearsAgoLabel(monthsAgo)}</span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {event.title}
                 </span>

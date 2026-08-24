@@ -5,6 +5,8 @@
  * Tìm kiếm video YouTube qua YouTube Data API v3 chính thức,
  * có dự phòng qua Invidious / oEmbed khi không có API key.
  */
+import { requireAuth } from './_auth'
+
 
 export const config = { maxDuration: 30 }
 
@@ -19,6 +21,8 @@ export type YouTubeSearchResultItem = {
 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   const query = String(req.query?.q || req.body?.q || '').trim()
   if (!query) {
     return res.status(400).json({ error: 'Thiếu từ khoá tìm kiếm (q)' })

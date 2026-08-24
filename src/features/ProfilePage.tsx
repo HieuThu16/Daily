@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Bell, BellOff, CheckCircle2, ChevronRight, Clock, Download,
-  HardDriveDownload, History, LogOut, RefreshCw, Settings, Sparkles, Upload,
+  HardDriveDownload, History, LogOut, RefreshCw, Settings, Upload,
   SunMoon, X, Zap,
 } from 'lucide-react'
 
@@ -248,7 +248,7 @@ interface SettingsPageProps {
   onInstallPWA: () => void
 }
 
-export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPWA }: SettingsPageProps) {
+export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: SettingsPageProps) {
   const { showToast } = useToast()
   const [showChangelog, setShowChangelog] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
@@ -303,9 +303,6 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
     setRestoring(false)
   }
 
-  const displayName = user.full_name || user.email?.split('@')[0] || 'Người dùng'
-  const joinDate = localStorage.getItem('daily_joined_at')
-  const memberDays = joinDate ? Math.max(1, Math.floor((Date.now() - new Date(joinDate).getTime()) / 86_400_000)) : null
 
   return (
     <div className="settings-page">
@@ -380,6 +377,7 @@ export function SettingsPage({ user, dark, onToggleDark, canInstall, onInstallPW
                   <ChevronRight size={15} />
                 </button>
                 <input
+                  aria-label="Chọn file sao lưu để nhập lại"
                   ref={restoreInput}
                   type="file"
                   accept="application/json,.json"

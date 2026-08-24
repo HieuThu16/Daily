@@ -1,14 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { Sparkles, RefreshCw, X, ArrowUpCircle } from 'lucide-react';
+import { Sparkles, RefreshCw, X } from 'lucide-react';
 import { forceReloadLatestVersion } from '../lib/appReload';
+import { Z } from '../lib/zLayers'
 
 export function PwaUpdateNotification() {
   const currentVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v2.4.0';
   const currentBuildTime = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
 
   const [newServerVersion, setNewServerVersion] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState<boolean>(false);
+  /*
+   * Nhớ ĐÃ BỎ QUA BẢN NÀO, chứ không phải cờ bật/tắt chung.
+   * Cờ chung khiến bấm X một lần là bản build sau cũng không hiện lại nữa.
+   */
+  const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
+  const swIntervalRef = useRef<number | null>(null);
 
   const {
     needRefresh: [swNeedRefresh, setSwNeedRefresh],
@@ -16,10 +22,12 @@ export function PwaUpdateNotification() {
   } = useRegisterSW({
     onRegisteredSW(_swUrl?: string, r?: ServiceWorkerRegistration) {
       if (r) {
-        // Tự động kiểm tra ServiceWorker mỗi 20 giây
-        setInterval(() => {
+        // 5 phút là đủ: đã có thêm nhịp kiểm tra mỗi lần quay lại tab bên dưới.
+        // 20 giây như cũ nghĩa là 2 request mạng mỗi 20 giây suốt phiên — tốn pin và data.
+        if (swIntervalRef.current !== null) clearInterval(swIntervalRef.current);
+        swIntervalRef.current = window.setInterval(() => {
           r.update().catch(() => {});
-        }, 20_000);
+        }, 5 * 60_000);
       }
     },
     onRegisterError(error: unknown) {
@@ -46,7 +54,7 @@ export function PwaUpdateNotification() {
     };
 
     void checkServerVersion();
-    const interval = setInterval(checkServerVersion, 20_000);
+    const interval = window.setInterval(checkServerVersion, 5 * 60_000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -62,11 +70,13 @@ export function PwaUpdateNotification() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       clearInterval(interval);
+      if (swIntervalRef.current !== null) clearInterval(swIntervalRef.current);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentVersion, currentBuildTime]);
 
-  const hasUpdate = Boolean((swNeedRefresh || newServerVersion) && !dismissed);
+  const pendingVersion = newServerVersion ?? (swNeedRefresh ? 'sw' : null);
+  const hasUpdate = Boolean(pendingVersion && pendingVersion !== dismissedVersion);
 
   if (!hasUpdate) return null;
 
@@ -84,7 +94,7 @@ export function PwaUpdateNotification() {
         top: '14px',
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 999999,
+        zIndex: Z.appUpdate,
         maxWidth: '92vw',
         width: '430px',
         background: 'linear-gradient(135deg, #1e1b4b, #312e81)',
@@ -158,7 +168,7 @@ export function PwaUpdateNotification() {
         <button
           type="button"
           onClick={() => {
-            setDismissed(true);
+            setDismissedVersion(pendingVersion);
             setSwNeedRefresh(false);
           }}
           style={{

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Bookmark, ArrowUp } from 'lucide-react';
 import type { HManga } from './hMangaService';
 import { getHMangaProgress, saveHMangaProgress } from './hMangaService';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
@@ -23,7 +23,6 @@ export const HMangaReaderModal: React.FC<Props> = ({
 }) => {
   const startNum = initialChapterNumber ?? initialChapterNum ?? 1;
   const [currentChapterNum, setCurrentChapterNum] = useState<number>(startNum);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -221,6 +220,7 @@ export const HMangaReaderModal: React.FC<Props> = ({
         <div className="ngontinh-reader-header-right">
           {/* Quick Chapter Selector */}
           <select
+            aria-label="Chọn chương"
             value={currentChapterNum}
             onChange={(e) => {
               const val = Number(e.target.value);

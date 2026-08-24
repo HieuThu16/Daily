@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractPartInfo, extractSeriesName, normalizeSeriesKey, groupVideosIntoSeries } from './tiktokSeries'
+import { extractPartInfo, extractSeriesName, groupVideosIntoSeries } from './tiktokSeries'
 
 describe('TikTok Series Parser & Grouper', () => {
   describe('extractPartInfo', () => {

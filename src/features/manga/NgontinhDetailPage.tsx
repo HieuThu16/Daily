@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Heart, Play, BookOpen, Clock, 
-  Search, ArrowUpDown, ChevronRight,
-  CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
-  Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
-  Layers, Bell
+  Search, ArrowUpDown, 
+  CheckCircle2, Sparkles, Flame, Star, Users, 
+  ChevronDown, ChevronUp, ExternalLink, 
+  Bell
 } from 'lucide-react';
 import type { MangaChapter, NgontinhManga } from '../../types/manga';
 import { 
@@ -33,7 +33,6 @@ export const NgontinhDetailPage: React.FC = () => {
   const [follows, setFollows] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
   const [showAllTags, setShowAllTags] = useState<boolean>(false);
-  const [isShareCopied, setIsShareCopied] = useState<boolean>(false);
   
   // Chapter filter and sort
   const [chapterSearch, setChapterSearch] = useState<string>('');
@@ -112,31 +111,6 @@ export const NgontinhDetailPage: React.FC = () => {
     showToast(added ? '🔔 Đang theo dõi truyện này! Sẽ nhận thông báo khi có chap mới' : '🔕 Đã hủy theo dõi truyện');
   };
 
-  const handleShare = async () => {
-    if (!manga) return;
-    const shareUrl = window.location.href;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: manga.title,
-          text: `Đọc truyện ${manga.title} cực hay!`,
-          url: shareUrl,
-        });
-        return;
-      } catch (e) {
-        // Fallback to copy
-      }
-    }
-    
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setIsShareCopied(true);
-      showToast('📋 Đã sao chép link truyện vào bộ nhớ tạm!');
-      setTimeout(() => setIsShareCopied(false), 2000);
-    } catch {
-      showToast('Không thể chia sẻ link');
-    }
-  };
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -162,26 +136,6 @@ export const NgontinhDetailPage: React.FC = () => {
     };
   }, [manga, slug]);
 
-  // Breadcrumbs
-  const breadcrumbsList = useMemo(() => {
-    if (!manga) return ['Truyện Ngôn Tình', 'Manhua', 'Hiện đại'];
-    const list = ['Truyện Ngôn Tình'];
-    if (manga.genres && manga.genres.length > 0) {
-      const typeGenre = manga.genres.find(g => ['Manhwa', 'Manga', 'Manhua'].includes(g));
-      list.push(typeGenre || 'Manhua');
-    } else {
-      list.push('Manhua');
-    }
-
-    if (manga.genres && manga.genres.length > 0) {
-      const mainGenre = manga.genres.find(g => !['Manhwa', 'Manga', 'Manhua', 'Ngôn Tình', 'Romance', '18+'].includes(g));
-      if (mainGenre) list.push(mainGenre);
-      else list.push('Hiện đại');
-    } else {
-      list.push('Hiện đại');
-    }
-    return list;
-  }, [manga]);
 
   // Tags list
   const tags = useMemo(() => {
@@ -197,10 +151,6 @@ export const NgontinhDetailPage: React.FC = () => {
     return rawGenres;
   }, [manga]);
 
-  const visibleTags = useMemo(() => {
-    if (showAllTags) return tags;
-    return tags.slice(0, 7);
-  }, [tags, showAllTags]);
 
   // Chapter sorting & filtering
   const displayedChapters = useMemo(() => {

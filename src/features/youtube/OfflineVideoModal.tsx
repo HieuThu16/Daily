@@ -137,6 +137,7 @@ export function OfflineVideoModal({ onClose }: { onClose: () => void }) {
               <Upload size={14} /> Thêm file MP4 từ máy
             </button>
             <input
+              aria-label="Chọn file MP4 từ máy"
               ref={fileRef}
               type="file"
               accept="video/*"

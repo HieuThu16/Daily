@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NotebookPen, Plus, Save, Trash2, Calendar, FileText } from 'lucide-react'
-import { localDate, shortDate } from '../../lib/date'
+import { localDate } from '../../lib/date'
 import { supabase } from '../../lib/supabase'
 import type { PersonDailyLog } from '../../types'
 import { Modal } from '../shared'
@@ -82,7 +82,7 @@ export function PersonJournal({ personId, personName }: { personId: string; pers
     setViewingLog(null)
   }
 
-  const deleteLog = async (logId: string, logDate: string) => {
+  const deleteLog = async (logId: string, _logDate: string) => {
     if (!confirm('Bạn có chắc muốn xoá nhật ký này?')) return
     if (supabase) {
       await supabase.from('person_daily_logs').delete().eq('id', logId)

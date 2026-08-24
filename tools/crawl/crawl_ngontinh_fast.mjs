@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const DATA_FILE = path.resolve('public/data/ngontinh_manga.json');
-const SRC_DATA_FILE = path.resolve('src/data/ngontinh_manga.json');
+const SRC_DATA_FILE = path.resolve('data/ngontinh_manga.json');
 const CONCURRENCY = 8;
 
 function sleep(ms) {

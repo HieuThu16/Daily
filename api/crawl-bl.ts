@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { requireAuth } from './_auth'
 
 export const config = { maxDuration: 60 };
 
@@ -25,7 +26,7 @@ async function fetchWithRetry(url: string, referer?: string, retries = 3): Promi
 
 export function normalizeBLUrl(inputUrl: string): { storyUrl: string; slug: string; source: 'teamsany' | 'dualeo' | 'otruyen' } {
   let url = inputUrl.trim();
-  let source: 'teamsany' | 'dualeo' | 'otruyen' = 'teamsany';
+  let source: 'teamsany' | 'dualeo' | 'otruyen';
 
   if (url.includes('dualeo') || url.startsWith('dl-')) {
     source = 'dualeo';
@@ -245,7 +246,7 @@ export async function crawlOtruyenStory(inputUrl: string, existingChapters?: any
   const item = json.data.item;
   const cdnDomain = json.data.APP_DOMAIN_CDN_IMAGE || 'https://img.otruyenapi.com';
 
-  let cover = item.thumb_url ? `${cdnDomain}/uploads/comics/${item.thumb_url}` : null;
+  const cover = item.thumb_url ? `${cdnDomain}/uploads/comics/${item.thumb_url}` : null;
   const description = item.content ? item.content.replace(/<[^>]+>/g, '').trim() : '';
   const author = Array.isArray(item.author) && item.author[0] ? item.author.join(', ') : 'Đang cập nhật';
   const genres = Array.isArray(item.category) ? item.category.map((c: any) => c.name) : ['Boylove', 'Đam Mỹ'];
@@ -287,6 +288,8 @@ export async function crawlOtruyenStory(inputUrl: string, existingChapters?: any
 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Chỉ nhận phương thức POST' });
   }

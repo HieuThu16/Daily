@@ -4,7 +4,7 @@
 // Lý do: Vercel chặn cứng 100MB/file nên file gốc không deploy được.
 // Chạy: npm run split:bl
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { BL_SHARD_COUNT, blShardOf } from './src/features/manga/blShards.ts'
+import { BL_SHARD_COUNT, blShardOf } from '../../src/features/manga/blShards.ts'
 
 const SRC = 'public/data/bl_manga.json'
 const OUT_DIR = 'public/data/bl'

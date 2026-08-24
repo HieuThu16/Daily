@@ -20,7 +20,7 @@ export function StudyProgressBar({ deck, stats }: { deck: DeckId; stats: DeckSta
     void (async () => {
       if (!supabase) return
       // 400 ngày là đủ cho chuỗi dài nhất mà vẫn không kéo cả lịch sử về máy.
-      const from = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10)
+      const from = localDate(new Date(Date.now() - 400 * 86_400_000))
       const { data, error } = await supabase
         .from('study_reviews')
         .select('log_date,card_id')

@@ -55,7 +55,21 @@ function rememberRef(key: string) {
 export async function listMyGroups(): Promise<WatchGroup[]> {
   if (!supabase) return []
   const { data } = await supabase.from('watch_groups').select('id, name, owner_id').order('created_at')
-  return data ?? []
+  if (data && data.length) return data
+  return await autoGroupFromPartners()
+}
+
+/** Chưa có nhóm nào mà đã ghép đôi (shared_partners) thì dựng sẵn một nhóm cho hai đứa. */
+async function autoGroupFromPartners(): Promise<WatchGroup[]> {
+  const { data: partners } = await supabase!.from('shared_partners').select('partner_email')
+  const emails = (partners ?? []).map((p: any) => p.partner_email).filter(Boolean)
+  if (!emails.length) return []
+  const group = await createGroup('Hai đứa mình')
+  if (!group) return []
+  await supabase!
+    .from('watch_group_members')
+    .insert(emails.map((email: string) => ({ group_id: group.id, email })))
+  return [group]
 }
 
 export async function createGroup(name: string): Promise<WatchGroup | null> {

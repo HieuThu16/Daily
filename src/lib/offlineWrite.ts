@@ -40,6 +40,29 @@ export function withOfflineQueue<T extends object>(client: T): T {
 }
 
 /**
+ * Chỉ `eq` được ghi lại thành điều kiện để đẩy lên sau. Mọi bộ lọc khác
+ * (`in`, `neq`, `is`, `lt`, `gt`, `match`…) mà bị bỏ quên thì lệnh update/delete
+ * sẽ áp cho CẢ BẢNG lúc flush — nên gặp là phải từ chối xếp hàng, không đoán bừa.
+ */
+const FILTER_METHODS = new Set([
+  'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike', 'is', 'in', 'contains',
+  'containedBy', 'rangeGt', 'rangeGte', 'rangeLt', 'rangeLte', 'rangeAdjacent',
+  'overlaps', 'textSearch', 'match', 'not', 'or', 'filter',
+])
+
+/** Mắt xích chỉ định dạng kết quả, không thu hẹp dòng nào — đi qua vô hại. */
+const PASSTHROUGH_METHODS = new Set([
+  'select', 'order', 'limit', 'range', 'abortSignal', 'returns', 'throwOnError', 'csv', 'geojson',
+])
+
+const OFFLINE_FILTER_ERROR = {
+  code: 'OFFLINE_UNSUPPORTED_FILTER',
+  message: 'Thao tác này cần mạng: bộ lọc phức tạp không xếp hàng chờ được.',
+  details: '',
+  hint: 'Kết nối lại rồi thử lại.',
+}
+
+/**
  * Đứng thay cho kết quả Supabase khi đang offline: nuốt tiếp cả chuỗi
  * `.eq().select().single()` rồi trả về đúng những dòng vừa ghi, để màn hình
  * hiện ngay như lúc có mạng.
@@ -51,13 +74,17 @@ export function queuedResult(table: string, op: WriteOp, payload: Row | Row[]) {
 
   const match: Record<string, string> = {}
   let single = false
+  /** Gặp bộ lọc không ghi lại được: bỏ hẳn lệnh, báo lỗi thật cho chỗ gọi. */
+  let unsupported = false
 
   // Xếp hàng ở microtask kế tiếp, lúc đó chuỗi .eq() đã chạy xong nên `match` mới đủ.
   queueMicrotask(() => {
+    if (unsupported) return
     queueWrite({
       table,
       op: op === 'upsert' ? 'insert' : op,
-      payload: op === 'delete' ? {} : rows.length === 1 ? rows[0] : ({ rows } as unknown as Row),
+      // Giữ nguyên mảng: gói thành { rows } thì lúc flush Postgres báo cột lạ và lệnh bị vứt.
+      payload: op === 'delete' ? {} : rows.length === 1 ? rows[0] : rows,
       match,
     })
   })
@@ -70,19 +97,25 @@ export function queuedResult(table: string, op: WriteOp, payload: Row | Row[]) {
         if (prop === 'then') {
           return (resolve: (value: unknown) => unknown) =>
             Promise.resolve(
-              resolve({
-                data: op === 'delete' ? null : single ? (rows[0] ?? null) : rows,
-                error: null,
-                count: rows.length,
-                status: 200,
-                statusText: 'OK (chờ đồng bộ)',
-              }),
+              resolve(
+                unsupported
+                  ? { data: null, error: OFFLINE_FILTER_ERROR, count: 0, status: 503, statusText: 'Offline' }
+                  : {
+                      data: op === 'delete' ? null : single ? (rows[0] ?? null) : rows,
+                      error: null,
+                      count: rows.length,
+                      status: 200,
+                      statusText: 'OK (chờ đồng bộ)',
+                    },
+              ),
             )
         }
         if (prop === 'eq') return (column: string, value: unknown) => { match[column] = String(value); return stub }
         if (prop === 'single' || prop === 'maybeSingle') return () => { single = true; return stub }
-        // .select(), .order(), .is()… chỉ là mắt xích trung gian, trả lại chính nó.
-        return () => stub
+        if (FILTER_METHODS.has(prop)) return () => { unsupported = true; return stub }
+        if (PASSTHROUGH_METHODS.has(prop)) return () => stub
+        // Mắt xích lạ chưa gặp bao giờ: coi như thu hẹp dòng, thà từ chối còn hơn ghi lan.
+        return () => { unsupported = true; return stub }
       },
     },
   )

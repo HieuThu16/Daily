@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { useToast } from '../ToastContext'
+import { apiFetch } from '../../lib/apiFetch'
 
 export type YoutubeLinkKind = 'channel' | 'video' | 'invalid'
 
@@ -79,7 +80,7 @@ function formatDuration(sec?: number | null): string {
 }
 
 async function post(body: any) {
-  const res = await fetch('/api/sync-tvshow', {
+  const res = await apiFetch('/api/sync-tvshow', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

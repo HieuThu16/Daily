@@ -5,7 +5,6 @@ import type {
   PartnerLocation, 
   SavedPlace, 
   LocationTimelineLog, 
-  LocationAlertEvent 
 } from '../../types/location';
 import { notifyPartner } from '../../lib/push';
 import {
@@ -30,7 +29,15 @@ import {
 /** Nhớ lần cảnh báo vị trí gần nhất để không báo trùng sau mỗi lần mở lại app. */
 const ALERT_KEY = 'daily_location_last_alert';
 
-export function useCoupleLocation(partnerPersonName?: string, selectedDate: string = localDate()) {
+/**
+ * Nhận diện hai tài khoản của app theo email.
+ * ponytail: hai hằng số cứng vì app chỉ có hai người dùng; thêm người thứ ba thì
+ * chuyển sang cột `display_name` trong bảng người dùng chứ đừng nối thêm chuỗi ở đây.
+ */
+const KIM_Y_EMAIL_HINTS = ['kimy', 'nguyenkimy'];
+const HIEU_EMAIL_HINTS = ['hieu', 'duyphuongvo'];
+
+export function useCoupleLocation(_partnerPersonName?: string, selectedDate: string = localDate()) {
   const [locations, setLocations] = useState<PartnerLocation[]>([]);
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [timelineLogs, setTimelineLogs] = useState<LocationTimelineLog[]>([]);
@@ -46,11 +53,31 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
   const activeMoveLogRef = useRef<LocationTimelineLog | null>(null);
   const lastCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
 
-  const isKimY = useCallback((s?: string) => {
-    const str = (s || '').toLowerCase();
-    return str.includes('kimy') || str.includes('nguyenkimy') || str.includes('ý');
-  }, []);
+  /*
+   * `timelineLogs` và `savedPlaces` đổi sau mỗi lần cập nhật vị trí. Nếu đọc thẳng
+   * state trong callback thì callback đổi identity → effect watchPosition bị dựng lại
+   * → clearWatch + watchPosition + lấy toạ độ lại → lại cập nhật → lặp vô tận.
+   * Đọc qua ref: giá trị vẫn mới, mà callback thì đứng yên.
+   */
+  const timelineLogsRef = useRef<LocationTimelineLog[]>([]);
+  const savedPlacesRef = useRef<SavedPlace[]>([]);
 
+  /*
+   * App này chỉ có hai tài khoản. Trước đây hàm còn dò `includes('ý')` trên email —
+   * email không mang được dấu tiếng Việt nên nhánh đó chết, và tài khoản lạ nào
+   * đăng nhập cũng bị coi là "Hiếu" rồi ghi đè vị trí của Hiếu.
+   * Giờ nhận diện bằng danh sách rõ ràng, và không khớp thì KHÔNG chia sẻ vị trí.
+   */
+  const isKimY = useCallback(
+    (email?: string) => KIM_Y_EMAIL_HINTS.some((hint) => (email || '').toLowerCase().includes(hint)),
+    []
+  );
+  const isHieu = useCallback(
+    (email?: string) => HIEU_EMAIL_HINTS.some((hint) => (email || '').toLowerCase().includes(hint)),
+    []
+  );
+
+  const knownUser = isKimY(currentUserEmail) || isHieu(currentUserEmail);
   const myUserName = isKimY(currentUserEmail) ? 'Kim Ý' : 'Hiếu';
   const partnerUserName = isKimY(currentUserEmail) ? 'Hiếu' : 'Kim Ý';
 
@@ -74,9 +101,12 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
         fetchSavedPlaces(),
         fetchLocationTimeline(selectedDate),
       ]);
+      const cleanedLogs = cleanTimelineLogs(logs);
+      savedPlacesRef.current = places;
+      timelineLogsRef.current = cleanedLogs;
       setLocations(locList);
       setSavedPlaces(places);
-      setTimelineLogs(cleanTimelineLogs(logs));
+      setTimelineLogs(cleanedLogs);
     } catch {
     } finally {
       setLoading(false);
@@ -103,7 +133,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
   // Xử lý logic Geofence & Lịch trình hành trình: Gom chặng Ở (STAY) & chặng Di chuyển (MOVE: Từ A -> B)
   const processGeofenceAndTimeline = useCallback(
     async (lat: number, lon: number, addressName: string, time: string, today: string) => {
-      const matchingPlace = findMatchingSavedPlace(lat, lon, savedPlaces, myUserName);
+      const matchingPlace = findMatchingSavedPlace(lat, lon, savedPlacesRef.current, myUserName);
       const uid = currentUserId || `user_${myUserName}`;
 
       // Tính khoảng cách di chuyển so với tọa độ trước
@@ -115,7 +145,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
       const upsertStay = (logId: string, placeLabel: string, plat: number, plon: number) => {
         const isSame = (l: LocationTimelineLog) =>
           l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === placeLabel;
-        const existing = getLocalTimelineLogs().find(isSame) || timelineLogs.find(isSame);
+        const existing = getLocalTimelineLogs().find(isSame) || timelineLogsRef.current.find(isSame);
         const stayLog: LocationTimelineLog = {
           id: existing ? existing.id : logId,
           user_id: uid,
@@ -235,7 +265,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
 
       return undefined;
     },
-    [currentUserId, myUserName, notifyPlaceChange, savedPlaces, timelineLogs]
+    [currentUserId, myUserName, notifyPlaceChange]
   );
 
   /*
@@ -258,8 +288,18 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
 
   // Cập nhật vị trí hiện tại của thiết bị
   const updateCurrentPosition = useCallback(
-    async (pos: GeolocationPosition) => {
+    async (pos: GeolocationPosition, force = false) => {
       if (!isLocationSharingEnabled()) return;
+      // Chưa biết mình là ai thì im lặng, chứ ghi bừa là đè lên vị trí người khác.
+      if (!knownUser) return;
+
+      /*
+       * Hai callback watchPosition có thể cùng lọt qua cửa 12 giây rồi cùng gọi
+       * reverseGeocode + đồng bộ. Đóng cửa NGAY, trước mọi await.
+       * `force` dành cho nút làm mới và lúc quay lại tab — người dùng bấm là phải chạy.
+       */
+      if (!force && Date.now() - lastSyncTimeRef.current < 12_000) return;
+      lastSyncTimeRef.current = Date.now();
 
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
@@ -289,11 +329,10 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
         updated_at: nowIso,
       };
 
-      lastSyncTimeRef.current = Date.now();
       await syncLocationToSupabase(myLoc);
       void reloadAllData();
     },
-    [currentUserId, myUserName, processGeofenceAndTimeline, reloadAllData]
+    [currentUserId, knownUser, myUserName, processGeofenceAndTimeline, reloadAllData]
   );
 
   // Kích hoạt lấy tọa độ tức thì
@@ -301,7 +340,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     if (!('geolocation' in navigator) || !isSharing) return;
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => void updateCurrentPosition(pos),
+      (pos) => void updateCurrentPosition(pos, true),
       (err) => console.warn('[Geolocation getCurrentPosition error]', err),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
@@ -320,11 +359,7 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     requestCurrentLocation();
 
     watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (Date.now() - lastSyncTimeRef.current > 12000) {
-          void updateCurrentPosition(pos);
-        }
-      },
+      (pos) => void updateCurrentPosition(pos),
       (err) => console.warn('[Geolocation watchPosition error]', err),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 }
     );

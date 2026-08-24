@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { 
   Navigation, Battery, BatteryCharging, RefreshCw, 
   MapPin, Heart, ShieldCheck, ShieldOff, Plus, Trash2,
   Clock, Route, ChevronDown, ChevronUp, Map as MapIcon,
-  Eye, ExternalLink
+  Eye
 } from 'lucide-react';
 import { formatDistance } from '../../lib/locationService';
 import { localDate } from '../../lib/date';
@@ -12,6 +12,7 @@ import { DatePager } from '../home/DatePager';
 import { useCoupleLocation } from './useCoupleLocation';
 import type { Person } from '../../types';
 import type { SavedPlace } from '../../types/location';
+import { Z } from '../../lib/zLayers'
 
 interface Props {
   partnerPerson?: Person;
@@ -91,7 +92,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     markersLayer.clearLayers();
     const bounds: L.LatLngTuple[] = [];
 
-    const createAvatarIcon = (name: string, isMe: boolean, currentPlace?: string) => {
+    const createAvatarIcon = (name: string, _isMe: boolean, currentPlace?: string) => {
       const bgColor = name === 'Hiếu' ? '#0284c7' : '#f43f5e';
       const initial = name.charAt(0).toUpperCase();
 
@@ -737,7 +738,6 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
               </div>
             ) : (
               timelineLogs.map((log) => {
-                const isMe = log.user_name === myUserName;
                 return (
                   <div
                     key={log.id}
@@ -793,7 +793,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
             position: 'fixed',
             inset: 0,
             background: 'rgba(0,0,0,0.6)',
-            zIndex: 9999,
+            zIndex: Z.modal,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

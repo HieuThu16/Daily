@@ -148,7 +148,7 @@ export function BookSearchModal({
   if (!isOpen) return null
 
   return (
-    <div className="book-search-overlay" onClick={onClose}>
+    <div className="book-search-overlay" role="presentation" onClick={onClose}>
       <div
         className="book-search-dialog"
         onClick={(e) => e.stopPropagation()}

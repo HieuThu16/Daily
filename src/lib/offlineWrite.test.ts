@@ -9,6 +9,8 @@ function fakeClient(calls: string[]) {
     update: (..._a: unknown[]) => { calls.push('update'); return builder },
     delete: (..._a: unknown[]) => { calls.push('delete'); return builder },
     eq: (..._a: unknown[]) => builder,
+    in: (..._a: unknown[]) => builder,
+    is: (..._a: unknown[]) => builder,
     select: (..._a: unknown[]) => builder,
     single: (..._a: unknown[]) => builder,
   }
@@ -72,6 +74,44 @@ describe('withOfflineQueue', () => {
     expect(error).toBeNull()
     await Promise.resolve()
     expect(getWriteQueue()[0]).toMatchObject({ table: 'media_items', op: 'delete', match: { id: 'm-9' } })
+  })
+
+  it('mất mạng + bộ lọc không phải eq thì từ chối, tuyệt đối không xếp hàng', async () => {
+    setOnline(false)
+    const client = withOfflineQueue(fakeClient([]))
+    // Không ghi lại được `.in()` thì lúc flush lệnh sẽ áp cho cả bảng — thà báo lỗi.
+    const { error } = (await client
+      .from('knowledge_items')
+      .update({ category: 'x' })
+      .in('id', ['a', 'b'])) as unknown as { error: { code: string } }
+
+    expect(error.code).toBe('OFFLINE_UNSUPPORTED_FILTER')
+    await Promise.resolve()
+    expect(getWriteQueue()).toHaveLength(0)
+  })
+
+  it('mất mạng + delete lọc bằng is() cũng bị chặn', async () => {
+    setOnline(false)
+    const client = withOfflineQueue(fakeClient([]))
+    const { error } = (await client
+      .from('todos')
+      .delete()
+      .is('deleted_at', null)) as unknown as { error: { code: string } | null }
+
+    expect(error?.code).toBe('OFFLINE_UNSUPPORTED_FILTER')
+    await Promise.resolve()
+    expect(getWriteQueue()).toHaveLength(0)
+  })
+
+  it('mất mạng + insert nhiều dòng thì giữ nguyên mảng, không gói vào { rows }', async () => {
+    setOnline(false)
+    const client = withOfflineQueue(fakeClient([]))
+    await client.from('todos').insert([{ title: 'a' }, { title: 'b' }])
+
+    await Promise.resolve()
+    const [queued] = getWriteQueue()
+    expect(Array.isArray(queued.payload)).toBe(true)
+    expect(queued.payload).toHaveLength(2)
   })
 
   it('không đụng tới thứ khác của client, ví dụ auth', () => {

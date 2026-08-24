@@ -178,7 +178,7 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: (id: string) => (/node_modules[\/](pdfjs-dist|jszip)[\/]/.test(id) ? 'book-parsers' : undefined),
+          manualChunks: (id: string) => (/node_modules[/](pdfjs-dist|jszip)[/]/.test(id) ? 'book-parsers' : undefined),
         },
       },
     },

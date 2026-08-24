@@ -1,7 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { localDate } from '../lib/date'
 import { TasksPage } from './TasksPage'
 
 const { seedTodos, calls, toastCalls, dbState } = vi.hoisted(() => ({

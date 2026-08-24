@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, CheckCircle2, ChevronRight, Circle, ExternalLink,
+  ArrowLeft, CheckCircle2, Circle, ExternalLink,
   Gauge, Clock, Settings, Search, ArrowUpDown, Play,
-  Copy, Check, MoreVertical, Tv, Film, Sparkles, Loader2
+  Copy, Check, MoreVertical, Sparkles, Loader2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHideHeader } from '../HeaderAction'

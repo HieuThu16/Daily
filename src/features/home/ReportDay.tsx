@@ -1,4 +1,4 @@
-import { BookMarked, BookOpen, CheckSquare, Film, Flame, Heart, Moon, Music, NotebookPen, Salad, Tv, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CheckSquare, Film, Flame, Heart, Moon, Music, NotebookPen, Salad, Youtube } from 'lucide-react'
 import type { CompletionSummary } from '../../lib/homeProgress'
 import { formatMoney, mealBreakdown, sleepSummary, totalSpend } from '../../lib/report'
 import type { UpcomingOccasion } from '../../lib/occasions'

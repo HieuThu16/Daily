@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, Calendar, ChevronDown, Clapperboard, Clock, Download, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, Play, Plus, RefreshCw, Search, Share2, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -81,22 +81,7 @@ const COVER_BUCKET = 'media-covers'
  * Ô "ảnh bìa" gradient của mỗi mục. Màu suy ra từ id nên một mục luôn giữ đúng
  * một màu qua mọi lần tải, và danh sách nhìn có nhịp màu thay vì một khối xám.
  */
-const ART_GRADIENTS = [
-  'linear-gradient(135deg, #60a5fa, #a78bfa)',
-  'linear-gradient(135deg, #f472b6, #fb923c)',
-  'linear-gradient(135deg, #34d399, #22d3ee)',
-  'linear-gradient(135deg, #818cf8, #38bdf8)',
-  'linear-gradient(135deg, #fb7185, #f59e0b)',
-  'linear-gradient(135deg, #a78bfa, #f472b6)',
-  'linear-gradient(135deg, #22d3ee, #3b82f6)',
-  'linear-gradient(135deg, #4ade80, #14b8a6)',
-]
 
-const artGradient = (id: string) => {
-  let hash = 0
-  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) % 100000
-  return ART_GRADIENTS[hash % ART_GRADIENTS.length]
-}
 
 export type Kind = (typeof categories)[number]['id']
 type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats'
@@ -1470,6 +1455,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                       ✍️ Tác giả:
                     </span>
                     <select
+                      aria-label="Lọc theo tác giả"
                       className="book-author-select"
                       value={bookAuthorFilter}
                       onChange={(e) => setBookAuthorFilter(e.target.value)}
@@ -1628,6 +1614,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
             {statsMode === 'DAY' && (
               <input
+                aria-label="Ngày xem thống kê"
                 type="date"
                 value={statsDate}
                 onChange={(e) => setStatsDate(e.target.value)}

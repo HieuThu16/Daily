@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, ChevronLeft, ChevronRight, 
-  ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles, BookOpen 
+  ExternalLink, Bookmark, ArrowUp, Sparkles, BookOpen 
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
 import { fetchNgontinhList, getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
@@ -11,6 +11,7 @@ import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadi
 import { useHideHeader } from '../HeaderAction';
 import { ReaderControls, useAutoScroll, useReaderPrefs } from './readerControls';
 import './ngontinhReader.css';
+import { rafThrottle } from '../../lib/rafThrottle';
 
 export const NgontinhReaderPage: React.FC = () => {
   const { slug, chapterNum } = useParams<{ slug: string; chapterNum: string }>();
@@ -23,8 +24,7 @@ export const NgontinhReaderPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchingChapterImages, setFetchingChapterImages] = useState<boolean>(false);
   const [dynamicChapterImages, setDynamicChapterImages] = useState<Record<number, any[]>>({});
-  const [fitMode, setFitMode] = useState<'standard' | 'wide' | 'full'>('standard');
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [fitMode] = useState<'standard' | 'wide' | 'full'>('standard');
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
 
@@ -105,6 +105,8 @@ export const NgontinhReaderPage: React.FC = () => {
   }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
 
   const isNavigatingRef = useRef(false);
+  /** Đã ghi "đọc xong" cho chương đang mở chưa — reset mỗi lần đổi chương. */
+  const completedRef = useRef(false);
   const lastChapterNumRef = useRef(currentChapterNum);
 
   // Save reading progress & scroll to top on change
@@ -160,9 +162,13 @@ export const NgontinhReaderPage: React.FC = () => {
     }
   }, [manga, currentChapter, currentChapterNum, dynamicChapterImages]);
 
+  useEffect(() => {
+    completedRef.current = false;
+  }, [currentChapterNum]);
+
   // Track scroll progress & mark completed when scrolling near bottom
   useEffect(() => {
-    const handleScroll = () => {
+    const handleScroll = rafThrottle(() => {
       if (isNavigatingRef.current) return;
       const total = document.documentElement.scrollHeight - window.innerHeight;
       if (total > 0) {
@@ -188,7 +194,10 @@ export const NgontinhReaderPage: React.FC = () => {
             }
           });
         }
-        if (progress >= 85 && manga && currentChapter) {
+        // Chỉ ghi MỘT lần cho mỗi chương: trước đây mỗi sự kiện cuộn qua mốc 85%
+        // đều ghi lại cả mảng log vào localStorage và bắn cập nhật tiến độ chia sẻ.
+        if (progress >= 85 && manga && currentChapter && !completedRef.current) {
+          completedRef.current = true;
           recordMangaReading({
             mangaSlug: manga.slug,
             mangaTitle: manga.title,
@@ -199,9 +208,12 @@ export const NgontinhReaderPage: React.FC = () => {
           });
         }
       }
-    };
+    });
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      handleScroll.cancel();
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, [manga, currentChapter, currentChapterNum, nextChapter]);
 
   const goToChapter = useCallback((chNum: number) => {
@@ -255,21 +267,7 @@ export const NgontinhReaderPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNext, handlePrev, navigate, slug]);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
 
-  const cycleFitMode = () => {
-    if (fitMode === 'standard') setFitMode('wide');
-    else if (fitMode === 'wide') setFitMode('full');
-    else setFitMode('standard');
-  };
 
   if (loading) {
     return (
@@ -318,6 +316,7 @@ export const NgontinhReaderPage: React.FC = () => {
         <div className="ngontinh-reader-right">
           {/* Chapter selector */}
           <select
+            aria-label="Chọn chương"
             value={currentChapterNum}
             onChange={(e) => goToChapter(Number(e.target.value))}
             className="ngontinh-reader-select"

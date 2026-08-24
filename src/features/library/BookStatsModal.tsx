@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight, Flame, History, Target } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, History, Target } from 'lucide-react'
 import { Modal } from '../shared'
 import { localDate } from '../../lib/date'
 import { getPeriodRange, shiftPeriodAnchor, type PeriodMode } from '../nutrition/periodData'

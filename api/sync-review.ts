@@ -15,10 +15,13 @@ import { createClient } from '@supabase/supabase-js'
 // package.json đặt "type": "module" nên hàm chạy dưới Node ESM — đường dẫn
 // tương đối bắt buộc có đuôi, thiếu là ERR_MODULE_NOT_FOUND lúc chạy.
 import { startSync, syncOnePage, writeVideos } from '../src/lib/reviewSeries/pageSync.js'
+import { requireAuth } from './_auth'
 
 export const config = { maxDuration: 60 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Chỉ nhận POST' })
 
   const { YOUTUBE_API_KEY, VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env

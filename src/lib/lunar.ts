@@ -104,7 +104,7 @@ function getLunarMonth11(yy: number): number {
 /** Vị trí tháng nhuận tính từ tháng 11 âm a11. */
 function getLeapMonthOffset(a11: number): number {
   const k = INT((a11 - 2415021.076998695) / 29.530588853 + 0.5)
-  let last = 0
+  let last: number
   let i = 1
   let arc = getSunLongitudeIndex(getNewMoonDay(k + i))
   do {
@@ -132,7 +132,7 @@ export function solarToLunar(date: Date): LunarDate {
   const k = INT(0.5 + (a11 - 2415021.076998695) / 29.530588853)
   const monthStart = getNewMoonDay(k + INT((dayNumber - a11) / 29))
   const start = monthStart > dayNumber ? getNewMoonDay(k + INT((dayNumber - a11) / 29) - 1) : monthStart
-  let diff = INT((start - a11) / 29)
+  const diff = INT((start - a11) / 29)
   let lunarMonth = diff + 11
   let isLeap = false
   if (b11 - a11 > 365) {

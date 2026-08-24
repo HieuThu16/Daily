@@ -155,6 +155,7 @@ export function BookImportModal({ attachableBooks, onClose, onImported }: Props)
         {stage === 'pick' && (
           <>
             <input
+              aria-label="Chọn file sách để nhập"
               ref={fileInput}
               type="file"
               accept=".pdf,.epub,application/pdf,application/epub+zip"

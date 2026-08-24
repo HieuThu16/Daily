@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { apiFetch } from './apiFetch'
 
 export type SubCue = { start: number; end: number; text: string; vi?: string }
 
@@ -8,7 +9,7 @@ const cache = new Map<string, SubCue[]>()
 export async function fetchDualSubs(videoId: string): Promise<SubCue[]> {
   const cached = cache.get(videoId)
   if (cached) return cached
-  const res = await fetch(`/api/youtube-transcript?v=${encodeURIComponent(videoId)}&tl=vi`)
+  const res = await apiFetch(`/api/youtube-transcript?v=${encodeURIComponent(videoId)}&tl=vi`)
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new Error(data?.error || 'Không lấy được phụ đề')
   const cues: SubCue[] = data?.cues || []

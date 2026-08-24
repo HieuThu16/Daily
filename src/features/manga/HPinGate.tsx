@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, Delete, Flame, KeyRound, Lock, ShieldAlert, Unlock } from 'lucide-react'
+import { ArrowLeft, Delete, Flame } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const SESSION_KEY = 'daily_h_manga_pin_unlocked'

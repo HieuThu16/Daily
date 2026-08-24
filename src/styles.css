@@ -268,12 +268,6 @@ header {
   transition: transform 0.2s ease;
 }
 
-.icon-box-sm {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-}
-
 .icon-box-blue {
   background: var(--blue-bg);
   color: var(--blue);
@@ -1319,12 +1313,6 @@ header {
   border-radius: inherit;
 }
 
-.library-media-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
 .library-media-title {
   overflow: hidden;
   font-size: 0.78rem;
@@ -1339,13 +1327,6 @@ header {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 5px;
-}
-
-.library-media-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
 }
 
 .library-status-select {
@@ -4711,8 +4692,6 @@ input, select, textarea, button {
   font-weight: 700;
   white-space: nowrap;
 }
-
-.person-form { display: grid; gap: 8px; }
 .person-form label.check { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-muted); }
 
 .log-photos { display: grid; gap: 8px; margin-top: 10px; }
@@ -4761,8 +4740,6 @@ input, select, textarea, button {
   font-size: 0.86rem;
 }
 .people-search input:focus { outline: none; }
-
-.person-grid { margin-top: 12px; }
 
 .person-tile { transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease; }
 .person-tile .person-body strong { margin-bottom: 3px; }
@@ -8979,24 +8956,6 @@ svg.lucide-library {
   color: var(--text-main);
 }
 
-.book-author-select-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.book-author-select {
-  flex: 1;
-  padding: 5px 10px;
-  font-size: 0.76rem;
-  border-radius: 8px;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
-  color: var(--text-main);
-  outline: none;
-}
-
 /* ==========================================================================
    Task Notification Bell in Header & Responsive Modal/Sheet
    ========================================================================== */
@@ -9665,23 +9624,6 @@ svg.lucide-library {
   gap: 5px;
 }
 
-.book-author-select-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.book-author-select {
-  flex: 1;
-  padding: 5px 10px;
-  font-size: 0.76rem;
-  border-radius: 8px;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
-  color: var(--text-main);
-  outline: none;
-}
-
 .spc-avatar {
   width: 48px;
   height: 48px;
@@ -9970,9 +9912,6 @@ svg.lucide-library {
   color: var(--text-main);
   outline: none;
 }
-
-/* ===== Tab English: thẻ lật kiểu uiverse "little-goat-24" (bấm để lật) ===== */
-.eng-page { display: flex; flex-direction: column; gap: 12px; }
 
 .eng-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 

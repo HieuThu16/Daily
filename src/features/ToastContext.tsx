@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react'
+import { Z } from '../lib/zLayers'
 
 type ToastType = 'success' | 'info' | 'delete' | 'supabase' | 'local' | 'error'
 
@@ -84,7 +85,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           bottom: 68,
           left: '50%',
           transform: 'translateX(-50%)',
-          zIndex: 9999,
+          zIndex: Z.toast,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

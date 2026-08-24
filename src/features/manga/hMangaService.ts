@@ -1,6 +1,7 @@
-import type { BLManga as HManga, ReadingProgress, MangaChapter, ChapterImage } from '../../types/manga';
+import type { BLManga as HManga, ReadingProgress, ChapterImage } from '../../types/manga';
 import { supabase } from '../../lib/supabase';
 import { uploadCoverToSupabase } from '../../lib/mangaCoverCache';
+import { apiFetch } from '../../lib/apiFetch'
 
 const FAVORITES_KEY = 'daily_h_favorites';
 const HISTORY_KEY = 'daily_h_history';
@@ -290,7 +291,7 @@ export async function fetchHMangaList(): Promise<HManga[]> {
 
 export async function crawlAndSaveStory(url: string, onProgress?: (msg: string) => void): Promise<HManga> {
   onProgress?.('Đang gửi yêu cầu cào truyện đến server...');
-  const res = await fetch('/api/crawl-truyenh', {
+  const res = await apiFetch('/api/crawl-truyenh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url })
@@ -323,7 +324,7 @@ export async function syncHMangaChapters(
   if (!storyUrl) return { updated: false, manga, addedCount: 0 };
 
   onProgress?.('Đang kiểm tra chapter mới từ link gốc...');
-  const res = await fetch('/api/crawl-truyenh', {
+  const res = await apiFetch('/api/crawl-truyenh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url: storyUrl, existingChapters: manga.chapters })

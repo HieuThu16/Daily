@@ -298,12 +298,12 @@ export function NotificationCenter() {
                   </ul>
                 ) : section === 'memories' ? (
                   <ul className="task-bell-list">
-                    {anniversaries.map(({ event, yearsAgo }) => (
+                    {anniversaries.map(({ event, monthsAgo }) => (
                       <li key={event.id} className="task-bell-item" onClick={() => goTo('/daily')}>
                         <div className="task-bell-item-content">
                           <span className="task-bell-item-title">{event.title}</span>
                           <div className="task-bell-item-tags">
-                            <span className="task-tag-badge tag-today"><CalendarHeart size={11} />{yearsAgoLabel(yearsAgo)}</span>
+                            <span className="task-tag-badge tag-today"><CalendarHeart size={11} />{yearsAgoLabel(monthsAgo)}</span>
                             <span className="task-tag-badge tag-category">{event.event_date}</span>
                           </div>
                         </div>

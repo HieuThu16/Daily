@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Film, Frown, Heart, History, ImagePlus, Link as LinkIcon, Loader2, NotebookPen, Pencil, Play, Plus, Save, Search, Sparkles, Star, Trash2, Tv, Video, Youtube, Zap } from 'lucide-react'
+import { BarChart3, Clock, Frown, Heart, History, ImagePlus, Link as Loader2, NotebookPen, Pencil, Plus, Save, Star, Trash2, Youtube, Zap } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
@@ -10,7 +10,7 @@ import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { SkeletonList } from './Skeleton'
 import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
-import { getVideoWatchLogs, recordVideoWatchSession, type VideoWatchLog } from '../lib/videoWatchLog'
+import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 
 const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
@@ -111,23 +111,11 @@ function applyTimePrefixToContent(currentContent: string, newPrefix: string): st
   return `${newPrefix}${currentContent}`
 }
 
-function calculateMinutesBetween(from: string, to: string): number {
-  if (!from || !to) return 30
-  const [h1, m1] = from.split(':').map(Number)
-  const [h2, m2] = to.split(':').map(Number)
-  let diff = (h2 * 60 + m2) - (h1 * 60 + m1)
-  if (diff <= 0) diff += 24 * 60
-  return Math.max(1, diff)
-}
 
 function startOfWeek(d: Date) {
   const c = new Date(d)
   c.setDate(c.getDate() - ((c.getDay() + 6) % 7)) // Monday
   return c
-}
-
-function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10)
 }
 
 const PHOTO_BUCKET = 'daily-photos'
@@ -261,7 +249,6 @@ export function DailyPage() {
   const [showActionModal, setShowActionModal] = useState(false)
 
   const [actionSearch, setActionSearch] = useState('')
-  const [newActionInput, setNewActionInput] = useState('')
   
   // Video / YouTube / TV Show Modal state
   const [showVideoModal, setShowVideoModal] = useState(false)
@@ -310,22 +297,7 @@ export function DailyPage() {
     }
   }
 
-  const setQuickTimeRange = (from: string, to: string) => {
-    setTimeFrom(from)
-    setTimeTo(to)
-    const newPrefix = computeTimePrefix(from, to)
-    setContent((prev) => applyTimePrefixToContent(prev, newPrefix))
-    setTimeOverride(`${from} - ${to}`)
-    showToast(`🕒 Đã đặt khung giờ: ${formatHourFriendly(from)} -> ${formatHourFriendly(to)}`)
-  }
 
-  const setRecentPastTimeRange = (minutesAgo: number) => {
-    const now = new Date()
-    const past = new Date(now.getTime() - minutesAgo * 60 * 1000)
-    const fromStr = `${String(past.getHours()).padStart(2, '0')}:${String(past.getMinutes()).padStart(2, '0')}`
-    const toStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    setQuickTimeRange(fromStr, toStr)
-  }
 
   const clearTimeRange = () => {
     setTimeFrom('')
@@ -549,10 +521,10 @@ export function DailyPage() {
     const today = new Date()
     let cutoff: string
     if (statsPeriod === 'week') {
-      cutoff = isoDate(startOfWeek(today))
+      cutoff = localDate(startOfWeek(today))
     } else if (statsPeriod === 'month') {
       const m = new Date(today.getFullYear(), today.getMonth(), 1)
-      cutoff = isoDate(m)
+      cutoff = localDate(m)
     } else {
       cutoff = '2000-01-01'
     }
@@ -637,7 +609,7 @@ export function DailyPage() {
               <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.68rem' }}>
                 {longDate(new Date(date + 'T12:00:00'))}
               </span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} aria-label="Ngày của nhật ký" />
             </div>
 
             {/* Khung chọn 2 nút Giờ: Giờ từ ➔ Giờ đến */}
@@ -662,6 +634,7 @@ export function DailyPage() {
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
                   <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
                   <input
+                    aria-label="Giờ bắt đầu"
                     type="time"
                     value={timeFrom}
                     onChange={(e) => handleTimeFromChange(e.target.value)}
@@ -674,6 +647,7 @@ export function DailyPage() {
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
                   <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
                   <input
+                    aria-label="Giờ kết thúc"
                     type="time"
                     value={timeTo}
                     onChange={(e) => handleTimeToChange(e.target.value)}
@@ -949,6 +923,7 @@ export function DailyPage() {
             </div>
             {/* Type filter */}
             <select
+              aria-label="Lọc theo loại nhật ký"
               value={statsType}
               onChange={(e) => setStatsType(e.target.value as any)}
               style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
@@ -1126,6 +1101,7 @@ export function DailyPage() {
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
                   <input
+                    aria-label="Giờ bắt đầu"
                     type="time"
                     value={editTimeFrom}
                     onChange={(e) => handleEditTimeFromChange(e.target.value)}
@@ -1138,6 +1114,7 @@ export function DailyPage() {
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
                   <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
                   <input
+                    aria-label="Giờ kết thúc"
                     type="time"
                     value={editTimeTo}
                     onChange={(e) => handleEditTimeToChange(e.target.value)}

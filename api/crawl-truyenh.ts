@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { requireAuth } from './_auth'
 
 export const config = { maxDuration: 60 };
 
@@ -35,11 +36,11 @@ export function normalizeStoryUrl(inputUrl: string): { storyUrl: string; slug: s
 
   // Remove chapter suffix for VietManhwa
   if (isVietManhwa) {
-    const chapMatch = url.match(/^(https?:\/\/[^\/]+\/manhwa-18\/[^\/]+)\/chap(?:ter)?-\d+/i);
+    const chapMatch = url.match(/^(https?:\/\/[^/]+\/manhwa-18\/[^/]+)\/chap(?:ter)?-\d+/i);
     if (chapMatch) url = chapMatch[1];
   } else {
     // Remove chapter suffix for MeTruyen18
-    const chapterMatch = url.match(/^(https?:\/\/[^\/]+\/truyen\/[^\/]+)\/chapter-\d+/i);
+    const chapterMatch = url.match(/^(https?:\/\/[^/]+\/truyen\/[^/]+)\/chapter-\d+/i);
     if (chapterMatch) url = chapterMatch[1];
   }
 
@@ -90,8 +91,8 @@ export async function crawlVietManhwaStory(inputUrl: string, existingChapters?: 
     description = $('meta[name="description"]').attr('content') || '';
   }
 
-  let author = 'Đang cập nhật';
-  let status = 'Đang tiến hành';
+  const author = 'Đang cập nhật';
+  const status = 'Đang tiến hành';
   const genres = ['Hentai', 'Manhwa', '18+'];
 
   $('a[href*="/the-loai/"], a[href*="/the-loai-truyen/"], a[href*="/genres/"], a.hashtag').each((_, el) => {
@@ -187,7 +188,7 @@ export async function crawlVietManhwaStory(inputUrl: string, existingChapters?: 
 }
 
 export async function crawlSayHentaiStory(inputUrl: string, existingChapters?: any[]) {
-  let url = inputUrl.trim();
+  const url = inputUrl.trim();
   const slugMatch = url.match(/truyen-([a-zA-Z0-9-]+?)(?:\.html|\/chuong|\/chap|$)/i);
   const slug = slugMatch ? slugMatch[1] : url.split('/').filter(Boolean).pop()?.replace(/^truyen-/, '').replace(/\.html$/, '') || 'truyen-h';
   
@@ -214,8 +215,8 @@ export async function crawlSayHentaiStory(inputUrl: string, existingChapters?: a
     description = $('meta[name="description"]').attr('content') || '';
   }
 
-  let author = 'Đang cập nhật';
-  let status = 'Đang tiến hành';
+  const author = 'Đang cập nhật';
+  const status = 'Đang tiến hành';
   const genres = ['Hentai', 'Manhwa', '18+'];
 
   $('a[href*="/the-loai/"], a[href*="/genres/"]').each((_, el) => {
@@ -242,7 +243,7 @@ export async function crawlSayHentaiStory(inputUrl: string, existingChapters?: a
   });
 
   // Check chapter reader dropdown to ensure we collect 100% of all chapters
-  let sampleChapterUrl = rawChapters[0]?.url || `https://sayhentai.cx/truyen-${slug}/chuong-1`;
+  const sampleChapterUrl = rawChapters[0]?.url || `https://sayhentai.cx/truyen-${slug}/chuong-1`;
   try {
     const sampleHtml = await fetchWithRetry(sampleChapterUrl, storyUrl);
     const $sample = cheerio.load(sampleHtml);
@@ -502,6 +503,8 @@ export async function crawlMetruyen18Story(inputUrl: string, existingChapters?: 
 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Chỉ nhận phương thức POST' });
   }

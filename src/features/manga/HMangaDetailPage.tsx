@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Heart, Play, BookOpen, Clock, 
-  Search, ArrowUpDown, ChevronRight,
-  CheckCircle2, Sparkles, Flame, Star, Users, Bookmark,
-  Tag, ChevronDown, ChevronUp, ExternalLink, Share2, Check,
+  Search, ArrowUpDown, 
+  CheckCircle2, Sparkles, Flame, Star, Users, 
+  ChevronDown, ChevronUp, ExternalLink, 
   Bell, RefreshCw, Trash2
 } from 'lucide-react';
 import type { MangaChapter } from '../../types/manga';
@@ -42,7 +42,6 @@ export const HMangaDetailPage: React.FC = () => {
   const [canDelete, setCanDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showAllTags, setShowAllTags] = useState<boolean>(false);
-  const [isShareCopied, setIsShareCopied] = useState<boolean>(false);
   
   // Chapter filter and sort
   const [chapterSearch, setChapterSearch] = useState<string>('');
@@ -185,29 +184,6 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
     showToast(added ? '🔔 Đang theo dõi truyện này! Sẽ nhận thông báo khi có chap mới' : '🔕 Đã hủy theo dõi truyện');
   };
 
-  const handleShare = async () => {
-    if (!manga) return;
-    const shareUrl = window.location.href;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: manga.title,
-          text: `Đọc truyện ${manga.title} cực hay!`,
-          url: shareUrl,
-        });
-        return;
-      } catch {}
-    }
-    
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setIsShareCopied(true);
-      showToast('📋 Đã sao chép link truyện vào bộ nhớ tạm!');
-      setTimeout(() => setIsShareCopied(false), 2000);
-    } catch {
-      showToast('Không thể chia sẻ link');
-    }
-  };
 
   // Stats calculation
   const stats = useMemo(() => {

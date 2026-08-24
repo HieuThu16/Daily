@@ -1,32 +1,27 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
-  ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
-  ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
-  Youtube, Clock, Settings, Gauge, Zap, Sliders, MoreVertical, 
-  Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
-  Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers, BookOpen, Bookmark,
-  Edit3, FolderPlus, Compass, Globe, BookmarkPlus, Users, PictureInPicture2, Info
+  ArrowLeft, CheckCircle2, Circle, 
+  ExternalLink, Play, Search, Video, 
+  Youtube, 
+  Check, 
+  Loader2, LayoutGrid, 
+  Edit3, Globe, BookmarkPlus, PictureInPicture2, Info
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { mapWithProgress } from '../../lib/mapWithProgress'
-import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
+import { youtubeVideoId } from '../../lib/youtubeMeta'
 import { searchYouTubeVideos, type YouTubeSearchResult } from '../../lib/youtubeSearch'
 import { Modal, useIncrementalList } from '../shared'
 import { DualSubtitles } from './DualSubtitles'
-import { publishedGroupLabel } from '../../lib/videoGrouping'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { useToast } from '../ToastContext'
 import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
 import {
-  autoMarkVideoWatching,
-  cycleNextVideoStatus,
   getVideoStatusSets,
   setVideoStatus as updateVideoStatusRecord,
   useVideoStatusListener,
   type VideoStatus
 } from '../../lib/videoStatus'
-import { summarizeVideo, toKnowledgeRows } from '../../lib/videoLesson'
 import {
   progressLabel,
   useVideoProgressMap,
@@ -38,9 +33,6 @@ import { useVideoMiniPlayer } from './VideoMiniPlayer'
 import { OfflineVideoModal } from './OfflineVideoModal'
 import '../tvshow/tvShow.css'
 
-/** Mỗi lượt kéo bấy nhiêu video; trang đầu về là hiện được ngay. */
-const VIDEO_PAGE_SIZE = 300
-const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
 
 // Danh sách các hạng mục kênh mặc định
 export const DEFAULT_YOUTUBE_CATEGORIES = [
@@ -146,15 +138,11 @@ export function YoutubeView() {
   const [allVideos, setAllVideos] = useState<VideoRow[]>([])
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [inProgressSet, setInProgressSet] = useState<Set<string>>(new Set())
-  const [statusMap, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
   const [loading, setLoading] = useState(true)
-  const [needsMigration, setNeedsMigration] = useState(false)
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'channel' | 'video'>('video')
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
-  const [selectedVideoForMenu, setSelectedVideoForMenu] = useState<VideoRow | null>(null)
-  const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
-  const [sortMode, setSortMode] = useState<'default' | 'newest' | 'channel' | 'unwatched'>('default')
+  const [watchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   
   // Hạng mục đang chọn trên thanh tab trượt ngang (mặc định 'ALL')
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('ALL')
@@ -177,7 +165,7 @@ export function YoutubeView() {
   
   const progressMap = useVideoProgressMap()
   const { playInMini } = useVideoMiniPlayer()
-  const savedScroll = useRef(0)
+  const [, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
   const tabsScrollRef = useRef<HTMLDivElement>(null)
 
   /** Cào video chưa có ở TẤT CẢ kênh đã thêm, rồi đưa video mới sang Xem chung. */
@@ -440,7 +428,6 @@ export function YoutubeView() {
       // 1. Kiểm tra hoặc tạo Creator trong tvshow_creators
       const creatorName = item.channelTitle || 'Kênh YouTube'
       const creatorId = item.channelId || null
-      const cat = guessChannelCategory(creatorName, 'tvshow')
 
       if (creatorName && creatorName !== 'Kênh YouTube') {
         await supabase?.from('tvshow_creators').upsert({
@@ -586,17 +573,6 @@ export function YoutubeView() {
 
   const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}`)
 
-  // Đổi trạng thái xem video
-  const handleSetStatus = async (videoId: string, status: VideoStatus, e?: React.MouseEvent) => {
-    e?.stopPropagation()
-    const targetVideo = allVideos.find((v) => v.video_id === videoId)
-    const type = targetVideo?.sourceType || 'tvshow'
-    await updateVideoStatusRecord(videoId, type, status, {
-      title: targetVideo?.title,
-      channel_name: targetVideo?.creator_name || undefined,
-      series_key: targetVideo?.series_key,
-    })
-  }
 
   /** Nút "Đã xem": bật/tắt trạng thái xem hết của đúng video đó. */
   const handleToggleWatched = async (video: VideoRow) => {
@@ -609,17 +585,6 @@ export function YoutubeView() {
     showToast(next === 'COMPLETED' ? 'Đã đánh dấu xem xong' : 'Bỏ đánh dấu đã xem', 'info')
   }
 
-  const handleCycleStatus = async (videoId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation()
-    const currentSt = statusMap.get(videoId) || (watchedSet.has(videoId) ? 'COMPLETED' : (inProgressSet.has(videoId) ? 'IN_PROGRESS' : 'UNWATCHED'))
-    const targetVideo = allVideos.find((v) => v.video_id === videoId)
-    const type = targetVideo?.sourceType || 'tvshow'
-    await cycleNextVideoStatus(videoId, type, currentSt, {
-      title: targetVideo?.title,
-      channel_name: targetVideo?.creator_name || undefined,
-      series_key: targetVideo?.series_key,
-    })
-  }
 
   // Nếu đang xem chi tiết 1 kênh
   if (selectedChannel) {
@@ -901,7 +866,6 @@ export function YoutubeView() {
             <div className="tv-creators-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {filteredChannels.map((channel) => {
                 const watchedPct = channel.videoCount > 0 ? Math.round((channel.watchedCount / channel.videoCount) * 100) : 0
-                const key = channel.creator_id || channel.creator_name || channel.id
 
                 return (
                   <div
@@ -1103,16 +1067,13 @@ function ChannelDetailView({
   onChangeCategory: (cat: string) => void
 }) {
   useHideHeader(true)
-  const { showToast } = useToast()
-
   const [videos, setVideos] = useState<VideoRow[]>([])
   const [watched, setWatched] = useState<Set<string>>(new Set())
   const [inProgress, setInProgress] = useState<Set<string>>(new Set())
-  const [statusMap, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
-  const [loading, setLoading] = useState(true)
+  const [, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
+  const [, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
-  const [isPlayerActive, setIsPlayerActive] = useState(false)
-  const [search, setSearch] = useState('')
+  const [search] = useState('')
   const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
 
@@ -1429,7 +1390,14 @@ function YoutubeVideoCard({
 
   return (
     <article className="yt-card">
-      <div className="yt-thumb" onClick={playing ? undefined : onPlay}>
+      <div
+        className="yt-thumb"
+        role={playing ? undefined : 'button'}
+        tabIndex={playing ? undefined : 0}
+        aria-label={playing ? undefined : `Phát ${video.title}`}
+        onClick={playing ? undefined : onPlay}
+        onKeyDown={playing ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay() } }}
+      >
         {playing ? (
           <iframe
             ref={setIframeEl}

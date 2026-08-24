@@ -1,6 +1,7 @@
-import type { BLManga, ChapterImage, ReadingProgress, MangaChapter, HotMangaData } from '../../types/manga';
+import type { BLManga, ChapterImage, ReadingProgress, HotMangaData } from '../../types/manga';
 import { blShardOf, blShardPath } from './blShards';
 import { supabase } from '../../lib/supabase';
+import { apiFetch } from '../../lib/apiFetch'
 
 const FAVORITES_KEY = 'daily_bl_favorites';
 const HISTORY_KEY = 'daily_bl_history';
@@ -77,7 +78,7 @@ export async function syncBLMangaChapters(
   if (!storyUrl) return { updated: false, manga, addedCount: 0 };
 
   onProgress?.('Đang kiểm tra chapter mới từ link gốc...');
-  const res = await fetch('/api/crawl-bl', {
+  const res = await apiFetch('/api/crawl-bl', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url: storyUrl, existingChapters: manga.chapters })

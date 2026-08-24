@@ -44,6 +44,6 @@ describe('offlineQueue', () => {
 
     const result = await flushWriteQueue()
     expect(result).toEqual({ sent: 0, failed: 1, left: 1 })
-    expect(getWriteQueue()[0].payload.title).toBe('giữ lại')
+    expect((getWriteQueue()[0].payload as Record<string, unknown>).title).toBe('giữ lại')
   })
 })

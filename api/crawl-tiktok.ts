@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { groupVideosIntoSeries } from '../src/lib/tiktokSeries.js'
+import { requireAuth } from './_auth'
 
 const execFileAsync = promisify(execFile)
 
@@ -37,7 +38,7 @@ type CreatorProfile = {
 }
 
 function extractUsername(input: string): string {
-  const m = input.match(/@([\w.\-]+)/)
+  const m = input.match(/@([\w.-]+)/)
   if (m) return m[1]
   return input.replace(/^https?:\/\/[^/]+\//, '').split(/[/?#]/)[0].trim()
 }
@@ -406,6 +407,8 @@ async function saveGroupedSeries(db: any, grouped: any[], creatorInfo: any) {
 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Chỉ nhận POST' })
 
   const { VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env

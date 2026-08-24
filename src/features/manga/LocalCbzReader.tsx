@@ -64,6 +64,7 @@ export function LocalCbzReader({ onClose }: { onClose: () => void }) {
       </header>
 
       <input
+        aria-label="Chọn file truyện CBZ hoặc EPUB"
         ref={fileInput}
         type="file"
         accept=".cbz,.zip,application/zip,application/x-cbz"

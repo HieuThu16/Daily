@@ -23,7 +23,6 @@ export const BLReaderModal: React.FC<Props> = ({
 }) => {
   const startNum = initialChapterNumber ?? initialChapterNum ?? 1;
   const [currentChapterNum, setCurrentChapterNum] = useState<number>(startNum);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   const topRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -191,15 +190,6 @@ export const BLReaderModal: React.FC<Props> = ({
     }
   };
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
 
   // Danh sách truyện không kèm URL ảnh (file quá to để deploy), nên nạp riêng theo truyện.
   const [lazyImages, setLazyImages] = useState<Record<string, ChapterImage[]>>({});
@@ -270,6 +260,7 @@ export const BLReaderModal: React.FC<Props> = ({
         <div className="bl-reader-header-right">
           {/* Quick Chapter Selector */}
           <select
+            aria-label="Chọn chương"
             value={currentChapterNum}
             onChange={(e) => {
               const val = Number(e.target.value);

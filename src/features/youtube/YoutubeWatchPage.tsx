@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, Download, ExternalLink,
-  PictureInPicture2, Share2, Users,
+  PictureInPicture2, Share2, 
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'

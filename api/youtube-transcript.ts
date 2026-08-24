@@ -4,6 +4,8 @@
  * Lấy phụ đề gốc của video YouTube rồi dịch sang tiếng Việt theo lô.
  * Phải chạy ở server vì YouTube chặn CORS với endpoint timedtext.
  */
+import { requireAuth } from './_auth'
+
 
 export const config = { maxDuration: 60 }
 
@@ -189,6 +191,8 @@ async function translate(texts: string[], tl: string): Promise<string[]> {
 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   const videoId = String(req.query?.v || req.body?.v || '').trim()
   const tl = String(req.query?.tl || 'vi').trim()
   if (!/^[\w-]{11}$/.test(videoId)) {

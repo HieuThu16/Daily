@@ -18,6 +18,7 @@ import { lockH } from './HPinGate'
 import { useToast } from '../ToastContext'
 import { MangaLibraryPage, type MangaLibraryConfig } from './MangaLibraryPage'
 import './ngontinhManga.css'
+import { Z } from '../../lib/zLayers'
 
 function extractSlugFromUrl(rawUrl: string): string {
   let u = rawUrl.trim();
@@ -93,7 +94,7 @@ function CrawlModal({
   };
 
   return (
-    <div className="crawl-modal-backdrop" onClick={onClose} style={{
+    <div className="crawl-modal-backdrop" role="presentation" onClick={onClose} style={{
       position: 'fixed',
       inset: 0,
       background: 'rgba(0, 0, 0, 0.65)',
@@ -101,7 +102,7 @@ function CrawlModal({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1000,
+      zIndex: Z.modal,
       padding: '16px'
     }}>
       <div 
@@ -131,6 +132,7 @@ function CrawlModal({
           </div>
           <button 
             type="button" 
+            aria-label="Đóng"
             onClick={onClose} 
             disabled={loading}
             style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', color: 'var(--text-muted, #64748b)' }}

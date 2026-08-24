@@ -385,12 +385,8 @@ export function groupBookReadingLogs(logs: BookReadingSessionLog[]): DayEvent[] 
 
     const timeDisplay = startTime && endTime && startTime !== endTime ? `${startTime} - ${endTime}` : startTime
 
-    let pageDetail = `Trang ${startPage}`
-    if (startPage !== endPage) {
-      pageDetail = `${totalPages} trang (Trang ${startPage} → ${endPage})`
-    } else {
-      pageDetail = `Trang ${startPage}`
-    }
+    const pageDetail =
+      startPage !== endPage ? `${totalPages} trang (Trang ${startPage} → ${endPage})` : `Trang ${startPage}`
 
     events.push({
       time: timeDisplay || startTime,

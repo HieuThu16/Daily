@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, ZoomOut, RotateCcw, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, Plus, Minus } from 'lucide-react';
 import { getHMangaScreenshots, syncHMangaScreenshotsWithSupabase, deleteHMangaScreenshot, type HMangaScreenshot } from './hMangaScreenshot';
 import { useToast } from '../ToastContext';
+import { Z } from '../../lib/zLayers'
 
 export const HMangaScreenshotPage: React.FC = () => {
   const navigate = useNavigate();
@@ -597,7 +598,7 @@ export const HMangaScreenshotPage: React.FC = () => {
             backgroundColor: 'rgba(0, 0, 0, 0.95)',
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
-            zIndex: 9999,
+            zIndex: Z.fullscreen,
             display: 'flex',
             flexDirection: 'column',
           }}

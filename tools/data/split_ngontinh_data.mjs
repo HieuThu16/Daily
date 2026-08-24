@@ -2,8 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const SRC = existsSync('public/data/ngontinh_manga.json')
   ? 'public/data/ngontinh_manga.json'
-  : existsSync('src/data/ngontinh_manga.json')
-  ? 'src/data/ngontinh_manga.json'
+  : existsSync('data/ngontinh_manga.json')
+  ? 'data/ngontinh_manga.json'
   : null;
 
 const PART1 = 'public/data/ngontinh_manga_1.json';

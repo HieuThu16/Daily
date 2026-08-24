@@ -8,8 +8,8 @@ extracted_covers/
 public/data/bl_manga.json
 public/data/bl/
 public/data/ngontinh_manga.json
-src/data/bl_manga.json
-src/data/ngontinh_manga.json
+data/bl_manga.json
+data/ngontinh_manga.json
 *.log
 
 # Ảnh chụp của Playwright MCP, không thuộc mã nguồn
@@ -17,9 +17,12 @@ src/data/ngontinh_manga.json
 
 # Dữ liệu crawl ~137MB/file, vượt giới hạn 100MB của GitHub.
 public/data/romance_manga.json
-src/data/romance_manga.json
+data/romance_manga.json
 public/data/school_life_manga.json
-src/data/school_life_manga.json
+data/school_life_manga.json
+
+# Du lieu cao ~380MB, khong commit. Nam ngoai src/ de Vite khoi theo doi.
+data/*.json
 
 # Sinh tự động mỗi build — không commit để Vercel luôn có giá trị mới nhất
 public/version.json

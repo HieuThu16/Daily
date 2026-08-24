@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { supabase } from './supabase'
 
 export type VideoStatus = 'UNWATCHED' | 'IN_PROGRESS' | 'COMPLETED'
@@ -75,7 +75,7 @@ export function getVideoStatusSets(
   }
 
   // 2. Thêm các bản ghi từ local storage
-  for (const [key, record] of Object.entries(records)) {
+  for (const record of Object.values(records)) {
     if (record && record.type === type) {
       if (record.status === 'COMPLETED') {
         watchedSet.add(record.video_id)

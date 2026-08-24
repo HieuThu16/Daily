@@ -34,7 +34,7 @@ export function WatchTogetherTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
+        <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)} aria-label="Lọc theo nhóm">
           <option value="ALL">Tất cả nhóm</option>
           {groups.map((g) => (
             <option key={g.id} value={g.id}>{g.name}</option>

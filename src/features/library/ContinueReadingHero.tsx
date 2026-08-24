@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, ChevronRight, Sparkles, X, Bookmark } from 'lucide-react'
+import { BookOpen, ChevronRight, Sparkles, X } from 'lucide-react'
 import { useLastReadBook, clearLastReadBook } from '../../lib/bookReadingLog'
 import { BookCover } from './BookCover'
 

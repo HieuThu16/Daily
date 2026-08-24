@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, Clock, Music, NotebookPen, Star } from 'lucide-react'
+import { BarChart3, Clock } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { buildDayReview } from '../../lib/dayReview'
 import { todayCompletion } from '../../lib/homeProgress'
@@ -43,12 +43,6 @@ export function HomePage() {
     [data.habits, data.todayLogs, data.todos, data.todosDoneToday, dateKey],
   )
 
-  /** Nhật ký và bài nhạc đã gắn sao trong đúng ngày đang xem. */
-  const favorites = useMemo(() => {
-    const entries = data.entries.filter((e) => e.is_favorite)
-    const media = data.todayMedia.filter((m) => m.is_favorite)
-    return { entries, media, total: entries.length + media.length }
-  }, [data.entries, data.todayMedia])
 
   /** Thống kê đọc truyện: dữ liệu vốn đã ghi sẵn, giờ mới có chỗ xem. */
   const mangaStats = useMemo(() => summarizeMangaLogs(mangaLogs, dateKey), [mangaLogs, dateKey])

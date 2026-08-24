@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, ChevronLeft, ChevronRight, 
-  ExternalLink, Bookmark, ArrowUp, RefreshCw, Sparkles, BookOpen,
+  ExternalLink, Bookmark, ArrowUp, Sparkles, BookOpen,
   Camera, Images
 } from 'lucide-react';
 import type { HManga } from './hMangaService';
@@ -15,6 +15,8 @@ import { useToast } from '../ToastContext';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhReader.css';
+import { rafThrottle } from '../../lib/rafThrottle';
+import { Z } from '../../lib/zLayers'
 
 export const HMangaReaderPage: React.FC = () => {
   const { slug, chapterNum } = useParams<{ slug: string; chapterNum: string }>();
@@ -26,7 +28,7 @@ export const HMangaReaderPage: React.FC = () => {
 
   const [manga, setManga] = useState<HManga | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [fitMode, setFitMode] = useState<'standard' | 'wide' | 'full'>('standard');
+  const [fitMode] = useState<'standard' | 'wide' | 'full'>('standard');
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   const [activePage, setActivePage] = useState<number>(1);
   const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
@@ -80,6 +82,8 @@ export const HMangaReaderPage: React.FC = () => {
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
   const isNavigatingRef = useRef(false);
+  /** Đã ghi "đọc xong" cho chương đang mở chưa — reset mỗi lần đổi chương. */
+  const completedRef = useRef(false);
   const lastChapterNumRef = useRef(currentChapterNum);
 
 
@@ -144,9 +148,13 @@ export const HMangaReaderPage: React.FC = () => {
     }
   }, [manga, currentChapter, currentChapterNum]);
 
+  useEffect(() => {
+    completedRef.current = false;
+  }, [currentChapterNum]);
+
   // Track scroll progress, active visible page, & mark completed
   useEffect(() => {
-    const handleScroll = () => {
+    const handleScroll = rafThrottle(() => {
       if (isNavigatingRef.current) return;
       const total = document.documentElement.scrollHeight - window.innerHeight;
       if (total > 0) {
@@ -160,7 +168,10 @@ export const HMangaReaderPage: React.FC = () => {
             scrollRatio: window.scrollY / total,
           });
         }
-        if (progress >= 85 && manga && currentChapter) {
+        // Chỉ ghi MỘT lần cho mỗi chương: trước đây mỗi sự kiện cuộn qua mốc 85%
+        // đều ghi lại cả mảng log vào localStorage và bắn cập nhật tiến độ chia sẻ.
+        if (progress >= 85 && manga && currentChapter && !completedRef.current) {
+          completedRef.current = true;
           recordMangaReading({
             mangaSlug: manga.slug,
             mangaTitle: manga.title,
@@ -189,10 +200,13 @@ export const HMangaReaderPage: React.FC = () => {
         }
         setActivePage(bestIdx + 1);
       }
-    };
+    });
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      handleScroll.cancel();
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, [manga, currentChapter, currentChapterNum]);
 
   const goToChapter = useCallback((chNum: number) => {
@@ -378,6 +392,7 @@ export const HMangaReaderPage: React.FC = () => {
         <div className="ngontinh-reader-right">
           {/* Chapter selector */}
           <select
+            aria-label="Chọn chương"
             value={currentChapterNum}
             onChange={(e) => goToChapter(Number(e.target.value))}
             className="ngontinh-reader-select"
@@ -465,7 +480,7 @@ export const HMangaReaderPage: React.FC = () => {
             inset: 0,
             backgroundColor: '#ffffff',
             opacity: 0.85,
-            zIndex: 10000,
+            zIndex: Z.fullscreen,
             pointerEvents: 'none',
             transition: 'opacity 0.35s ease-out',
           }}

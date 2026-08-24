@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch'
 export type YouTubeSearchResult = {
   videoId: string
   title: string
@@ -16,7 +17,7 @@ export async function searchYouTubeVideos(query: string): Promise<YouTubeSearchR
   if (!trimmed) return []
 
   try {
-    const res = await fetch(`/api/search-youtube?q=${encodeURIComponent(trimmed)}`)
+    const res = await apiFetch(`/api/search-youtube?q=${encodeURIComponent(trimmed)}`)
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`)
     }

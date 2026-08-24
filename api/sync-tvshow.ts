@@ -10,10 +10,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { startSync, syncOnePage, writeVideos } from '../src/lib/tvshowSeries/pageSync.js'
+import { requireAuth } from './_auth'
 
 export const config = { maxDuration: 60 }
 
 export default async function handler(req: any, res: any) {
+  if (await requireAuth(req, res)) return
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Chỉ nhận POST' })
 
   const { YOUTUBE_API_KEY, VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env

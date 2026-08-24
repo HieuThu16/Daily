@@ -434,11 +434,11 @@ export function NutritionPage() {
                     </div>
                   </div>
                   {log.dream ? (
-                    <div onClick={() => openDreamModal(log)} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 10px', background: 'var(--bg-main)', borderRadius: 8, fontSize: '0.78rem', borderLeft: '3px solid #8b5cf6', color: 'var(--text-main)', cursor: 'pointer' }} title="Nhấn để sửa giấc mơ">
+                    <button type="button" onClick={() => openDreamModal(log)} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 10px', background: 'var(--bg-main)', borderRadius: 8, fontSize: '0.78rem', borderLeft: '3px solid #8b5cf6', color: 'var(--text-main)', cursor: 'pointer', width: '100%', textAlign: 'left', border: 0 }} title="Nhấn để sửa giấc mơ">
                       <CloudMoon size={14} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: 2 }} />
                       <span style={{ flex: 1 }}>{log.dream}</span>
                       <Pencil size={11} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 3 }} />
-                    </div>
+                    </button>
                   ) : (
                     <button type="button" onClick={() => openDreamModal(log)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', background: 'rgba(139, 92, 246, 0.08)', border: '1px dashed rgba(139, 92, 246, 0.3)', borderRadius: 6, fontSize: '0.74rem', color: '#8b5cf6', fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-start', marginTop: 2 }}>
                       <Plus size={12} /> Thêm giấc mơ cho phiên này

@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   CloudUpload,
-  Heart,
   ListMusic,
-  Music,
   Music2,
   Pause,
   Pencil,

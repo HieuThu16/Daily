@@ -4,7 +4,7 @@
 
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import { cleanDisplayTitle } from './src/lib/reviewSeries/seriesResolver.ts'
+import { cleanDisplayTitle } from '../../src/lib/reviewSeries/seriesResolver.ts'
 
 config()
 

@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { 
   Navigation, Battery, BatteryCharging, RefreshCw, 
-  MapPin, Heart, ShieldCheck, ShieldOff, Plus, Trash2,
-  Clock, Route, ChevronDown, ChevronUp, BellRing
+  Heart, ShieldCheck, ShieldOff, Plus, Trash2,
+  Clock, Route, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { formatDistance } from '../../lib/locationService';
 import { useCoupleLocation } from './useCoupleLocation';
 import type { Person } from '../../types';
+import { Z } from '../../lib/zLayers'
 
 interface Props {
   partnerPerson?: Person;
@@ -38,7 +39,6 @@ export function CoupleLocationCard({ partnerPerson, selectedDate }: Props) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAddPlaceModal, setShowAddPlaceModal] = useState(false);
   const [customPlaceName, setCustomPlaceName] = useState('');
-  const [selectedIcon, setSelectedIcon] = useState('🏠');
   const [showTimeline, setShowTimeline] = useState(true);
 
   // Khởi tạo bản đồ Leaflet
@@ -364,7 +364,7 @@ export function CoupleLocationCard({ partnerPerson, selectedDate }: Props) {
               position: 'absolute',
               top: '10px',
               right: '10px',
-              zIndex: 1000,
+              zIndex: Z.overlay,
               background: 'linear-gradient(135deg, #0284c7, #0369a1)',
               color: '#ffffff',
               border: 'none',
@@ -555,7 +555,7 @@ export function CoupleLocationCard({ partnerPerson, selectedDate }: Props) {
             position: 'fixed',
             inset: 0,
             background: 'rgba(0,0,0,0.6)',
-            zIndex: 9999,
+            zIndex: Z.modal,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

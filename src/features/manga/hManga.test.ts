@@ -3,7 +3,7 @@ import { isUserAuthorizedForH } from '../../lib/hAuth';
 import { 
   getHMangaFavorites, toggleHMangaFavorite,
   getHMangaFollows, toggleHMangaFollow,
-  getHMangaHistory, saveHMangaProgress, getHMangaProgress
+  saveHMangaProgress, getHMangaProgress
 } from './hMangaService';
 
 describe('isUserAuthorizedForH', () => {

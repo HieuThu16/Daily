@@ -28,6 +28,22 @@ const cache = new Map<string, unknown[]>()
 /** Cache còn sống qua cả lần tải lại trang: mất mạng vẫn xem được dữ liệu lần trước. */
 const diskKey = (cacheKey: string) => `daily_cache_${cacheKey}`
 
+/**
+ * Trần cho phần ghi xuống localStorage.
+ *
+ * `media_items` gom cả sách, manga, nhạc, phim nên dễ vài nghìn dòng. Nén cả bảng
+ * thành chuỗi rồi ghi sau MỖI lần tải và MỖI lần sửa tại chỗ vừa vượt hạn mức ~5MB
+ * (rồi hỏng âm thầm), vừa chặn main thread đủ lâu để thấy giật.
+ *
+ * Bộ nhớ trong vẫn giữ đủ; chỉ phần dự phòng trên đĩa là cắt bớt — nó chỉ để
+ * lần mở sau có cái hiện ngay, không phải nguồn sự thật.
+ *
+ * ponytail: cắt cứng theo số dòng và số ký tự. Muốn giữ trọn vẹn thì phải chuyển
+ * sang IndexedDB, lúc đó bỏ hai hằng số này đi.
+ */
+const DISK_CACHE_MAX_ROWS = 400
+const DISK_CACHE_MAX_CHARS = 1_000_000
+
 function readCache<T>(cacheKey: string): T[] {
   const inMemory = cache.get(cacheKey)
   if (inMemory) return inMemory as T[]
@@ -38,12 +54,27 @@ function readCache<T>(cacheKey: string): T[] {
 
 function writeCache<T>(cacheKey: string, rows: T[]) {
   cache.set(cacheKey, rows)
+
+  // Danh sách đã sắp giảm dần nên phần đầu là phần mới nhất — cắt đuôi là đúng cái cần giữ.
+  let slice = rows.length > DISK_CACHE_MAX_ROWS ? rows.slice(0, DISK_CACHE_MAX_ROWS) : rows
+  let serialized = JSON.stringify(slice)
+  while (serialized.length > DISK_CACHE_MAX_CHARS && slice.length > 20) {
+    slice = slice.slice(0, Math.floor(slice.length / 2))
+    serialized = JSON.stringify(slice)
+  }
+  if (serialized.length > DISK_CACHE_MAX_CHARS) return
+
   // Quá hạn mức localStorage thì bỏ qua — cache chỉ là tiện ích, không phải nguồn sự thật.
-  saveLocal(diskKey(cacheKey), rows)
+  saveLocal(diskKey(cacheKey), slice)
 }
 
 export function useQuery<T>(table: string, order = 'created_at') {
   const cacheKey = `${table}:${order}`
+  /*
+   * Đổi bảng/thứ tự lúc lần tải trước còn dở thì kết quả cũ về sau sẽ đè lên
+   * kết quả mới. Đánh số mỗi lần gọi, về trễ thì bỏ.
+   */
+  const requestId = useRef(0)
   const [items, setItems] = useState<T[]>(() => readCache<T>(cacheKey))
   // Đã có cache thì hiện ngay, làm mới ngầm — không chớp màn hình trống.
   const [loading, setLoading] = useState(() => readCache<T>(cacheKey).length === 0)
@@ -51,17 +82,20 @@ export function useQuery<T>(table: string, order = 'created_at') {
 
   const reload = async () => {
     if (!supabase) return
+    const myId = ++requestId.current
     setLoading(readCache<T>(cacheKey).length === 0)
     try {
       const rows = await fetchAll<T>(table, order)
+      if (myId !== requestId.current) return
       writeCache(cacheKey, rows)
       setItems(rows)
       setError('')
     } catch {
+      if (myId !== requestId.current) return
       // Còn cache thì im lặng dùng tiếp; trắng tay mới báo lỗi.
       setError(readCache<T>(cacheKey).length ? '' : 'Chưa tải được dữ liệu. Thử lại nhé.')
     }
-    setLoading(false)
+    if (myId === requestId.current) setLoading(false)
   }
 
   useEffect(() => {
@@ -187,6 +221,25 @@ export function useBackdropClose(onClose: () => void) {
   }
 }
 
+/**
+ * Đếm số hộp thoại đang mở: hộp lồng hộp thì chỉ hộp cuối cùng đóng lại mới
+ * trả cuộn về cho trang, không thì đóng cái trong là nền cuộn lại ngay.
+ */
+let openModalCount = 0
+
+function lockBodyScroll() {
+  openModalCount += 1
+  if (openModalCount > 1) return () => unlockBodyScroll()
+  const previous = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  return () => unlockBodyScroll(previous)
+}
+
+function unlockBodyScroll(previous?: string) {
+  openModalCount = Math.max(0, openModalCount - 1)
+  if (openModalCount === 0) document.body.style.overflow = previous ?? ''
+}
+
 export function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   const panel = useRef<HTMLElement>(null)
   // `onClose` thường là arrow inline nên đổi mỗi lần render. Giữ qua ref để effect
@@ -196,6 +249,8 @@ export function Modal({ title, children, onClose }: { title: string; children: R
   const backdrop = useBackdropClose(onClose)
 
   useEffect(() => {
+    // Không khoá thì trên mobile vuốt trong hộp thoại là trang phía sau trôi theo.
+    const unlock = lockBodyScroll()
     const opener = document.activeElement as HTMLElement | null
     panel.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus()
 
@@ -215,6 +270,7 @@ export function Modal({ title, children, onClose }: { title: string; children: R
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
+      unlock()
       opener?.focus?.()
     }
   }, [])

@@ -8,7 +8,8 @@ export type QueuedWrite = {
   id: string
   table: string
   op: 'insert' | 'update' | 'delete'
-  payload: Record<string, unknown>
+  /** Mảng khi insert nhiều dòng một lượt — Supabase nhận thẳng mảng. */
+  payload: Record<string, unknown> | Record<string, unknown>[]
   /** Với 'update'/'delete': điều kiện eq, thường là { id: '...' }. */
   match?: Record<string, string>
   queuedAt: string

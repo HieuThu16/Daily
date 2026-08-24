@@ -137,7 +137,20 @@ function MangaCard<T extends MangaLike>({
   const p = cssPrefix
 
   return (
-    <div className={`${p}-manga-card`} onClick={onClick}>
+    <div
+      className={`${p}-manga-card`}
+      role="button"
+      tabIndex={0}
+      aria-label={manga.title || 'Mở truyện'}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+    >
       <div className={`${p}-cover-wrap`}>
         {!imgLoaded && !imgError && <div className={`${p}-cover-skeleton`} />}
 
@@ -348,7 +361,7 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
   }
 
   const filteredList = useMemo(() => {
-    let result: Array<{ manga: T; rank?: number }> = []
+    let result: Array<{ manga: T; rank?: number }>
 
     if (activeTab === 'ranking') {
       result = rankedItems(rankingType)

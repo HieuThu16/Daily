@@ -1,59 +1,73 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, Tv, UserRound, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
 import { HeaderActionProvider, useHeaderActionSlots, useIsHeaderHidden } from './features/HeaderAction'
 import { AsideProvider, useAsideRef } from './features/AsideSlot'
 import { HomePage } from './features/home/HomePage'
-import { HabitsPage } from './features/HabitsPage'
-import { DailyPage } from './features/DailyPage'
-import { TasksPage } from './features/TasksPage'
-import { LibraryPage } from './features/LibraryPage'
-import { ReviewSeriesView } from './features/library/ReviewSeriesView'
-import { TikTokPage } from './features/tiktok/TikTokPage'
-import { TvShowView } from './features/tvshow/TvShowView'
-import { NutritionPage } from './features/NutritionPage'
-import { UsageStatsPage } from './features/UsageStatsPage'
-import { PeoplePage } from './features/people/PeoplePage'
-import { BookReaderPage } from './features/library/BookReaderPage'
-import { QuotesPage } from './features/library/QuotesPage'
-import { MoneyPage } from './features/MoneyPage'
-import { CalendarPage } from './features/CalendarPage'
-import { BLMangaPage } from './features/manga/BLMangaPage'
-import { BLMangaDetailPage } from './features/manga/BLMangaDetailPage'
-import { NgontinhMangaPage } from './features/manga/NgontinhMangaPage'
-import { NgontinhDetailPage } from './features/manga/NgontinhDetailPage'
-import { NgontinhReaderPage } from './features/manga/NgontinhReaderPage'
-import { HMangaPage } from './features/manga/HMangaPage'
-import { HMangaDetailPage } from './features/manga/HMangaDetailPage'
-import { HMangaReaderPage } from './features/manga/HMangaReaderPage'
-import { HMangaScreenshotPage } from './features/manga/HMangaScreenshotPage'
 import { HPinGate } from './features/manga/HPinGate'
-import { EnglishPage } from './features/english/EnglishPage'
-import { KnowledgePage } from './features/knowledge/KnowledgePage'
 import { useTaskReminders } from './features/useTaskReminders'
-import { backupReminder, exportBackup, getLastBackupAt } from './lib/backup'
+import { backupReminder, getLastBackupAt } from './lib/backup'
 import { startQueueAutoFlush } from './lib/offlineQueue'
 import { ErrorBoundary } from './features/ErrorBoundary'
+import { SkeletonList } from './features/Skeleton'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { VideoMiniPlayer, VideoMiniPlayerProvider } from './features/youtube/VideoMiniPlayer'
-import { YoutubeWatchPage } from './features/youtube/YoutubeWatchPage'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
-import { ShareTarget } from './features/ShareTarget'
 import { ToastProvider, useToast } from './features/ToastContext'
 import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaUpdateNotification'
 
 
-import { YoutubeView } from './features/youtube/YoutubeView'
 import { getRemoteAppSetting, saveAppSetting } from './lib/userAppSettings'
 import { isUserAuthorizedForH } from './lib/hAuth'
 export { isUserAuthorizedForH }
+
+/*
+ * Tách gói theo route. Trước đây mọi trang nằm chung một chunk 1.48 MB, nên mở
+ * trang chủ vẫn phải tải cả LibraryPage, các reader manga, leaflet, pdfjs…
+ * Named export nên phải ánh xạ về `default` cho React.lazy.
+ */
+/** Khung chờ trong lúc nạp gói của route — giữ chỗ để layout không nhảy. */
+function RouteFallback() {
+  return (
+    <div style={{ padding: 16 }}>
+      <SkeletonList rows={5} />
+    </div>
+  )
+}
+
+const HabitsPage = lazy(() => import('./features/HabitsPage').then((m) => ({ default: m.HabitsPage })))
+const DailyPage = lazy(() => import('./features/DailyPage').then((m) => ({ default: m.DailyPage })))
+const TasksPage = lazy(() => import('./features/TasksPage').then((m) => ({ default: m.TasksPage })))
+const LibraryPage = lazy(() => import('./features/LibraryPage').then((m) => ({ default: m.LibraryPage })))
+const TikTokPage = lazy(() => import('./features/tiktok/TikTokPage').then((m) => ({ default: m.TikTokPage })))
+const NutritionPage = lazy(() => import('./features/NutritionPage').then((m) => ({ default: m.NutritionPage })))
+const UsageStatsPage = lazy(() => import('./features/UsageStatsPage').then((m) => ({ default: m.UsageStatsPage })))
+const PeoplePage = lazy(() => import('./features/people/PeoplePage').then((m) => ({ default: m.PeoplePage })))
+const BookReaderPage = lazy(() => import('./features/library/BookReaderPage').then((m) => ({ default: m.BookReaderPage })))
+const QuotesPage = lazy(() => import('./features/library/QuotesPage').then((m) => ({ default: m.QuotesPage })))
+const MoneyPage = lazy(() => import('./features/MoneyPage').then((m) => ({ default: m.MoneyPage })))
+const CalendarPage = lazy(() => import('./features/CalendarPage').then((m) => ({ default: m.CalendarPage })))
+const BLMangaPage = lazy(() => import('./features/manga/BLMangaPage').then((m) => ({ default: m.BLMangaPage })))
+const BLMangaDetailPage = lazy(() => import('./features/manga/BLMangaDetailPage').then((m) => ({ default: m.BLMangaDetailPage })))
+const NgontinhMangaPage = lazy(() => import('./features/manga/NgontinhMangaPage').then((m) => ({ default: m.NgontinhMangaPage })))
+const NgontinhDetailPage = lazy(() => import('./features/manga/NgontinhDetailPage').then((m) => ({ default: m.NgontinhDetailPage })))
+const NgontinhReaderPage = lazy(() => import('./features/manga/NgontinhReaderPage').then((m) => ({ default: m.NgontinhReaderPage })))
+const HMangaPage = lazy(() => import('./features/manga/HMangaPage').then((m) => ({ default: m.HMangaPage })))
+const HMangaDetailPage = lazy(() => import('./features/manga/HMangaDetailPage').then((m) => ({ default: m.HMangaDetailPage })))
+const HMangaReaderPage = lazy(() => import('./features/manga/HMangaReaderPage').then((m) => ({ default: m.HMangaReaderPage })))
+const HMangaScreenshotPage = lazy(() => import('./features/manga/HMangaScreenshotPage').then((m) => ({ default: m.HMangaScreenshotPage })))
+const EnglishPage = lazy(() => import('./features/english/EnglishPage').then((m) => ({ default: m.EnglishPage })))
+const KnowledgePage = lazy(() => import('./features/knowledge/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
+const YoutubeView = lazy(() => import('./features/youtube/YoutubeView').then((m) => ({ default: m.YoutubeView })))
+const YoutubeWatchPage = lazy(() => import('./features/youtube/YoutubeWatchPage').then((m) => ({ default: m.YoutubeWatchPage })))
+const ShareTarget = lazy(() => import('./features/ShareTarget').then((m) => ({ default: m.ShareTarget })))
+
 
 const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
   { id: 'home', label: 'Home', icon: Home, colorClass: 'icon-box-blue' },
@@ -248,30 +262,6 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     deferredPrompt.current = null
   }
 
-  // Thông báo đẩy: bật rồi thì nhắc việc tới cả khi app đã đóng.
-  const [pushOn, setPushOn] = useState(false)
-  const [pushBusy, setPushBusy] = useState(false)
-  useEffect(() => {
-    void pushEnabled().then(setPushOn)
-  }, [])
-
-  const togglePush = async () => {
-    setPushBusy(true)
-    try {
-      if (pushOn) {
-        await disablePush()
-        setPushOn(false)
-      } else {
-        await enablePush()
-        setPushOn(true)
-      }
-    } catch (error) {
-      showToast(`❌ ${error instanceof Error ? error.message : 'Không bật được thông báo.'}`, 'delete')
-    } finally {
-      setPushBusy(false)
-    }
-  }
-
   const navigation = useMemo(() => {
     const list = [...BASE_NAVIGATION]
     const ngontinhIdx = list.findIndex((n) => n.id === 'ngontinh')
@@ -377,19 +367,6 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     return () => clearTimeout(timer)
   }, [showToast])
 
-  const [backingUp, setBackingUp] = useState(false)
-  const handleBackup = async () => {
-    setBackingUp(true)
-    try {
-      const backup = await exportBackup()
-      if (backup.failed.length) showToast(`⚠️ Đã tải bản sao lưu. Bỏ qua bảng chưa có: ${backup.failed.join(', ')}`, 'info')
-      else showToast('☁️ Đã tải bản sao lưu.')
-    } catch {
-      showToast('❌ Chưa sao lưu được — kiểm tra kết nối Supabase.', 'delete')
-    }
-    setBackingUp(false)
-  }
-
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     try {
@@ -492,7 +469,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
       {/* Ngăn kéo điện thoại: mở sẵn toàn bộ theo nhóm, có thể vuốt xuống cuộn mượt mà */}
       {menuOpen && (
-        <div className="mobile-drawer-backdrop" onClick={() => setMenuOpen(false)}>
+        <div className="mobile-drawer-backdrop" role="presentation" onClick={() => setMenuOpen(false)}>
           <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-drawer-head">
               <div className="brand-icon"><Sparkles size={18} /></div>
@@ -606,6 +583,7 @@ function Protected({ user }: { user: unknown }) {
         <HeaderActionProvider>
           <AsideProvider>
           <VideoMiniPlayerProvider>
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
               <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
@@ -655,6 +633,7 @@ function Protected({ user }: { user: unknown }) {
                 }
               />
             </Routes>
+            </Suspense>
             <GlobalMiniPlayer />
             <VideoMiniPlayer />
             {/* Toast cập nhật: hiện toàn cục khi có bản cập nhật mới chưa xem */}
