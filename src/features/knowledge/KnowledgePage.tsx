@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Brain, Check, ChevronDown, FilePlus2, Plus, Search, Settings2, Tags, Trash2, HelpCircle, BookOpen } from 'lucide-react'
+import { Brain, Check, ChevronDown, FilePlus2, Plus, Search, Settings2, Tags, Trash2, BookOpen, ChevronRight, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHeaderAction } from '../HeaderAction'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import type { KnowledgeItem } from '../../types'
-import { categoryStats, DEFAULT_CATEGORY, filterKnowledge, normalizeCategory, parseLesson } from './knowledge'
+import { answerLines, categoryStats, DEFAULT_CATEGORY, filterKnowledge, lessonRows, normalizeCategory } from './knowledge'
+import type { LessonEntry } from './knowledge'
 import { ReviewSession } from '../study/ReviewSession'
 import { useDeck } from '../study/useDeck'
 import { StudyProgressBar } from '../study/StudyProgressBar'
@@ -25,7 +26,7 @@ export function getCategoryAccent(cat: string): string {
   return colors[Math.abs(hash) % colors.length]
 }
 
-/** Tab Kiến thức: Thẻ hình chữ nhật dài dọc (2 cột), lật thẻ xem câu trả lời, lọc theo thể loại và tìm kiếm. */
+/** Tab Kiến thức: sơ đồ tư duy thể loại → câu hỏi → các câu trả lời, lọc theo thể loại và tìm kiếm. */
 export function KnowledgePage() {
   const { showToast, showUndoToast } = useToast()
   const [items, setItems] = useState<KnowledgeItem[]>([])
@@ -33,13 +34,13 @@ export function KnowledgePage() {
   const [needsMigration, setNeedsMigration] = useState(false)
   const [category, setCategory] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [flipped, setFlipped] = useState<Record<string, boolean>>({})
+  const [open, setOpen] = useState<Record<string, boolean>>({})
   const [form, setForm] = useState(EMPTY_FORM)
   const [adding, setAdding] = useState(false)
   const [managing, setManaging] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [reviewing, setReviewing] = useState(false)
-  const [lesson, setLesson] = useState<{ category: string; text: string } | null>(null) // != null: đang soạn bài học tay
+  const [lesson, setLesson] = useState<{ category: string; entries: LessonEntry[] } | null>(null) // != null: đang soạn bài học tay
   const [lessonBusy, setLessonBusy] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
@@ -146,7 +147,7 @@ export function KnowledgePage() {
   /** Lưu cả bài học tự soạn: mỗi dòng thành một thẻ. Không gọi AI. */
   const saveLesson = async () => {
     if (!lesson || !supabase) return
-    const rows = parseLesson(lesson.text, lesson.category)
+    const rows = lessonRows(lesson.entries, lesson.category)
     if (!rows.length) return
     setLessonBusy(true)
     const { data, error } = await supabase.from('knowledge_items').insert(rows).select()
@@ -172,7 +173,16 @@ export function KnowledgePage() {
     })
   }
 
-  const toggleFlip = (id: string) => setFlipped((prev) => ({ ...prev, [id]: !prev[id] }))
+  const toggleNode = (id: string) => setOpen((prev) => ({ ...prev, [id]: !prev[id] }))
+
+  /** Nhánh sơ đồ: mỗi thể loại là một nhánh, mỗi thẻ là một nút con. */
+  const branches = useMemo(() => {
+    const map = new Map<string, KnowledgeItem[]>()
+    for (const i of visible) map.set(i.category, [...(map.get(i.category) ?? []), i])
+    return [...map.entries()]
+      .map(([name, list]) => ({ name, list }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+  }, [visible])
 
   const closeForm = () => {
     setAdding(false)
@@ -256,7 +266,7 @@ export function KnowledgePage() {
             )}
           </div>
 
-          <button className="kn-picker-btn" onClick={() => setLesson({ category: category ?? '', text: '' })} title="Tự soạn bài học bằng tay">
+          <button className="kn-picker-btn" onClick={() => setLesson({ category: category ?? '', entries: [{ question: '', answers: [''] }] })} title="Tự soạn bài học bằng tay">
             <FilePlus2 size={14} />
             <span className="kn-picker-label">Soạn bài học</span>
           </button>
@@ -336,21 +346,78 @@ export function KnowledgePage() {
               onChange={(e) => setLesson({ ...lesson, category: e.target.value })}
             />
           </label>
-          <label>
-            Nội dung — mỗi dòng một thẻ, dạng <code>câu hỏi | câu trả lời</code>
-            <textarea
-              rows={10}
-              placeholder={'Thủ đô Pháp là gì? | Paris' + String.fromCharCode(10) + 'Nước sôi ở bao nhiêu độ? | 100°C'}
-              value={lesson.text}
-              onChange={(e) => setLesson({ ...lesson, text: e.target.value })}
-            />
-          </label>
+          <div className="kn-lesson-list">
+            {lesson.entries.map((entry, qi) => (
+              <div key={qi} className="kn-lesson-q">
+                <div className="kn-lesson-q-head">
+                  <input
+                    placeholder={`Câu hỏi ${qi + 1}`}
+                    value={entry.question}
+                    onChange={(e) => setLesson({ ...lesson, entries: lesson.entries.map((x, i) => (i === qi ? { ...x, question: e.target.value } : x)) })}
+                  />
+                  {lesson.entries.length > 1 && (
+                    <button
+                      className="kn-manage-btn is-danger"
+                      aria-label={`Xoá câu hỏi ${qi + 1}`}
+                      onClick={() => setLesson({ ...lesson, entries: lesson.entries.filter((_, i) => i !== qi) })}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                {entry.answers.map((ans, ai) => (
+                  <div key={ai} className="kn-lesson-a">
+                    <input
+                      placeholder={`Câu trả lời ${ai + 1}`}
+                      value={ans}
+                      onChange={(e) =>
+                        setLesson({
+                          ...lesson,
+                          entries: lesson.entries.map((x, i) =>
+                            i === qi ? { ...x, answers: x.answers.map((y, j) => (j === ai ? e.target.value : y)) } : x,
+                          ),
+                        })
+                      }
+                    />
+                    {entry.answers.length > 1 && (
+                      <button
+                        className="kn-manage-btn is-danger"
+                        aria-label={`Xoá câu trả lời ${ai + 1}`}
+                        onClick={() =>
+                          setLesson({
+                            ...lesson,
+                            entries: lesson.entries.map((x, i) => (i === qi ? { ...x, answers: x.answers.filter((_, j) => j !== ai) } : x)),
+                          })
+                        }
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  className="kn-manage-btn"
+                  onClick={() =>
+                    setLesson({ ...lesson, entries: lesson.entries.map((x, i) => (i === qi ? { ...x, answers: [...x.answers, ''] } : x)) })
+                  }
+                >
+                  <Plus size={14} /> Thêm câu trả lời
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="kn-manage-btn"
+            onClick={() => setLesson({ ...lesson, entries: [...lesson.entries, { question: '', answers: [''] }] })}
+          >
+            <Plus size={14} /> Thêm câu hỏi
+          </button>
           <p className="muted" style={{ fontSize: '0.8rem', margin: '4px 0 0' }}>
-            {parseLesson(lesson.text, lesson.category).length} thẻ sẽ được tạo.
+            {lessonRows(lesson.entries, lesson.category).length} thẻ sẽ được tạo.
           </p>
           <div className="modal-actions">
             <button onClick={() => setLesson(null)}>Huỷ</button>
-            <button className="primary" onClick={saveLesson} disabled={lessonBusy || !parseLesson(lesson.text, lesson.category).length}>
+            <button className="primary" onClick={saveLesson} disabled={lessonBusy || !lessonRows(lesson.entries, lesson.category).length}>
               {lessonBusy ? 'Đang lưu…' : 'Lưu bài học'}
             </button>
           </div>
@@ -369,9 +436,9 @@ export function KnowledgePage() {
             />
           </label>
           <label>
-            Câu trả lời
+            Câu trả lời — mỗi dòng một ý
             <textarea
-              placeholder="Ghi lại lời giải thích"
+              placeholder="Mỗi dòng là một câu trả lời"
               rows={4}
               value={form.answer}
               onChange={(e) => setForm({ ...form, answer: e.target.value })}
@@ -416,76 +483,55 @@ export function KnowledgePage() {
           </button>
         </div>
       ) : (
-        /* Tall Vertical Rectangular 2-Column Grid */
-        <div className="eng-rect-2col-grid">
-          {visible.map((item) => {
-            const isFlipped = !!flipped[item.id]
-            const accent = getCategoryAccent(item.category)
-
+        /* Sơ đồ tư duy: thể loại → câu hỏi → các câu trả lời */
+        <div className="kn-mindmap">
+          {branches.map((b) => {
+            const accent = getCategoryAccent(b.name)
+            const branchOpen = open[`c:${b.name}`] !== false
             return (
-              <div
-                key={item.id}
-                className="eng-rect-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => toggleFlip(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    toggleFlip(item.id)
-                  }
-                }}
-              >
-                <div className={`eng-rect-card-inner ${isFlipped ? 'is-flipped' : ''}`}>
-                  {/* FRONT SIDE - Question */}
-                  <div
-                    className="eng-compact-card-side eng-front-side"
-                    style={{ borderLeft: `4px solid ${accent}` }}
-                  >
-                    <div className="eng-card-header-line">
-                      <span className="kn-cat" style={{ background: `${accent}20`, color: accent }}>
-                        {item.category}
-                      </span>
-                      <HelpCircle size={15} color={accent} style={{ opacity: 0.8 }} />
-                    </div>
-
-                    <div className="eng-rect-term-wrap">
-                      <p className="eng-rect-term-title kn-card-q-text">{item.question}</p>
-                    </div>
-
-                    <div className="eng-rect-bottom-line">
-                      <span className="eng-hint-flip">Lật xem câu trả lời</span>
-                    </div>
+              <div key={b.name} className="kn-branch" style={{ ['--kn-accent' as string]: accent }}>
+                <button className="kn-node kn-node-root" onClick={() => toggleNode(`c:${b.name}`)} aria-expanded={branchOpen}>
+                  <ChevronRight size={14} className={`kn-caret ${branchOpen ? 'is-open' : ''}`} />
+                  <span className="kn-node-text">{b.name}</span>
+                  <span className="kn-picker-count">{b.list.length}</span>
+                </button>
+                {branchOpen && (
+                  <div className="kn-children">
+                    {b.list.map((item) => {
+                      const answers = answerLines(item.answer)
+                      const itemOpen = !!open[item.id]
+                      return (
+                        <div key={item.id} className="kn-leaf">
+                          <div className="kn-node-row">
+                            <button className="kn-node kn-node-q" onClick={() => toggleNode(item.id)} aria-expanded={itemOpen}>
+                              <ChevronRight size={14} className={`kn-caret ${itemOpen ? 'is-open' : ''}`} />
+                              <span className="kn-node-text">{item.question}</span>
+                              {answers.length > 1 && <span className="kn-picker-count">{answers.length}</span>}
+                            </button>
+                            <button
+                              className="eng-icon-action-btn is-delete"
+                              aria-label={`Xoá thẻ "${item.question}"`}
+                              title="Xoá thẻ"
+                              onClick={(e) => void remove(item.id, e)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          {itemOpen && (
+                            <div className="kn-children">
+                              {answers.length === 0 && <p className="kn-node kn-node-a muted">—</p>}
+                              {answers.map((a, i) => (
+                                <p key={i} className="kn-node kn-node-a">
+                                  {a}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-
-                  {/* BACK SIDE - Answer */}
-                  <div
-                    className="eng-compact-card-side eng-back-side"
-                    style={{ borderLeft: `4px solid ${accent}` }}
-                  >
-                    <div className="eng-card-header-line">
-                      <span className="kn-cat" style={{ background: `${accent}20`, color: accent }}>
-                        {item.category}
-                      </span>
-                      <button
-                        className="eng-icon-action-btn is-delete"
-                        aria-label={`Xoá thẻ "${item.question}"`}
-                        title="Xoá thẻ"
-                        onClick={(e) => void remove(item.id, e)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-
-                    <div className="eng-rect-meaning-wrap kn-card-a-wrap">
-                      <p className="kn-card-a-text">{item.answer || '—'}</p>
-                    </div>
-
-                    <div className="eng-rect-bottom-line">
-                      <span className="eng-hint-flip">Lật lại câu hỏi</span>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             )
           })}

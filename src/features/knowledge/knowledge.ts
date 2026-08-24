@@ -26,17 +26,21 @@ export function filterKnowledge(items: KnowledgeItem[], category: string | null,
   })
 }
 
-/**
- * Soạn bài học bằng tay: mỗi dòng một thẻ, dạng "câu hỏi | câu trả lời".
- * Không có dấu | thì cả dòng là câu hỏi, để trống câu trả lời.
- */
-export function parseLesson(text: string, category: string): { question: string; answer: string; category: string }[] {
+/** Nhiều câu trả lời của một thẻ được lưu chung một cột, mỗi dòng một ý. */
+export function answerLines(answer: string): string[] {
+  return answer.split('\n').map((a) => a.trim()).filter(Boolean)
+}
+
+export type LessonEntry = { question: string; answers: string[] }
+
+/** Soạn bài học bằng tay: mỗi mục là một câu hỏi kèm danh sách câu trả lời. */
+export function lessonRows(entries: LessonEntry[], category: string): { question: string; answer: string; category: string }[] {
   const cat = normalizeCategory(category)
-  return text
-    .split('\n')
-    .map((line) => {
-      const [q, ...rest] = line.split('|')
-      return { question: q.trim(), answer: rest.join('|').trim(), category: cat }
-    })
-    .filter((c) => c.question)
+  return entries
+    .map((e) => ({
+      question: e.question.trim(),
+      answer: e.answers.map((a) => a.trim()).filter(Boolean).join('\n'),
+      category: cat,
+    }))
+    .filter((r) => r.question)
 }

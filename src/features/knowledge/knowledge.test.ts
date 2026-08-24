@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryStats, filterKnowledge, normalizeCategory, parseLesson } from './knowledge'
+import { answerLines, categoryStats, filterKnowledge, lessonRows, normalizeCategory } from './knowledge'
 import type { KnowledgeItem } from '../../types'
 
 const items: KnowledgeItem[] = [
@@ -45,15 +45,20 @@ describe('filterKnowledge', () => {
   })
 })
 
-describe('parseLesson', () => {
-  it('tách mỗi dòng thành một thẻ, bỏ dòng trống', () => {
-    expect(parseLesson('Hỏi 1 | Đáp 1\n\n  \nHỏi 2', 'Lịch sử')).toEqual([
-      { question: 'Hỏi 1', answer: 'Đáp 1', category: 'Lịch sử' },
-      { question: 'Hỏi 2', answer: '', category: 'Lịch sử' },
-    ])
+describe('answerLines', () => {
+  it('tách nhiều câu trả lời theo dòng, bỏ dòng trống', () => {
+    expect(answerLines('A' + String.fromCharCode(10) + '  ' + String.fromCharCode(10) + ' B ')).toEqual(['A', 'B'])
+  })
+})
+
+describe('lessonRows', () => {
+  it('gộp danh sách câu trả lời thành một thẻ, bỏ câu hỏi rỗng', () => {
+    expect(
+      lessonRows([{ question: ' Hỏi 1 ', answers: ['Đáp 1', ' ', 'Đáp 2'] }, { question: '  ', answers: ['x'] }], 'Lịch sử'),
+    ).toEqual([{ question: 'Hỏi 1', answer: 'Đáp 1' + String.fromCharCode(10) + 'Đáp 2', category: 'Lịch sử' }])
   })
 
-  it('giữ dấu | trong câu trả lời và mặc định thể loại Chung', () => {
-    expect(parseLesson('a | b | c', '')).toEqual([{ question: 'a', answer: 'b | c', category: 'Chung' }])
+  it('không có thể loại thì mặc định Chung', () => {
+    expect(lessonRows([{ question: 'a', answers: [] }], '')).toEqual([{ question: 'a', answer: '', category: 'Chung' }])
   })
 })

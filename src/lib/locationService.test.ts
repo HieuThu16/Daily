@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateDistanceKm, formatDistance, findMatchingSavedPlace } from './locationService';
+import { calculateDistanceKm, formatDistance, findMatchingSavedPlace, cleanTimelineLogs } from './locationService';
 import type { SavedPlace } from '../types/location';
 
 describe('locationService', () => {
@@ -55,5 +55,55 @@ describe('locationService', () => {
     // Đi xa 500m khỏi Trọ
     const out = findMatchingSavedPlace(10.8050, 106.7050, places);
     expect(out).toBeNull();
+  });
+});
+
+describe('findMatchingSavedPlace - mốc lồng nhau', () => {
+  const places: any[] = [
+    { id: 'tinh', place_name: 'Tỉnh Cà Mau', latitude: 9.18, longitude: 105.15, radius_meters: 30000 },
+    { id: 'nha', place_name: 'Nhà', latitude: 9.181, longitude: 105.151, radius_meters: 200 },
+  ];
+
+  it('chọn mốc cụ thể nhất chứ không phải mốc liệt kê trước', () => {
+    expect(findMatchingSavedPlace(9.1811, 105.1511, places)?.id).toBe('nha');
+  });
+
+  it('ra ngoài mốc nhỏ thì mới rơi về mốc vùng rộng', () => {
+    expect(findMatchingSavedPlace(9.30, 105.25, places)?.id).toBe('tinh');
+  });
+});
+
+describe('cleanTimelineLogs - dọn lịch trình rối', () => {
+  const base = { user_id: 'u1', user_name: 'Hiếu', log_date: '2026-08-24', latitude: 0, longitude: 0 };
+
+  it('bỏ mốc vùng rộng khi trùng giờ với mốc cụ thể của cùng người', () => {
+    const out = cleanTimelineLogs([
+      { ...base, id: '1', place_name: 'Ở Nhà', event_type: 'STAY', start_time: '10:20', end_time: '10:41' },
+      { ...base, id: '2', place_name: 'Ở Tỉnh Cà Mau', event_type: 'STAY', start_time: '10:20', end_time: '10:41' },
+    ] as any);
+    expect(out.map((l) => l.place_name)).toEqual(['Ở Nhà']);
+  });
+
+  it('giữ mốc vùng rộng nếu không có mốc cụ thể nào trùng giờ', () => {
+    const out = cleanTimelineLogs([
+      { ...base, id: '1', place_name: 'Ở Tỉnh Cà Mau', event_type: 'STAY', start_time: '10:20', end_time: '10:41' },
+    ] as any);
+    expect(out).toHaveLength(1);
+  });
+
+  it('bỏ chặng "Đi từ X" dở dang không đi được mét nào', () => {
+    const out = cleanTimelineLogs([
+      { ...base, id: '1', place_name: 'Đi từ Nhà', event_type: 'MOVE', start_time: '10:22', end_time: '10:22', distance_km: 0 },
+      { ...base, id: '2', place_name: 'Đi từ Nhà đến Trọ', event_type: 'MOVE', start_time: '10:30', end_time: '11:00', distance_km: 8 },
+    ] as any);
+    expect(out.map((l) => l.place_name)).toEqual(['Đi từ Nhà đến Trọ']);
+  });
+
+  it('mốc của hai người khác nhau không xoá lẫn nhau', () => {
+    const out = cleanTimelineLogs([
+      { ...base, id: '1', place_name: 'Ở Nhà', event_type: 'STAY', start_time: '10:20', end_time: '10:41' },
+      { ...base, id: '2', user_name: 'Kim Ý', place_name: 'Ở Tỉnh Cà Mau', event_type: 'STAY', start_time: '10:20', end_time: '10:41' },
+    ] as any);
+    expect(out).toHaveLength(2);
   });
 });

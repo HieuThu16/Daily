@@ -11817,3 +11817,40 @@ svg.lucide-library {
   opacity: 1;
   border: 2px solid var(--purple, #8b5cf6);
 }
+
+/* Sơ đồ tư duy tab Kiến thức */
+.kn-mindmap { display: flex; flex-direction: column; gap: 10px; }
+.kn-branch { --kn-accent: #8b5cf6; }
+.kn-children {
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 2px solid color-mix(in srgb, var(--kn-accent) 45%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.kn-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--kn-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--kn-accent) 10%, transparent);
+  font: inherit;
+  cursor: pointer;
+}
+.kn-node-root { font-weight: 600; border-left: 4px solid var(--kn-accent); }
+.kn-node-a { cursor: default; opacity: 0.9; }
+.kn-node-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.kn-caret { flex: none; transition: transform 0.15s ease; }
+.kn-caret.is-open { transform: rotate(90deg); }
+.kn-node-row { display: flex; align-items: center; gap: 6px; }
+.kn-lesson-list { display: flex; flex-direction: column; gap: 12px; }
+.kn-lesson-q { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border, #8883); border-radius: 10px; }
+.kn-lesson-q-head, .kn-lesson-a { display: flex; align-items: center; gap: 6px; }
+.kn-lesson-a { margin-left: 14px; }
+.kn-lesson-q-head input, .kn-lesson-a input { flex: 1; min-width: 0; }

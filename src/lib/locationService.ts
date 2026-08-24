@@ -181,6 +181,8 @@ export async function deletePlace(placeId: string): Promise<void> {
 }
 
 export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPlace[], forUserName?: string): SavedPlace | null {
+  let best: { place: SavedPlace; radiusKm: number; distKm: number } | null = null
+
   for (const p of places) {
     // Ưu tiên mốc của người đó hoặc mốc chung
     if (forUserName && p.user_name && p.user_name !== forUserName) continue;
@@ -188,12 +190,16 @@ export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPl
     // Bán kính nhận diện an toàn chống giật GPS: tối thiểu 350m
     const effectiveRadiusMeters = Math.max(p.radius_meters || 200, 350);
     const radiusKm = effectiveRadiusMeters / 1000;
-    if (distKm <= radiusKm) {
-      return p;
+    if (distKm > radiusKm) continue;
+    // Mốc nhỏ nằm trong mốc lớn (Nhà nằm trong Tỉnh) -> luôn chọn mốc cụ thể nhất
+    if (!best || radiusKm < best.radiusKm || (radiusKm === best.radiusKm && distKm < best.distKm)) {
+      best = { place: p, radiusKm, distKm };
     }
   }
-  return null;
+
+  return best?.place || null;
 }
+
 
 /* ==========================================================================
  * 2. LỊCH TRÌNH VỊ TRÍ & QUÃNG ĐƯỜNG TRONG NGÀY (TIMELINE LOGS)
@@ -203,6 +209,17 @@ export function findMatchingSavedPlace(lat: number, lon: number, places: SavedPl
  * Lọc bỏ các log rác/ảo do GPS bị giật (Đi từ Trọ đến Trọ, Di chuyển đến Trọ khi đang ở Trọ)
  * và tự động gộp các mốc Ở (STAY) cùng một địa điểm trong ngày thành 1 dòng duy nhất (từ giờ sớm nhất -> giờ muộn nhất).
  */
+/** Tên mốc kiểu vùng hành chính rộng ("Ở Tỉnh Cà Mau") — bỏ khi đã có mốc cụ thể cùng giờ. */
+function isBroadArea(placeName: string): boolean {
+  return /^ở\s+(tỉnh|thành phố|tp\.?|quận|huyện|phường|xã)\s/i.test((placeName || '').trim());
+}
+
+function overlaps(a: LocationTimelineLog, b: LocationTimelineLog): boolean {
+  const aEnd = a.end_time || a.start_time;
+  const bEnd = b.end_time || b.start_time;
+  return a.start_time <= bEnd && b.start_time <= aEnd;
+}
+
 export function cleanTimelineLogs(logs: LocationTimelineLog[]): LocationTimelineLog[] {
   const cleaned: LocationTimelineLog[] = [];
   const stayMap = new Map<string, LocationTimelineLog>();
@@ -211,13 +228,18 @@ export function cleanTimelineLogs(logs: LocationTimelineLog[]): LocationTimeline
     // 1. Loại bỏ các log di chuyển ảo (GPS giật trong nhà)
     if (log.event_type === 'MOVE') {
       const lower = (log.place_name || '').toLowerCase().trim();
-      
+
       // Bỏ các log "Đi từ X đến X" (VD: "Đi từ Trọ đến Trọ", "Đi từ Nhà đến Nhà")
       if (lower.includes('đến') && lower.includes('từ')) {
         const parts = lower.replace('đi từ', '').split('đến');
         if (parts.length === 2 && parts[0].trim() === parts[1].trim()) {
           continue;
         }
+      }
+
+      // Chặng dở dang "Đi từ X" chưa tới đâu và gần như không đi được mét nào
+      if (!lower.includes('đến') && (log.distance_km || 0) < 0.15) {
+        continue;
       }
 
       // Bỏ các log "Di chuyển đến..." khi không có quãng đường hoặc quá ngắn (< 0.15 km)
@@ -248,9 +270,24 @@ export function cleanTimelineLogs(logs: LocationTimelineLog[]): LocationTimeline
     cleaned.push(log);
   }
 
+  // 3. Một người không thể ở hai nơi cùng lúc: bỏ mốc vùng rộng khi đã có mốc cụ thể trùng giờ
+  const kept = cleaned.filter((log) => {
+    if (log.event_type !== 'STAY' || !isBroadArea(log.place_name)) return true;
+    return !cleaned.some(
+      (other) =>
+        other !== log &&
+        other.event_type === 'STAY' &&
+        other.user_name === log.user_name &&
+        other.log_date === log.log_date &&
+        !isBroadArea(other.place_name) &&
+        overlaps(other, log)
+    );
+  });
+
   // Sắp xếp theo start_time tăng dần
-  return cleaned.sort((a, b) => a.start_time.localeCompare(b.start_time));
+  return kept.sort((a, b) => a.start_time.localeCompare(b.start_time));
 }
+
 
 export function getLocalTimelineLogs(): LocationTimelineLog[] {
   try {
