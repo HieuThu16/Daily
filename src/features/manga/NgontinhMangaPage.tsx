@@ -161,6 +161,7 @@ export const NgontinhMangaPage: React.FC = () => {
   
   const [activeTab, setActiveTab] = useState<MainTab>('all');
   const [rankingType, setRankingType] = useState<RankingType>('hot');
+  const [activeGenre, setActiveGenre] = useState<string>('');
   
   const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
@@ -212,7 +213,7 @@ export const NgontinhMangaPage: React.FC = () => {
   // Reset pagination on tab/search change
   useEffect(() => {
     setVisibleCount(BATCH_SIZE);
-  }, [activeTab, rankingType, searchQuery]);
+  }, [activeTab, rankingType, searchQuery, activeGenre]);
 
   useScrollRestore('ngontinh-list', mangaList.length > 0);
 
@@ -221,6 +222,21 @@ export const NgontinhMangaPage: React.FC = () => {
     toggleNgontinhFavorite(slug);
     setFavorites(getNgontinhFavorites());
   };
+
+  // Thể loại hay gặp nhất trong kho, kèm số bộ, để làm hàng chip lọc.
+  const genreOptions = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const manga of mangaList) {
+      for (const genre of manga.genres ?? []) {
+        const name = String(genre).trim();
+        if (name) count.set(name, (count.get(name) ?? 0) + 1);
+      }
+    }
+    return [...count.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(([name, total]) => ({ name, total }));
+  }, [mangaList]);
 
   // Map slug to full manga details
   const mangaMap = useMemo(() => {
@@ -339,6 +355,11 @@ export const NgontinhMangaPage: React.FC = () => {
       result = mangaList.map(m => ({ manga: m }));
     }
 
+    // Lọc theo thể loại
+    if (activeGenre) {
+      result = result.filter(item => (item.manga.genres ?? []).includes(activeGenre));
+    }
+
     // Search filtering
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -346,7 +367,7 @@ export const NgontinhMangaPage: React.FC = () => {
     }
 
     return result;
-  }, [mangaList, mangaMap, hotData, activeTab, rankingType, favorites, history, searchQuery]);
+  }, [mangaList, mangaMap, hotData, activeTab, rankingType, favorites, history, searchQuery, activeGenre]);
 
   // Paginated visible list
   const visibleItems = useMemo(() => {
@@ -507,6 +528,27 @@ export const NgontinhMangaPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Hàng chip lọc theo thể loại */}
+      {genreOptions.length > 0 && (
+        <div className="ngontinh-ranking-subtabs" role="group" aria-label="Lọc theo thể loại">
+          <button
+            className={`ngontinh-ranking-chip ${activeGenre === '' ? 'active' : ''}`}
+            onClick={() => setActiveGenre('')}
+          >
+            Tất cả thể loại
+          </button>
+          {genreOptions.map((genre) => (
+            <button
+              key={genre.name}
+              className={`ngontinh-ranking-chip ${activeGenre === genre.name ? 'active' : ''}`}
+              onClick={() => setActiveGenre(activeGenre === genre.name ? '' : genre.name)}
+            >
+              {genre.name} ({genre.total})
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Sub-chips for Ranking when Bảng Xếp Hạng is selected */}
       {activeTab === 'ranking' && (
