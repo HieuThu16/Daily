@@ -184,28 +184,46 @@ function loadYouTubeApi(): Promise<any> {
   return apiPromise
 }
 
+/** Bám vào iframe YouTube (cần enablejsapi=1) và trả về đối tượng player. */
+export function useYouTubePlayer(iframe: HTMLIFrameElement | null, videoId: string | null) {
+  const [player, setPlayer] = useState<any>(null)
+  useEffect(() => {
+    if (!iframe || !videoId) return
+    let alive = true
+    void loadYouTubeApi().then((YT) => {
+      if (alive) setPlayer(new YT.Player(iframe, {}))
+    })
+    return () => {
+      alive = false
+      setPlayer(null)
+    }
+  }, [iframe, videoId])
+  return player
+}
+
 /**
- * Bám vào iframe YouTube (cần enablejsapi=1) để biết đang xem tới đâu.
- * Lưu định kỳ, và lưu ngay khi thu nhỏ / tắt app hay đổi video.
+ * Lưu tiến độ xem định kỳ, và lưu ngay khi thu nhỏ / tắt app hay đổi video.
+ * Trả về player để chỗ gọi dùng lại (phụ đề song ngữ cần số giây hiện tại).
  */
 export function useYouTubeProgress(
   iframe: HTMLIFrameElement | null,
   video: { videoId: string | null; title?: string; channelName?: string; thumbnail?: string | null },
 ) {
+  const player = useYouTubePlayer(iframe, video.videoId)
   const playerRef = useRef<any>(null)
+  playerRef.current = player
   const videoRef = useRef(video)
   videoRef.current = video
 
   useEffect(() => {
-    if (!iframe || !video.videoId) return
-    let alive = true
+    if (!player || !video.videoId) return
 
     const flush = () => {
-      const player = playerRef.current
+      const p = playerRef.current
       const current = videoRef.current
-      if (!player?.getCurrentTime || !current.videoId) return
-      const seconds = Number(player.getCurrentTime()) || 0
-      const duration = Number(player.getDuration?.()) || null
+      if (!p?.getCurrentTime || !current.videoId) return
+      const seconds = Number(p.getCurrentTime()) || 0
+      const duration = Number(p.getDuration?.()) || null
       if (seconds < 5) return // bấm nhầm rồi thoát thì không tính là đang xem
       void saveVideoProgress({
         videoId: current.videoId,
@@ -217,11 +235,6 @@ export function useYouTubeProgress(
       })
     }
 
-    void loadYouTubeApi().then((YT) => {
-      if (!alive) return
-      playerRef.current = new YT.Player(iframe, {})
-    })
-
     const timer = setInterval(flush, 15000)
     const onHidden = () => {
       if (document.visibilityState === 'hidden') flush()
@@ -231,13 +244,13 @@ export function useYouTubeProgress(
     window.addEventListener('blur', flush)
 
     return () => {
-      alive = false
       flush()
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onHidden)
       window.removeEventListener('pagehide', flush)
       window.removeEventListener('blur', flush)
-      playerRef.current = null
     }
-  }, [iframe, video.videoId])
+  }, [player, video.videoId])
+
+  return player
 }

@@ -12,6 +12,7 @@ import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { searchYouTubeVideos, type YouTubeSearchResult } from '../../lib/youtubeSearch'
 import { Modal, useIncrementalList } from '../shared'
+import { DualSubtitles } from './DualSubtitles'
 import { publishedGroupLabel } from '../../lib/videoGrouping'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
 import { useToast } from '../ToastContext'
@@ -1155,7 +1156,7 @@ function ChannelDetailView({
 
   const currentVideo = videos.find((v) => v.video_id === playingId) || videos[0]
   // Tự ghi "đang xem" + % đã xem; lưu ngay khi thu nhỏ hoặc tắt app.
-  useYouTubeProgress(iframeEl, {
+  const player = useYouTubeProgress(iframeEl, {
     videoId: currentVideo?.video_id ?? null,
     title: currentVideo?.title,
     channelName: currentVideo?.creator_name ?? undefined,
@@ -1231,6 +1232,7 @@ function ChannelDetailView({
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
+          <DualSubtitles player={player} videoId={currentVideo.video_id} />
         </div>
       )}
 
