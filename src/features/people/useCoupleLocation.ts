@@ -7,6 +7,7 @@ import type {
   LocationTimelineLog, 
   LocationAlertEvent 
 } from '../../types/location';
+import { notifyPartner } from '../../lib/push';
 import {
   calculateDistanceKm,
   fetchCoupleLocations,
@@ -25,6 +26,9 @@ import {
   setLocationSharingEnabled,
   syncLocationToSupabase,
 } from '../../lib/locationService';
+
+/** Nhớ lần cảnh báo vị trí gần nhất để không báo trùng sau mỗi lần mở lại app. */
+const ALERT_KEY = 'daily_location_last_alert';
 
 export function useCoupleLocation(partnerPersonName?: string, selectedDate: string = localDate()) {
   const [locations, setLocations] = useState<PartnerLocation[]>([]);
@@ -79,6 +83,23 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
     }
   }, [selectedDate]);
 
+  /** Chỉ báo khi thật sự đổi mốc, không báo lại cùng một sự kiện sau mỗi lần refresh. */
+  const notifyPlaceChange = useCallback(
+    (kind: 'ARRIVE' | 'LEAVE', placeName: string, time: string) => {
+      const key = `${kind}:${placeName}`;
+      try {
+        if (localStorage.getItem(ALERT_KEY) === key) return;
+        localStorage.setItem(ALERT_KEY, key);
+      } catch {
+        return;
+      }
+      const title =
+        kind === 'ARRIVE' ? `${myUserName} đã tới ${placeName}` : `${myUserName} đang rời khỏi ${placeName}`;
+      void notifyPartner(title, `lúc ${time}`, '/people', `loc-${kind}-${placeName}`);
+    },
+    [myUserName]
+  );
+
   // Xử lý logic Geofence & Lịch trình hành trình: Gom chặng Ở (STAY) & chặng Di chuyển (MOVE: Từ A -> B)
   const processGeofenceAndTimeline = useCallback(
     async (lat: number, lon: number, addressName: string, time: string, today: string) => {
@@ -89,6 +110,27 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
       const prevCoords = lastCoordsRef.current;
       const movedDistanceKm = prevCoords ? calculateDistanceKm(prevCoords.lat, prevCoords.lon, lat, lon) : 0;
       lastCoordsRef.current = { lat, lon };
+
+      /** Tìm mốc Ở đã có trong ngày để giữ nguyên giờ bắt đầu, chỉ nới giờ kết thúc. */
+      const upsertStay = (logId: string, placeLabel: string, plat: number, plon: number) => {
+        const isSame = (l: LocationTimelineLog) =>
+          l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === placeLabel;
+        const existing = getLocalTimelineLogs().find(isSame) || timelineLogs.find(isSame);
+        const stayLog: LocationTimelineLog = {
+          id: existing ? existing.id : logId,
+          user_id: uid,
+          user_name: myUserName,
+          place_name: placeLabel,
+          event_type: 'STAY',
+          latitude: plat,
+          longitude: plon,
+          log_date: today,
+          start_time: existing ? existing.start_time : time,
+          end_time: time,
+          created_at: existing?.created_at || new Date().toISOString(),
+        };
+        void logTimelineEvent(stayLog);
+      };
 
       // 1. NẾU ĐANG Ở ĐỊA ĐIỂM QUEN THUỘC (Trọ / Nhà / Công ty...)
       if (matchingPlace) {
@@ -116,101 +158,103 @@ export function useCoupleLocation(partnerPersonName?: string, selectedDate: stri
           }
         }
 
-        // Tìm mốc STAY đã có của địa điểm này trong ngày để duy trì mốc thời gian "Từ ... đến ..."
-        const localLogs = getLocalTimelineLogs();
-        const existingStay = localLogs.find(
-          (l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === `Ở ${matchingPlace.name}`
-        ) || timelineLogs.find(
-          (l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === `Ở ${matchingPlace.name}`
+        if (lastKnownPlaceRef.current?.name !== matchingPlace.name) {
+          notifyPlaceChange('ARRIVE', matchingPlace.name, time);
+        }
+
+        upsertStay(
+          `stay_${myUserName}_${matchingPlace.id}_${today}`,
+          `Ở ${matchingPlace.name}`,
+          matchingPlace.latitude,
+          matchingPlace.longitude
         );
-
-        const stayLogId = existingStay ? existingStay.id : `stay_${myUserName}_${matchingPlace.id}_${today}`;
-        const startTime = existingStay ? existingStay.start_time : time;
-
-        const stayLog: LocationTimelineLog = {
-          id: stayLogId,
-          user_id: uid,
-          user_name: myUserName,
-          place_name: `Ở ${matchingPlace.name}`,
-          event_type: 'STAY',
-          latitude: matchingPlace.latitude,
-          longitude: matchingPlace.longitude,
-          log_date: today,
-          start_time: startTime,
-          end_time: time,
-          created_at: existingStay?.created_at || new Date().toISOString(),
-        };
-
-        void logTimelineEvent(stayLog);
         lastKnownPlaceRef.current = matchingPlace;
-      } 
-      // 2. NẾU KHÔNG Ở MỐC NÀO (Đang trên đường di chuyển)
-      else {
-        // Kiểm tra chống giật GPS: nếu vẫn < 400m so với mốc quen thuộc cũ thì vẫn coi là đang ở mốc đó
-        if (lastKnownPlaceRef.current) {
-          const distToLastPlace = calculateDistanceKm(lat, lon, lastKnownPlaceRef.current.latitude, lastKnownPlaceRef.current.longitude);
-          if (distToLastPlace < 0.4) {
-            const oldPlace = lastKnownPlaceRef.current;
-            const existingStay = getLocalTimelineLogs().find(
-              (l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY' && l.place_name === `Ở ${oldPlace.name}`
-            );
-            if (existingStay) {
-              existingStay.end_time = time;
-              void logTimelineEvent(existingStay);
-              return oldPlace.name;
-            }
-          }
-
-          // Đã thực sự đi ra xa khỏi mốc cũ (> 400m)
-          lastDeparturePlaceRef.current = lastKnownPlaceRef.current;
-          lastKnownPlaceRef.current = null;
-        }
-
-        const originName = lastDeparturePlaceRef.current?.name;
-        const tripTitle = originName ? `Đi từ ${originName}` : (addressName || 'Đang di chuyển');
-
-        // Chỉ tạo chặng di chuyển khi đã đi một khoảng cách đáng kể (> 0.2km)
-        if (!activeMoveLogRef.current) {
-          if (movedDistanceKm > 0.1) {
-            const moveLogId = `trip_${myUserName}_${today}_${Date.now()}`;
-            const newMoveLog: LocationTimelineLog = {
-              id: moveLogId,
-              user_id: uid,
-              user_name: myUserName,
-              place_name: tripTitle,
-              event_type: 'MOVE',
-              latitude: lat,
-              longitude: lon,
-              log_date: today,
-              start_time: time,
-              end_time: time,
-              distance_km: movedDistanceKm > 0.05 ? Math.round(movedDistanceKm * 10) / 10 : 0,
-              created_at: new Date().toISOString(),
-            };
-            activeMoveLogRef.current = newMoveLog;
-            void logTimelineEvent(newMoveLog);
-          }
-        } else {
-          // Cập nhật giờ đến và cộng dồn quãng đường của chặng di chuyển
-          const currentMove = activeMoveLogRef.current;
-          const totalDist = (currentMove.distance_km || 0) + (movedDistanceKm > 0.05 ? movedDistanceKm : 0);
-          const updatedMoveLog: LocationTimelineLog = {
-            ...currentMove,
-            place_name: originName ? `Đi từ ${originName}` : (addressName || 'Đang di chuyển'),
-            end_time: time,
-            latitude: lat,
-            longitude: lon,
-            distance_km: Math.round(totalDist * 10) / 10,
-          };
-          activeMoveLogRef.current = updatedMoveLog;
-          void logTimelineEvent(updatedMoveLog);
-        }
+        lastDeparturePlaceRef.current = null;
+        return matchingPlace.name;
       }
 
-      return matchingPlace ? matchingPlace.name : undefined;
+      // 2. NẾU KHÔNG Ở MỐC NÀO (Đang trên đường, hoặc đang ở một nơi chưa lưu mốc)
+      if (lastKnownPlaceRef.current) {
+        // Chống giật GPS: vẫn < 400m so với mốc quen thuộc cũ thì coi như chưa rời đi
+        const oldPlace = lastKnownPlaceRef.current;
+        const distToLastPlace = calculateDistanceKm(lat, lon, oldPlace.latitude, oldPlace.longitude);
+        if (distToLastPlace < 0.4) {
+          upsertStay(`stay_${myUserName}_${oldPlace.id}_${today}`, `Ở ${oldPlace.name}`, oldPlace.latitude, oldPlace.longitude);
+          return oldPlace.name;
+        }
+
+        // Đã thực sự đi ra xa khỏi mốc cũ (> 400m)
+        notifyPlaceChange('LEAVE', oldPlace.name, time);
+        lastDeparturePlaceRef.current = oldPlace;
+        lastKnownPlaceRef.current = null;
+      }
+
+      const originName = lastDeparturePlaceRef.current?.name;
+
+      /*
+       * Không biết đi ra từ mốc nào (thường là mở app lại khi đã ở chỗ khác):
+       * ghi thẳng một mốc Ở theo địa chỉ hiện tại. Trước đây chỗ này đòi phải
+       * đo được quãng đường > 0.1km mới ghi, mà lần lấy toạ độ đầu tiên thì
+       * chưa có toạ độ trước để so — nên lịch trình đứng im ở mốc cũ.
+       */
+      if (!originName) {
+        const label = `Ở ${addressName}`;
+        const slug = addressName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+        upsertStay(`stay_${myUserName}_${today}_${slug}`, label, lat, lon);
+        return addressName;
+      }
+
+      // Đang trên đường giữa hai nơi: mở chặng di chuyển và cộng dồn quãng đường
+      if (!activeMoveLogRef.current) {
+        activeMoveLogRef.current = {
+          id: `trip_${myUserName}_${today}_${Date.now()}`,
+          user_id: uid,
+          user_name: myUserName,
+          place_name: `Đi từ ${originName}`,
+          event_type: 'MOVE',
+          latitude: lat,
+          longitude: lon,
+          log_date: today,
+          start_time: time,
+          end_time: time,
+          distance_km: movedDistanceKm > 0.05 ? Math.round(movedDistanceKm * 10) / 10 : 0,
+          created_at: new Date().toISOString(),
+        };
+      } else {
+        const currentMove = activeMoveLogRef.current;
+        const totalDist = (currentMove.distance_km || 0) + (movedDistanceKm > 0.05 ? movedDistanceKm : 0);
+        activeMoveLogRef.current = {
+          ...currentMove,
+          end_time: time,
+          latitude: lat,
+          longitude: lon,
+          distance_km: Math.round(totalDist * 10) / 10,
+        };
+      }
+      void logTimelineEvent(activeMoveLogRef.current);
+
+      return undefined;
     },
-    [currentUserId, myUserName, savedPlaces, timelineLogs]
+    [currentUserId, myUserName, notifyPlaceChange, savedPlaces, timelineLogs]
   );
+
+  /*
+   * Tải lại trang là mất hết ref, không còn nhớ hôm nay đã ở mốc nào. Dựng lại
+   * "đi ra từ đâu" theo mốc Ở cuối cùng trong ngày để chặng di chuyển tiếp theo
+   * có tên đúng ("Đi từ Trọ") thay vì chỉ là một địa chỉ trống không.
+   */
+  useEffect(() => {
+    if (lastDeparturePlaceRef.current || lastKnownPlaceRef.current) return;
+    if (savedPlaces.length === 0 || timelineLogs.length === 0) return;
+    const today = localDate();
+    const lastStay = [...timelineLogs]
+      .filter((l) => l.user_name === myUserName && l.log_date === today && l.event_type === 'STAY')
+      .sort((a, b) => (a.end_time || a.start_time).localeCompare(b.end_time || b.start_time))
+      .pop();
+    if (!lastStay) return;
+    const place = savedPlaces.find((p) => `Ở ${p.name}` === lastStay.place_name);
+    if (place) lastDeparturePlaceRef.current = place;
+  }, [myUserName, savedPlaces, timelineLogs]);
 
   // Cập nhật vị trí hiện tại của thiết bị
   const updateCurrentPosition = useCallback(

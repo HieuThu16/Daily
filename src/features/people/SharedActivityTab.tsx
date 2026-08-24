@@ -10,10 +10,8 @@ import { useOptionalAudioPlayer } from '../library/AudioPlayerContext';
 import { useToast } from '../ToastContext';
 import { DatePager } from '../home/DatePager';
 import { getMangaReadingLogs } from '../../lib/mangaReadingLog';
-import { fetchHMangaList, getCustomHMangaList } from '../manga/hMangaService';
+import { loadMangaInfo } from './mangaInfoCache';
 import { estimatePage } from '../../lib/book/repository';
-import { fetchNgontinhList } from '../manga/ngontinhService';
-import { fetchBLMangaList } from '../manga/mangaService';
 import type { Media, Person } from '../../types';
 
 export interface SharedActivityItem {
@@ -89,8 +87,10 @@ export function SharedActivityTab({ partnerPerson }: Props) {
   }, []);
 
   // Tải dữ liệu hoạt động
-  const fetchActivities = useCallback(async () => {
-    setLoading(true);
+  const fetchActivities = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
+    // Bắt đầu tải bảng tra truyện ngay để chạy song song với các truy vấn Supabase.
+    const mangaInfoPromise = loadMangaInfo();
     try {
       const itemsMap = new Map<string, SharedActivityItem>();
 
@@ -101,7 +101,8 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           { data: bookDocs },
           { data: mangaLogs },
           { data: mangaInteractions },
-          { data: profileRows }
+          { data: profileRows },
+          { data: videoRows }
         ] = await Promise.all([
           supabase
             .from('media_items')
@@ -124,15 +125,14 @@ export function SharedActivityTab({ partnerPerson }: Props) {
             .limit(100),
           supabase
             .from('profiles')
-            .select('id, email, name')
+            .select('id, email, name'),
+          // Tiến độ xem video YouTube của cả hai người (bảng đọc chung)
+          supabase
+            .from('video_watch_progress')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(150)
         ]);
-
-        // Tiến độ xem video YouTube của cả hai người (bảng đọc chung)
-        const { data: videoRows } = await supabase
-          .from('video_watch_progress')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(150);
 
         const profileMap = new Map<string, string>();
         if (profileRows) {
@@ -168,25 +168,7 @@ export function SharedActivityTab({ partnerPerson }: Props) {
           }
         }
 
-        // Tải thông tin & ảnh bìa manga từ các nguồn (Ngôn tình, BL, Truyện H)
-        const mangaInfoMap = new Map<string, { type: 'NGONTINH' | 'BL' | 'H_MANGA'; cover?: string; title?: string }>();
-        try {
-          const [hList, blList, ngontinhList] = await Promise.all([
-            fetchHMangaList().catch(() => []),
-            fetchBLMangaList().catch(() => []),
-            fetchNgontinhList().catch(() => []),
-          ]);
-          const customList = getCustomHMangaList();
-          for (const m of [...hList, ...customList]) {
-            if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'H_MANGA', cover: m.cover ?? undefined, title: m.title ?? undefined });
-          }
-          for (const m of blList) {
-            if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'BL', cover: m.cover ?? undefined, title: m.title ?? undefined });
-          }
-          for (const m of ngontinhList) {
-            if (m.slug) mangaInfoMap.set(m.slug.toLowerCase().trim(), { type: 'NGONTINH', cover: m.cover ?? undefined, title: m.title ?? undefined });
-          }
-        } catch {}
+        const mangaInfoMap = await mangaInfoPromise;
 
         const resolveMangaType = (slug?: string, genre?: string, type?: string, logType?: string): 'NGONTINH' | 'BL' | 'H_MANGA' => {
           if (logType === 'NGONTINH' || genre === 'NGONTINH' || genre === 'ngontinh' || type === 'NGONTINH') return 'NGONTINH';
@@ -458,40 +440,47 @@ export function SharedActivityTab({ partnerPerson }: Props) {
   useEffect(() => {
     void fetchActivities();
 
+    /*
+     * Bảng video_watch_progress ghi lại mỗi 15 giây trong lúc xem, mỗi lần ghi
+     * là một sự kiện realtime. Gom các sự kiện dồn dập lại thành một lần tải
+     * chạy nền, nếu không tab này sẽ tải lại liên tục và giật.
+     */
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void fetchActivities(true), 1500);
+    };
+
+    const cleanupLocal = () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('daily_music_listening_updated', scheduleRefresh);
+      window.removeEventListener('daily_manga_reading_updated', scheduleRefresh);
+    };
+
+    window.addEventListener('daily_music_listening_updated', scheduleRefresh);
+    window.addEventListener('daily_manga_reading_updated', scheduleRefresh);
+
     // Lắng nghe Realtime từ Supabase
     if (supabase) {
       const sb = supabase;
-      const channel = sb
-        .channel('shared-activity-realtime-channel-v2')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'media_items' }, () => {
-          void fetchActivities();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'book_documents' }, () => {
-          void fetchActivities();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'manga_reading_logs' }, () => {
-          void fetchActivities();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'video_watch_progress' }, () => {
-          void fetchActivities();
-        })
-        .subscribe();
-
-      const handleLocalEvent = () => void fetchActivities();
-      window.addEventListener('daily_music_listening_updated', handleLocalEvent);
-      window.addEventListener('daily_manga_reading_updated', handleLocalEvent);
+      const channel = sb.channel('shared-activity-realtime-channel-v2');
+      for (const table of ['media_items', 'book_documents', 'manga_reading_logs', 'video_watch_progress']) {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
+      }
+      channel.subscribe();
 
       return () => {
         void sb.removeChannel(channel);
-        window.removeEventListener('daily_music_listening_updated', handleLocalEvent);
-        window.removeEventListener('daily_manga_reading_updated', handleLocalEvent);
+        cleanupLocal();
       };
     }
+
+    return cleanupLocal;
   }, [fetchActivities]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchActivities();
+    await fetchActivities(true);
     setTimeout(() => setIsRefreshing(false), 800);
   };
 

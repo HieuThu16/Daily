@@ -7,6 +7,8 @@ import {
   Eye, ExternalLink
 } from 'lucide-react';
 import { formatDistance } from '../../lib/locationService';
+import { localDate } from '../../lib/date';
+import { DatePager } from '../home/DatePager';
 import { useCoupleLocation } from './useCoupleLocation';
 import type { Person } from '../../types';
 import type { SavedPlace } from '../../types/location';
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export function CoupleLocationTab({ partnerPerson }: Props) {
+  const [selectedDate, setSelectedDate] = useState<string>(() => localDate());
   const {
     hieuLocation,
     kimYLocation,
@@ -29,7 +32,7 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
     removePlace,
     loading,
     myUserName,
-  } = useCoupleLocation(partnerPerson?.name);
+  } = useCoupleLocation(partnerPerson?.name, selectedDate);
 
   const [showMap, setShowMap] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -715,10 +718,16 @@ export function CoupleLocationTab({ partnerPerson }: Props) {
           }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Route size={15} color="#0284c7" /> Lịch trình hành trình trong ngày ({timelineLogs.length})
+            <Route size={15} color="#0284c7" /> Lịch trình hành trình ({timelineLogs.length})
           </span>
           {showTimeline ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         </button>
+
+        {showTimeline && (
+          <div style={{ marginTop: '8px' }}>
+            <DatePager dateKey={selectedDate} week={[]} mode="day" onChange={setSelectedDate} />
+          </div>
+        )}
 
         {showTimeline && (
           <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>

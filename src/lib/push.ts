@@ -67,3 +67,19 @@ export async function disablePush(): Promise<void> {
   await supabase?.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint)
   await subscription.unsubscribe()
 }
+
+/**
+ * Bắn một thông báo sang thiết bị của người kia (cảnh báo vị trí).
+ * Lỗi thì nuốt: không báo được cũng đừng làm hỏng luồng cập nhật vị trí.
+ */
+export async function notifyPartner(title: string, body: string, url = '/people', tag?: string): Promise<void> {
+  try {
+    const session = (await supabase?.auth.getSession())?.data?.session
+    if (!session) return
+    await supabase!.functions.invoke('notify-partner', {
+      body: { title, body, url, tag },
+    })
+  } catch (err) {
+    console.warn('[push] không gửi được thông báo cho người kia:', err)
+  }
+}
