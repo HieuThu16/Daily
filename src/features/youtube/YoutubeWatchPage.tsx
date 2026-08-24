@@ -1,0 +1,346 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import {
+  ArrowLeft, Check, CheckCircle2, Circle, Download, ExternalLink,
+  PictureInPicture2, Share2, Users,
+} from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { useToast } from '../ToastContext'
+import { useHideHeader } from '../HeaderAction'
+import {
+  progressLabel, shareVideosToWatchTogether, useVideoProgressMap, useYouTubeProgress,
+} from '../../lib/videoProgress'
+import {
+  getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener,
+} from '../../lib/videoStatus'
+import { useVideoMiniPlayer } from './VideoMiniPlayer'
+import { OfflineVideoModal } from './OfflineVideoModal'
+import '../tvshow/tvShow.css'
+
+type WatchVideo = {
+  id: string
+  video_id: string
+  creator_id: string | null
+  creator_name: string | null
+  title: string
+  description: string | null
+  canonical_url: string | null
+  embed_url: string | null
+  thumbnail: string | null
+  duration: number | null
+  published_at: string | null
+  sourceType: 'tvshow' | 'review'
+}
+
+const COLUMNS =
+  'id,video_id,creator_id,creator_name,title,description,canonical_url,embed_url,thumbnail,duration,published_at'
+
+export function formatDuration(sec: number | null | undefined): string {
+  if (!sec || isNaN(Number(sec))) return ''
+  const total = Math.floor(Number(sec))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+export function publishedLabel(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (isNaN(then)) return ''
+  const days = Math.floor((now.getTime() - then) / 86400000)
+  if (days < 1) return 'Hôm nay'
+  if (days < 7) return `${days} ngày trước`
+  if (days < 30) return `${Math.floor(days / 7)} tuần trước`
+  if (days < 365) return `${Math.floor(days / 30)} tháng trước`
+  return `${Math.floor(days / 365)} năm trước`
+}
+
+/** Trang xem một video: khung phát lớn, tiêu đề, hàng nút, mô tả, video cùng kênh. */
+export function YoutubeWatchPage() {
+  const { videoId = '' } = useParams()
+  const navigate = useNavigate()
+  const { showToast } = useToast()
+  const { playInMini } = useVideoMiniPlayer()
+  const progressMap = useVideoProgressMap()
+  useHideHeader(true)
+
+  const [video, setVideo] = useState<WatchVideo | null>(null)
+  const [siblings, setSiblings] = useState<WatchVideo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
+  const [showDescription, setShowDescription] = useState(false)
+  const [offlineOpen, setOfflineOpen] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useVideoStatusListener(() => setReloadKey((k) => k + 1))
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+
+    void (async () => {
+      // Video nằm ở một trong hai bảng; tìm cả hai rồi lấy cái có.
+      const [tv, review] = await Promise.all([
+        supabase?.from('tvshow_videos').select(COLUMNS).eq('video_id', videoId).maybeSingle(),
+        supabase?.from('review_videos').select(COLUMNS).eq('video_id', videoId).maybeSingle(),
+      ])
+      const row = (tv?.data ?? review?.data) as any
+      if (!alive) return
+
+      if (!row) {
+        setVideo(null)
+        setLoading(false)
+        return
+      }
+
+      const sourceType: 'tvshow' | 'review' = tv?.data ? 'tvshow' : 'review'
+      const current: WatchVideo = { ...row, sourceType }
+      setVideo(current)
+
+      const table = sourceType === 'tvshow' ? 'tvshow_videos' : 'review_videos'
+      const [same, watchedRes] = await Promise.all([
+        supabase
+          ?.from(table)
+          .select(COLUMNS)
+          .eq('creator_name', current.creator_name ?? '')
+          .is('unavailable_at', null)
+          .order('published_at', { ascending: false })
+          .limit(40),
+        supabase?.from(sourceType === 'tvshow' ? 'tvshow_watched' : 'review_watched').select('video_id'),
+      ])
+      if (!alive) return
+
+      setSiblings(
+        ((same?.data ?? []) as any[]).filter((v) => v.video_id !== videoId).map((v) => ({ ...v, sourceType })),
+      )
+      const watchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
+      setWatchedSet(getVideoStatusSets(sourceType, watchedIds).watchedSet)
+      setLoading(false)
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [videoId, reloadKey])
+
+  useYouTubeProgress(iframeEl, {
+    videoId: video?.video_id ?? null,
+    title: video?.title,
+    channelName: video?.creator_name ?? undefined,
+    thumbnail: video?.thumbnail,
+  })
+
+  const progress = progressMap[videoId]
+  const watched = watchedSet.has(videoId) || progress?.status === 'COMPLETED'
+
+  const embedSrc = useMemo(() => {
+    if (!video) return ''
+    const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
+    const start = Math.floor(progressMap[video.video_id]?.seconds ?? 0)
+    return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
+      start > 5 ? `&start=${start}` : ''
+    }`
+    // Chỉ dựng lại src khi đổi video, không dựng theo tiến độ đang chạy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.video_id, video?.embed_url])
+
+  const toggleWatched = async () => {
+    if (!video) return
+    const next = watched ? 'UNWATCHED' : 'COMPLETED'
+    await updateVideoStatusRecord(video.video_id, video.sourceType, next, {
+      title: video.title,
+      channel_name: video.creator_name ?? undefined,
+    })
+    showToast(next === 'COMPLETED' ? 'Đã đánh dấu xem xong' : 'Bỏ đánh dấu đã xem', 'info')
+  }
+
+  const share = async () => {
+    if (!video) return
+    const url = video.canonical_url || `https://www.youtube.com/watch?v=${video.video_id}`
+    try {
+      if (navigator.share) await navigator.share({ title: video.title, url })
+      else {
+        await navigator.clipboard.writeText(url)
+        showToast('Đã chép link', 'success')
+      }
+    } catch {
+      /* người dùng bấm huỷ */
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="yt-watch">
+        <div className="yt-watch-main">
+          <div className="yt-watch-player" style={{ background: '#000' }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (!video) {
+    return (
+      <div className="yt-watch">
+        <div className="yt-watch-main">
+          <button type="button" className="tv-btn" onClick={() => navigate('/youtube')}>
+            <ArrowLeft size={15} /> Quay lại
+          </button>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Không tìm thấy video này trong kho.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="yt-watch">
+      <div className="yt-watch-main">
+        <button type="button" className="yt-watch-back" onClick={() => navigate('/youtube')}>
+          <ArrowLeft size={16} /> Kho video
+        </button>
+
+        <div className="yt-watch-player">
+          <iframe
+            ref={setIframeEl}
+            src={embedSrc}
+            title={video.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+
+        <h1 className="yt-watch-title">{video.title}</h1>
+
+        <div className="yt-watch-meta">
+          <span className="yt-watch-avatar" aria-hidden>
+            {(video.creator_name || 'Y').trim().charAt(0).toUpperCase()}
+          </span>
+          <div className="yt-watch-channel">
+            <strong>{video.creator_name || 'Kênh YouTube'}</strong>
+            <span>{siblings.length + 1} video trong kho</span>
+          </div>
+          <span className="yt-watch-published">
+            {[publishedLabel(video.published_at), formatDuration(video.duration)].filter(Boolean).join(' · ')}
+          </span>
+        </div>
+
+        <div className="yt-watch-actions">
+          <button type="button" className={`yt-chip ${watched ? 'on' : ''}`} onClick={() => void toggleWatched()}>
+            {watched ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+            {watched ? 'Đã xem xong' : 'Đánh dấu đã xem'}
+          </button>
+
+          <button
+            type="button"
+            className="yt-chip"
+            onClick={() =>
+              playInMini({
+                videoId: video.video_id,
+                title: video.title,
+                channelName: video.creator_name,
+                thumbnail: video.thumbnail,
+                startSeconds: progress?.seconds,
+              })
+            }
+          >
+            <PictureInPicture2 size={15} /> Phát nền
+          </button>
+
+          <button
+            type="button"
+            className="yt-chip"
+            onClick={() =>
+              void shareVideosToWatchTogether([
+                {
+                  videoId: video.video_id,
+                  title: video.title,
+                  channelName: video.creator_name ?? undefined,
+                  thumbnail: video.thumbnail,
+                },
+              ]).then(() => showToast('Đã đưa sang Xem chung', 'success'))
+            }
+          >
+            <Users size={15} /> Xem chung
+          </button>
+
+          <button type="button" className="yt-chip" onClick={() => void share()}>
+            <Share2 size={15} /> Chia sẻ
+          </button>
+
+          <button type="button" className="yt-chip" onClick={() => setOfflineOpen(true)}>
+            <Download size={15} /> Video trong máy
+          </button>
+
+          <a
+            className="yt-chip"
+            href={video.canonical_url || `https://www.youtube.com/watch?v=${video.video_id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink size={14} /> Mở YouTube
+          </a>
+        </div>
+
+        {progress && progress.percent > 0 && (
+          <div className={`yt-watch-progress ${watched ? 'done' : ''}`}>
+            {progressLabel(progress)}
+            <span className="yt-watch-progress-bar">
+              <i style={{ width: `${Math.min(100, progress.percent)}%` }} />
+            </span>
+          </div>
+        )}
+
+        {video.description && (
+          <div
+            className={`yt-watch-desc ${showDescription ? 'open' : ''}`}
+            onClick={() => setShowDescription((v) => !v)}
+          >
+            <p>{video.description}</p>
+            <button type="button">{showDescription ? 'Thu gọn' : 'Xem thêm'}</button>
+          </div>
+        )}
+      </div>
+
+      <aside className="yt-watch-side">
+        <h2>Video khác của kênh</h2>
+        {siblings.length === 0 && <p className="yt-watch-side-empty">Kho chưa có video nào khác của kênh này.</p>}
+        {siblings.map((item) => {
+          const itemProgress = progressMap[item.video_id]
+          const itemWatched = watchedSet.has(item.video_id) || itemProgress?.status === 'COMPLETED'
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className="yt-watch-next"
+              onClick={() => navigate(`/youtube/watch/${item.video_id}`)}
+            >
+              <span className="yt-watch-next-thumb">
+                {item.thumbnail && <img src={item.thumbnail} alt="" loading="lazy" />}
+                {item.duration ? <i className="yt-watch-next-time">{formatDuration(item.duration)}</i> : null}
+                {itemProgress && itemProgress.percent > 0 && (
+                  <i className="yt-watch-next-seen" style={{ width: `${Math.min(100, itemProgress.percent)}%` }} />
+                )}
+              </span>
+              <span className="yt-watch-next-body">
+                <span className="yt-watch-next-title">{item.title}</span>
+                <span className="yt-watch-next-sub">
+                  {[item.creator_name, publishedLabel(item.published_at)].filter(Boolean).join(' · ')}
+                </span>
+                {itemWatched && (
+                  <span className="yt-watch-next-done">
+                    <Check size={11} /> Đã xem
+                  </span>
+                )}
+              </span>
+            </button>
+          )
+        })}
+      </aside>
+
+      {offlineOpen && <OfflineVideoModal onClose={() => setOfflineOpen(false)} />}
+    </div>
+  )
+}

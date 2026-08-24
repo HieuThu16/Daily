@@ -41,6 +41,7 @@ import { ErrorBoundary } from './features/ErrorBoundary'
 import { AudioPlayerProvider } from './features/library/AudioPlayerContext'
 import { GlobalMiniPlayer } from './features/library/GlobalMiniPlayer'
 import { VideoMiniPlayer, VideoMiniPlayerProvider } from './features/youtube/VideoMiniPlayer'
+import { YoutubeWatchPage } from './features/youtube/YoutubeWatchPage'
 import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
@@ -621,6 +622,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/tasks" element={<TasksPage />} />
                       <Route path="/share" element={<ShareTarget />} />
                       <Route path="/youtube" element={<YoutubeView />} />
+                      <Route path="/youtube/watch/:videoId" element={<YoutubeWatchPage />} />
                       <Route path="/tvshow" element={<Navigate to="/youtube" replace />} />
                       <Route path="/reviews" element={<Navigate to="/youtube" replace />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />

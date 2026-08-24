@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, 
   ExternalLink, Film, Pause, Play, Plus, Radio, Search, Trash2, Tv, Video, 
   Youtube, Clock, Settings, Gauge, Zap, Sliders, MoreVertical, 
   Copy, Check, ChevronRight, Tag, ArrowUpDown, SlidersHorizontal, Moon, RefreshCw,
   Download, Loader2, Sparkles, AlertCircle, Save, LayoutGrid, Layers, BookOpen, Bookmark,
-  Edit3, FolderPlus, Compass, Globe, BookmarkPlus, Users, PictureInPicture2
+  Edit3, FolderPlus, Compass, Globe, BookmarkPlus, Users, PictureInPicture2, Info
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
@@ -140,6 +141,7 @@ function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'review'): 
 
 export function YoutubeView() {
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [channels, setChannels] = useState<ChannelItem[]>([])
   const [allVideos, setAllVideos] = useState<VideoRow[]>([])
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
@@ -1012,6 +1014,7 @@ export function YoutubeView() {
                   playing={playingVideoId === video.video_id}
                   onPlay={() => setPlayingVideoId(video.video_id)}
                   onToggleWatched={() => void handleToggleWatched(video)}
+                  onOpen={() => navigate(`/youtube/watch/${video.video_id}`)}
                   onPlayMini={() =>
                     playInMini({
                       videoId: video.video_id,
@@ -1409,6 +1412,7 @@ function YoutubeVideoCard({
   onToggleWatched,
   onShare,
   onPlayMini,
+  onOpen,
 }: {
   video: VideoRow
   watched: boolean
@@ -1419,6 +1423,7 @@ function YoutubeVideoCard({
   onToggleWatched: () => void
   onShare: () => void
   onPlayMini: () => void
+  onOpen: () => void
 }) {
   const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
   useYouTubeProgress(playing ? iframeEl : null, {
@@ -1457,7 +1462,9 @@ function YoutubeVideoCard({
       <div className="yt-body">
         <span className="yt-avatar" aria-hidden>{(video.creator_name || 'Y').trim().charAt(0).toUpperCase()}</span>
         <div className="yt-text">
-          <h3 className="yt-title" title={video.title}>{video.title}</h3>
+          <h3 className="yt-title" title={video.title} onClick={onOpen} style={{ cursor: 'pointer' }}>
+            {video.title}
+          </h3>
           <p className="yt-meta">{meta}</p>
           {(watched || inProgress || (progress && progress.percent > 0)) && (
             <p className={`yt-status ${watched || progress?.status === 'COMPLETED' ? 'done' : ''}`}>
@@ -1465,6 +1472,9 @@ function YoutubeVideoCard({
             </p>
           )}
           <div className="yt-actions">
+            <button type="button" className="yt-action" onClick={onOpen} title="Mở trang chi tiết video">
+              <Info size={13} /> Chi tiết
+            </button>
             <button type="button" className="yt-action" onClick={onPlayMini} title="Phát ở khung nhỏ, đi tab khác vẫn chạy">
               <PictureInPicture2 size={13} /> Phát nền
             </button>
