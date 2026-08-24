@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, Tv, UserRound, Wallet, X, Youtube } from 'lucide-react'
+import { Bell, BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Clapperboard, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, Tv, UserRound, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { disablePush, enablePush, pushEnabled } from './lib/push'
 import { localDate } from './lib/date'
@@ -481,7 +481,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
             <NotificationCenter />
             {headerActions.map((a) => (
               <button key={a.label} className="header-action" aria-label={a.label} title={a.label} onClick={a.onClick}>
-                {a.icon === 'radio' ? <Radio size={20} /> : <Plus size={20} />}
+                {a.icon === 'radio' ? <Radio size={20} /> : a.icon === 'download' ? <Download size={20} /> : <Plus size={20} />}
               </button>
             ))}
           </div>

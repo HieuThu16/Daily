@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 
 /** `icon` là mã tên, không phải JSX, để mảng hành động giữ được tham chiếu ổn định. */
-export type HeaderActionIcon = 'plus' | 'radio'
+export type HeaderActionIcon = 'plus' | 'radio' | 'download'
 export type HeaderAction = { label: string; icon?: HeaderActionIcon; onClick: () => void }
 
 type Store = {

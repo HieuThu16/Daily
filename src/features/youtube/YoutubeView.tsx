@@ -34,6 +34,7 @@ import {
 } from '../../lib/videoProgress'
 import { AddYoutubeModal } from './AddYoutubeModal'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
+import { OfflineVideoModal } from './OfflineVideoModal'
 import '../tvshow/tvShow.css'
 
 /** Mỗi lượt kéo bấy nhiêu video; trang đầu về là hiện được ngay. */
@@ -168,6 +169,7 @@ export function YoutubeView() {
   const [sharedUrl] = useState(() => new URLSearchParams(window.location.search).get('youtube') ?? '')
   const [addOpen, setAddOpen] = useState(Boolean(sharedUrl))
   const [syncingAll, setSyncingAll] = useState(false)
+  const [offlineOpen, setOfflineOpen] = useState(false)
   const [editingChannelCategory, setEditingChannelCategory] = useState<ChannelItem | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   
@@ -202,6 +204,7 @@ export function YoutubeView() {
   useHeaderActions([
     { label: 'Thêm kênh / video', icon: 'plus', onClick: () => setAddOpen(true) },
     { label: syncingAll ? 'Đang cào…' : 'Cào video mới tất cả kênh', icon: 'radio', onClick: () => void handleSyncAllChannels() },
+    { label: 'Video trong máy', icon: 'download', onClick: () => setOfflineOpen(true) },
   ])
 
   useVideoStatusListener(() => {
@@ -1029,6 +1032,8 @@ export function YoutubeView() {
           )}
         </>
       )}
+
+      {offlineOpen && <OfflineVideoModal onClose={() => setOfflineOpen(false)} />}
 
       {/* MODAL THÊM KÊNH / VIDEO (tự phân biệt link) */}
       {addOpen && (
