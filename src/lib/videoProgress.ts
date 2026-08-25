@@ -146,63 +146,60 @@ export function useVideoProgressMap(): Record<string, VideoProgress> {
   return map
 }
 
-/* ------------------------------------------------------------------ */
-/* Trình phát YouTube: đọc được số giây đang xem qua IFrame Player API */
-/* ------------------------------------------------------------------ */
-
-let apiPromise: Promise<any> | null = null
-
-function loadYouTubeApi(): Promise<any> {
-  const w = window as any
-  if (w.YT?.Player) return Promise.resolve(w.YT)
-  if (apiPromise) return apiPromise
-  apiPromise = new Promise((resolve) => {
-    const prev = w.onYouTubeIframeAPIReady
-    w.onYouTubeIframeAPIReady = () => {
-      prev?.()
-      resolve(w.YT)
-    }
-    const tag = document.createElement('script')
-    tag.src = 'https://www.youtube.com/iframe_api'
-    document.head.appendChild(tag)
-  })
-  return apiPromise
-}
-
-/** Bám vào iframe YouTube (cần enablejsapi=1) và trả về đối tượng player. */
-export function useYouTubePlayer(iframe: HTMLIFrameElement | null, videoId: string | null) {
-  const [player, setPlayer] = useState<any>(null)
-  useEffect(() => {
-    if (!iframe || !videoId) return
-    let alive = true
-    void loadYouTubeApi().then((YT) => {
-      if (alive) setPlayer(new YT.Player(iframe, {}))
-    })
-    return () => {
-      alive = false
-      setPlayer(null)
-    }
-  }, [iframe, videoId])
-  return player
+export type YouTubeController = {
+  getCurrentTime: () => number
+  getDuration: () => number
+  seekTo: (seconds: number) => void
+  playVideo: () => void
+  pauseVideo: () => void
 }
 
 /**
- * Lưu tiến độ xem định kỳ, và lưu ngay khi thu nhỏ / tắt app hay đổi video.
- * Trả về player để chỗ gọi dùng lại (phụ đề song ngữ cần số giây hiện tại).
+ * Trình điều khiển YouTube qua postMessage chuẩn HTML5.
+ * KHÔNG tiêm script ngoài, KHÔNG dùng new YT.Player() tránh làm giật/reset iframe.
  */
 export function useYouTubeProgress(
-  iframe: HTMLIFrameElement | null,
+  iframe: HTMLIFrameElement | React.RefObject<HTMLIFrameElement | null> | null,
   video: { videoId: string | null; title?: string; channelName?: string; thumbnail?: string | null },
-) {
-  const player = useYouTubePlayer(iframe, video.videoId)
-  const playerRef = useRef<any>(null)
-  playerRef.current = player
+): YouTubeController {
   const videoRef = useRef(video)
   videoRef.current = video
 
   const currentTimeRef = useRef(0)
   const durationRef = useRef<number | null>(null)
 
+  const getIframeEl = useCallback((): HTMLIFrameElement | null => {
+    if (!iframe) return null
+    if ('current' in iframe) return iframe.current
+    return iframe
+  }, [iframe])
+
+  const sendCommand = useCallback((func: string, args: any[] = []) => {
+    const el = getIframeEl()
+    if (!el?.contentWindow) return
+    try {
+      el.contentWindow.postMessage(
+        JSON.stringify({
+          event: 'command',
+          func,
+          args,
+        }),
+        '*',
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [getIframeEl])
+
+  const controller = useMemo<YouTubeController>(() => ({
+    getCurrentTime: () => currentTimeRef.current,
+    getDuration: () => durationRef.current ?? 0,
+    seekTo: (seconds: number) => sendCommand('seekTo', [seconds, true]),
+    playVideo: () => sendCommand('playVideo', []),
+    pauseVideo: () => sendCommand('pauseVideo', []),
+  }), [sendCommand])
+
+  // Lắng nghe postMessage từ YouTube iframe
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       try {
@@ -220,34 +217,35 @@ export function useYouTubeProgress(
       }
     }
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [])
 
+    // Báo cho YouTube iframe biết parent đang lắng nghe
+    const pingTimer = setInterval(() => {
+      const el = getIframeEl()
+      if (el?.contentWindow) {
+        try {
+          el.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*')
+        } catch {}
+      }
+    }, 2000)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      clearInterval(pingTimer)
+    }
+  }, [getIframeEl])
+
+  // Lưu tiến độ định kỳ
   useEffect(() => {
     if (!video.videoId) return
 
     const flush = () => {
-      const p = playerRef.current
       const current = videoRef.current
       if (!current.videoId) return
 
-      let seconds = currentTimeRef.current
-      let duration = durationRef.current
+      const seconds = currentTimeRef.current
+      const duration = durationRef.current
 
-      if (p && typeof p.getCurrentTime === 'function') {
-        try {
-          const s = Number(p.getCurrentTime())
-          if (s > 0) seconds = s
-        } catch {}
-      }
-      if (p && typeof p.getDuration === 'function') {
-        try {
-          const d = Number(p.getDuration())
-          if (d > 0) duration = d
-        } catch {}
-      }
-
-      if (seconds < 3) return // bấm nhầm rồi thoát thì không tính là đang xem
+      if (seconds < 3) return // Bấm nhầm rồi thoát thì không tính là đang xem
       void saveVideoProgress({
         videoId: current.videoId,
         seconds,
@@ -258,7 +256,7 @@ export function useYouTubeProgress(
       })
     }
 
-    const timer = setInterval(flush, 10000)
+    const timer = setInterval(flush, 8000)
     const onHidden = () => {
       if (document.visibilityState === 'hidden') flush()
     }
@@ -275,5 +273,5 @@ export function useYouTubeProgress(
     }
   }, [video.videoId])
 
-  return player
+  return controller
 }

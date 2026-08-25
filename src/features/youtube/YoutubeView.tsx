@@ -1213,7 +1213,7 @@ function ChannelDetailView({
   const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
 
-  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const progressMap = useVideoProgressMap()
   const { playInMini } = useVideoMiniPlayer()
 
@@ -1268,7 +1268,7 @@ function ChannelDetailView({
 
   const currentVideo = videos.find((v) => v.video_id === playingId) || videos[0]
   // Tự ghi "đang xem" + % đã xem; lưu ngay khi thu nhỏ hoặc tắt app.
-  const player = useYouTubeProgress(iframeEl, {
+  const player = useYouTubeProgress(iframeRef, {
     videoId: currentVideo?.video_id ?? null,
     title: currentVideo?.title,
     channelName: currentVideo?.creator_name ?? undefined,
@@ -1357,7 +1357,7 @@ function ChannelDetailView({
       {currentVideo && (
         <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000', borderRadius: 16, overflow: 'hidden', marginBottom: 16, boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)' }}>
           <iframe
-            ref={setIframeEl}
+            ref={iframeRef}
             src={embedSrc}
             title={currentVideo.title}
             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
@@ -1516,8 +1516,8 @@ function YoutubeVideoCard({
   onPlayMini: () => void
   onOpen: () => void
 }) {
-  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
-  useYouTubeProgress(playing ? iframeEl : null, {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  useYouTubeProgress(playing ? iframeRef : null, {
     videoId: video.video_id,
     title: video.title,
     channelName: video.creator_name ?? undefined,
@@ -1544,7 +1544,7 @@ function YoutubeVideoCard({
       >
         {playing ? (
           <iframe
-            ref={setIframeEl}
+            ref={iframeRef}
             src={src}
             title={video.title}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

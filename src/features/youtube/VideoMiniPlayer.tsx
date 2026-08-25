@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Maximize2, X } from 'lucide-react'
 import { useYouTubeProgress } from '../../lib/videoProgress'
@@ -43,10 +43,10 @@ export function VideoMiniPlayerProvider({ children }: { children: ReactNode }) {
 export function VideoMiniPlayer() {
   const { current, closeMini } = useVideoMiniPlayer()
   const navigate = useNavigate()
-  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Vẫn ghi "đang xem" và % như trình phát lớn.
-  useYouTubeProgress(iframeEl, {
+  useYouTubeProgress(iframeRef, {
     videoId: current?.videoId ?? null,
     title: current?.title,
     channelName: current?.channelName ?? undefined,
@@ -64,7 +64,7 @@ export function VideoMiniPlayer() {
     <div className="yt-mini" role="complementary" aria-label="Video đang phát">
       <div className="yt-mini-frame">
         <iframe
-          ref={setIframeEl}
+          ref={iframeRef}
           src={src}
           title={current.title || 'Video YouTube'}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

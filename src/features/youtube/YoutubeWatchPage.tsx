@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, ExternalLink,
@@ -109,7 +109,7 @@ export function YoutubeWatchPage() {
   const [video, setVideo] = useState<WatchVideo | null>(null)
   const [siblings, setSiblings] = useState<WatchVideo[]>([])
   const [loading, setLoading] = useState(true)
-  const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [showDescription, setShowDescription] = useState(false)
 
@@ -177,7 +177,7 @@ export function YoutubeWatchPage() {
     }
   }, [videoId, hint])
 
-  useYouTubeProgress(iframeEl, {
+  useYouTubeProgress(iframeRef, {
     videoId: video?.video_id ?? null,
     title: video?.title,
     channelName: video?.creator_name ?? undefined,
@@ -254,7 +254,7 @@ export function YoutubeWatchPage() {
 
         <div className="yt-watch-player">
           <iframe
-            ref={setIframeEl}
+            ref={iframeRef}
             src={embedSrc}
             title={video.title}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
