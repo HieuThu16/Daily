@@ -19,6 +19,7 @@ import {
   type PermissionState,
 } from '../lib/permissionStatus'
 import { supabase } from '../lib/supabase'
+import { sendNudge } from '../lib/pushNudge'
 import { useToast } from './ToastContext'
 import { forceReloadLatestVersion } from './PwaUpdateNotification'
 
@@ -319,6 +320,25 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
   const notifStatus = describeNotification(pushOn, notifPerm)
   const locStatus = describeLocation(locOn, locPerm)
 
+  const [nudging, setNudging] = useState<string | null>(null)
+
+  const nudge = async (email: string) => {
+    setNudging(email)
+    try {
+      const sent = await sendNudge(email)
+      showToast(
+        sent
+          ? `📨 Đã nhắc ${email} — họ sẽ thấy lời nhắc khi mở app`
+          : `⏳ Vừa nhắc ${email} gần đây rồi, để lát nữa hãy nhắc lại`,
+        sent ? undefined : 'info',
+      )
+    } catch (err) {
+      showToast(`❌ Không nhắc được: ${err instanceof Error ? err.message : err}`, 'delete')
+    } finally {
+      setNudging(null)
+    }
+  }
+
   const toggleLocation = async () => {
     const next = !locOn
     setLocOn(next)
@@ -496,11 +516,23 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
                       <span key={o.email} className="status-other-row">
                         <i className={o.has_push ? 'on' : undefined} />
                         <span className="status-other-mail">{o.email}</span>
-                        <b>{o.has_push ? 'Đã bật' : 'Chưa bật'}</b>
+                        {o.has_push ? (
+                          <b>Đã bật</b>
+                        ) : (
+                          <button
+                            type="button"
+                            className="status-nudge-btn"
+                            disabled={nudging === o.email}
+                            onClick={() => void nudge(o.email)}
+                          >
+                            {nudging === o.email ? 'Đang nhắc…' : 'Nhắc bật'}
+                          </button>
+                        )}
                       </span>
                     ))}
                     <span className="status-others-hint">
-                      Người chưa bật sẽ không nhận được thông báo. Họ cần tự bật trên máy của họ.
+                      Người chưa bật sẽ không nhận được thông báo. Bấm “Nhắc bật” thì lần tới họ mở
+                      app sẽ thấy lời nhắc — không đẩy được thông báo cho người chưa bật thông báo.
                     </span>
                   </div>
                 )}

@@ -12241,3 +12241,87 @@ svg.lucide-library {
 .yt-order-chip:disabled { opacity: 0.6; cursor: default; }
 
 .yt-card-stats { margin-top: 4px; font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+
+/* ---- Bảng nhắc bật thông báo ---- */
+
+.nudge-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 2400;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(430px, 92vw);
+  padding: 11px 12px;
+  border-radius: 15px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  animation: nudgeUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes nudgeUp {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.nudge-banner-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--primary-light, rgba(99, 102, 241, 0.12));
+  color: var(--primary);
+}
+
+.nudge-banner-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.nudge-banner-text b { font-size: 0.84rem; font-weight: 800; color: var(--text-main); }
+.nudge-banner-text span { font-size: 0.7rem; color: var(--text-muted); line-height: 1.35; }
+
+.nudge-banner-cta {
+  flex-shrink: 0;
+  padding: 8px 13px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.79rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.nudge-banner-cta:disabled { opacity: 0.7; cursor: default; }
+
+.nudge-banner-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+/* Nút nhắc trong danh sách tài khoản ở Cài đặt. */
+.status-nudge-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.status-nudge-btn:disabled { opacity: 0.6; cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nudge-banner { animation: none; }
+}

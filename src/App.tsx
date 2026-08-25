@@ -21,6 +21,7 @@ import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
 import { ToastProvider, useToast } from './features/ToastContext'
 import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaUpdateNotification'
+import { PushNudgeBanner } from './features/PushNudgeBanner'
 
 
 import { getRemoteAppSetting, saveAppSetting } from './lib/userAppSettings'
@@ -643,6 +644,8 @@ function Protected({ user }: { user: unknown }) {
             <UpdateToast />
             {/* PWA Service Worker Update Notification Banner */}
             <PwaUpdateNotification />
+            {/* Nhắc bật thông báo khi có người gửi lời nhắc cho mình. */}
+            <PushNudgeBanner />
           </VideoMiniPlayerProvider>
         </AsideProvider>
 
