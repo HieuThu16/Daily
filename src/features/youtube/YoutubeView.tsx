@@ -171,6 +171,7 @@ export function YoutubeView() {
   const [syncingAll, setSyncingAll] = useState(false)
   const [offlineOpen, setOfflineOpen] = useState(false)
   const [editingChannelCategory, setEditingChannelCategory] = useState<ChannelItem | null>(null)
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   
   const progressMap = useVideoProgressMap()
@@ -817,6 +818,26 @@ export function YoutubeView() {
               </button>
             )
           })}
+
+          {/* NÚT THÊM THỂ LOẠI MỚI TRỰC TIẾP TRÊN THANH TAB */}
+          <button
+            type="button"
+            className="yt-category-tab"
+            onClick={() => {
+              if (hasMovedRef.current) return
+              setShowAddCategoryModal(true)
+            }}
+            title="Thêm thể loại mới cho YouTube"
+            style={{
+              background: 'rgba(59, 130, 246, 0.08)',
+              borderColor: 'rgba(59, 130, 246, 0.35)',
+              color: 'var(--primary)',
+              borderStyle: 'dashed',
+            }}
+          >
+            <Plus size={15} />
+            <span className="yt-tab-label">Thêm thể loại</span>
+          </button>
         </div>
 
         {canScrollRight && (
@@ -1323,6 +1344,21 @@ export function YoutubeView() {
           onClose={() => setEditingChannelCategory(null)}
         />
       )}
+
+      {/* MODAL TẠO THỂ LOẠI MỚI TỪ THANH TAB */}
+      {showAddCategoryModal && (
+        <QuickAddCategoryModal
+          customCategories={customCategories}
+          onAddCustomCategory={async (name, icon) => {
+            const created = await handleAddCustomCategory(name, icon)
+            if (created) {
+              setActiveCategoryTab(created)
+              setShowAddCategoryModal(false)
+            }
+          }}
+          onClose={() => setShowAddCategoryModal(false)}
+        />
+      )}
     </section>
   )
 }
@@ -1373,92 +1409,12 @@ function ChannelCategoryModal({
 
   return (
     <Modal title={`🏷️ Thể loại cho kênh: ${channelName}`} onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
-          Chọn thể loại phù hợp cho kênh này. Tất cả video của kênh sẽ tự động được hiển thị trong tab tương ứng:
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 280, overflowY: 'auto', padding: 2 }}>
-          {allItems.map((cat) => {
-            const isSelected = currentCategory === cat.label
-            return (
-              <div
-                key={cat.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  borderRadius: 12,
-                  border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
-                  background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
-                  transition: 'all 0.15s ease',
-                  overflow: 'hidden',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelectCategory(cat.label)}
-                  style={{
-                    flex: 1,
-                    padding: '10px 12px',
-                    border: 'none',
-                    background: 'transparent',
-                    color: isSelected ? 'var(--primary)' : 'var(--text-main)',
-                    fontWeight: isSelected ? 800 : 600,
-                    fontSize: '0.82rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    minWidth: 0,
-                  }}
-                >
-                  <span>{cat.icon}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.label}</span>
-                  {isSelected && <Check size={14} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
-                </button>
-
-                {cat.isCustom && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void onDeleteCustomCategory(cat.id)
-                    }}
-                    title="Xoá thể loại này"
-                    style={{
-                      padding: '8px',
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      opacity: 0.6,
-                      transition: 'opacity 0.15s, color 0.15s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.opacity = '1'
-                      e.currentTarget.style.color = 'var(--rose, #ef4444)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = '0.6'
-                      e.currentTarget.style.color = 'var(--text-muted)'
-                    }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* THÊM THỂ LOẠI MỚI */}
-        <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--card-border)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={14} style={{ color: 'var(--primary)' }} />
-            <span>Thêm thể loại mới (lưu Supabase)</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* KHU VỰC TẠO THỂ LOẠI MỚI - ĐẶT NGAY TRÊN ĐẦU */}
+        <div style={{ background: 'var(--bg-subtle, rgba(59, 130, 246, 0.05))', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={15} style={{ color: 'var(--primary)' }} />
+            <span>➕ Tạo thể loại mới (Lưu Supabase):</span>
           </div>
 
           <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 6 }}>
@@ -1468,11 +1424,11 @@ function ChannelCategoryModal({
                 type="button"
                 onClick={() => setSelectedEmoji(emoji)}
                 style={{
-                  padding: '3px 6px',
-                  borderRadius: 6,
+                  padding: '4px 7px',
+                  borderRadius: 8,
                   border: `1px solid ${selectedEmoji === emoji ? 'var(--primary)' : 'var(--card-border)'}`,
-                  background: selectedEmoji === emoji ? 'rgba(59, 130, 246, 0.15)' : 'var(--card-bg)',
-                  fontSize: '0.85rem',
+                  background: selectedEmoji === emoji ? 'rgba(59, 130, 246, 0.18)' : 'var(--card-bg)',
+                  fontSize: '0.9rem',
                   cursor: 'pointer',
                   flexShrink: 0,
                 }}
@@ -1485,7 +1441,7 @@ function ChannelCategoryModal({
           <form onSubmit={handleCreate} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <input
               type="text"
-              placeholder="Tên thể loại (vd: Sách nói, Âm nhạc, Nấu ăn...)"
+              placeholder="Nhập tên thể loại (vd: Sách nói, Âm nhạc, Nấu ăn...)"
               value={newCategoryInput}
               onChange={(e) => setNewCategoryInput(e.target.value)}
               style={{
@@ -1493,9 +1449,9 @@ function ChannelCategoryModal({
                 padding: '8px 12px',
                 borderRadius: 10,
                 border: '1px solid var(--card-border)',
-                background: 'var(--bg-main)',
+                background: 'var(--card-bg)',
                 color: 'var(--text-main)',
-                fontSize: '0.82rem',
+                fontSize: '0.84rem',
                 outline: 'none',
               }}
             />
@@ -1508,8 +1464,8 @@ function ChannelCategoryModal({
                 border: 'none',
                 background: newCategoryInput.trim() ? 'var(--primary)' : 'var(--card-border)',
                 color: '#fff',
-                fontWeight: 700,
-                fontSize: '0.8rem',
+                fontWeight: 800,
+                fontSize: '0.82rem',
                 cursor: newCategoryInput.trim() ? 'pointer' : 'not-allowed',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1517,13 +1473,225 @@ function ChannelCategoryModal({
                 whiteSpace: 'nowrap',
               }}
             >
-              <Plus size={14} /> Thêm
+              <Plus size={14} /> Thêm & Chọn
             </button>
           </form>
+        </div>
+
+        {/* DANH SÁCH THỂ LOẠI ĐÃ CÓ */}
+        <div>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 8px', fontWeight: 600 }}>
+            Hoặc bấm chọn thể loại cho kênh này:
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 260, overflowY: 'auto', padding: 2 }}>
+            {allItems.map((cat) => {
+              const isSelected = currentCategory === cat.label
+              return (
+                <div
+                  key={cat.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: 12,
+                    border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
+                    background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
+                    transition: 'all 0.15s ease',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectCategory(cat.label)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                      fontWeight: isSelected ? 800 : 600,
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      minWidth: 0,
+                    }}
+                  >
+                    <span>{cat.icon}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.label}</span>
+                    {isSelected && <Check size={14} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                  </button>
+
+                  {cat.isCustom && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void onDeleteCustomCategory(cat.id)
+                      }}
+                      title="Xoá thể loại này"
+                      style={{
+                        padding: '8px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        opacity: 0.6,
+                        transition: 'opacity 0.15s, color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '1'
+                        e.currentTarget.style.color = 'var(--rose, #ef4444)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '0.6'
+                        e.currentTarget.style.color = 'var(--text-muted)'
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     </Modal>
   )
+}
+
+/** Modal thêm nhanh thể loại mới từ thanh Tab */
+function QuickAddCategoryModal({
+  customCategories,
+  onAddCustomCategory,
+  onClose,
+}: {
+  customCategories: CustomCategoryItem[]
+  onAddCustomCategory: (label: string, icon?: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [newCategoryInput, setNewCategoryInput] = useState('')
+  const [selectedEmoji, setSelectedEmoji] = useState('🏷️')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCategoryInput.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
+      setNewCategoryInput('')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal title="✨ Thêm thể loại mới (Lưu Supabase)" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
+          Tạo thể loại mới để phân nhóm video và kênh YouTube. Thể loại này sẽ được lưu trên Supabase và xuất hiện trên thanh Tab của bạn:
+        </p>
+
+        <div>
+          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, display: 'block' }}>
+            1. Chọn biểu tượng Emoji:
+          </label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxHeight: 90, overflowY: 'auto' }}>
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => setSelectedEmoji(emoji)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${selectedEmoji === emoji ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: selectedEmoji === emoji ? 'rgba(59, 130, 246, 0.18)' : 'var(--card-bg)',
+                  fontSize: '1.05rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, display: 'block' }}>
+              2. Tên thể loại:
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '1.4rem' }}>{selectedEmoji}</span>
+              <input
+                type="text"
+                placeholder="Ví dụ: Sách nói, Âm nhạc, Nấu ăn, Du lịch..."
+                value={newCategoryInput}
+                onChange={(e) => setNewCategoryInput(e.target.value)}
+                autoFocus
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--bg-main)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.88rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '9px 16px',
+                borderRadius: 10,
+                border: '1px solid var(--card-border)',
+                background: 'var(--card-bg)',
+                color: 'var(--text-main)',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={!newCategoryInput.trim() || isSubmitting}
+              style={{
+                padding: '9px 20px',
+                borderRadius: 10,
+                border: 'none',
+                background: newCategoryInput.trim() ? 'var(--primary)' : 'var(--card-border)',
+                color: '#fff',
+                fontSize: '0.84rem',
+                fontWeight: 800,
+                cursor: newCategoryInput.trim() ? 'pointer' : 'not-allowed',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Plus size={15} /> Tạo thể loại
+            </button>
+          </div>
+        </form>
+      </div>
+    </Modal>
+  )
+}
 }
 
 /** Màn hình xem chi tiết 1 Kênh */
