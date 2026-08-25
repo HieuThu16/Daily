@@ -1,14 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bell, BellOff, CheckCircle2, ChevronRight, Clock, Download,
   HardDriveDownload, History, LogOut, RefreshCw, Settings, Upload,
-  SunMoon, X, Zap,
+  SunMoon, X, Zap, MapPin,
 } from 'lucide-react'
 
 import type { ChangelogEntry } from '../data/changelog'
 import { CHANGELOG, getUnseenLatest, markLatestSeen } from '../data/changelog'
 import { backupReminder, daysSinceBackup, exportBackup, getLastBackupAt, importBackup } from '../lib/backup'
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push'
+import { isLocationSharingEnabled, setLocationSharingEnabled } from '../lib/locationService'
+import {
+  describeLocation,
+  describeNotification,
+  readLocationPermission,
+  readNotificationPermission,
+  type FeatureStatus,
+  type PermissionState,
+} from '../lib/permissionStatus'
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
 import { forceReloadLatestVersion } from './PwaUpdateNotification'
@@ -271,6 +280,58 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
     } finally { setPushBusy(false) }
   }
 
+  /* ---- Trạng thái quyền: thông báo và vị trí ---- */
+  const [notifPerm, setNotifPerm] = useState<PermissionState>('prompt')
+  const [locPerm, setLocPerm] = useState<PermissionState>('prompt')
+  const [locOn, setLocOn] = useState(isLocationSharingEnabled)
+  const [others, setOthers] = useState<{ email: string; has_push: boolean }[]>([])
+
+  const refreshPermissions = useCallback(async () => {
+    setNotifPerm(readNotificationPermission())
+    setLocPerm(await readLocationPermission())
+    void pushEnabled().then(setPushOn)
+  }, [])
+
+  useEffect(() => {
+    void refreshPermissions()
+    // Bảng chưa có hàm push_status thì bỏ qua phần "tài khoản khác", đừng làm hỏng trang.
+    void (async () => {
+      try {
+        const res = await supabase?.rpc('push_status')
+        setOthers((res?.data as { email: string; has_push: boolean }[]) ?? [])
+      } catch {
+        setOthers([])
+      }
+    })()
+  }, [refreshPermissions])
+
+  // Quay lại tab sau khi đổi quyền trong cài đặt trình duyệt thì phải cập nhật ngay.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshPermissions()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refreshPermissions])
+
+  const notifStatus = describeNotification(pushOn, notifPerm)
+  const locStatus = describeLocation(locOn, locPerm)
+
+  const toggleLocation = async () => {
+    const next = !locOn
+    setLocOn(next)
+    setLocationSharingEnabled(next)
+    if (next && 'geolocation' in navigator) {
+      // Xin quyền ngay để trạng thái phản ánh đúng, chứ không đợi tới lúc mở tab Người.
+      navigator.geolocation.getCurrentPosition(
+        () => void refreshPermissions(),
+        () => void refreshPermissions(),
+        { timeout: 10000 },
+      )
+    }
+    showToast(next ? '📍 Đã bật chia sẻ vị trí' : '📍 Đã tắt chia sẻ vị trí')
+  }
+
   // Đọc lại sau mỗi lần sao lưu để dòng "lần cuối" đổi ngay, khỏi phải tải lại trang.
   const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt)
   const lastBackupDays = daysSinceBackup(lastBackupAt)
@@ -405,6 +466,45 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
               </div>
             </div>
 
+            {/* Trạng thái quyền: thông báo và vị trí */}
+            <div className="settings-section">
+              <div className="settings-section-label">Trạng thái</div>
+              <div className="settings-group">
+                <StatusRow
+                  icon={notifStatus.tone === 'on' ? <Bell size={16} /> : <BellOff size={16} />}
+                  iconClass="sr-icon--rose"
+                  title="Thông báo đẩy"
+                  status={notifStatus}
+                  busy={pushBusy}
+                  onToggle={() => void togglePush()}
+                />
+                <StatusRow
+                  icon={<MapPin size={16} />}
+                  iconClass="sr-icon--cyan"
+                  title="Chia sẻ vị trí"
+                  status={locStatus}
+                  onToggle={() => void toggleLocation()}
+                />
+
+                {/* Ai đã bật thông báo — gửi Xem chung mà họ chưa bật thì sẽ không nhận được gì. */}
+                {others.length > 1 && (
+                  <div className="status-others">
+                    <span className="status-others-title">Thông báo của các tài khoản</span>
+                    {others.map((o) => (
+                      <span key={o.email} className="status-other-row">
+                        <i className={o.has_push ? 'on' : undefined} />
+                        <span className="status-other-mail">{o.email}</span>
+                        <b>{o.has_push ? 'Đã bật' : 'Chưa bật'}</b>
+                      </span>
+                    ))}
+                    <span className="status-others-hint">
+                      Người chưa bật sẽ không nhận được thông báo. Họ cần tự bật trên máy của họ.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Giao diện & Thông báo */}
             <div className="settings-section">
               <div className="settings-section-label">Giao diện & thông báo</div>
@@ -455,3 +555,42 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
 // Dùng để export icon nút Cài đặt, dùng trong Shell
 
 export { Settings as SettingsIcon }
+
+/**
+ * Một dòng trạng thái: tên, câu mô tả rõ đang ở tình trạng nào, và công tắc.
+ * Quyền đã bị chặn thì khoá công tắc lại — gạt cũng không ăn thua, khoá còn
+ * đỡ hiểu lầm hơn là để gạt rồi tự bật lại.
+ */
+function StatusRow({
+  icon,
+  iconClass,
+  title,
+  status,
+  busy,
+  onToggle,
+}: {
+  icon: React.ReactNode
+  iconClass: string
+  title: string
+  status: FeatureStatus
+  busy?: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      className="settings-row status-row"
+      onClick={onToggle}
+      disabled={busy || !status.actionable}
+      aria-pressed={status.enabled}
+    >
+      <div className={`sr-icon ${iconClass}`}>{icon}</div>
+      <span className="sr-label">
+        {title}
+        <span className={`status-note status-note--${status.tone}`}>{status.label}</span>
+      </span>
+      <div className={`sr-toggle ${status.enabled && status.tone === 'on' ? 'sr-toggle--on' : ''}`}>
+        <div className="sr-toggle-thumb" />
+      </div>
+    </button>
+  )
+}

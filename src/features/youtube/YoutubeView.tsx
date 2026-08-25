@@ -763,8 +763,21 @@ export function YoutubeView() {
                     }}
                   >
                     {/* Thumbnail video & Badge trạng thái */}
-                    <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000', overflow: 'hidden' }}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      title="Xem ngay trong app"
+                      onClick={() => playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })
+                        }
+                      }}
+                      style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000', overflow: 'hidden', cursor: 'pointer' }}
+                    >
                       <img src={item.thumbnail} alt="" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <Play size={34} color="#fff" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))', pointerEvents: 'none' }} />
                       
                       {isAlreadySaved ? (
                         <span
@@ -821,9 +834,18 @@ export function YoutubeView() {
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 600 }}>{item.channelTitle}</span>
-                        <a href={`https://www.youtube.com/watch?v=${item.videoId}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                          Xem <ExternalLink size={10} />
-                        </a>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                          >
+                            <Play size={10} /> Xem trong app
+                          </button>
+                          <a href={`https://www.youtube.com/watch?v=${item.videoId}`} target="_blank" rel="noopener noreferrer" title="Mở trên YouTube" style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>
+                            <ExternalLink size={10} />
+                          </a>
+                        </span>
                       </div>
                     </div>
                   </div>
