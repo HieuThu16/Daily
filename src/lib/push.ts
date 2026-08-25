@@ -25,10 +25,49 @@ const keyOf = (subscription: PushSubscription, name: 'p256dh' | 'auth') => {
   return btoa(String.fromCharCode(...new Uint8Array(key)))
 }
 
+/**
+ * Lấy service worker, chờ nó kích hoạt xong nếu cần.
+ *
+ * `getRegistration()` trả về NGAY: tải lại trang mà service worker chưa kịp
+ * kích hoạt thì nó là `undefined`, và công tắc hiện TẮT dù đăng ký vẫn còn
+ * nguyên trên máy lẫn trên Supabase. `ready` thì chờ, nhưng máy chưa từng đăng
+ * ký service worker nào thì nó KHÔNG BAO GIỜ resolve — nên phải kèm hạn giờ.
+ */
+export async function getReadyRegistration(timeoutMs = 3000): Promise<ServiceWorkerRegistration | undefined> {
+  const existing = await navigator.serviceWorker.getRegistration()
+  if (existing) return existing
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+  ])
+}
+
 export async function pushEnabled(): Promise<boolean> {
   if (!pushSupported()) return false
-  const registration = await navigator.serviceWorker.getRegistration()
-  return Boolean(await registration?.pushManager.getSubscription())
+  const registration = await getReadyRegistration()
+  const subscription = await registration?.pushManager.getSubscription()
+  if (!subscription) return false
+
+  // Máy còn đăng ký mà Supabase mất dòng (xoá tay, hết hạn…) thì ghi lại — nếu
+  // không, app tưởng đang bật nhưng máy chủ không biết đẩy đi đâu.
+  void ensureSubscriptionSaved(subscription)
+  return true
+}
+
+/** Ghi lại đăng ký lên Supabase; lỗi thì nuốt, đây chỉ là bước vá lệch. */
+async function ensureSubscriptionSaved(subscription: PushSubscription): Promise<void> {
+  try {
+    await supabase?.from('push_subscriptions').upsert(
+      {
+        endpoint: subscription.endpoint,
+        p256dh: keyOf(subscription, 'p256dh'),
+        auth: keyOf(subscription, 'auth'),
+      },
+      { onConflict: 'endpoint' },
+    )
+  } catch (err) {
+    console.warn('[push] không đồng bộ lại được đăng ký:', err)
+  }
 }
 
 /**
@@ -61,7 +100,7 @@ export async function enablePush(): Promise<void> {
 
 /** Huỷ ở cả hai đầu: trình duyệt và bảng đăng ký. */
 export async function disablePush(): Promise<void> {
-  const registration = await navigator.serviceWorker.getRegistration()
+  const registration = await getReadyRegistration()
   const subscription = await registration?.pushManager.getSubscription()
   if (!subscription) return
   await supabase?.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint)
