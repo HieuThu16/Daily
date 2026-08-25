@@ -6,7 +6,8 @@ import {
   Youtube, 
   Check, 
   Loader2, LayoutGrid, 
-  Edit3, Globe, BookmarkPlus, PictureInPicture2, Info
+  Edit3, Globe, BookmarkPlus, PictureInPicture2, Info,
+  Plus, Trash2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
@@ -46,6 +47,7 @@ export const DEFAULT_YOUTUBE_CATEGORIES = [
   { id: 'OTHER', label: 'Khác', icon: '📦' },
 ]
 
+export type CustomCategoryItem = { id: string; label: string; icon: string }
 export type ChannelCategoryMap = Record<string, string>
 
 export type ChannelItem = {
@@ -149,6 +151,8 @@ export function YoutubeView() {
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('ALL')
   // Bản đồ lưu Thể loại của từng Kênh (Lưu trên Supabase qua user_app_settings)
   const [channelCategoryMap, setChannelCategoryMap] = useState<ChannelCategoryMap>({})
+  // Thể loại tùy chỉnh do người dùng thêm mới (Lưu trên Supabase qua user_app_settings)
+  const [customCategories, setCustomCategories] = useState<CustomCategoryItem[]>([])
 
   // TÌM KIẾM YOUTUBE API (Tìm video đã có VÀ chưa có trong app)
   const [searchScope, setSearchScope] = useState<'all' | 'saved' | 'youtube'>('all')
@@ -221,16 +225,52 @@ export function YoutubeView() {
     setInProgressSet(new Set([...tvSets.inProgressSet, ...reviewSets.inProgressSet]))
   })
 
-  // Tải bản đồ Thể loại kênh từ Supabase
+  // Tải bản đồ Thể loại kênh & Thể loại tùy chỉnh từ Supabase
   useEffect(() => {
     let alive = true
-    void getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}).then((map) => {
-      if (alive && map) {
-        setChannelCategoryMap(map)
+    void Promise.all([
+      getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}),
+      getRemoteAppSetting<CustomCategoryItem[]>('youtube_custom_categories', []),
+    ]).then(([map, customList]) => {
+      if (alive) {
+        if (map) setChannelCategoryMap(map)
+        if (Array.isArray(customList)) setCustomCategories(customList)
       }
     })
     return () => { alive = false }
   }, [])
+
+  // Thêm thể loại mới (Lưu ngay vào State, LocalStorage và Supabase)
+  const handleAddCustomCategory = async (label: string, icon = '🏷️'): Promise<string | undefined> => {
+    const trimmed = label.trim()
+    if (!trimmed) return undefined
+    const allKnown = [...DEFAULT_YOUTUBE_CATEGORIES, ...customCategories]
+    const exists = allKnown.some((c) => c.label.toLowerCase() === trimmed.toLowerCase())
+    if (exists) {
+      showToast(`Thể loại "${trimmed}" đã có sẵn`, 'info')
+      return trimmed
+    }
+    const newCat: CustomCategoryItem = {
+      id: `cat_${Date.now()}`,
+      label: trimmed,
+      icon: icon || '🏷️',
+    }
+    const updated = [...customCategories, newCat]
+    setCustomCategories(updated)
+    await saveAppSetting('youtube_custom_categories', updated)
+    showToast(`Đã lưu thể loại "${trimmed}" lên Supabase`, 'success')
+    return trimmed
+  }
+
+  // Xóa thể loại tùy chỉnh
+  const handleDeleteCustomCategory = async (catId: string) => {
+    const target = customCategories.find((c) => c.id === catId)
+    if (!target) return
+    const updated = customCategories.filter((c) => c.id !== catId)
+    setCustomCategories(updated)
+    await saveAppSetting('youtube_custom_categories', updated)
+    showToast(`Đã xoá thể loại "${target.label}"`, 'info')
+  }
 
   // Đổi thể loại của 1 Kênh (Lưu ngay vào state, local và Supabase)
   const handleChangeChannelCategory = async (channelKey: string, newCategory: string) => {
@@ -513,6 +553,9 @@ export function YoutubeView() {
     DEFAULT_YOUTUBE_CATEGORIES.forEach((cat) => {
       counts[cat.label] = { channels: 0, videos: 0 }
     })
+    customCategories.forEach((cat) => {
+      counts[cat.label] = { channels: 0, videos: 0 }
+    })
 
     channels.forEach((c) => {
       const cat = c.category || 'Khác'
@@ -522,7 +565,7 @@ export function YoutubeView() {
     })
 
     return counts
-  }, [channels])
+  }, [channels, customCategories])
 
   // Danh sách các tab hiển thị trên thanh cuộn ngang
   const dynamicCategoryTabs = useMemo(() => {
@@ -545,9 +588,23 @@ export function YoutubeView() {
       })
     })
 
+    customCategories.forEach((c) => {
+      const stat = categoryTabStats[c.label] || { channels: 0, videos: 0 }
+      tabs.push({
+        id: c.label,
+        label: c.label,
+        icon: c.icon || '🏷️',
+        count: stat.videos || stat.channels,
+      })
+    })
+
     // Các thể loại tùy chỉnh khác nếu có
     Object.keys(categoryTabStats).forEach((catName) => {
-      if (!DEFAULT_YOUTUBE_CATEGORIES.some((c) => c.label === catName) && catName !== 'ALL') {
+      if (
+        !DEFAULT_YOUTUBE_CATEGORIES.some((c) => c.label === catName) &&
+        !customCategories.some((c) => c.label === catName) &&
+        catName !== 'ALL'
+      ) {
         tabs.push({
           id: catName,
           label: catName,
@@ -558,7 +615,7 @@ export function YoutubeView() {
     })
 
     return tabs
-  }, [allVideos.length, categoryTabStats])
+  }, [allVideos.length, categoryTabStats, customCategories])
 
   // Lọc Kênh theo Tab Thể Loại và Ô Tìm Kiếm
   const filteredChannels = useMemo(() => {
@@ -638,6 +695,9 @@ export function YoutubeView() {
           const key = selectedChannel.creator_id || selectedChannel.creator_name || selectedChannel.id
           void handleChangeChannelCategory(key, newCat)
         }}
+        customCategories={customCategories}
+        onAddCustomCategory={handleAddCustomCategory}
+        onDeleteCustomCategory={handleDeleteCustomCategory}
       />
     )
   }
@@ -1144,51 +1204,219 @@ export function YoutubeView() {
 
       {/* MODAL ĐỔI THỂ LOẠI CHO KÊNH */}
       {editingChannelCategory && (
-        <Modal
-          title={`🏷️ Thể loại cho kênh: ${editingChannelCategory.creator_name}`}
+        <ChannelCategoryModal
+          channelName={editingChannelCategory.creator_name}
+          currentCategory={editingChannelCategory.category}
+          customCategories={customCategories}
+          onSelectCategory={(newCat) => {
+            const key = editingChannelCategory.creator_id || editingChannelCategory.creator_name || editingChannelCategory.id
+            void handleChangeChannelCategory(key, newCat)
+          }}
+          onAddCustomCategory={handleAddCustomCategory}
+          onDeleteCustomCategory={handleDeleteCustomCategory}
           onClose={() => setEditingChannelCategory(null)}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 8px' }}>
-              Chọn thể loại phù hợp cho kênh này. Tất cả video của kênh sẽ tự động được hiển thị trong tab tương ứng:
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-              {DEFAULT_YOUTUBE_CATEGORIES.filter((c) => c.id !== 'ALL').map((cat) => {
-                const isSelected = editingChannelCategory.category === cat.label
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => {
-                      const key = editingChannelCategory.creator_id || editingChannelCategory.creator_name || editingChannelCategory.id
-                      void handleChangeChannelCategory(key, cat.label)
-                    }}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
-                      background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
-                      color: isSelected ? 'var(--primary)' : 'var(--text-main)',
-                      fontWeight: isSelected ? 800 : 600,
-                      fontSize: '0.82rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                    {isSelected && <Check size={14} style={{ marginLeft: 'auto' }} />}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </Modal>
+        />
       )}
     </section>
+  )
+}
+
+const QUICK_EMOJIS = ['🏷️', '🎧', '🎵', '🎮', '🍲', '✈️', '💄', '⚽', '📚', '💡', '🎬', '💼', '🚗', '🎨', '🐾', '📻', '💪', '🔥']
+
+/** Modal đổi thể loại hoặc tạo mới thể loại lưu Supabase */
+function ChannelCategoryModal({
+  channelName,
+  currentCategory,
+  customCategories,
+  onSelectCategory,
+  onAddCustomCategory,
+  onDeleteCustomCategory,
+  onClose,
+}: {
+  channelName: string
+  currentCategory: string
+  customCategories: CustomCategoryItem[]
+  onSelectCategory: (category: string) => void
+  onAddCustomCategory: (label: string, icon?: string) => Promise<string | undefined>
+  onDeleteCustomCategory: (id: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [newCategoryInput, setNewCategoryInput] = useState('')
+  const [selectedEmoji, setSelectedEmoji] = useState('🏷️')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCategoryInput.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      const created = await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
+      if (created) {
+        onSelectCategory(created)
+        setNewCategoryInput('')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const allItems = [
+    ...DEFAULT_YOUTUBE_CATEGORIES.filter((c) => c.id !== 'ALL').map((c) => ({ ...c, isCustom: false })),
+    ...customCategories.map((c) => ({ ...c, isCustom: true })),
+  ]
+
+  return (
+    <Modal title={`🏷️ Thể loại cho kênh: ${channelName}`} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
+          Chọn thể loại phù hợp cho kênh này. Tất cả video của kênh sẽ tự động được hiển thị trong tab tương ứng:
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 280, overflowY: 'auto', padding: 2 }}>
+          {allItems.map((cat) => {
+            const isSelected = currentCategory === cat.label
+            return (
+              <div
+                key={cat.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRadius: 12,
+                  border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
+                  transition: 'all 0.15s ease',
+                  overflow: 'hidden',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectCategory(cat.label)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                    fontWeight: isSelected ? 800 : 600,
+                    fontSize: '0.82rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    minWidth: 0,
+                  }}
+                >
+                  <span>{cat.icon}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.label}</span>
+                  {isSelected && <Check size={14} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </button>
+
+                {cat.isCustom && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void onDeleteCustomCategory(cat.id)
+                    }}
+                    title="Xoá thể loại này"
+                    style={{
+                      padding: '8px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      opacity: 0.6,
+                      transition: 'opacity 0.15s, color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '1'
+                      e.currentTarget.style.color = 'var(--rose, #ef4444)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '0.6'
+                      e.currentTarget.style.color = 'var(--text-muted)'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* THÊM THỂ LOẠI MỚI */}
+        <div style={{ marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--card-border)' }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={14} style={{ color: 'var(--primary)' }} />
+            <span>Thêm thể loại mới (lưu Supabase)</span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 6 }}>
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => setSelectedEmoji(emoji)}
+                style={{
+                  padding: '3px 6px',
+                  borderRadius: 6,
+                  border: `1px solid ${selectedEmoji === emoji ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: selectedEmoji === emoji ? 'rgba(59, 130, 246, 0.15)' : 'var(--card-bg)',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleCreate} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <input
+              type="text"
+              placeholder="Tên thể loại (vd: Sách nói, Âm nhạc, Nấu ăn...)"
+              value={newCategoryInput}
+              onChange={(e) => setNewCategoryInput(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid var(--card-border)',
+                background: 'var(--bg-main)',
+                color: 'var(--text-main)',
+                fontSize: '0.82rem',
+                outline: 'none',
+              }}
+            />
+            <button
+              type="submit"
+              disabled={!newCategoryInput.trim() || isSubmitting}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 10,
+                border: 'none',
+                background: newCategoryInput.trim() ? 'var(--primary)' : 'var(--card-border)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                cursor: newCategoryInput.trim() ? 'pointer' : 'not-allowed',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Plus size={14} /> Thêm
+            </button>
+          </form>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1197,10 +1425,16 @@ function ChannelDetailView({
   channel,
   onBack,
   onChangeCategory,
+  customCategories,
+  onAddCustomCategory,
+  onDeleteCustomCategory,
 }: {
   channel: ChannelItem
   onBack: () => void
   onChangeCategory: (cat: string) => void
+  customCategories: CustomCategoryItem[]
+  onAddCustomCategory: (label: string, icon?: string) => Promise<string | undefined>
+  onDeleteCustomCategory: (id: string) => Promise<void>
 }) {
   useHideHeader(true)
   const [videos, setVideos] = useState<VideoRow[]>([])
@@ -1438,31 +1672,18 @@ function ChannelDetailView({
       </div>
 
       {showCategoryPicker && (
-        <Modal title="Đổi thể loại kênh" onClose={() => setShowCategoryPicker(false)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
-            {DEFAULT_YOUTUBE_CATEGORIES.filter((c) => c.id !== 'ALL').map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  onChangeCategory(cat.label)
-                  setShowCategoryPicker(false)
-                }}
-                style={{
-                  padding: '10px',
-                  borderRadius: 10,
-                  border: '1px solid var(--card-border)',
-                  background: channel.category === cat.label ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
-                  fontWeight: 700,
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                }}
-              >
-                {cat.icon} {cat.label}
-              </button>
-            ))}
-          </div>
-        </Modal>
+        <ChannelCategoryModal
+          channelName={channel.creator_name}
+          currentCategory={channel.category}
+          customCategories={customCategories}
+          onSelectCategory={(newCat) => {
+            onChangeCategory(newCat)
+            setShowCategoryPicker(false)
+          }}
+          onAddCustomCategory={onAddCustomCategory}
+          onDeleteCustomCategory={onDeleteCustomCategory}
+          onClose={() => setShowCategoryPicker(false)}
+        />
       )}
     </div>
   )
