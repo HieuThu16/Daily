@@ -12172,3 +12172,29 @@ svg.lucide-library {
   line-height: 1.4;
   color: var(--text-muted);
 }
+
+/* Nút lấy thêm trang kết quả tìm kiếm YouTube. */
+.yt-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px dashed var(--primary);
+  background: var(--primary-light, rgba(99, 102, 241, 0.08));
+  color: var(--primary);
+  font-size: 0.83rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.yt-load-more:disabled { opacity: 0.65; cursor: default; }
+
+.yt-load-more-end {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}

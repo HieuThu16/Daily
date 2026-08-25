@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
-import { searchYouTubeVideos, type YouTubeSearchResult } from '../../lib/youtubeSearch'
+import { mergeSearchPages, searchYouTubePage, type YouTubeSearchResult } from '../../lib/youtubeSearch'
 import { Modal, useIncrementalList } from '../shared'
 import { DualSubtitles } from './DualSubtitles'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
@@ -153,6 +153,9 @@ export function YoutubeView() {
   const [searchScope, setSearchScope] = useState<'all' | 'saved' | 'youtube'>('all')
   const [ytSearchResults, setYtSearchResults] = useState<YouTubeSearchResult[]>([])
   const [isSearchingYouTube, setIsSearchingYouTube] = useState(false)
+  /** Token trang kế; null nghĩa là đã hết kết quả. */
+  const [ytNextPage, setYtNextPage] = useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [savingVideoId, setSavingVideoId] = useState<string | null>(null)
 
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
@@ -412,15 +415,36 @@ export function YoutubeView() {
     if (!q) return
     setIsSearchingYouTube(true)
     try {
-      const results = await searchYouTubeVideos(q)
-      setYtSearchResults(results)
-      if (results.length === 0) {
+      const page = await searchYouTubePage(q)
+      setYtSearchResults(page.items)
+      setYtNextPage(page.nextPageToken)
+      if (page.items.length === 0) {
         showToast('Không tìm thấy kết quả từ YouTube API', 'info')
       }
     } catch {
       showToast('Không thể kết nối tìm kiếm YouTube', 'error')
     } finally {
       setIsSearchingYouTube(false)
+    }
+  }
+
+  /**
+   * Lấy thêm một trang kết quả. Không tự động cuộn-để-tải: mỗi lần gọi tốn 100
+   * đơn vị quota YouTube (~100 lượt/ngày), nên để người dùng chủ động bấm.
+   */
+  const handleLoadMoreYouTube = async () => {
+    const q = search.trim()
+    if (!q || !ytNextPage || isLoadingMore) return
+    setIsLoadingMore(true)
+    try {
+      const page = await searchYouTubePage(q, ytNextPage)
+      setYtSearchResults((prev) => mergeSearchPages(prev, page.items))
+      setYtNextPage(page.nextPageToken)
+      if (page.items.length === 0) showToast('Hết kết quả rồi', 'info')
+    } catch {
+      showToast('Không tải thêm được kết quả', 'error')
+    } finally {
+      setIsLoadingMore(false)
     }
   }
 
@@ -755,7 +779,8 @@ export function YoutubeView() {
           </div>
 
           {ytSearchResults.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
               {ytSearchResults.map((item) => {
                 const isAlreadySaved = savedVideoIdSet.has(item.videoId)
                 const isSaving = savingVideoId === item.videoId
@@ -882,7 +907,31 @@ export function YoutubeView() {
                   </div>
                 )
               })}
-            </div>
+              </div>
+
+              {ytNextPage ? (
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreYouTube()}
+                  disabled={isLoadingMore}
+                  className="yt-load-more"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 size={14} className="tv-spin" /> Đang tải thêm…
+                    </>
+                  ) : (
+                    <>
+                      <Globe size={14} /> Xem thêm kết quả
+                    </>
+                  )}
+                </button>
+              ) : (
+                ytSearchResults.length > 0 && (
+                  <p className="yt-load-more-end">Đã hiện hết kết quả tìm được.</p>
+                )
+              )}
+            </>
           ) : (
             <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               {isSearchingYouTube ? (

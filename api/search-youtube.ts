@@ -1,9 +1,15 @@
 /**
- * GET /api/search-youtube?q=...
- * POST /api/search-youtube { q: string }
+ * GET /api/search-youtube?q=...&pageToken=...
+ * POST /api/search-youtube { q: string, pageToken?: string }
  *
  * Tìm kiếm video YouTube qua YouTube Data API v3 chính thức,
- * có dự phòng qua Invidious / oEmbed khi không có API key.
+ * có dự phòng qua Invidious khi không có API key.
+ *
+ * Trả về `nextPageToken` để lấy trang tiếp; hết kết quả thì không có trường đó.
+ *
+ * QUOTA: mỗi lần gọi search tốn 100 đơn vị, hạn mức miễn phí 10.000/ngày —
+ * tức khoảng 100 lượt tìm. Lấy 50 kết quả cũng tốn đúng 100 như lấy 25, nên
+ * lấy tối đa để đỡ phải bấm "xem thêm".
  */
 import { requireAuth } from './_auth.js'
 
@@ -27,13 +33,17 @@ export default async function handler(req: any, res: any) {
   if (!query) {
     return res.status(400).json({ error: 'Thiếu từ khoá tìm kiếm (q)' })
   }
+  const pageToken = String(req.query?.pageToken || req.body?.pageToken || '').trim()
 
   const apiKey = process.env.YOUTUBE_API_KEY || process.env.VITE_YOUTUBE_API_KEY
 
   // 1. Thử gọi YouTube Data API v3 nếu có API key
   if (apiKey) {
     try {
-      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=25&q=${encodeURIComponent(query)}&key=${apiKey}`
+      const url =
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=50` +
+        `&q=${encodeURIComponent(query)}&key=${apiKey}` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
       const response = await fetch(url)
       if (response.ok) {
         const data = (await response.json()) as any
@@ -47,7 +57,7 @@ export default async function handler(req: any, res: any) {
           publishedAt: item.snippet?.publishedAt || '',
         })).filter((item: YouTubeSearchResultItem) => Boolean(item.videoId))
 
-        return res.status(200).json({ items, source: 'youtube-api' })
+        return res.status(200).json({ items, source: 'youtube-api', nextPageToken: data.nextPageToken || null })
       }
     } catch (err: any) {
       console.warn('Lỗi gọi YouTube v3 API, chuyển sang phương án dự phòng:', err.message)
@@ -64,7 +74,9 @@ export default async function handler(req: any, res: any) {
 
   for (const instance of invidiousInstances) {
     try {
-      const invUrl = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`
+      // Invidious phân trang bằng số trang, không phải token — quy ước token là số trang.
+      const page = Number(pageToken) > 1 ? Number(pageToken) : 1
+      const invUrl = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}`
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 4000)
       const invRes = await fetch(invUrl, { signal: controller.signal })
@@ -73,7 +85,7 @@ export default async function handler(req: any, res: any) {
       if (invRes.ok) {
         const invData = await invRes.json()
         if (Array.isArray(invData) && invData.length > 0) {
-          const items: YouTubeSearchResultItem[] = invData.slice(0, 25).map((item: any) => ({
+          const items: YouTubeSearchResultItem[] = invData.slice(0, 50).map((item: any) => ({
             videoId: item.videoId || '',
             title: item.title || '',
             description: item.description || '',
@@ -83,7 +95,12 @@ export default async function handler(req: any, res: any) {
             publishedAt: item.published ? new Date(item.published * 1000).toISOString() : undefined,
           })).filter((item: YouTubeSearchResultItem) => Boolean(item.videoId))
 
-          return res.status(200).json({ items, source: 'invidious' })
+          // Còn đủ một trang thì đoán là còn nữa; Invidious không nói tổng số.
+          return res.status(200).json({
+            items,
+            source: 'invidious',
+            nextPageToken: items.length >= 20 ? String(page + 1) : null,
+          })
         }
       }
     } catch {
@@ -91,5 +108,5 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  return res.status(200).json({ items: [], source: 'none' })
+  return res.status(200).json({ items: [], source: 'none', nextPageToken: null })
 }
