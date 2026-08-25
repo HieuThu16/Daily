@@ -227,7 +227,7 @@ export function YoutubeView() {
       el.removeEventListener('scroll', checkScroll)
       window.removeEventListener('resize', checkScroll)
     }
-  }, [checkScroll, dynamicCategoryTabs.length])
+  }, [checkScroll])
 
   const scrollTabs = (offset: number) => {
     const el = tabsScrollRef.current
@@ -1567,11 +1567,10 @@ function ChannelCategoryModal({
 
 /** Modal thêm nhanh thể loại mới từ thanh Tab */
 function QuickAddCategoryModal({
-  customCategories,
   onAddCustomCategory,
   onClose,
 }: {
-  customCategories: CustomCategoryItem[]
+  customCategories?: CustomCategoryItem[]
   onAddCustomCategory: (label: string, icon?: string) => Promise<void>
   onClose: () => void
 }) {
@@ -1691,7 +1690,6 @@ function QuickAddCategoryModal({
       </div>
     </Modal>
   )
-}
 }
 
 /** Màn hình xem chi tiết 1 Kênh */
@@ -2004,7 +2002,7 @@ function YoutubeVideoCard({
   video: VideoRow
   watched: boolean
   inProgress: boolean
-  progress?: { percent: number; status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' }
+  progress?: { percent: number; status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'; seconds?: number }
   playing: boolean
   onPlay: () => void
   onToggleWatched: () => void
@@ -2019,7 +2017,7 @@ function YoutubeVideoCard({
     thumbnail: video.thumbnail,
   })
 
-  const start = Math.floor(progress?.seconds ?? progressMap[video.video_id]?.seconds ?? 0)
+  const start = Math.floor(progress?.seconds ?? 0)
   const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
   const src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
     start > 3 ? `&start=${start}` : ''
