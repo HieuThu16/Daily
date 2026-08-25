@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rankVietnameseFirst, vietnameseScore } from './vietnameseRank'
+import { matchesKeyword, rankVietnameseFirst, vietnameseScore } from './vietnameseRank'
 
 const v = (title: string, channelTitle = '') => ({ title, channelTitle })
 
@@ -45,5 +45,41 @@ describe('rankVietnameseFirst', () => {
 
   it('thieu title/channel cung khong vo', () => {
     expect(rankVietnameseFirst([{}, { title: 'có dấu' }])).toHaveLength(2)
+  })
+})
+
+describe('matchesKeyword', () => {
+  it('tu khoa rong = khong loc gi', () => {
+    expect(matchesKeyword('Bất kỳ video nào', '')).toBe(true)
+    expect(matchesKeyword('X', '   ')).toBe(true)
+  })
+
+  it('khop khong phan biet hoa thuong', () => {
+    expect(matchesKeyword('DORAEMON Tập 1', 'doraemon')).toBe(true)
+  })
+
+  it('go KHONG DAU van bat duoc tieu de CO DAU', () => {
+    expect(matchesKeyword('Phim Hoạt Hình Vui', 'hoat hinh')).toBe(true)
+  })
+
+  it('go CO DAU van bat duoc tieu de khong dau', () => {
+    expect(matchesKeyword('Phim Hoat Hinh Vui', 'hoạt hình')).toBe(true)
+  })
+
+  it('chu d gach ngang coi nhu d', () => {
+    expect(matchesKeyword('Đồ Rêm', 'do rem')).toBe(true)
+  })
+
+  it('nhieu tu thi phai co DU, khong phai co mot tu la dau', () => {
+    expect(matchesKeyword('Doraemon Tập 1', 'doraemon tap')).toBe(true)
+    expect(matchesKeyword('Conan Tập 1', 'doraemon tap')).toBe(false)
+  })
+
+  it('khong khop thi loai', () => {
+    expect(matchesKeyword('Conan Tập 5', 'doraemon')).toBe(false)
+  })
+
+  it('tim duoc ca trong ten kenh', () => {
+    expect(matchesKeyword('Tập 1', 'doraemon', 'Doraemon Việt Nam')).toBe(true)
   })
 })

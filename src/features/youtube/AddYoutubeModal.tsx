@@ -4,6 +4,7 @@ import { Modal } from '../shared'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
 import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
+import { matchesKeyword } from '../../lib/vietnameseRank'
 import { useToast } from '../ToastContext'
 import { apiFetch } from '../../lib/apiFetch'
 
@@ -157,6 +158,10 @@ export function AddYoutubeModal({
   const [activePlan, setActivePlan] = useState<any>(null)
   const [activeJob, setActiveJob] = useState<{ channelName: string; sectionName: string; percent: number } | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  /** Chỉ cào video có chữ này; rỗng nghĩa là lấy hết kênh. */
+  const [crawlKeyword, setCrawlKeyword] = useState('')
+  /** Đếm số video bị từ khoá loại ra, để không tưởng kênh trống. */
+  const [skippedByKeyword, setSkippedByKeyword] = useState(0)
   const [filterType, setFilterType] = useState<'all' | 'fresh' | 'known'>('all')
   const [savingProgress, setSavingProgress] = useState<{ current: number; total: number } | null>(null)
   const [error, setError] = useState('')
@@ -194,10 +199,20 @@ export function AddYoutubeModal({
         if (stopRef.current) return { stopped: true }
         const { outcome } = await post({ action: 'page', plan, cursor: { entryIndex, pageToken }, dryRun: true })
         pages++
-        addVideos(
-          (outcome.videos || []).map((v: any) => ({ ...v, channelName: plan.channelName, creatorId: plan.channelId })),
-          (v) => !v.isKnown,
-        )
+        const pageVideos = (outcome.videos || []).map((v: any) => ({
+          ...v,
+          channelName: plan.channelName,
+          creatorId: plan.channelId,
+        }))
+        // Lọc ngay tại đây thay vì lọc lúc hiện: danh sách khỏi phình vì video
+        // không liên quan, và số "đã tìm thấy" phản ánh đúng thứ sẽ lưu.
+        const kept = crawlKeyword.trim()
+          ? pageVideos.filter((v: any) => matchesKeyword(v.title ?? '', crawlKeyword, v.channelName ?? ''))
+          : pageVideos
+        if (kept.length < pageVideos.length) {
+          setSkippedByKeyword((n) => n + (pageVideos.length - kept.length))
+        }
+        addVideos(kept, (v) => !v.isKnown)
         setActiveJob({
           channelName: plan.channelName,
           sectionName: entry.name,
@@ -241,6 +256,7 @@ export function AddYoutubeModal({
     stopRef.current = false
     setDiscovered([])
     setSelectedIds(new Set())
+    setSkippedByKeyword(0)
     setState('scanning')
     try {
       await loadPastedVideos()
@@ -329,6 +345,20 @@ export function AddYoutubeModal({
               placeholder={'Dán link kênh hoặc link video, mỗi dòng một link:\nhttps://www.youtube.com/@web5ngay\nhttps://youtu.be/xxxxxxxxxxx'}
             />
 
+            <label className="tv-keyword-field">
+              <span className="tv-keyword-label">
+                <Search size={13} /> Chỉ cào video có chữ (để trống = lấy hết kênh)
+              </span>
+              <input
+                value={crawlKeyword}
+                onChange={(e) => setCrawlKeyword(e.target.value)}
+                placeholder="Ví dụ: doraemon"
+              />
+              <span className="tv-keyword-hint">
+                Không cần bỏ dấu — gõ “hoat hinh” vẫn bắt được “Hoạt Hình”. Nhiều từ thì phải có đủ.
+              </span>
+            </label>
+
             <div className="tv-sync-badge-summary">
               <span className="tv-sync-pill-valid">
                 <Check size={12} /> {parsed.channels.length} kênh · {parsed.videos.length} video lẻ
@@ -387,7 +417,15 @@ export function AddYoutubeModal({
                   ) : (
                     <>
                       <CheckCircle2 size={16} color="#10b981" />
-                      <span>Xong: {discovered.length} video tìm thấy</span>
+                      <span>
+                        Xong: {discovered.length} video tìm thấy
+                        {/* Nói rõ đã bỏ bao nhiêu, không thì tưởng kênh ít video. */}
+                        {skippedByKeyword > 0 && (
+                          <span className="tv-keyword-skipped">
+                            {' '}· bỏ qua {skippedByKeyword} video không khớp “{crawlKeyword.trim()}”
+                          </span>
+                        )}
+                      </span>
                     </>
                   )}
                 </div>

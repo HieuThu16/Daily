@@ -12198,3 +12198,28 @@ svg.lucide-library {
   font-size: 0.76rem;
   color: var(--text-muted);
 }
+
+/* Ô lọc từ khoá khi cào kênh YouTube. */
+.tv-keyword-field { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+
+.tv-keyword-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.tv-keyword-field input {
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+
+.tv-keyword-hint { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; }
+
+.tv-keyword-skipped { font-weight: 500; color: var(--text-muted); }

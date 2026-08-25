@@ -48,3 +48,32 @@ export function rankVietnameseFirst<T extends { title?: string; channelTitle?: s
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.item)
 }
+
+/**
+ * Tiêu đề có khớp từ khoá lọc không — dùng khi cào kênh mà chỉ muốn lấy một
+ * loạt phim nhất định ("cào kênh này nhưng chỉ video có chữ doraemon").
+ *
+ * Bỏ dấu hai phía nên gõ "hoat hinh" vẫn bắt được "Hoạt Hình", và nhiều từ thì
+ * phải có ĐỦ (AND) chứ không phải có một từ là đậu — gõ "doraemon tap 1" mà ra
+ * mọi video có chữ "1" thì lọc cũng như không.
+ *
+ * Từ khoá rỗng nghĩa là không lọc gì.
+ */
+export function matchesKeyword(title: string, keyword: string, channelTitle = ''): boolean {
+  const words = stripDiacritics(keyword).split(/\s+/).filter(Boolean)
+  if (words.length === 0) return true
+  const haystack = stripDiacritics(`${title} ${channelTitle}`)
+  return words.every((word) => haystack.includes(word))
+}
+
+/** Bỏ dấu tiếng Việt + hạ chữ thường. Chép lại thay vì import từ globalSearch
+ *  vì file này còn chạy ở serverless trong api/, không kéo theo phần của app. */
+function stripDiacritics(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim()
+}
