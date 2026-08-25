@@ -12,10 +12,23 @@ self.addEventListener('push', (event) => {
     if (event.data) data.body = event.data.text()
   }
 
+  var tag = data.tag || 'daily-reminder'
+
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      tag: data.tag || 'daily-reminder',
+      // Icon app cho dễ nhận ra giữa đống thông báo, badge là icon nhỏ trên thanh trạng thái.
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: tag,
+      /*
+       * renotify: cùng một tag thì mặc định trình duyệt thay lặng lẽ, KHÔNG kêu lại.
+       * Bật lên để thông báo mới vẫn rung và kêu như Zalo. Bắt buộc phải có tag.
+       */
+      renotify: true,
+      silent: false,
+      vibrate: [200, 100, 200],
+      timestamp: Date.now(),
       data: { url: data.url || '/tasks' },
     }),
   )

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
+import { notifyUsers } from './push'
 
 export type WatchKind = 'VIDEO' | 'MUSIC' | 'MANGA' | 'BOOK' | 'OTHER'
 
@@ -152,6 +153,18 @@ export async function shareToPeople(people: WatchPerson[], item: WatchItem): Pro
   if (error) throw new Error(error.message)
 
   rememberRef(`${item.kind}:${item.refId}`)
+
+  // Báo cho người nhận ngay, kể cả khi họ đã tắt app.
+  const senderName = user.email?.split('@')[0] || 'Ai đó'
+  void notifyUsers(
+    people.map((p) => p.id),
+    `${senderName} gửi bạn một mục xem chung`,
+    item.title,
+    '/watch',
+    // Mỗi mục một tag riêng: nhiều mục khác nhau thì hiện nhiều thông báo, không đè nhau.
+    `watch-${item.kind}-${item.refId}`,
+  )
+
   return rows.length
 }
 

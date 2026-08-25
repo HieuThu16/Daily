@@ -1,8 +1,11 @@
 /**
- * POST /functions/v1/notify-partner  { title, body, url?, tag? }
+ * POST /functions/v1/notify-partner  { title, body, url?, tag?, toUserIds? }
  *
- * Đẩy một thông báo tới TẤT CẢ thiết bị của người kia (mọi đăng ký push không
- * thuộc người gọi). Dùng cho cảnh báo vị trí: "Hiếu đã tới Công ty".
+ * Không có `toUserIds`: đẩy tới TẤT CẢ thiết bị của người kia (mọi đăng ký push
+ * không thuộc người gọi) — dùng cho cảnh báo vị trí: "Hiếu đã tới Công ty".
+ *
+ * Có `toUserIds`: chỉ đẩy đúng những người đó — dùng khi chia sẻ "Xem chung"
+ * cho một Gmail cụ thể, để người thứ ba không nhận nhầm thông báo.
  */
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -35,10 +38,17 @@ serve(async (req) => {
   const { data: me } = await admin.auth.getUser(token)
   if (!me?.user) return json({ error: 'Phiên đăng nhập không hợp lệ' }, 401)
 
-  const { title, body, url, tag } = await req.json().catch(() => ({}))
+  const { title, body, url, tag, toUserIds } = await req.json().catch(() => ({}))
   if (!title || !body) return json({ error: 'Thiếu title hoặc body' }, 400)
 
-  const { data: subRows } = await admin.from('push_subscriptions').select('*').neq('user_id', me.user.id)
+  // Gửi đích danh thì lọc theo danh sách; vẫn loại mình ra để khỏi tự báo cho chính mình.
+  const targets = Array.isArray(toUserIds) ? toUserIds.filter((id: unknown) => typeof id === 'string' && id !== me.user.id) : null
+  if (targets && targets.length === 0) return json({ sent: 0 })
+
+  const query = admin.from('push_subscriptions').select('*')
+  const { data: subRows } = targets
+    ? await query.in('user_id', targets)
+    : await query.neq('user_id', me.user.id)
 
   const payload = JSON.stringify({ title, body, url: url || '/people', tag: tag || 'location-alert' })
   let sent = 0

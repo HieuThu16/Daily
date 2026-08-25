@@ -61,9 +61,9 @@ export function WatchTogetherPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--bg-main)' }}>
+    <div className="watch-page">
+      <div className="watch-toolbar">
+        <div className="watch-tabs" role="tablist">
           <BoxTab active={box === 'INBOX'} onClick={() => setBox('INBOX')} count={inbox.length}>
             <Inbox size={14} /> Được gửi cho mình
           </BoxTab>
@@ -71,21 +71,31 @@ export function WatchTogetherPage() {
             <Send size={14} /> Mình đã gửi
           </BoxTab>
         </div>
-        <button type="button" onClick={() => { void reload(); reloadPeople() }} title="Tải lại">
-          <RefreshCw size={14} /> Làm mới
+        <button
+          type="button"
+          className="watch-refresh"
+          aria-label="Tải lại danh sách"
+          title="Tải lại"
+          onClick={() => { void reload(); reloadPeople() }}
+        >
+          <RefreshCw size={15} />
         </button>
       </div>
 
       {loading ? (
-        <div style={{ fontSize: '0.9rem' }}>Đang tải…</div>
+        <div className="watch-empty">Đang tải…</div>
       ) : visible.length === 0 ? (
-        <div style={{ fontSize: '0.9rem', opacity: 0.75, padding: '20px 0', textAlign: 'center' }}>
-          {box === 'INBOX'
-            ? 'Chưa ai gửi gì cho bạn. Khi có người bấm “Xem chung” và chọn Gmail của bạn, mục đó hiện ở đây.'
-            : 'Bạn chưa gửi gì. Bấm “Xem chung” ở video, nhạc hay truyện rồi chọn Gmail người nhận.'}
+        <div className="watch-empty">
+          <span className="watch-empty-icon">{box === 'INBOX' ? <Inbox size={26} /> : <Send size={26} />}</span>
+          <strong>{box === 'INBOX' ? 'Chưa ai gửi gì cho bạn' : 'Bạn chưa gửi gì'}</strong>
+          <span>
+            {box === 'INBOX'
+              ? 'Khi có người bấm “Xem chung” và chọn Gmail của bạn, mục đó hiện ở đây.'
+              : 'Bấm “Xem chung” ở video, nhạc hay truyện rồi chọn Gmail người nhận.'}
+          </span>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="watch-list">
           {visible.map((s) => {
             // Hộp đến thì quan tâm ai gửi; hộp đi thì quan tâm gửi cho ai.
             const email = box === 'INBOX' ? s.sender_email : s.recipient_email
@@ -124,20 +134,9 @@ function BoxTab({
   active: boolean; onClick: () => void; count: number; children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 10,
-        border: 0, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700,
-        background: active ? 'var(--card-bg)' : 'transparent',
-        color: active ? 'var(--text-main)' : 'var(--text-muted)',
-        boxShadow: active ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-      }}
-    >
+    <button type="button" onClick={onClick} aria-pressed={active} className={`watch-tab${active ? ' on' : ''}`}>
       {children}
-      {count > 0 && <span style={{ opacity: 0.6 }}>({count})</span>}
+      {count > 0 && <span className="watch-tab-count">{count}</span>}
     </button>
   )
 }
@@ -153,72 +152,74 @@ function ShareCard({
   onRename?: () => void
   onRemove?: () => void
 }) {
+  const done = s.percent >= 90
+  const started = s.percent > 0
   return (
-    <div
-      style={{
-        display: 'flex', gap: 12, padding: 10, borderRadius: 14,
-        background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-      }}
-    >
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label={`Mở ${s.title}`}
-        style={{ display: 'flex', gap: 12, flex: 1, minWidth: 0, textAlign: 'left', background: 'transparent', border: 0, padding: 0, cursor: 'pointer', color: 'inherit' }}
-      >
-        {s.thumbnail && (
-          <img
-            src={s.thumbnail}
-            alt=""
-            loading="lazy"
-            style={{ width: 96, height: 56, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
-          />
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {s.title}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.74rem', opacity: 0.75, marginTop: 2 }}>
+    <article className="watch-card">
+      <button type="button" className="watch-card-main" onClick={onOpen} aria-label={`Mở ${s.title}`}>
+        <span className="watch-thumb">
+          {s.thumbnail ? (
+            <img src={s.thumbnail} alt="" loading="lazy" />
+          ) : (
+            <span className="watch-thumb-fallback">{KIND_LABEL[s.kind]?.charAt(0) ?? '?'}</span>
+          )}
+          <span className="watch-kind">{KIND_LABEL[s.kind] ?? s.kind}</span>
+        </span>
+
+        <span className="watch-card-body">
+          <span className="watch-card-title" title={s.title}>{s.title}</span>
+
+          <span className="watch-card-who">
             {person && <Avatar person={person} size={16} />}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {whoPrefix} {who} · {KIND_LABEL[s.kind] ?? s.kind}
+            <span className="watch-card-who-text">
+              {whoPrefix} <b>{who}</b>
               {s.subtitle ? ` · ${s.subtitle}` : ''}
             </span>
-          </div>
-          <div style={{ fontSize: '0.78rem', marginTop: 5 }}>
-            {s.progress_text ?? (s.percent > 0 ? `Đang xem ${s.percent}%` : 'Chưa xem')}
-          </div>
-          <div style={{ height: 4, borderRadius: 4, background: 'var(--card-border)', marginTop: 4 }}>
-            <div style={{ width: `${s.percent}%`, height: '100%', borderRadius: 4, background: 'var(--accent, #8b5cf6)' }} />
-          </div>
-        </div>
+          </span>
+
+          {/* Chưa xem thì thanh 0% trông như lỗi hiển thị — thay bằng một chip chữ. */}
+          {started ? (
+            <>
+              <span className="watch-card-progress-text">
+                {s.progress_text ?? (done ? 'Đã xem xong' : `Đang xem ${s.percent}%`)}
+              </span>
+              <span className="watch-bar" role="progressbar" aria-valuenow={s.percent} aria-valuemin={0} aria-valuemax={100}>
+                <i className={done ? 'done' : undefined} style={{ width: `${Math.min(100, s.percent)}%` }} />
+              </span>
+            </>
+          ) : (
+            <span className="watch-chip">Chưa xem</span>
+          )}
+        </span>
       </button>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignSelf: 'center', flexShrink: 0 }}>
+      <div className="watch-card-actions">
         {onRename && (
           <button
             type="button"
+            className="watch-icon-btn"
             aria-label={`Đặt tên cho ${person?.email ?? who}`}
             title="Đặt tên cho Gmail này"
             onClick={onRename}
-            style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
           >
-            <Pencil size={14} />
+            <Pencil size={15} />
           </button>
         )}
         {onRemove && (
           <button
             type="button"
+            className="watch-icon-btn danger"
             aria-label={`Gỡ ${s.title} khỏi xem chung`}
             title="Gỡ khỏi xem chung"
             onClick={onRemove}
-            style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--rose, #f43f5e)', padding: 4 }}
           >
-            <Trash2 size={14} />
+            <Trash2 size={15} />
           </button>
         )}
-        <ExternalLink size={14} style={{ opacity: 0.4, margin: '0 4px' }} aria-hidden="true" />
+        <button type="button" className="watch-icon-btn" aria-label={`Mở ${s.title}`} title="Mở" onClick={onOpen}>
+          <ExternalLink size={15} />
+        </button>
       </div>
-    </div>
+    </article>
   )
 }

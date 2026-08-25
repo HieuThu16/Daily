@@ -6,6 +6,9 @@ const upsert = vi.fn(async (_rows: any, _opts?: any) => ({ error: null }))
 const del = vi.fn(() => chain)
 const chain: any = { update, eq, upsert, delete: del, then: (r: any) => r({ error: null }) }
 
+const notifyUsers = vi.fn(async () => {})
+vi.mock('./push', () => ({ notifyUsers }))
+
 vi.mock('./supabase', () => ({
   supabase: {
     auth: { getUser: async () => ({ data: { user: { id: 'u1', email: 'toi@gmail.com' } } }) },
@@ -51,6 +54,27 @@ describe('watchTogether', () => {
 
     await updateMyShareProgress('VIDEO', 'abc', 140, 'Đã xem hết')
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ percent: 100 }))
+  })
+
+  it('gửi xong thì bắn thông báo đẩy tới ĐÚNG người nhận', async () => {
+    await shareToPeople(
+      [person(), person({ id: 'p2', email: 'hieu@gmail.com', label: 'Hiếu' })],
+      { kind: 'VIDEO', refId: 'abc', title: 'Phim hay' },
+    )
+    expect(notifyUsers).toHaveBeenCalledTimes(1)
+    const [ids, title, body, url, tag] = notifyUsers.mock.calls[0] as unknown as string[]
+    // Chỉ hai người được chọn, không rải cho người thứ ba.
+    expect(ids).toEqual(['p1', 'p2'])
+    expect(title).toContain('toi')
+    expect(body).toBe('Phim hay')
+    expect(url).toBe('/watch')
+    // Tag riêng cho từng mục: nhiều mục thì hiện nhiều thông báo, không đè nhau.
+    expect(tag).toBe('watch-VIDEO-abc')
+  })
+
+  it('không chọn ai thì cũng không bắn thông báo', async () => {
+    await shareToPeople([], { kind: 'VIDEO', refId: 'abc', title: 'Phim' })
+    expect(notifyUsers).not.toHaveBeenCalled()
   })
 
   it('không chọn ai thì không gọi mạng', async () => {

@@ -11871,3 +11871,237 @@ svg.lucide-library {
   .photo-progress-spin { animation: none; }
   .photo-progress-bar i { transition: none; }
 }
+
+/* ================= Tab Xem chung ================= */
+
+.watch-page { display: flex; flex-direction: column; gap: 12px; }
+
+.watch-toolbar { display: flex; align-items: center; gap: 8px; }
+
+.watch-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--bg-main);
+  border: 1px solid var(--card-border);
+}
+
+.watch-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.watch-tab.on {
+  background: var(--card-bg);
+  color: var(--text-main);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Số đếm thành huy hiệu tròn, dễ liếc hơn "(2)". */
+.watch-tab-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--card-border);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  line-height: 18px;
+}
+.watch-tab.on .watch-tab-count { background: var(--accent, #8b5cf6); color: #fff; }
+
+/* Nút làm mới thu về đúng một icon vuông cho khỏi chiếm chỗ. */
+.watch-refresh {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.watch-refresh:active { transform: scale(0.94); }
+
+.watch-list { display: flex; flex-direction: column; gap: 10px; }
+
+.watch-card {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.watch-card-main {
+  display: flex;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.watch-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 104px;
+  height: 68px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--bg-main);
+  display: block;
+}
+.watch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.watch-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+/* Nhãn loại nằm đè góc ảnh: biết ngay là Truyện hay Video mà không tốn dòng. */
+.watch-kind {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.watch-card-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+
+.watch-card-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-main);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.watch-card-who { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.watch-card-who-text {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-card-who-text b { font-weight: 700; color: var(--text-main); }
+
+.watch-card-progress-text { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); margin-top: 2px; }
+
+.watch-bar { display: block; height: 5px; border-radius: 99px; background: var(--card-border); overflow: hidden; }
+.watch-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent, #8b5cf6);
+  transition: width 0.3s ease;
+}
+.watch-bar i.done { background: var(--emerald, #10b981); }
+
+/* Chưa xem: một chip chữ, KHÔNG vẽ thanh 0% (trông như hỏng). */
+.watch-chip {
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: var(--bg-main);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.watch-card-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.watch-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.watch-icon-btn:active { background: var(--bg-main); }
+.watch-icon-btn.danger { color: var(--rose, #f43f5e); }
+
+.watch-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 44px 24px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.watch-empty strong { font-size: 0.92rem; color: var(--text-main); }
+.watch-empty-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+/* Màn hẹp: ảnh nhỏ lại cho tiêu đề còn chỗ thở. */
+@media (max-width: 380px) {
+  .watch-thumb { width: 84px; height: 56px; }
+  .watch-tab { font-size: 0.72rem; padding: 8px 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watch-bar i { transition: none; }
+  .watch-refresh:active { transform: none; }
+}

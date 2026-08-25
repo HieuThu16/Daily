@@ -73,13 +73,33 @@ export async function disablePush(): Promise<void> {
  * Lỗi thì nuốt: không báo được cũng đừng làm hỏng luồng cập nhật vị trí.
  */
 export async function notifyPartner(title: string, body: string, url = '/people', tag?: string): Promise<void> {
+  await sendPush({ title, body, url, tag })
+}
+
+/**
+ * Bắn thông báo tới ĐÚNG những người này (theo user id).
+ *
+ * Khác `notifyPartner` ở chỗ không rải cho mọi người còn lại — dùng khi chia sẻ
+ * "Xem chung" cho một Gmail cụ thể, để người thứ ba không nhận nhầm.
+ */
+export async function notifyUsers(
+  userIds: string[],
+  title: string,
+  body: string,
+  url = '/watch',
+  tag?: string,
+): Promise<void> {
+  if (userIds.length === 0) return
+  await sendPush({ title, body, url, tag, toUserIds: userIds })
+}
+
+/** Lỗi thì nuốt: không báo được cũng đừng làm hỏng luồng đang chạy. */
+async function sendPush(payload: Record<string, unknown>): Promise<void> {
   try {
     const session = (await supabase?.auth.getSession())?.data?.session
     if (!session) return
-    await supabase!.functions.invoke('notify-partner', {
-      body: { title, body, url, tag },
-    })
+    await supabase!.functions.invoke('notify-partner', { body: payload })
   } catch (err) {
-    console.warn('[push] không gửi được thông báo cho người kia:', err)
+    console.warn('[push] không gửi được thông báo:', err)
   }
 }
