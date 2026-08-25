@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus } from 'lucide-react'
+import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { anniversariesOn, yearsAgoLabel } from '../../lib/anniversary'
@@ -10,6 +10,15 @@ import { notifyPartner } from '../../lib/push'
 import { compressForUpload } from '../../lib/photo'
 
 const PHOTO_BUCKET = 'daily-photos'
+
+/** Ảnh đang ở bước nào; `done`/`total` để vẽ thanh tiến trình. */
+type PhotoProgress = { phase: 'compress' | 'upload' | 'save'; done: number; total: number }
+
+const PHASE_LABEL: Record<PhotoProgress['phase'], string> = {
+  compress: 'Đang nén ảnh',
+  upload: 'Đang tải ảnh lên',
+  save: 'Đang lưu kỷ niệm',
+}
 
 function viDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -69,6 +78,12 @@ export function SharedEventsView({
   const [filterMonth, setFilterMonth] = useState<string>('ALL')
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  /*
+   * Tiến trình xử lý ảnh. 12 tấm ảnh máy ảnh phải nén rồi tải lên lần lượt, mất
+   * cả phút — không hiện gì thì người dùng tưởng app treo và bấm lại, mà bấm lại
+   * là tải trùng cả bộ.
+   */
+  const [progress, setProgress] = useState<PhotoProgress | null>(null)
   const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
 
   useEffect(() => {
@@ -182,7 +197,8 @@ export function SharedEventsView({
     location: location.trim() || null,
   })
 
-  const fileToDataUrl = (file: File): Promise<string> =>
+  /** FileReader đọc được cả Blob, không riêng File — nhận Blob để dùng luôn bản đã nén. */
+  const fileToDataUrl = (file: Blob): Promise<string> =>
     new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
@@ -190,15 +206,23 @@ export function SharedEventsView({
       reader.readAsDataURL(file)
     })
 
-  const uploadMultipleImages = async (folder: string, files: File[]) => {
-    if (!files.length) return { urls: [] as string[], paths: [] as string[] }
+  const uploadMultipleImages = async (
+    folder: string,
+    files: File[],
+    onProgress?: (p: PhotoProgress) => void,
+  ) => {
+    if (!files.length) return { urls: [] as string[], paths: [] as string[], fellBack: 0 }
     const urls: string[] = []
     const paths: string[] = []
+    /** Số ảnh không đẩy lên storage được, phải nhúng thẳng vào bản ghi. */
+    let fellBack = 0
 
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       try {
+        onProgress?.({ phase: 'compress', done: index, total: files.length })
         // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
         const { blob, ext } = await compressForUpload(file)
+        onProgress?.({ phase: 'upload', done: index, total: files.length })
         const path = `${folder}/${crypto.randomUUID()}.${ext}`
         let uploadedUrl = ''
 
@@ -215,7 +239,9 @@ export function SharedEventsView({
         }
 
         if (!uploadedUrl) {
-          uploadedUrl = await fileToDataUrl(file)
+          // Nhúng thẳng vào bản ghi: nặng nhưng còn hơn mất ảnh. Có đếm để báo lại.
+          uploadedUrl = await fileToDataUrl(blob)
+          if (uploadedUrl) fellBack += 1
         }
 
         if (uploadedUrl) {
@@ -228,10 +254,12 @@ export function SharedEventsView({
         if (dataUrl) {
           urls.push(dataUrl)
           paths.push('')
+          fellBack += 1
         }
       }
     }
-    return { urls, paths }
+    onProgress?.({ phase: 'upload', done: files.length, total: files.length })
+    return { urls, paths, fellBack }
   }
 
   const createEvent = async () => {
@@ -240,11 +268,14 @@ export function SharedEventsView({
 
     let urls: string[] = []
     let paths: string[] = []
+    let fellBack = 0
     if (pendingFiles.length > 0) {
-      const res = await uploadMultipleImages(eventDate, pendingFiles)
+      const res = await uploadMultipleImages(eventDate, pendingFiles, setProgress)
       urls = res.urls
       paths = res.paths
+      fellBack = res.fellBack
     }
+    setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
 
     const firstUrl = urls[0] || null
     const firstPath = paths[0] || null
@@ -318,11 +349,19 @@ export function SharedEventsView({
       } as SharedEvent
     }
 
+    setProgress(null)
     setBusy(false)
     events.setItems((prev) => [created!, ...prev])
+
     if (savedRemotely) {
       void notifyPartner('Có kỷ niệm mới được chia sẻ', created.title, '/daily', `share-${created.id}`)
-      showToast('💞 Đã thêm kỷ niệm mới')
+      // Nói rõ đã lưu được bao nhiêu ảnh — đó là bằng chứng việc xử lý đã xong.
+      const savedCount = urls.length
+      const missing = pendingFiles.length - savedCount
+      let message = savedCount > 0 ? `✅ Đã lưu kỷ niệm cùng ${savedCount} ảnh` : '✅ Đã lưu kỷ niệm'
+      if (missing > 0) message += ` · ${missing} ảnh không đọc được`
+      if (fellBack > 0) message += ` · ${fellBack} ảnh lưu kèm bản ghi (nặng hơn)`
+      showToast(message)
     } else {
       showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
     }
@@ -339,9 +378,10 @@ export function SharedEventsView({
     let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
     if (pendingFiles.length > 0) {
-      const { urls, paths } = await uploadMultipleImages(eventDate, pendingFiles)
+      const { urls, paths } = await uploadMultipleImages(eventDate, pendingFiles, setProgress)
       currentImages = [...currentImages, ...urls]
       currentPaths = [...currentPaths, ...paths]
+      setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
     }
 
     const baseUpdateData = {
@@ -356,22 +396,37 @@ export function SharedEventsView({
       image_paths: currentPaths,
     }
 
+    /*
+     * Phải biết ĐÃ ghi được hay chưa, chứ không báo bừa: trước đây lần thử lại
+     * hỏng cũng vẫn hiện "Đã cập nhật", tải lại trang mới biết là mất.
+     */
+    let savedRemotely = !supabase
     if (supabase) {
       const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
-      if (error) {
+      if (!error) {
+        savedRemotely = true
+      } else {
         // Schema cũ chưa có cột mảng images, thử lại với baseUpdateData
         if (currentImages.length > 1) warnMissingImagesColumn(showToast)
-        await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
+        const retry = await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
+        savedRemotely = !retry.error
+        if (retry.error) console.warn('Không cập nhật được kỷ niệm:', retry.error.message)
       }
     }
 
+    setProgress(null)
     setBusy(false)
     const finalEvent = {
       ...editing,
       ...fullUpdateData,
     }
     events.setItems((prev) => prev.map((e) => (e.id === editing.id ? finalEvent : e)))
-    showToast('✏️ Đã cập nhật kỷ niệm')
+    if (savedRemotely) {
+      const added = pendingFiles.length
+      showToast(added > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${added} ảnh` : '✏️ Đã cập nhật kỷ niệm')
+    } else {
+      showToast('⚠️ Chưa lưu được thay đổi lên máy chủ — kiểm tra kết nối rồi thử lại.', 'delete')
+    }
     setEditing(null)
     setViewing(null)
     resetForm()
@@ -529,6 +584,23 @@ export function SharedEventsView({
         >
           <ImagePlus size={15} /> Chọn ảnh từ bộ sưu tập (nhiều ảnh)
         </button>
+
+        {/* Tiến trình xử lý ảnh: nén -> tải lên -> lưu */}
+        {progress && (
+          <div className="photo-progress" role="status" aria-live="polite">
+            <div className="photo-progress-top">
+              <Loader2 size={14} className="photo-progress-spin" />
+              <span>
+                {PHASE_LABEL[progress.phase]}
+                {progress.total > 0 && progress.phase !== 'save' ? ` ${Math.min(progress.done + 1, progress.total)}/${progress.total}` : '…'}
+              </span>
+            </div>
+            <div className="photo-progress-bar">
+              <i style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 100}%` }} />
+            </div>
+            <span className="photo-progress-hint">Đừng đóng cửa sổ, ảnh đang được xử lý.</span>
+          </div>
+        )}
 
         {/* Xem trước ảnh mới chọn chuẩn bị lưu */}
         {pendingFiles.length > 0 && (
@@ -880,7 +952,13 @@ export function SharedEventsView({
         <Modal title="Sự kiện chung mới" onClose={() => setAdding(false)}>
           {eventForm}
           <div className="modal-actions">
-            <button className="primary" onClick={createEvent} disabled={busy}>{busy ? 'Lưu…' : 'Lưu sự kiện'}</button>
+            <button className="primary" onClick={createEvent} disabled={busy}>
+              {busy
+                ? progress
+                  ? `${PHASE_LABEL[progress.phase]}…`
+                  : 'Đang lưu…'
+                : 'Lưu sự kiện'}
+            </button>
           </div>
         </Modal>
       )}
@@ -917,7 +995,9 @@ export function SharedEventsView({
 
           <div className="modal-actions">
             <DeleteButton onDelete={() => deleteEvent(editing.id)} />
-            <button className="primary" onClick={saveEvent}>Lưu thay đổi</button>
+            <button className="primary" onClick={saveEvent} disabled={busy}>
+              {busy ? (progress ? `${PHASE_LABEL[progress.phase]}…` : 'Đang lưu…') : 'Lưu thay đổi'}
+            </button>
           </div>
         </Modal>
       )}

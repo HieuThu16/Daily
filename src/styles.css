@@ -11825,3 +11825,49 @@ svg.lucide-library {
   line-height: 1.25;
 }
 .usage-metric b { font-size: 0.86rem; font-weight: 800; color: var(--text-main); }
+
+/* ---- Tiến trình xử lý ảnh kỷ niệm ---- */
+
+.photo-progress {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--primary-light, rgba(99, 102, 241, 0.1));
+  border: 1px solid var(--card-border);
+}
+
+.photo-progress-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Vòng quay báo còn đang chạy — ảnh nén lâu, thanh đứng yên dễ tưởng treo. */
+.photo-progress-spin { animation: photoProgressSpin 0.9s linear infinite; flex-shrink: 0; }
+@keyframes photoProgressSpin { to { transform: rotate(360deg); } }
+
+.photo-progress-bar {
+  height: 5px;
+  margin: 7px 0 5px;
+  border-radius: 99px;
+  background: var(--card-border);
+  overflow: hidden;
+}
+.photo-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--primary);
+  transition: width 0.25s ease;
+}
+
+.photo-progress-hint { font-size: 0.7rem; color: var(--text-muted); }
+
+/* Máy đặt "giảm chuyển động" thì bỏ xoay, giữ nguyên thanh. */
+@media (prefers-reduced-motion: reduce) {
+  .photo-progress-spin { animation: none; }
+  .photo-progress-bar i { transition: none; }
+}
