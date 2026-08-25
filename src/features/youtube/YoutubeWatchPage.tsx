@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, Download, ExternalLink,
   PictureInPicture2, Share2, 
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { fetchYouTubeMeta } from '../../lib/youtubeMeta'
 import { useToast } from '../ToastContext'
 import { useHideHeader } from '../HeaderAction'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
@@ -18,7 +19,7 @@ import { useVideoMiniPlayer } from './VideoMiniPlayer'
 import { OfflineVideoModal } from './OfflineVideoModal'
 import '../tvshow/tvShow.css'
 
-type WatchVideo = {
+export type WatchVideo = {
   id: string
   video_id: string
   creator_id: string | null
@@ -31,7 +32,15 @@ type WatchVideo = {
   duration: number | null
   published_at: string | null
   sourceType: 'tvshow' | 'review'
+  /** True khi video chưa nằm trong kho — mở thẳng từ kết quả tìm kiếm YouTube. */
+  notInApp?: boolean
 }
+
+/**
+ * Thông tin kèm theo lúc điều hướng từ kết quả tìm kiếm.
+ * Có sẵn thì hiện ngay tiêu đề, khỏi chờ gọi oEmbed.
+ */
+export type WatchHint = { title?: string; channelName?: string; thumbnail?: string }
 
 const COLUMNS =
   'id,video_id,creator_id,creator_name,title,description,canonical_url,embed_url,thumbnail,duration,published_at'
@@ -59,10 +68,40 @@ export function publishedLabel(iso: string | null | undefined, now: Date = new D
   return `${Math.floor(days / 365)} năm trước`
 }
 
+/**
+ * Dựng bản ghi tạm cho video KHÔNG có trong kho, để vẫn xem được.
+ *
+ * Ưu tiên thông tin gửi kèm lúc điều hướng (bấm từ kết quả tìm kiếm) vì có ngay;
+ * vào thẳng bằng URL thì mới cần oEmbed. Không có gì thì vẫn phát được, chỉ là
+ * tiêu đề chung chung — thà vậy còn hơn báo "không tìm thấy".
+ */
+export function buildFallbackVideo(
+  videoId: string,
+  hint?: WatchHint | null,
+  meta?: { title: string; author: string } | null,
+): WatchVideo {
+  return {
+    id: `yt-${videoId}`,
+    video_id: videoId,
+    creator_id: null,
+    creator_name: hint?.channelName || meta?.author || null,
+    title: hint?.title || meta?.title || 'Video YouTube',
+    description: null,
+    canonical_url: `https://www.youtube.com/watch?v=${videoId}`,
+    embed_url: null,
+    thumbnail: hint?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    duration: null,
+    published_at: null,
+    sourceType: 'review',
+    notInApp: true,
+  }
+}
+
 /** Trang xem một video: khung phát lớn, tiêu đề, hàng nút, mô tả, video cùng kênh. */
 export function YoutubeWatchPage() {
   const { videoId = '' } = useParams()
   const navigate = useNavigate()
+  const hint = useLocation().state as WatchHint | null
   const { showToast } = useToast()
   const { playInMini } = useVideoMiniPlayer()
   const progressMap = useVideoProgressMap()
@@ -93,7 +132,16 @@ export function YoutubeWatchPage() {
       if (!alive) return
 
       if (!row) {
-        setVideo(null)
+        /*
+         * Không có trong kho — nhưng vẫn phải xem được. Bấm một kết quả tìm kiếm
+         * YouTube mà nhận "Không tìm thấy video này trong kho" thì vô lý.
+         * Điều hướng từ ô tìm kiếm có kèm sẵn tiêu đề nên hiện ngay; vào thẳng
+         * bằng URL thì hỏi oEmbed, chậm một nhịp nhưng vẫn ra.
+         */
+        const meta = hint?.title ? null : await fetchYouTubeMeta(`https://www.youtube.com/watch?v=${videoId}`)
+        if (!alive) return
+        setVideo(buildFallbackVideo(videoId, hint, meta))
+        setSiblings([])
         setLoading(false)
         return
       }
@@ -126,7 +174,7 @@ export function YoutubeWatchPage() {
     return () => {
       alive = false
     }
-  }, [videoId, reloadKey])
+  }, [videoId, reloadKey, hint])
 
   useYouTubeProgress(iframeEl, {
     videoId: video?.video_id ?? null,
@@ -212,6 +260,12 @@ export function YoutubeWatchPage() {
             allowFullScreen
           />
         </div>
+
+        {video.notInApp && (
+          <p className="yt-watch-notice">
+            Video này chưa có trong kho — vẫn xem được, nhưng chưa lưu tiến độ theo kênh.
+          </p>
+        )}
 
         <h1 className="yt-watch-title">{video.title}</h1>
 

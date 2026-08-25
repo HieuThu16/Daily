@@ -166,6 +166,17 @@ export function YoutubeView() {
   const progressMap = useVideoProgressMap()
   const { playInMini } = useVideoMiniPlayer()
   const [, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
+
+  /**
+   * Bấm một kết quả tìm kiếm là vào thẳng trang xem, không chỉ thu nhỏ.
+   * Gửi kèm tiêu đề/kênh/ảnh để trang bên kia hiện ngay, khỏi chờ gọi oEmbed —
+   * video này thường chưa có trong kho nên không tra được từ database.
+   */
+  const openSearchResult = (item: YouTubeSearchResult) => {
+    navigate(`/youtube/watch/${item.videoId}`, {
+      state: { title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail },
+    })
+  }
   const tabsScrollRef = useRef<HTMLDivElement>(null)
 
   /** Cào video chưa có ở TẤT CẢ kênh đã thêm, rồi đưa video mới sang Xem chung. */
@@ -766,12 +777,12 @@ export function YoutubeView() {
                     <div
                       role="button"
                       tabIndex={0}
-                      title="Xem ngay trong app"
-                      onClick={() => playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })}
+                      title="Mở trang xem"
+                      onClick={() => openSearchResult(item)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
-                          playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })
+                          openSearchResult(item)
                         }
                       }}
                       style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000', overflow: 'hidden', cursor: 'pointer' }}
@@ -829,7 +840,18 @@ export function YoutubeView() {
                     </div>
 
                     <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openSearchResult(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            openSearchResult(item)
+                          }
+                        }}
+                        style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', cursor: 'pointer' }}
+                      >
                         {item.title}
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -837,10 +859,19 @@ export function YoutubeView() {
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <button
                             type="button"
-                            onClick={() => playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })}
+                            onClick={() => openSearchResult(item)}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
                           >
-                            <Play size={10} /> Xem trong app
+                            <Play size={10} /> Mở chi tiết
+                          </button>
+                          <button
+                            type="button"
+                            title="Phát ở khung nhỏ, không rời trang"
+                            aria-label="Phát ở khung nhỏ"
+                            onClick={() => playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)', display: 'inline-flex' }}
+                          >
+                            <PictureInPicture2 size={11} />
                           </button>
                           <a href={`https://www.youtube.com/watch?v=${item.videoId}`} target="_blank" rel="noopener noreferrer" title="Mở trên YouTube" style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>
                             <ExternalLink size={10} />
