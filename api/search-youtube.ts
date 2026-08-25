@@ -7,11 +7,16 @@
  *
  * Trả về `nextPageToken` để lấy trang tiếp; hết kết quả thì không có trường đó.
  *
+ * Ưu tiên tiếng Việt hai tầng: xin YouTube nghiêng về vi/VN, rồi tự xếp lại
+ * theo dấu tiếng Việt trong tiêu đề và tên kênh (relevanceLanguage chỉ nghiêng
+ * chứ không lọc — gõ "doraemon" vẫn ra kênh Nhật đứng đầu).
+ *
  * QUOTA: mỗi lần gọi search tốn 100 đơn vị, hạn mức miễn phí 10.000/ngày —
  * tức khoảng 100 lượt tìm. Lấy 50 kết quả cũng tốn đúng 100 như lấy 25, nên
  * lấy tối đa để đỡ phải bấm "xem thêm".
  */
 import { requireAuth } from './_auth.js'
+import { rankVietnameseFirst } from '../src/lib/vietnameseRank.js'
 
 
 export const config = { maxDuration: 30 }
@@ -42,6 +47,7 @@ export default async function handler(req: any, res: any) {
     try {
       const url =
         `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=50` +
+        `&relevanceLanguage=vi&regionCode=VN` +
         `&q=${encodeURIComponent(query)}&key=${apiKey}` +
         (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
       const response = await fetch(url)
@@ -57,7 +63,11 @@ export default async function handler(req: any, res: any) {
           publishedAt: item.snippet?.publishedAt || '',
         })).filter((item: YouTubeSearchResultItem) => Boolean(item.videoId))
 
-        return res.status(200).json({ items, source: 'youtube-api', nextPageToken: data.nextPageToken || null })
+        return res.status(200).json({
+          items: rankVietnameseFirst(items),
+          source: 'youtube-api',
+          nextPageToken: data.nextPageToken || null,
+        })
       }
     } catch (err: any) {
       console.warn('Lỗi gọi YouTube v3 API, chuyển sang phương án dự phòng:', err.message)
@@ -76,7 +86,9 @@ export default async function handler(req: any, res: any) {
     try {
       // Invidious phân trang bằng số trang, không phải token — quy ước token là số trang.
       const page = Number(pageToken) > 1 ? Number(pageToken) : 1
-      const invUrl = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}`
+      const invUrl =
+        `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}` +
+        `&region=VN`
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 4000)
       const invRes = await fetch(invUrl, { signal: controller.signal })
@@ -97,7 +109,7 @@ export default async function handler(req: any, res: any) {
 
           // Còn đủ một trang thì đoán là còn nữa; Invidious không nói tổng số.
           return res.status(200).json({
-            items,
+            items: rankVietnameseFirst(items),
             source: 'invidious',
             nextPageToken: items.length >= 20 ? String(page + 1) : null,
           })
