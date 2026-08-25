@@ -11,6 +11,7 @@ import { useToast } from './ToastContext'
 import { SkeletonList } from './Skeleton'
 import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
 import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
+import { compressForUpload } from '../lib/photo'
 
 const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
@@ -444,9 +445,10 @@ export function DailyPage() {
   const uploadEntryImage = async (file: File) => {
     if (!editing || !supabase) return
     setUploading(true)
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
+    const { blob, ext } = await compressForUpload(file)
     const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file)
+    const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob)
     if (uploadError) {
       showToast('❌ Tải ảnh lên thất bại', 'delete')
       setUploading(false)

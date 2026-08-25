@@ -7,6 +7,7 @@ import type { SharedEvent, SharedPartner } from '../../types'
 import { DeleteButton, Empty, Modal, useQuery } from '../shared'
 import { useToast } from '../ToastContext'
 import { notifyPartner } from '../../lib/push'
+import { compressForUpload } from '../../lib/photo'
 
 const PHOTO_BUCKET = 'daily-photos'
 
@@ -196,12 +197,13 @@ export function SharedEventsView({
 
     for (const file of files) {
       try {
-        const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+        // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
+        const { blob, ext } = await compressForUpload(file)
         const path = `${folder}/${crypto.randomUUID()}.${ext}`
         let uploadedUrl = ''
 
         if (supabase) {
-          const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { upsert: true })
+          const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { upsert: true })
           if (!upErr) {
             const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
             if (pub?.publicUrl) {
@@ -289,6 +291,19 @@ export function SharedEventsView({
     // Không lưu được lên máy chủ: vẫn hiện ra để khỏi mất công gõ lại, nhưng phải
     // nói thẳng là chưa lưu — trước đây toast báo thành công rồi tải lại trang là mất.
     const savedRemotely = created !== null
+
+    /*
+     * Ảnh đã nằm trên storage trước khi insert. Insert hỏng mà cứ để đó thì mỗi
+     * lần bấm thêm lại là một bộ ảnh mới nằm lại vĩnh viễn — đúng cách 12 tấm ảnh
+     * đã phình thành 204 tệp / 790MB. Hỏng thì dọn ngay.
+     */
+    if (!savedRemotely && supabase) {
+      const uploaded = paths.filter(Boolean)
+      if (uploaded.length) {
+        const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove(uploaded)
+        if (rmErr) console.warn('Không dọn được ảnh của lần thêm hỏng:', rmErr)
+      }
+    }
 
     if (!created) {
       created = {

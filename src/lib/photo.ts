@@ -48,3 +48,33 @@ export async function fileToUploadableJpeg(file: File): Promise<Blob | null> {
     bitmap.close?.()
   }
 }
+
+/**
+ * Chuẩn bị một tệp để tải lên: nén được thì nén, không thì dùng nguyên bản.
+ *
+ * Có hàm `fileToUploadableJpeg` từ lâu nhưng chỉ một màn hình gọi tới, nên ảnh
+ * kỷ niệm và ảnh nhật ký vẫn đẩy thẳng file gốc từ máy ảnh — mỗi tấm 4-7MB thay
+ * vì ~300KB. Gói lại ở đây để mọi chỗ tải ảnh đều đi qua cùng một cửa.
+ *
+ * Không giải mã được (định dạng lạ, trình duyệt cũ) thì trả lại file gốc: thà
+ * nặng còn hơn mất ảnh.
+ */
+export async function compressForUpload(file: File): Promise<{ blob: Blob; ext: string }> {
+  const jpeg = await fileToUploadableJpeg(file)
+  if (jpeg) return { blob: jpeg, ext: 'jpg' }
+  return { blob: file, ext: extensionOf(file.name) }
+}
+
+/**
+ * Đuôi tệp, mặc định 'jpg'.
+ *
+ * `name.split('.').pop()` trên tên KHÔNG có dấu chấm trả về nguyên cả tên, nên
+ * `?? 'jpg'` viết kiểu cũ không bao giờ chạy — file tên "anhcuoi" thành
+ * "uuid.anhcuoi". Phải kiểm tra thật sự có dấu chấm và đuôi trông ra đuôi.
+ */
+function extensionOf(name: string): string {
+  const parts = name.split('.')
+  if (parts.length < 2) return 'jpg'
+  const ext = (parts.pop() ?? '').toLowerCase()
+  return /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'jpg'
+}
