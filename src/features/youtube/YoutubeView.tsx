@@ -7,7 +7,7 @@ import {
   Check, 
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2, Info,
-  Plus, Trash2, ChevronLeft, ChevronRight
+  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
@@ -113,6 +113,26 @@ export function moveItem<T>(arr: T[], from: number, to: number): T[] {
   return copy
 }
 
+/** Xáo trộn ngẫu nhiên danh sách dựa trên seed ngẫu nhiên */
+export function shuffleArray<T>(arr: T[], seed: number): T[] {
+  const copy = [...arr]
+  let m = copy.length
+  let t: T
+  let i: number
+  let s = Math.abs(Math.sin(seed) * 10000)
+  const rand = () => {
+    s = (s * 9301 + 49297) % 233280
+    return s / 233280
+  }
+  while (m) {
+    i = Math.floor(rand() * m--)
+    t = copy[m]
+    copy[m] = copy[i]
+    copy[i] = t
+  }
+  return copy
+}
+
 /** Tự động đoán thể loại ban đầu của kênh dựa vào tên kênh hoặc nguồn gốc */
 export function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'review'): string {
   const lower = (name || '').toLowerCase()
@@ -145,7 +165,8 @@ export function YoutubeView() {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'channel' | 'video'>('video')
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
-  const [watchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
+  const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
+  const [shuffleSeed, setShuffleSeed] = useState(() => Math.random())
   
   // Hạng mục đang chọn trên thanh tab trượt ngang (mặc định 'ALL')
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('ALL')
@@ -774,12 +795,15 @@ export function YoutubeView() {
           v.title.toLowerCase().includes(q) ||
           (v.creator_name && v.creator_name.toLowerCase().includes(q))
       )
+    } else if (activeCategoryTab === 'ALL' && watchFilter === 'all') {
+      // Khi vừa vào hoặc ở tab Tất cả: xáo trộn ngẫu nhiên để thấy đa dạng video
+      result = shuffleArray(result, shuffleSeed)
     }
 
     return result
-  }, [allVideos, activeCategoryTab, watchFilter, search, watchedSet, inProgressSet])
+  }, [allVideos, activeCategoryTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed])
 
-  const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}`)
+  const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}`)
 
 
   /** Nút "Đã xem": bật/tắt trạng thái xem hết của đúng video đó. */
@@ -988,6 +1012,86 @@ export function YoutubeView() {
           </div>
         )}
       </form>
+
+      {/* 2.5. BỘ LỌC TRẠNG THÁI XEM (ĐANG XEM, ĐÃ XEM, CHƯA XEM) & NÚT XÁO TRỘN NGẪU NHIÊN */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, margin: '8px 0 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {([
+            { id: 'all', label: 'Tất cả video', icon: null, count: allVideos.length },
+            { id: 'in_progress', label: 'Đang xem', icon: Clock, count: inProgressSet.size },
+            { id: 'watched', label: 'Đã xem', icon: CheckCircle2, count: watchedSet.size },
+            { id: 'unwatched', label: 'Chưa xem', icon: Circle, count: Math.max(0, allVideos.length - inProgressSet.size - watchedSet.size) },
+          ] as const).map((filter) => {
+            const isActive = watchFilter === filter.id
+            const Icon = filter.icon
+            return (
+              <button
+                key={filter.id}
+                type="button"
+                className={`tv-filter-pill ${isActive ? 'active' : ''}`}
+                onClick={() => setWatchFilter(filter.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '5px 12px',
+                  borderRadius: 10,
+                  border: `1px solid ${isActive ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: isActive ? 'var(--primary)' : 'var(--card-bg)',
+                  color: isActive ? '#ffffff' : 'var(--text-main)',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {Icon && <Icon size={12} />}
+                <span>{filter.label}</span>
+                <span
+                  style={{
+                    padding: '1px 6px',
+                    borderRadius: 99,
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    background: isActive ? 'rgba(255, 255, 255, 0.25)' : 'var(--bg-main)',
+                    color: isActive ? '#ffffff' : 'var(--text-muted)',
+                  }}
+                >
+                  {filter.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Nút Xáo trộn ngẫu nhiên khi ở tab Tất cả */}
+        {activeCategoryTab === 'ALL' && viewMode === 'video' && !search.trim() && (
+          <button
+            type="button"
+            onClick={() => {
+              setShuffleSeed(Math.random())
+              showToast('Đã xáo trộn ngẫu nhiên danh sách video', 'info')
+            }}
+            title="Xáo trộn ngẫu nhiên danh sách video"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--card-border)',
+              background: 'var(--card-bg)',
+              color: 'var(--text-main)',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <Shuffle size={13} color="var(--primary)" />
+            <span>Đổi ngẫu nhiên</span>
+          </button>
+        )}
+      </div>
 
       {/* 3. PHẦN HIỂN THỊ KẾT QUẢ TÌM KIẾM YOUTUBE TRỰC TUYẾN (NẾU ĐANG TÌM KIẾM) */}
       {search.trim() && (searchScope === 'all' || searchScope === 'youtube') && (

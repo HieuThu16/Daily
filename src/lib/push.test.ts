@@ -23,6 +23,7 @@ function stubServiceWorker(now: unknown, ready: unknown, readyDelay = 0) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.stubEnv('VITE_VAPID_PUBLIC_KEY', 'test-key')
   vi.stubGlobal('Notification', { permission: 'granted' })
   vi.stubGlobal('PushManager', function () {})
   vi.stubGlobal('window', { PushManager: function () {} })

@@ -446,7 +446,7 @@ export function AddYoutubeModal({
   const currentCatIcon = currentCatObj?.icon || '🏷️'
 
   /** Render menu dropdown chọn thể loại */
-  const renderCategoryDropdown = (isOpen: boolean, onCloseDropdown: () => void) => {
+  const renderCategoryDropdown = (isOpen: boolean) => {
     if (!isOpen) return null
     return (
       <div
@@ -643,7 +643,7 @@ export function AddYoutubeModal({
                     }}
                   />
                 </button>
-                {renderCategoryDropdown(categoryPickerOpenPaste, () => setCategoryPickerOpenPaste(false))}
+                {renderCategoryDropdown(categoryPickerOpenPaste)}
               </div>
             </div>
 
@@ -796,7 +796,7 @@ export function AddYoutubeModal({
                     }}
                   />
                 </button>
-                {renderCategoryDropdown(categoryPickerOpen, () => setCategoryPickerOpen(false))}
+                {renderCategoryDropdown(categoryPickerOpen)}
               </div>
             </div>
 

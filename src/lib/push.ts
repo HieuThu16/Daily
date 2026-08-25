@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
 
 export const pushSupported = () =>
-  typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && Boolean(VAPID_PUBLIC_KEY)
+  typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && Boolean(import.meta.env.VITE_VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY)
 
 /**
  * base64url của VAPID → ArrayBuffer, dạng PushManager nhận.

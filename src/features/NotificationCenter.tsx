@@ -190,7 +190,7 @@ export function NotificationCenter() {
     const timer = setTimeout(() => {
       updateScrollState()
       const activeEl = tabsRef.current?.querySelector<HTMLElement>('.inbox-tab.is-active')
-      activeEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+      activeEl?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' })
     }, 60)
     window.addEventListener('resize', updateScrollState)
     return () => {
