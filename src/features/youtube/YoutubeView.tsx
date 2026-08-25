@@ -36,16 +36,16 @@ import { OfflineVideoModal } from './OfflineVideoModal'
 import '../tvshow/tvShow.css'
 
 
-// Danh sách các hạng mục kênh mặc định
-export const DEFAULT_YOUTUBE_CATEGORIES = [
-  { id: 'ALL', label: 'Tất cả', icon: '🎬' },
-  { id: 'REVIEW', label: 'Review phim', icon: '🍿' },
-  { id: 'TVSHOW', label: 'TV Shows', icon: '📺' },
-  { id: 'STUDY', label: 'Học tập & Tri thức', icon: '📚' },
-  { id: 'TECH', label: 'Công nghệ & Khoa học', icon: '💡' },
-  { id: 'ENTERTAINMENT', label: 'Giải trí & Vlogs', icon: '🎭' },
-  { id: 'OTHER', label: 'Khác', icon: '📦' },
+// Danh sách các hạng mục kênh mặc định ban đầu
+export const INITIAL_YOUTUBE_CATEGORIES: CustomCategoryItem[] = [
+  { id: 'cat_review', label: 'Review phim', icon: '🍿' },
+  { id: 'cat_tvshow', label: 'TV Shows', icon: '📺' },
+  { id: 'cat_study', label: 'Học tập & Tri thức', icon: '📚' },
+  { id: 'cat_tech', label: 'Công nghệ & Khoa học', icon: '💡' },
+  { id: 'cat_entertainment', label: 'Giải trí & Vlogs', icon: '🎭' },
+  { id: 'cat_other', label: 'Khác', icon: '📦' },
 ]
+export const DEFAULT_YOUTUBE_CATEGORIES = INITIAL_YOUTUBE_CATEGORIES
 
 export type CustomCategoryItem = { id: string; label: string; icon: string }
 export type ChannelCategoryMap = Record<string, string>
@@ -304,11 +304,15 @@ export function YoutubeView() {
     let alive = true
     void Promise.all([
       getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}),
-      getRemoteAppSetting<CustomCategoryItem[]>('youtube_custom_categories', []),
+      getRemoteAppSetting<CustomCategoryItem[]>('youtube_custom_categories', INITIAL_YOUTUBE_CATEGORIES),
     ]).then(([map, customList]) => {
       if (alive) {
         if (map) setChannelCategoryMap(map)
-        if (Array.isArray(customList)) setCustomCategories(customList)
+        if (Array.isArray(customList) && customList.length > 0) {
+          setCustomCategories(customList)
+        } else {
+          setCustomCategories(INITIAL_YOUTUBE_CATEGORIES)
+        }
       }
     })
     return () => { alive = false }
@@ -318,8 +322,7 @@ export function YoutubeView() {
   const handleAddCustomCategory = async (label: string, icon = '🏷️'): Promise<string | undefined> => {
     const trimmed = label.trim()
     if (!trimmed) return undefined
-    const allKnown = [...DEFAULT_YOUTUBE_CATEGORIES, ...customCategories]
-    const exists = allKnown.some((c) => c.label.toLowerCase() === trimmed.toLowerCase())
+    const exists = customCategories.some((c) => c.label.toLowerCase() === trimmed.toLowerCase())
     if (exists) {
       showToast(`Thể loại "${trimmed}" đã có sẵn`, 'info')
       return trimmed
@@ -670,9 +673,6 @@ export function YoutubeView() {
   const categoryTabStats = useMemo(() => {
     const counts: Record<string, { channels: number; videos: number }> = {}
     
-    DEFAULT_YOUTUBE_CATEGORIES.forEach((cat) => {
-      counts[cat.label] = { channels: 0, videos: 0 }
-    })
     customCategories.forEach((cat) => {
       counts[cat.label] = { channels: 0, videos: 0 }
     })
@@ -698,16 +698,6 @@ export function YoutubeView() {
       },
     ]
 
-    DEFAULT_YOUTUBE_CATEGORIES.filter((c) => c.id !== 'ALL').forEach((c) => {
-      const stat = categoryTabStats[c.label] || { channels: 0, videos: 0 }
-      tabs.push({
-        id: c.label,
-        label: c.label,
-        icon: c.icon,
-        count: stat.videos || stat.channels,
-      })
-    })
-
     customCategories.forEach((c) => {
       const stat = categoryTabStats[c.label] || { channels: 0, videos: 0 }
       tabs.push({
@@ -718,10 +708,9 @@ export function YoutubeView() {
       })
     })
 
-    // Các thể loại tùy chỉnh khác nếu có
+    // Các thể loại khác đã gán vào kênh nhưng chưa có trong danh mục (nếu có)
     Object.keys(categoryTabStats).forEach((catName) => {
       if (
-        !DEFAULT_YOUTUBE_CATEGORIES.some((c) => c.label === catName) &&
         !customCategories.some((c) => c.label === catName) &&
         catName !== 'ALL'
       ) {
@@ -1477,10 +1466,7 @@ function ChannelCategoryModal({
     }
   }
 
-  const allItems = [
-    ...DEFAULT_YOUTUBE_CATEGORIES.filter((c) => c.id !== 'ALL').map((c) => ({ ...c, isCustom: false })),
-    ...customCategories.map((c) => ({ ...c, isCustom: true })),
-  ]
+  const allItems = customCategories.map((c) => ({ ...c, isCustom: true }))
 
   return (
     <Modal title={`🏷️ Thể loại cho kênh: ${channelName}`} onClose={onClose}>
