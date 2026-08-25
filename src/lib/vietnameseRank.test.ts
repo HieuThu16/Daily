@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchesKeyword, rankVietnameseFirst, vietnameseScore } from './vietnameseRank'
+import { filterVietnamese, isVietnameseText, matchesKeyword, rankVietnameseFirst, vietnameseScore } from './vietnameseRank'
 
 const v = (title: string, channelTitle = '') => ({ title, channelTitle })
 
@@ -81,5 +81,43 @@ describe('matchesKeyword', () => {
 
   it('tim duoc ca trong ten kenh', () => {
     expect(matchesKeyword('Tập 1', 'doraemon', 'Doraemon Việt Nam')).toBe(true)
+  })
+})
+
+describe('isVietnameseText', () => {
+  it('co dau la chac chan tieng Viet', () => {
+    expect(isVietnameseText('Món ngon mỗi ngày')).toBe(true)
+  })
+
+  it('caption TikTok chi co hashtag khong dau van nhan ra', () => {
+    expect(isVietnameseText('#xuhuong #reviewphim')).toBe(true)
+    expect(isVietnameseText('#monngon #nauan')).toBe(true)
+  })
+
+  it('tieng Anh / tieng Trung thi khong', () => {
+    expect(isVietnameseText('Funny cat compilation #fyp')).toBe(false)
+    expect(isVietnameseText('搞笑视频')).toBe(false)
+  })
+
+  it('chuoi rong thi khong', () => {
+    expect(isVietnameseText('')).toBe(false)
+  })
+})
+
+describe('filterVietnamese', () => {
+  it('LOC HAN clip khong phai tieng Viet, khong chi xep lai', () => {
+    const feed = [
+      { title: 'Funny cat #fyp' },
+      { title: 'Review phim hay cực đỉnh' },
+      { title: '搞笑视频' },
+      { title: '#xuhuong' },
+    ]
+    const out = filterVietnamese(feed, (v) => v.title)
+    expect(out).toHaveLength(2)
+    expect(out.every((v) => !v.title.includes('cat'))).toBe(true)
+  })
+
+  it('khong con gi thi tra mang rong chu khong vo', () => {
+    expect(filterVietnamese([{ title: 'hello' }], (v) => v.title)).toEqual([])
   })
 })

@@ -23,6 +23,39 @@ const VIET_HINTS = [
   'tap ', 'tập ', 'phan ', 'phần ', 'toan tap', 'trọn bộ', 'tron bo',
 ]
 
+/**
+ * Từ khoá Việt hay gặp trong caption TikTok, phần lớn gõ không dấu.
+ * Nhiều clip chỉ có mỗi hashtag "#xuhuong #reviewphim" chứ không có câu chữ nào.
+ */
+const VIET_TIKTOK_HINTS = [
+  'xuhuong', 'xu huong', 'xuhuongtiktok', 'reviewphim', 'phimhay', 'giaitri',
+  'anvat', 'nauan', 'monngon', 'tamtrang', 'nhaccover', 'hoctap', 'meovat',
+  'vietnam', 'viet nam', 'nguoiviet', 'saigon', 'hanoi',
+]
+
+/**
+ * Đoạn chữ này có phải tiếng Việt không.
+ *
+ * Dấu là bằng chứng chắc chắn nhất. Không dấu thì dựa vào từ khoá — caption
+ * TikTok rất hay chỉ có hashtag không dấu, bỏ qua thì lọc sạch cả feed.
+ */
+export function isVietnameseText(text: string): boolean {
+  if (!text) return false
+  if (VIET_LETTERS.test(text)) return true
+  const lower = stripDiacritics(text)
+  return [...VIET_HINTS, ...VIET_TIKTOK_HINTS].some((hint) => lower.includes(hint))
+}
+
+/**
+ * Giữ lại đúng những mục tiếng Việt.
+ *
+ * Lọc hẳn chứ không chỉ xếp lại: feed TikTok mà lẫn clip tiếng Trung, tiếng Anh
+ * thì "ưu tiên" bao nhiêu cũng vẫn phải lướt qua chúng.
+ */
+export function filterVietnamese<T>(items: T[], getText: (item: T) => string): T[] {
+  return items.filter((item) => isVietnameseText(getText(item)))
+}
+
 /** Điểm "Việt tính" của một mục: càng cao càng nên đứng trước. */
 export function vietnameseScore(title: string, channelTitle = ''): number {
   let score = 0

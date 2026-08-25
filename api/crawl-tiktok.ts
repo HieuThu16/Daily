@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { groupVideosIntoSeries } from '../src/lib/tiktokSeries.js'
+import { filterVietnamese } from '../src/lib/vietnameseRank.js'
 import { requireAuth } from './_auth.js'
 
 const execFileAsync = promisify(execFile)
@@ -222,7 +223,19 @@ async function crawlChannelDeep(username: string, budgetMs = 45_000) {
 }
 
 /** ponytail: seed hashtag cứng, chuyển sang bảng cấu hình nếu cần đổi mà không deploy. */
-const FEED_SEEDS = ['tag/xuhuong', 'tag/reviewphim', 'tag/phimhay', 'tag/giaitri', 'tag/anvat']
+/*
+ * Toàn hashtag Việt — đây là tầng quyết định "nguồn tiếng Việt", vì hai endpoint
+ * đề xuất của TikTok hay bị chặn và khi chạy được thì vẫn lẫn clip nước ngoài.
+ */
+const FEED_SEEDS = [
+  'tag/xuhuong', 'tag/reviewphim', 'tag/phimhay', 'tag/giaitri', 'tag/anvat',
+  'tag/monngon', 'tag/nauan', 'tag/hoctienganh', 'tag/tamtrang', 'tag/nhacviet',
+  'tag/vietnam', 'tag/meovat', 'tag/truyenhay',
+]
+
+/** Lọc chỉ giữ clip tiếng Việt; xét cả caption lẫn tên kênh. */
+const onlyVietnamese = <T extends { title?: string; creator_name?: string }>(items: T[]): T[] =>
+  filterVietnamese(items, (v) => `${v.title ?? ''} ${v.creator_name ?? ''}`)
 
 /** Bước 1: tải HTML profile → lấy hồ sơ creator (secUid, avatar, stats) + video nhúng sẵn trong trang. */
 async function fetchProfile(username: string): Promise<{ profile: CreatorProfile; entries: RawEntry[] }> {
@@ -435,7 +448,9 @@ export default async function handler(req: any, res: any) {
           const text = await r.text()
           if (!text) continue
           const data = JSON.parse(text)
-          const items = (data.itemList || data.body?.itemList || []).map(mapFeedItem).filter(Boolean)
+          const all = (data.itemList || data.body?.itemList || []).map(mapFeedItem).filter(Boolean)
+          const items = onlyVietnamese(all)
+          // Lọc xong mà rỗng thì rơi xuống tầng sau chứ KHÔNG trả clip nước ngoài.
           if (items.length > 0) {
             return res.status(200).json({ success: true, source: 'tiktok', videos: items })
           }
@@ -447,9 +462,13 @@ export default async function handler(req: any, res: any) {
       // Lớp 2: trang /embed công khai — không cần chữ ký
       const htmlItems: any[] = []
       const seenFeed = new Set<string>()
-      for (const seed of FEED_SEEDS) {
+      // Xáo thứ tự tag mỗi lần gọi để feed không lặp lại y hệt.
+      const seeds = [...FEED_SEEDS].sort(() => Math.random() - 0.5)
+      for (const seed of seeds) {
         try {
-          for (const v of await fetchFeedFromEmbed(seed)) {
+          // Lọc NGAY khi gom: dừng vòng lặp theo số clip Việt thật sự có,
+          // chứ đếm cả clip nước ngoài rồi mới lọc thì hay bị hụt.
+          for (const v of onlyVietnamese(await fetchFeedFromEmbed(seed))) {
             if (!seenFeed.has(v.video_id)) {
               seenFeed.add(v.video_id)
               htmlItems.push(v)
@@ -475,8 +494,9 @@ export default async function handler(req: any, res: any) {
           .select('*')
           .eq('platform', 'tiktok')
           .limit(300)
-        if (rows && rows.length > 0) {
-          const shuffled = [...rows]
+        const vietRows = onlyVietnamese((rows ?? []) as any[])
+        if (vietRows.length > 0) {
+          const shuffled = [...vietRows]
           for (let i = shuffled.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1))
             ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
