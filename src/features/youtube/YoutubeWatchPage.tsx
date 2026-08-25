@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Check, CheckCircle2, Circle, Download, ExternalLink,
+  ArrowLeft, Check, CheckCircle2, Circle, ExternalLink,
   PictureInPicture2, Share2, 
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -16,7 +16,6 @@ import {
   getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener,
 } from '../../lib/videoStatus'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
-import { OfflineVideoModal } from './OfflineVideoModal'
 import '../tvshow/tvShow.css'
 
 export type WatchVideo = {
@@ -113,10 +112,12 @@ export function YoutubeWatchPage() {
   const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [showDescription, setShowDescription] = useState(false)
-  const [offlineOpen, setOfflineOpen] = useState(false)
-  const [reloadKey, setReloadKey] = useState(0)
 
-  useVideoStatusListener(() => setReloadKey((k) => k + 1))
+  useVideoStatusListener(() => {
+    if (video) {
+      setWatchedSet(getVideoStatusSets(video.sourceType).watchedSet)
+    }
+  })
 
   useEffect(() => {
     let alive = true
@@ -174,7 +175,7 @@ export function YoutubeWatchPage() {
     return () => {
       alive = false
     }
-  }, [videoId, reloadKey, hint])
+  }, [videoId, hint])
 
   useYouTubeProgress(iframeEl, {
     videoId: video?.video_id ?? null,
@@ -319,10 +320,6 @@ export function YoutubeWatchPage() {
             <Share2 size={15} /> Chia sẻ
           </button>
 
-          <button type="button" className="yt-chip" onClick={() => setOfflineOpen(true)}>
-            <Download size={15} /> Video trong máy
-          </button>
-
           <a
             className="yt-chip"
             href={video.canonical_url || `https://www.youtube.com/watch?v=${video.video_id}`}
@@ -388,8 +385,6 @@ export function YoutubeWatchPage() {
           )
         })}
       </aside>
-
-      {offlineOpen && <OfflineVideoModal onClose={() => setOfflineOpen(false)} />}
     </div>
   )
 }

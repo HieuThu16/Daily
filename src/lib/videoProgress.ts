@@ -98,23 +98,27 @@ export async function saveVideoProgress(input: {
   channelName?: string
   thumbnail?: string | null
 }): Promise<VideoProgress> {
-  const percent = percentOf(input.seconds, input.durationSeconds)
+  const map = getLocalProgress()
+  const prev = map[input.videoId]
+  const duration = (input.durationSeconds && input.durationSeconds > 0)
+    ? input.durationSeconds
+    : (prev?.durationSeconds && prev.durationSeconds > 0 ? prev.durationSeconds : null)
+
+  const percent = percentOf(input.seconds, duration)
   const row: VideoProgress = {
     videoId: input.videoId,
-    title: input.title,
-    channelName: input.channelName,
-    thumbnail: input.thumbnail ?? null,
+    title: input.title ?? prev?.title,
+    channelName: input.channelName ?? prev?.channelName,
+    thumbnail: input.thumbnail ?? prev?.thumbnail ?? null,
     seconds: input.seconds,
-    durationSeconds: input.durationSeconds ?? null,
+    durationSeconds: duration,
     percent,
     status: statusOfPercent(percent),
     updatedAt: new Date().toISOString(),
   }
 
-  const map = getLocalProgress()
-  const prev = map[input.videoId]
   // Không tụt lùi: xem lại từ đầu vẫn giữ mốc xa nhất đã xem.
-  if (!prev || row.percent >= prev.percent) {
+  if (!prev || row.percent >= prev.percent || row.seconds >= prev.seconds) {
     map[input.videoId] = row
     writeLocal(map)
   }
