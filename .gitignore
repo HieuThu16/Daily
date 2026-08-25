@@ -23,6 +23,7 @@ data/school_life_manga.json
 
 # Du lieu cao ~380MB, khong commit. Nam ngoai src/ de Vite khoi theo doi.
 data/*.json
+src/data/*.json
 
 # Sinh tự động mỗi build — không commit để Vercel luôn có giá trị mới nhất
 public/version.json
