@@ -215,7 +215,10 @@ export function YoutubeView() {
   ])
 
   useVideoStatusListener(() => {
-    setReloadKey((k) => k + 1)
+    const tvSets = getVideoStatusSets('tvshow')
+    const reviewSets = getVideoStatusSets('review')
+    setWatchedSet(new Set([...tvSets.watchedSet, ...reviewSets.watchedSet]))
+    setInProgressSet(new Set([...tvSets.inProgressSet, ...reviewSets.inProgressSet]))
   })
 
   // Tải bản đồ Thể loại kênh từ Supabase
@@ -1271,8 +1274,13 @@ function ChannelDetailView({
     channelName: currentVideo?.creator_name ?? undefined,
     thumbnail: currentVideo?.thumbnail,
   })
-  const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube-nocookie.com/embed/${currentVideo.video_id}` : '')
-  const embedSrc = embedBase ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1` : ''
+  const start = Math.floor(progressMap[currentVideo?.video_id]?.seconds ?? 0)
+  const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube.com/embed/${currentVideo.video_id}` : '')
+  const embedSrc = embedBase
+    ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
+        start > 3 ? `&start=${start}` : ''
+      }`
+    : ''
 
   return (
     <div className="tv-detail">
@@ -1516,8 +1524,11 @@ function YoutubeVideoCard({
     thumbnail: video.thumbnail,
   })
 
+  const start = Math.floor(progress?.seconds ?? progressMap[video.video_id]?.seconds ?? 0)
   const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
-  const src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1`
+  const src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
+    start > 3 ? `&start=${start}` : ''
+  }`
   const percent = progress?.percent ?? (watched ? 100 : 0)
   const meta = [video.creator_name || 'Kênh YouTube', timeAgo(video.published_at)].filter(Boolean).join(' · ')
 

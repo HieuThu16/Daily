@@ -200,16 +200,54 @@ export function useYouTubeProgress(
   const videoRef = useRef(video)
   videoRef.current = video
 
+  const currentTimeRef = useRef(0)
+  const durationRef = useRef<number | null>(null)
+
   useEffect(() => {
-    if (!player || !video.videoId) return
+    const handleMessage = (e: MessageEvent) => {
+      try {
+        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
+        if (data && data.event === 'infoDelivery' && data.info) {
+          if (typeof data.info.currentTime === 'number') {
+            currentTimeRef.current = data.info.currentTime
+          }
+          if (typeof data.info.duration === 'number' && data.info.duration > 0) {
+            durationRef.current = data.info.duration
+          }
+        }
+      } catch {
+        /* Ignore non-JSON messages */
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  useEffect(() => {
+    if (!video.videoId) return
 
     const flush = () => {
       const p = playerRef.current
       const current = videoRef.current
-      if (!p?.getCurrentTime || !current.videoId) return
-      const seconds = Number(p.getCurrentTime()) || 0
-      const duration = Number(p.getDuration?.()) || null
-      if (seconds < 5) return // bấm nhầm rồi thoát thì không tính là đang xem
+      if (!current.videoId) return
+
+      let seconds = currentTimeRef.current
+      let duration = durationRef.current
+
+      if (p && typeof p.getCurrentTime === 'function') {
+        try {
+          const s = Number(p.getCurrentTime())
+          if (s > 0) seconds = s
+        } catch {}
+      }
+      if (p && typeof p.getDuration === 'function') {
+        try {
+          const d = Number(p.getDuration())
+          if (d > 0) duration = d
+        } catch {}
+      }
+
+      if (seconds < 3) return // bấm nhầm rồi thoát thì không tính là đang xem
       void saveVideoProgress({
         videoId: current.videoId,
         seconds,
@@ -220,7 +258,7 @@ export function useYouTubeProgress(
       })
     }
 
-    const timer = setInterval(flush, 15000)
+    const timer = setInterval(flush, 10000)
     const onHidden = () => {
       if (document.visibilityState === 'hidden') flush()
     }
@@ -235,7 +273,7 @@ export function useYouTubeProgress(
       window.removeEventListener('pagehide', flush)
       window.removeEventListener('blur', flush)
     }
-  }, [player, video.videoId])
+  }, [video.videoId])
 
   return player
 }

@@ -192,7 +192,7 @@ export function YoutubeWatchPage() {
     const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
     const start = Math.floor(progressMap[video.video_id]?.seconds ?? 0)
     return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
-      start > 5 ? `&start=${start}` : ''
+      start > 3 ? `&start=${start}` : ''
     }`
     // Chỉ dựng lại src khi đổi video, không dựng theo tiến độ đang chạy.
     // eslint-disable-next-line react-hooks/exhaustive-deps
