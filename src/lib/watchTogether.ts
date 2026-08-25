@@ -3,13 +3,12 @@ import { supabase } from './supabase'
 
 export type WatchKind = 'VIDEO' | 'MUSIC' | 'MANGA' | 'BOOK' | 'OTHER'
 
-export type WatchGroup = { id: string; name: string; owner_id: string }
-
 export type WatchShare = {
   id: string
-  group_id: string
   sender_id: string
   sender_email: string | null
+  recipient_id: string | null
+  recipient_email: string | null
   kind: WatchKind
   ref_id: string
   title: string
@@ -31,7 +30,18 @@ export type WatchItem = {
   url?: string | null
 }
 
-/** Những mục mình đã gửi lên xem chung — để khỏi gọi mạng khi chưa gửi gì. */
+/** Một người trong danh bạ app, kèm tên do CHÍNH MÌNH đặt (nếu đã đặt). */
+export type WatchPerson = {
+  id: string
+  email: string
+  /** Tên hiện ra: tên mình tự đặt > tên tài khoản > phần trước @ của email. */
+  label: string
+  /** Tên mình tự đặt; null nghĩa là chưa đặt. */
+  customName: string | null
+  avatarUrl: string | null
+}
+
+/** Những mục mình đã gửi đi — để khỏi gọi mạng cập nhật tiến độ khi chưa gửi gì. */
 const SHARED_KEY = 'daily_watch_shared_refs'
 
 function sharedRefs(): Set<string> {
@@ -52,62 +62,81 @@ function rememberRef(key: string) {
   }
 }
 
-export async function listMyGroups(): Promise<WatchGroup[]> {
+/** Tên rơi về phần trước @ khi không có gì khác để hiện. */
+export const emailLabel = (email: string | null | undefined) => (email ?? '').split('@')[0] || 'ai đó'
+
+/**
+ * Danh bạ để chọn người nhận: mọi tài khoản trong app (public.profiles),
+ * ghép với tên mình tự đặt trong watch_contacts. Bỏ chính mình ra.
+ */
+export async function listPeople(): Promise<WatchPerson[]> {
   if (!supabase) return []
-  const { data } = await supabase.from('watch_groups').select('id, name, owner_id').order('created_at')
-  if (data && data.length) return data
-  return await autoGroupFromPartners()
+  const { data: auth } = await supabase.auth.getUser()
+  const me = auth?.user?.id
+
+  const [profileRes, contactRes] = await Promise.all([
+    supabase.from('profiles').select('id, email, name, avatar_url').order('name'),
+    supabase.from('watch_contacts').select('email, display_name').is('deleted_at', null),
+  ])
+
+  const named = new Map<string, string>()
+  for (const c of contactRes.data ?? []) named.set(String(c.email).toLowerCase(), c.display_name)
+
+  type Row = { id: string; email: string | null; name: string | null; avatar_url: string | null }
+  return ((profileRes.data ?? []) as Row[])
+    .filter((p) => p.id !== me && p.email)
+    .map((p) => {
+      const custom = named.get(p.email!.toLowerCase()) ?? null
+      return {
+        id: p.id,
+        email: p.email!,
+        customName: custom,
+        label: custom || p.name || emailLabel(p.email),
+        avatarUrl: p.avatar_url,
+      }
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
 }
 
-/** Chưa có nhóm nào mà đã ghép đôi (shared_partners) thì dựng sẵn một nhóm cho hai đứa. */
-async function autoGroupFromPartners(): Promise<WatchGroup[]> {
-  const { data: partners } = await supabase!.from('shared_partners').select('partner_email')
-  const emails = (partners ?? []).map((p: any) => p.partner_email).filter(Boolean)
-  if (!emails.length) return []
-  const group = await createGroup('Hai đứa mình')
-  if (!group) return []
-  await supabase!
-    .from('watch_group_members')
-    .insert(emails.map((email: string) => ({ group_id: group.id, email })))
-  return [group]
+/** Đặt (hoặc đổi) tên cho một Gmail. Tên rỗng nghĩa là gỡ tên tự đặt. */
+export async function saveContactName(rawEmail: string, name: string): Promise<void> {
+  if (!supabase) return
+  // Bảng ràng buộc email phải là chữ thường (xem migration) để ON CONFLICT khớp index.
+  const email = rawEmail.trim().toLowerCase()
+  const trimmed = name.trim()
+  if (!trimmed) {
+    const res = await supabase.from('watch_contacts').delete().eq('email', email)
+    if (res.error) throw new Error(res.error.message)
+    return
+  }
+  const res = await supabase
+    .from('watch_contacts')
+    .upsert(
+      { email, display_name: trimmed, updated_at: new Date().toISOString() },
+      { onConflict: 'owner_id,email' },
+    )
+  if (res.error) throw new Error(res.error.message)
 }
 
-export async function createGroup(name: string): Promise<WatchGroup | null> {
-  if (!supabase) return null
-  const { data, error } = await supabase.from('watch_groups').insert({ name }).select('id, name, owner_id').single()
-  if (error) throw error
-  return data
+/** Lọc danh bạ theo ô tìm kiếm. Tách riêng để test được mà không cần mạng. */
+export function filterPeople(people: WatchPerson[], query: string): WatchPerson[] {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return people
+  return people.filter((p) => `${p.label} ${p.email}`.toLowerCase().includes(needle))
 }
 
-export async function deleteGroup(groupId: string): Promise<void> {
-  await supabase?.from('watch_groups').delete().eq('id', groupId)
-}
-
-export async function listMembers(groupId: string): Promise<Array<{ id: string; email: string }>> {
-  if (!supabase) return []
-  const { data } = await supabase.from('watch_group_members').select('id, email').eq('group_id', groupId)
-  return data ?? []
-}
-
-export async function addMember(groupId: string, email: string): Promise<void> {
-  const { error } = (await supabase?.from('watch_group_members').insert({ group_id: groupId, email: email.trim() })) ?? {}
-  if (error) throw error
-}
-
-export async function removeMember(memberId: string): Promise<void> {
-  await supabase?.from('watch_group_members').delete().eq('id', memberId)
-}
-
-/** Gửi một mục lên xem chung cho các nhóm đã chọn. */
-export async function shareToGroups(groupIds: string[], item: WatchItem): Promise<number> {
-  if (!supabase || groupIds.length === 0) return 0
+/** Gửi một mục cho những người đã chọn. Gửi lại lần nữa thì cập nhật, không đẻ bản sao. */
+export async function shareToPeople(people: WatchPerson[], item: WatchItem): Promise<number> {
+  if (!supabase || people.length === 0) return 0
   const { data } = await supabase.auth.getUser()
   const user = data?.user
   if (!user) return 0
-  const rows = groupIds.map((gid) => ({
-    group_id: gid,
+
+  const rows = people.map((p) => ({
     sender_id: user.id,
     sender_email: user.email ?? null,
+    recipient_id: p.id,
+    recipient_email: p.email,
     kind: item.kind,
     ref_id: item.refId,
     title: item.title,
@@ -116,15 +145,26 @@ export async function shareToGroups(groupIds: string[], item: WatchItem): Promis
     url: item.url ?? null,
     updated_at: new Date().toISOString(),
   }))
+
   const { error } = await supabase
     .from('watch_shares')
-    .upsert(rows, { onConflict: 'group_id,sender_id,kind,ref_id' })
-  if (error) throw error
+    .upsert(rows, { onConflict: 'sender_id,recipient_id,kind,ref_id' })
+  if (error) throw new Error(error.message)
+
   rememberRef(`${item.kind}:${item.refId}`)
   return rows.length
 }
 
-/** Cập nhật tiến độ của chính mình cho mọi nhóm đã gửi — nhóm thấy realtime. */
+/** Gỡ một mục mình đã gửi. */
+export async function unshare(shareId: string): Promise<void> {
+  const res = await supabase?.from('watch_shares').delete().eq('id', shareId)
+  if (res?.error) throw new Error(res.error.message)
+}
+
+/**
+ * Cập nhật tiến độ của chính mình cho MỌI người mình đã gửi mục này —
+ * họ thấy chạy realtime.
+ */
 export async function updateMyShareProgress(
   kind: WatchKind,
   refId: string,
@@ -150,21 +190,33 @@ export async function updateMyShareProgress(
   }
 }
 
-export function useMyGroups() {
-  const [groups, setGroups] = useState<WatchGroup[]>([])
+export function usePeople() {
+  const [people, setPeople] = useState<WatchPerson[]>([])
   const [loading, setLoading] = useState(true)
   const reload = useCallback(() => {
     setLoading(true)
-    void listMyGroups()
-      .then(setGroups)
-      .catch(() => setGroups([]))
+    void listPeople()
+      .then(setPeople)
+      .catch(() => setPeople([]))
       .finally(() => setLoading(false))
   }, [])
   useEffect(reload, [reload])
-  return { groups, loading, reload }
+  return { people, loading, reload }
 }
 
-/** Danh sách mục xem chung của mọi nhóm mình ở trong, tiến độ cập nhật realtime. */
+/** Ai đang đăng nhập — để tách "người ta gửi cho mình" và "mình gửi đi". */
+export function useMyUserId() {
+  const [id, setId] = useState<string | null>(null)
+  useEffect(() => {
+    void supabase?.auth.getUser().then(({ data }) => setId(data?.user?.id ?? null))
+  }, [])
+  return id
+}
+
+/**
+ * Mọi mục xem chung liên quan tới mình: người khác gửi cho mình, và mình gửi đi.
+ * RLS đã lọc sẵn nên `select *` chỉ trả về đúng phần của mình.
+ */
 export function useWatchFeed() {
   const [shares, setShares] = useState<WatchShare[]>([])
   const [loading, setLoading] = useState(true)
@@ -176,7 +228,7 @@ export function useWatchFeed() {
       .select('*')
       .order('updated_at', { ascending: false })
       .limit(200)
-    setShares(data ?? [])
+    setShares((data ?? []) as WatchShare[])
     setLoading(false)
   }, [])
 

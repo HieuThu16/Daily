@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -49,6 +49,7 @@ const TikTokPage = lazy(() => import('./features/tiktok/TikTokPage').then((m) =>
 const NutritionPage = lazy(() => import('./features/NutritionPage').then((m) => ({ default: m.NutritionPage })))
 const UsageStatsPage = lazy(() => import('./features/UsageStatsPage').then((m) => ({ default: m.UsageStatsPage })))
 const PeoplePage = lazy(() => import('./features/people/PeoplePage').then((m) => ({ default: m.PeoplePage })))
+const WatchTogetherPage = lazy(() => import('./features/watch/WatchTogetherPage').then((m) => ({ default: m.WatchTogetherPage })))
 const BookReaderPage = lazy(() => import('./features/library/BookReaderPage').then((m) => ({ default: m.BookReaderPage })))
 const QuotesPage = lazy(() => import('./features/library/QuotesPage').then((m) => ({ default: m.QuotesPage })))
 const MoneyPage = lazy(() => import('./features/MoneyPage').then((m) => ({ default: m.MoneyPage })))
@@ -87,6 +88,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
+  { id: 'watch', label: 'Xem chung', icon: MonitorPlay, colorClass: 'icon-box-purple' },
   { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
   { id: 'usage', label: 'Thống kê', icon: BarChart3, colorClass: 'icon-box-cyan' },
   { id: 'settings', label: 'Cài đặt', icon: Settings, colorClass: 'icon-box-slate' },
@@ -279,7 +281,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     { title: 'Giải trí & Video', ids: ['youtube', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
-    { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people'] as Tab[] },
+    { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people', 'watch'] as Tab[] },
     { title: 'Hệ thống', ids: ['usage', 'settings'] as Tab[] },
   ], [])
 
@@ -621,6 +623,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/english" element={<EnglishPage />} />
                       <Route path="/knowledge" element={<KnowledgePage />} />
                       <Route path="/people" element={<PeoplePage />} />
+                      <Route path="/watch" element={<WatchTogetherPage />} />
                       <Route path="/library" element={<Navigate to="/books" replace />} />
                       <Route path="/nutrition" element={<NutritionPage />} />
                       <Route path="/money" element={<MoneyPage />} />

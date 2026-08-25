@@ -11,11 +11,10 @@ import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
 import { PersonJournal } from './PersonJournal'
 import { PersonSpending } from './PersonSpending'
-import { WatchTogetherTab } from '../watch/WatchTogetherTab'
 import { CoupleLocationTab } from './CoupleLocationTab'
 import type { NewOccasion } from './usePeopleData'
 
-type DetailTab = 'location' | 'shared' | 'events' | 'info' | 'occasions' | 'journal'
+type DetailTab = 'location' | 'events' | 'info' | 'occasions' | 'journal'
 
 type Props = {
   person: Person
@@ -46,7 +45,6 @@ export function PersonDetail({
   const availableTabs = [
     ...(person.is_partner ? [
       { key: 'location' as const, label: 'Vị trí' },
-      { key: 'shared' as const, label: 'Xem chung' },
     ] : []),
     { key: 'events' as const, label: 'Kỷ niệm' },
     { key: 'info' as const, label: 'Thông tin' },
@@ -185,7 +183,6 @@ export function PersonDetail({
         <CoupleLocationTab partnerPerson={person} />
       )}
 
-      {tab === 'shared' && <WatchTogetherTab />}
 
       {tab === 'info' && (
         <>

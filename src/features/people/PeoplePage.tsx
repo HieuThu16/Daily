@@ -13,7 +13,6 @@ import { DualCalendarDate } from './DualCalendarDate'
 import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
-import { WatchTogetherTab } from '../watch/WatchTogetherTab'
 import { CoupleLocationTab } from './CoupleLocationTab'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
 
@@ -46,7 +45,7 @@ export function PeoplePage() {
   } = usePeopleData()
 
   const partnerPerson = useMemo(() => people.find((p) => p.is_partner) || null, [people])
-  const [mainTab, setMainTab] = useState<'LOCATION' | 'SHARED' | 'OCCASIONS' | 'PEOPLE'>('LOCATION')
+  const [mainTab, setMainTab] = useState<'LOCATION' | 'OCCASIONS' | 'PEOPLE'>('LOCATION')
   const [selected, setSelected] = useState<Person | null>(null)
 
 
@@ -241,30 +240,6 @@ export function PeoplePage() {
           </button>
         )}
 
-        {partnerPerson && (
-          <button
-            type="button"
-            onClick={() => setMainTab('SHARED')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '9px 8px',
-              borderRadius: '12px',
-              border: 'none',
-              background: mainTab === 'SHARED' ? 'linear-gradient(135deg, #ec4899, #be123c)' : 'transparent',
-              color: mainTab === 'SHARED' ? '#ffffff' : 'var(--text-muted)',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <HeartHandshake size={15} /> Xem chung
-          </button>
-        )}
-
         <button
           type="button"
           onClick={() => setMainTab('OCCASIONS')}
@@ -276,8 +251,8 @@ export function PeoplePage() {
             padding: '9px 8px',
             borderRadius: '12px',
             border: 'none',
-            background: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
-            color: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? '#ffffff' : 'var(--text-muted)',
+            background: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
+            color: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? '#ffffff' : 'var(--text-muted)',
             fontWeight: 800,
             fontSize: '0.82rem',
             cursor: 'pointer',
@@ -291,8 +266,8 @@ export function PeoplePage() {
                 fontSize: '0.68rem',
                 padding: '1px 5px',
                 borderRadius: '10px',
-                background: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
-                color: (mainTab === 'OCCASIONS' || ((mainTab === 'SHARED' || mainTab === 'LOCATION') && !partnerPerson)) ? '#fff' : '#f43f5e',
+                background: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
+                color: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? '#fff' : '#f43f5e',
                 fontWeight: 700,
               }}
             >
@@ -342,7 +317,6 @@ export function PeoplePage() {
       )}
 
       {/* TAB 2: XEM CHUNG TRỰC TIẾP (KHI ĐÃ KẾT NỐI PHÒNG CHUNG) */}
-      {mainTab === 'SHARED' && <WatchTogetherTab />}
 
       {/* TAB 3: KỶ NIỆM */}
       {(mainTab === 'OCCASIONS' || (mainTab === 'LOCATION' && !partnerPerson)) && (
