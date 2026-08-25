@@ -336,6 +336,52 @@ export function YoutubeView() {
     return trimmed
   }
 
+  // Sửa thể loại tùy chỉnh (Tên, icon) và cập nhật luôn các kênh đang dùng thể loại cũ
+  const handleUpdateCustomCategory = async (catId: string, newLabel: string, newIcon = '🏷️'): Promise<string | undefined> => {
+    const trimmed = newLabel.trim()
+    if (!trimmed) return undefined
+    const target = customCategories.find((c) => c.id === catId)
+    if (!target) return undefined
+
+    const oldLabel = target.label
+    const updatedCategories = customCategories.map((c) => (c.id === catId ? { ...c, label: trimmed, icon: newIcon || '🏷️' } : c))
+    setCustomCategories(updatedCategories)
+    await saveAppSetting('youtube_custom_categories', updatedCategories)
+
+    // Nếu tên thay đổi, cập nhật luôn các kênh đang dùng thể loại cũ sang tên mới
+    if (oldLabel !== trimmed) {
+      const updatedMap: ChannelCategoryMap = {}
+      let hasChange = false
+      Object.entries(channelCategoryMap).forEach(([key, val]) => {
+        if (val === oldLabel) {
+          updatedMap[key] = trimmed
+          hasChange = true
+        } else {
+          updatedMap[key] = val
+        }
+      })
+
+      if (hasChange) {
+        setChannelCategoryMap(updatedMap)
+        setChannels((prev) =>
+          prev.map((c) => (c.category === oldLabel ? { ...c, category: trimmed } : c))
+        )
+        if (selectedChannel && selectedChannel.category === oldLabel) {
+          setSelectedChannel({ ...selectedChannel, category: trimmed })
+        }
+        await saveAppSetting('youtube_channel_categories', updatedMap)
+      }
+
+      // Cập nhật tab đang chọn nếu trùng tên cũ
+      if (activeCategoryTab === oldLabel) {
+        setActiveCategoryTab(trimmed)
+      }
+    }
+
+    showToast(`Đã cập nhật thể loại "${trimmed}"`, 'success')
+    return trimmed
+  }
+
   // Xóa thể loại tùy chỉnh
   const handleDeleteCustomCategory = async (catId: string) => {
     const target = customCategories.find((c) => c.id === catId)
@@ -771,6 +817,7 @@ export function YoutubeView() {
         }}
         customCategories={customCategories}
         onAddCustomCategory={handleAddCustomCategory}
+        onUpdateCustomCategory={handleUpdateCustomCategory}
         onDeleteCustomCategory={handleDeleteCustomCategory}
       />
     )
@@ -1340,6 +1387,7 @@ export function YoutubeView() {
             void handleChangeChannelCategory(key, newCat)
           }}
           onAddCustomCategory={handleAddCustomCategory}
+          onUpdateCustomCategory={handleUpdateCustomCategory}
           onDeleteCustomCategory={handleDeleteCustomCategory}
           onClose={() => setEditingChannelCategory(null)}
         />
@@ -1356,6 +1404,8 @@ export function YoutubeView() {
               setShowAddCategoryModal(false)
             }
           }}
+          onUpdateCustomCategory={handleUpdateCustomCategory}
+          onDeleteCustomCategory={handleDeleteCustomCategory}
           onClose={() => setShowAddCategoryModal(false)}
         />
       )}
@@ -1372,6 +1422,7 @@ function ChannelCategoryModal({
   customCategories,
   onSelectCategory,
   onAddCustomCategory,
+  onUpdateCustomCategory,
   onDeleteCustomCategory,
   onClose,
 }: {
@@ -1380,22 +1431,46 @@ function ChannelCategoryModal({
   customCategories: CustomCategoryItem[]
   onSelectCategory: (category: string) => void
   onAddCustomCategory: (label: string, icon?: string) => Promise<string | undefined>
+  onUpdateCustomCategory: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
   onDeleteCustomCategory: (id: string) => Promise<void>
   onClose: () => void
 }) {
+  const [editingCat, setEditingCat] = useState<CustomCategoryItem | null>(null)
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [selectedEmoji, setSelectedEmoji] = useState('🏷️')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const startEdit = (cat: CustomCategoryItem) => {
+    setEditingCat(cat)
+    setNewCategoryInput(cat.label)
+    setSelectedEmoji(cat.icon || '🏷️')
+  }
+
+  const cancelEdit = () => {
+    setEditingCat(null)
+    setNewCategoryInput('')
+    setSelectedEmoji('🏷️')
+  }
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newCategoryInput.trim() || isSubmitting) return
     setIsSubmitting(true)
     try {
-      const created = await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
-      if (created) {
-        onSelectCategory(created)
-        setNewCategoryInput('')
+      if (editingCat) {
+        const updated = await onUpdateCustomCategory(editingCat.id, newCategoryInput.trim(), selectedEmoji)
+        if (updated) {
+          if (currentCategory === editingCat.label) {
+            onSelectCategory(updated)
+          }
+          cancelEdit()
+        }
+      } else {
+        const created = await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
+        if (created) {
+          onSelectCategory(created)
+          setNewCategoryInput('')
+        }
       }
     } finally {
       setIsSubmitting(false)
@@ -1410,11 +1485,46 @@ function ChannelCategoryModal({
   return (
     <Modal title={`🏷️ Thể loại cho kênh: ${channelName}`} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* KHU VỰC TẠO THỂ LOẠI MỚI - ĐẶT NGAY TRÊN ĐẦU */}
-        <div style={{ background: 'var(--bg-subtle, rgba(59, 130, 246, 0.05))', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={15} style={{ color: 'var(--primary)' }} />
-            <span>➕ Tạo thể loại mới (Lưu Supabase):</span>
+        {/* KHU VỰC TẠO HOẶC SỬA THỂ LOẠI - ĐẶT NGAY TRÊN ĐẦU */}
+        <div style={{
+          background: editingCat ? 'rgba(168, 85, 247, 0.08)' : 'var(--bg-subtle, rgba(59, 130, 246, 0.05))',
+          padding: '12px 14px',
+          borderRadius: 14,
+          border: `1px solid ${editingCat ? 'rgba(168, 85, 247, 0.35)' : 'rgba(59, 130, 246, 0.2)'}`,
+          transition: 'all 0.2s ease',
+        }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {editingCat ? (
+                <>
+                  <Edit3 size={15} style={{ color: 'var(--purple, #a855f7)' }} />
+                  <span>✏️ Chỉnh sửa thể loại: <strong>{editingCat.label}</strong></span>
+                </>
+              ) : (
+                <>
+                  <Plus size={15} style={{ color: 'var(--primary)' }} />
+                  <span>➕ Tạo thể loại mới (Lưu Supabase):</span>
+                </>
+              )}
+            </div>
+            {editingCat && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: '2px 6px',
+                  borderRadius: 6,
+                }}
+              >
+                ✕ Hủy sửa
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 6 }}>
@@ -1426,8 +1536,8 @@ function ChannelCategoryModal({
                 style={{
                   padding: '4px 7px',
                   borderRadius: 8,
-                  border: `1px solid ${selectedEmoji === emoji ? 'var(--primary)' : 'var(--card-border)'}`,
-                  background: selectedEmoji === emoji ? 'rgba(59, 130, 246, 0.18)' : 'var(--card-bg)',
+                  border: `1px solid ${selectedEmoji === emoji ? (editingCat ? '#a855f7' : 'var(--primary)') : 'var(--card-border)'}`,
+                  background: selectedEmoji === emoji ? (editingCat ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.18)') : 'var(--card-bg)',
                   fontSize: '0.9rem',
                   cursor: 'pointer',
                   flexShrink: 0,
@@ -1438,7 +1548,7 @@ function ChannelCategoryModal({
             ))}
           </div>
 
-          <form onSubmit={handleCreate} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <form onSubmit={handleFormSubmit} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <input
               type="text"
               placeholder="Nhập tên thể loại (vd: Sách nói, Âm nhạc, Nấu ăn...)"
@@ -1462,7 +1572,7 @@ function ChannelCategoryModal({
                 padding: '8px 14px',
                 borderRadius: 10,
                 border: 'none',
-                background: newCategoryInput.trim() ? 'var(--primary)' : 'var(--card-border)',
+                background: newCategoryInput.trim() ? (editingCat ? '#9333ea' : 'var(--primary)') : 'var(--card-border)',
                 color: '#fff',
                 fontWeight: 800,
                 fontSize: '0.82rem',
@@ -1473,7 +1583,15 @@ function ChannelCategoryModal({
                 whiteSpace: 'nowrap',
               }}
             >
-              <Plus size={14} /> Thêm & Chọn
+              {editingCat ? (
+                <>
+                  <Edit3 size={14} /> Lưu thay đổi
+                </>
+              ) : (
+                <>
+                  <Plus size={14} /> Thêm & Chọn
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -1487,6 +1605,7 @@ function ChannelCategoryModal({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 260, overflowY: 'auto', padding: 2 }}>
             {allItems.map((cat) => {
               const isSelected = currentCategory === cat.label
+              const isBeingEdited = editingCat?.id === cat.id
               return (
                 <div
                   key={cat.id}
@@ -1494,8 +1613,8 @@ function ChannelCategoryModal({
                     display: 'flex',
                     alignItems: 'center',
                     borderRadius: 12,
-                    border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
-                    background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
+                    border: `1px solid ${isBeingEdited ? '#a855f7' : isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
+                    background: isBeingEdited ? 'rgba(168, 85, 247, 0.12)' : isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
                     transition: 'all 0.15s ease',
                     overflow: 'hidden',
                   }}
@@ -1505,7 +1624,7 @@ function ChannelCategoryModal({
                     onClick={() => onSelectCategory(cat.label)}
                     style={{
                       flex: 1,
-                      padding: '10px 12px',
+                      padding: '10px 10px',
                       border: 'none',
                       background: 'transparent',
                       color: isSelected ? 'var(--primary)' : 'var(--text-main)',
@@ -1525,35 +1644,68 @@ function ChannelCategoryModal({
                   </button>
 
                   {cat.isCustom && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void onDeleteCustomCategory(cat.id)
-                      }}
-                      title="Xoá thể loại này"
-                      style={{
-                        padding: '8px',
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        opacity: 0.6,
-                        transition: 'opacity 0.15s, color 0.15s',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.opacity = '1'
-                        e.currentTarget.style.color = 'var(--rose, #ef4444)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.opacity = '0.6'
-                        e.currentTarget.style.color = 'var(--text-muted)'
-                      }}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', paddingRight: 4 }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          startEdit(cat as CustomCategoryItem)
+                        }}
+                        title="Sửa tên hoặc icon thể loại này"
+                        style={{
+                          padding: '6px 5px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--primary)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          opacity: 0.75,
+                          transition: 'opacity 0.15s, transform 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.opacity = '1'
+                          e.currentTarget.style.transform = 'scale(1.2)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.opacity = '0.75'
+                          e.currentTarget.style.transform = 'scale(1)'
+                        }}
+                      >
+                        <Edit3 size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (editingCat?.id === cat.id) cancelEdit()
+                          void onDeleteCustomCategory(cat.id)
+                        }}
+                        title="Xoá thể loại này"
+                        style={{
+                          padding: '6px 5px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          opacity: 0.6,
+                          transition: 'opacity 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.opacity = '1'
+                          e.currentTarget.style.color = 'var(--rose, #ef4444)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.opacity = '0.6'
+                          e.currentTarget.style.color = 'var(--text-muted)'
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   )}
                 </div>
               )
@@ -1567,34 +1719,59 @@ function ChannelCategoryModal({
 
 /** Modal thêm nhanh thể loại mới từ thanh Tab */
 function QuickAddCategoryModal({
+  customCategories = [],
   onAddCustomCategory,
+  onUpdateCustomCategory,
+  onDeleteCustomCategory,
   onClose,
 }: {
   customCategories?: CustomCategoryItem[]
   onAddCustomCategory: (label: string, icon?: string) => Promise<void>
+  onUpdateCustomCategory?: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
+  onDeleteCustomCategory?: (id: string) => Promise<void>
   onClose: () => void
 }) {
+  const [editingCat, setEditingCat] = useState<CustomCategoryItem | null>(null)
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [selectedEmoji, setSelectedEmoji] = useState('🏷️')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const startEdit = (cat: CustomCategoryItem) => {
+    setEditingCat(cat)
+    setNewCategoryInput(cat.label)
+    setSelectedEmoji(cat.icon || '🏷️')
+  }
+
+  const cancelEdit = () => {
+    setEditingCat(null)
+    setNewCategoryInput('')
+    setSelectedEmoji('🏷️')
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newCategoryInput.trim() || isSubmitting) return
     setIsSubmitting(true)
     try {
-      await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
-      setNewCategoryInput('')
+      if (editingCat && onUpdateCustomCategory) {
+        await onUpdateCustomCategory(editingCat.id, newCategoryInput.trim(), selectedEmoji)
+        cancelEdit()
+      } else {
+        await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
+        setNewCategoryInput('')
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <Modal title="✨ Thêm thể loại mới (Lưu Supabase)" onClose={onClose}>
+    <Modal title={editingCat ? `✏️ Sửa thể loại: ${editingCat.label}` : "✨ Quản lý & Thêm thể loại mới"} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
-          Tạo thể loại mới để phân nhóm video và kênh YouTube. Thể loại này sẽ được lưu trên Supabase và xuất hiện trên thanh Tab của bạn:
+          {editingCat
+            ? 'Thay đổi biểu tượng hoặc đổi tên thể loại. Dữ liệu sẽ được tự động đồng bộ lên Supabase:'
+            : 'Tạo thể loại mới để phân nhóm video và kênh YouTube. Thể loại này sẽ được lưu trên Supabase và xuất hiện trên thanh Tab của bạn:'}
         </p>
 
         <div>
@@ -1610,8 +1787,8 @@ function QuickAddCategoryModal({
                 style={{
                   padding: '6px 10px',
                   borderRadius: 8,
-                  border: `1px solid ${selectedEmoji === emoji ? 'var(--primary)' : 'var(--card-border)'}`,
-                  background: selectedEmoji === emoji ? 'rgba(59, 130, 246, 0.18)' : 'var(--card-bg)',
+                  border: `1px solid ${selectedEmoji === emoji ? (editingCat ? '#a855f7' : 'var(--primary)') : 'var(--card-border)'}`,
+                  background: selectedEmoji === emoji ? (editingCat ? 'rgba(168, 85, 247, 0.18)' : 'rgba(59, 130, 246, 0.18)') : 'var(--card-bg)',
                   fontSize: '1.05rem',
                   cursor: 'pointer',
                 }}
@@ -1650,22 +1827,41 @@ function QuickAddCategoryModal({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: '9px 16px',
-                borderRadius: 10,
-                border: '1px solid var(--card-border)',
-                background: 'var(--card-bg)',
-                color: 'var(--text-main)',
-                fontSize: '0.82rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Hủy
-            </button>
+            {editingCat ? (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                ✕ Hủy sửa
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Đóng
+              </button>
+            )}
             <button
               type="submit"
               disabled={!newCategoryInput.trim() || isSubmitting}
@@ -1673,7 +1869,7 @@ function QuickAddCategoryModal({
                 padding: '9px 20px',
                 borderRadius: 10,
                 border: 'none',
-                background: newCategoryInput.trim() ? 'var(--primary)' : 'var(--card-border)',
+                background: newCategoryInput.trim() ? (editingCat ? '#9333ea' : 'var(--primary)') : 'var(--card-border)',
                 color: '#fff',
                 fontSize: '0.84rem',
                 fontWeight: 800,
@@ -1683,10 +1879,95 @@ function QuickAddCategoryModal({
                 gap: 6,
               }}
             >
-              <Plus size={15} /> Tạo thể loại
+              {editingCat ? (
+                <>
+                  <Edit3 size={15} /> Lưu sửa đổi
+                </>
+              ) : (
+                <>
+                  <Plus size={15} /> Tạo thể loại
+                </>
+              )}
             </button>
           </div>
         </form>
+
+        {/* DANH SÁCH CÁC THỂ LOẠI TỰ TẠO (ĐỂ SỬA HOẶC XOÁ) */}
+        {customCategories.length > 0 && (
+          <div style={{ marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--card-border)' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+              Danh sách thể loại bạn đã tạo ({customCategories.length}):
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
+              {customCategories.map((cat) => (
+                <div
+                  key={cat.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    background: editingCat?.id === cat.id ? 'rgba(168, 85, 247, 0.15)' : 'var(--card-bg)',
+                    border: `1px solid ${editingCat?.id === cat.id ? '#a855f7' : 'var(--card-border)'}`,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(cat)}
+                      title="Sửa thể loại này"
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        color: 'var(--primary)',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                      }}
+                    >
+                      <Edit3 size={11} /> Sửa
+                    </button>
+                    {onDeleteCustomCategory && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingCat?.id === cat.id) cancelEdit()
+                          void onDeleteCustomCategory(cat.id)
+                        }}
+                        title="Xoá thể loại này"
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          border: '1px solid rgba(244, 63, 94, 0.3)',
+                          background: 'rgba(244, 63, 94, 0.1)',
+                          color: 'var(--rose, #f43f5e)',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                        }}
+                      >
+                        <Trash2 size={11} /> Xóa
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -1699,6 +1980,7 @@ function ChannelDetailView({
   onChangeCategory,
   customCategories,
   onAddCustomCategory,
+  onUpdateCustomCategory,
   onDeleteCustomCategory,
 }: {
   channel: ChannelItem
@@ -1706,6 +1988,7 @@ function ChannelDetailView({
   onChangeCategory: (cat: string) => void
   customCategories: CustomCategoryItem[]
   onAddCustomCategory: (label: string, icon?: string) => Promise<string | undefined>
+  onUpdateCustomCategory: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
   onDeleteCustomCategory: (id: string) => Promise<void>
 }) {
   useHideHeader(true)
@@ -1953,6 +2236,7 @@ function ChannelDetailView({
             setShowCategoryPicker(false)
           }}
           onAddCustomCategory={onAddCustomCategory}
+          onUpdateCustomCategory={onUpdateCustomCategory}
           onDeleteCustomCategory={onDeleteCustomCategory}
           onClose={() => setShowCategoryPicker(false)}
         />
