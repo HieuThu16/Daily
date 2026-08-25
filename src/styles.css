@@ -11793,3 +11793,35 @@ svg.lucide-library {
 .kn-lesson-q-head, .kn-lesson-a { display: flex; align-items: center; gap: 6px; }
 .kn-lesson-a { margin-left: 14px; }
 .kn-lesson-q-head input, .kn-lesson-a input { flex: 1; min-width: 0; }
+
+/* ---- Trang Thống kê: khu "Hoạt động" ---- */
+
+/* Tiêu đề tách hai khu: thời gian xem/đọc và hoạt động các tab. */
+.usage-group-title {
+  margin: 18px 0 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Hàng số phụ dưới dòng tóm tắt; cuộn ngang khi hẹp thay vì xuống dòng lộn xộn. */
+.usage-metrics {
+  display: flex;
+  gap: 14px;
+  padding: 2px 10px 8px 30px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.usage-metrics::-webkit-scrollbar { display: none; }
+
+.usage-metric {
+  display: inline-flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+.usage-metric b { font-size: 0.86rem; font-weight: 800; color: var(--text-main); }

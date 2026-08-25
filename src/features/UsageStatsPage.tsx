@@ -5,6 +5,8 @@ import { getMangaReadingLogs } from '../lib/mangaReadingLog'
 import { getBookReadingSessionLogs } from '../lib/bookReadingLog'
 import { getLocalProgress } from '../lib/videoProgress'
 import { buildUsageStats, formatMinutes, sinceDate, type UsageSectionKey } from '../lib/usageStats'
+import { buildActivityStats, type ActivityKey, type ActivitySection } from '../lib/activityStats'
+import { useActivityData } from './useActivityData'
 
 const RANGES = [
   { days: 7, label: '7 ngày' },
@@ -20,6 +22,20 @@ const SECTION_COLOR: Record<UsageSectionKey, string> = {
   books: '#6366f1',
 }
 
+/** Màu cho từng mục ở khu Hoạt động; giữ cùng bảng màu với icon tab. */
+const ACTIVITY_COLOR: Record<ActivityKey, string> = {
+  habit: '#f59e0b',
+  daily: '#10b981',
+  tasks: '#8b5cf6',
+  money: '#f59e0b',
+  nutrition: '#22c55e',
+  knowledge: '#a855f7',
+  english: '#06b6d4',
+  library: '#6366f1',
+  people: '#0ea5e9',
+  watch: '#8b5cf6',
+}
+
 const ITEMS_PER_STEP = 8
 
 /** Xem mình đổ thời gian vào mục nào, video nào, truyện nào. */
@@ -27,6 +43,13 @@ export function UsageStatsPage() {
   const [days, setDays] = useState(30)
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['youtube']))
   const [shownCount, setShownCount] = useState<Record<string, number>>({})
+
+  const { data: activityData, loading: activityLoading } = useActivityData()
+
+  const activity = useMemo(
+    () => (activityData ? buildActivityStats({ ...activityData, from: sinceDate(days), days }) : []),
+    [activityData, days],
+  )
 
   const stats = useMemo(
     () =>
@@ -55,7 +78,7 @@ export function UsageStatsPage() {
           <span className="usage-head-icon"><BarChart3 size={18} /></span>
           <div>
             <h2>Thống kê</h2>
-            <p>Thời gian đã bỏ vào từng mục của app</p>
+            <p>Thời gian và hoạt động ở mọi tab</p>
           </div>
         </div>
         <div className="usage-ranges">
@@ -78,6 +101,7 @@ export function UsageStatsPage() {
         <span>trong {days === 0 ? 'toàn bộ lịch sử' : `${days} ngày qua`}</span>
       </div>
 
+      <h3 className="usage-group-title">Thời gian xem &amp; đọc</h3>
       {stats.sections.length === 0 ? (
         <p className="usage-empty">Chưa có dữ liệu nào trong khoảng này. Xem video hoặc đọc truyện rồi quay lại.</p>
       ) : (
@@ -150,9 +174,76 @@ export function UsageStatsPage() {
         </div>
       )}
 
+      <h3 className="usage-group-title">Hoạt động</h3>
+      {activityLoading ? (
+        <p className="usage-empty">Đang tải số liệu các tab…</p>
+      ) : activity.length === 0 ? (
+        <p className="usage-empty">Chưa có hoạt động nào trong khoảng này.</p>
+      ) : (
+        <div className="usage-sections">
+          {activity.map((section) => (
+            <ActivityCard
+              key={section.key}
+              section={section}
+              open={openSections.has(section.key)}
+              onToggle={() => toggle(section.key)}
+            />
+          ))}
+        </div>
+      )}
+
       <p className="usage-note">
         Số liệu lấy từ nhật ký xem/đọc lưu trên máy này. Xem trên máy khác thì thống kê ở đó tính riêng.
       </p>
     </div>
+  )
+}
+
+/** Một mục ở khu Hoạt động: tóm tắt luôn hiện, chi tiết bấm mới bung. */
+function ActivityCard({
+  section,
+  open,
+  onToggle,
+}: {
+  section: ActivitySection
+  open: boolean
+  onToggle: () => void
+}) {
+  const color = ACTIVITY_COLOR[section.key]
+  return (
+    <section className="usage-section">
+      <button type="button" className="usage-section-head" onClick={onToggle}>
+        {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        <span className="usage-dot" style={{ background: color }} />
+        <span className="usage-section-name">{section.label}</span>
+        <strong style={{ color, marginLeft: 'auto' }}>{section.headline}</strong>
+      </button>
+
+      {section.metrics.length > 0 && (
+        <div className="usage-metrics">
+          {section.metrics.map((m) => (
+            <span key={m.label} className="usage-metric">
+              <b>{m.value}</b>
+              {m.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && section.details.length > 0 && (
+        <ol className="usage-items">
+          {section.details.map((d, i) => (
+            <li key={d.key}>
+              <span className="usage-rank">{i + 1}</span>
+              <span className="usage-item-text">
+                <span className="usage-item-title" title={d.title}>{d.title}</span>
+                {d.subtitle && <span className="usage-item-sub">{d.subtitle}</span>}
+              </span>
+              <strong className="usage-item-minutes">{d.value}</strong>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }
