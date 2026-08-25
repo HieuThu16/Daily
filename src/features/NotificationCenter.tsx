@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronRight, Clock, Flame, Clapperboard, Sparkles, X } from 'lucide-react'
+import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronLeft, ChevronRight, Clock, Flame, Clapperboard, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useBackdropClose } from './shared'
 import { localDate } from '../lib/date'
@@ -169,6 +169,84 @@ export function NotificationCenter() {
     if (open && firstNonEmpty) setSection(firstNonEmpty)
   }, [open])
 
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+  const isDraggingRef = useRef(false)
+  const startXRef = useRef(0)
+  const scrollLeftRef = useRef(0)
+  const hasMovedRef = useRef(false)
+
+  const updateScrollState = useCallback(() => {
+    const el = tabsRef.current
+    if (!el) return
+    const maxScroll = el.scrollWidth - el.clientWidth
+    setCanScrollLeft(el.scrollLeft > 4)
+    setCanScrollRight(maxScroll > 4 && el.scrollLeft < maxScroll - 4)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(() => {
+      updateScrollState()
+      const activeEl = tabsRef.current?.querySelector<HTMLElement>('.inbox-tab.is-active')
+      activeEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    }, 60)
+    window.addEventListener('resize', updateScrollState)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', updateScrollState)
+    }
+  }, [open, section, updateScrollState])
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    const el = tabsRef.current
+    if (!el) return
+    const amount = direction === 'left' ? -160 : 160
+    el.scrollBy({ left: amount, behavior: 'smooth' })
+    setTimeout(updateScrollState, 220)
+  }
+
+  const handleTabsWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = tabsRef.current
+    if (!el) return
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) {
+      el.scrollLeft += e.deltaY * 0.9
+      updateScrollState()
+    }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = tabsRef.current
+    if (!el) return
+    isDraggingRef.current = true
+    startXRef.current = e.pageX - el.offsetLeft
+    scrollLeftRef.current = el.scrollLeft
+    hasMovedRef.current = false
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = tabsRef.current
+    if (!isDraggingRef.current || !el) return
+    const x = e.pageX - el.offsetLeft
+    const walk = (x - startXRef.current) * 1.2
+    if (Math.abs(walk) > 4) {
+      hasMovedRef.current = true
+      e.preventDefault()
+    }
+    el.scrollLeft = scrollLeftRef.current - walk
+    updateScrollState()
+  }
+
+  const handleMouseUpOrLeave = () => {
+    isDraggingRef.current = false
+  }
+
+  const handleTabClick = (id: Section) => {
+    if (hasMovedRef.current) return
+    setSection(id)
+  }
+
   const quickComplete = (e: React.MouseEvent, task: Todo) => {
     e.stopPropagation()
     setJustCompletedId(task.id)
@@ -235,21 +313,53 @@ export function NotificationCenter() {
                 </button>
               </div>
 
-              <div className="inbox-tabs" role="tablist">
-                {tabs.map(({ id, label, icon: Icon }) => (
+              <div className="inbox-tabs-wrapper">
+                {canScrollLeft && (
                   <button
-                    key={id}
                     type="button"
-                    role="tab"
-                    aria-selected={section === id}
-                    className={`inbox-tab ${section === id ? 'is-active' : ''}`}
-                    onClick={() => setSection(id)}
+                    className="inbox-tabs-nav-btn prev"
+                    onClick={() => scrollTabs('left')}
+                    aria-label="Cuộn sang trái"
                   >
-                    <Icon size={14} />
-                    <span>{label}</span>
-                    {counts[id] > 0 && <span className="inbox-tab-count">{counts[id]}</span>}
+                    <ChevronLeft size={15} />
                   </button>
-                ))}
+                )}
+                <div
+                  ref={tabsRef}
+                  className="inbox-tabs"
+                  role="tablist"
+                  onWheel={handleTabsWheel}
+                  onScroll={updateScrollState}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUpOrLeave}
+                  onMouseLeave={handleMouseUpOrLeave}
+                >
+                  {tabs.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={section === id}
+                      className={`inbox-tab ${section === id ? 'is-active' : ''}`}
+                      onClick={() => handleTabClick(id)}
+                    >
+                      <Icon size={14} />
+                      <span>{label}</span>
+                      {counts[id] > 0 && <span className="inbox-tab-count">{counts[id]}</span>}
+                    </button>
+                  ))}
+                </div>
+                {canScrollRight && (
+                  <button
+                    type="button"
+                    className="inbox-tabs-nav-btn next"
+                    onClick={() => scrollTabs('right')}
+                    aria-label="Cuộn sang phải"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                )}
               </div>
 
               <div className="task-bell-body">
