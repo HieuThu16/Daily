@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { localDate } from './date';
+import { getRemoteAppSetting, saveAppSetting } from './userAppSettings';
 import type { 
   PartnerLocation, 
   SavedPlace, 
@@ -57,6 +58,22 @@ export function setLocationSharingEnabled(enabled: boolean): void {
     localStorage.setItem(STORAGE_KEY_SHARING, String(enabled));
     window.dispatchEvent(new CustomEvent('daily_location_sharing_toggled', { detail: enabled }));
   } catch {}
+  // Đẩy lên Supabase ngầm để đổi máy vẫn giữ lựa chọn; hỏng thì vẫn còn bản local.
+  void saveAppSetting(STORAGE_KEY_SHARING, enabled);
+}
+
+/**
+ * Đọc lại lựa chọn từ Supabase.
+ *
+ * `isLocationSharingEnabled()` vẫn là bản đọc tức thì từ localStorage cho UI
+ * dựng ngay; hàm này chạy sau để bắt kịp lựa chọn đã đặt ở máy khác.
+ */
+export async function loadLocationSharingEnabled(): Promise<boolean> {
+  const value = await getRemoteAppSetting<boolean>(STORAGE_KEY_SHARING, isLocationSharingEnabled());
+  try {
+    localStorage.setItem(STORAGE_KEY_SHARING, String(value));
+  } catch {}
+  return value;
 }
 
 export async function getDeviceBattery(): Promise<{ batteryLevel?: number; isCharging?: boolean }> {

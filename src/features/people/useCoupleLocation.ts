@@ -18,6 +18,7 @@ import {
   getLocalTimelineLogs,
   cleanTimelineLogs,
   isLocationSharingEnabled,
+  loadLocationSharingEnabled,
   logTimelineEvent,
   reverseGeocode,
   savePlace,
@@ -80,6 +81,11 @@ export function useCoupleLocation(_partnerPersonName?: string, selectedDate: str
   const knownUser = isKimY(currentUserEmail) || isHieu(currentUserEmail);
   const myUserName = isKimY(currentUserEmail) ? 'Kim Ý' : 'Hiếu';
   const partnerUserName = isKimY(currentUserEmail) ? 'Hiếu' : 'Kim Ý';
+
+  // Lựa chọn chia sẻ vị trí lưu trên Supabase: bật ở máy khác thì máy này cũng theo.
+  useEffect(() => {
+    void loadLocationSharingEnabled().then(setIsSharing);
+  }, []);
 
   // Lấy thông tin user hiện tại
   useEffect(() => {

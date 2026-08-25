@@ -13,11 +13,14 @@ export async function getRemoteAppSetting<T>(key: string, defaultValue: T): Prom
   if (!supabase) return localVal
 
   try {
-    const { data, error } = await supabase
-      .from('user_app_settings')
-      .select('setting_value')
-      .eq('setting_key', key)
-      .maybeSingle()
+    // RLS đã lọc theo chủ, nhưng lọc luôn ở đây cho rõ ý và tránh maybeSingle()
+    // vỡ nếu còn sót dòng cũ dùng chung.
+    const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
+    const userId = userData?.user?.id ?? null
+
+    let query = supabase.from('user_app_settings').select('setting_value').eq('setting_key', key)
+    if (userId) query = query.eq('user_id', userId)
+    const { data, error } = await query.maybeSingle()
 
     if (!error && data?.setting_value !== undefined && data?.setting_value !== null) {
       const remoteVal = data.setting_value as T
@@ -49,7 +52,7 @@ export async function saveAppSetting<T>(key: string, value: T): Promise<void> {
         user_id: userId,
         setting_value: value as any,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'setting_key' })
+      }, { onConflict: 'user_id,setting_key' })
   } catch (err) {
     console.warn(`[saveAppSetting] Lỗi đẩy setting ${key} lên Supabase:`, err)
   }

@@ -9,7 +9,7 @@ import type { ChangelogEntry } from '../data/changelog'
 import { CHANGELOG, getUnseenLatest, markLatestSeen } from '../data/changelog'
 import { backupReminder, daysSinceBackup, exportBackup, getLastBackupAt, importBackup } from '../lib/backup'
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../lib/push'
-import { isLocationSharingEnabled, setLocationSharingEnabled } from '../lib/locationService'
+import { isLocationSharingEnabled, loadLocationSharingEnabled, setLocationSharingEnabled } from '../lib/locationService'
 import {
   describeLocation,
   describeNotification,
@@ -290,6 +290,8 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
     setNotifPerm(readNotificationPermission())
     setLocPerm(await readLocationPermission())
     void pushEnabled().then(setPushOn)
+    // Lựa chọn chia sẻ vị trí nằm trên Supabase, kéo về để đổi máy vẫn đúng.
+    void loadLocationSharingEnabled().then(setLocOn)
   }, [])
 
   useEffect(() => {
