@@ -187,10 +187,16 @@ export function YoutubeWatchPage() {
   const progress = progressMap[videoId]
   const watched = watchedSet.has(videoId) || progress?.status === 'COMPLETED'
 
+  // Chỉ lấy start time 1 lần khi bắt đầu tải video (không phụ thuộc vào tiến độ thay đổi liên tục)
+  const initialStartRef = useRef<Record<string, number>>({})
+  if (video?.video_id && initialStartRef.current[video.video_id] === undefined) {
+    initialStartRef.current[video.video_id] = Math.floor(progressMap[video.video_id]?.seconds ?? 0)
+  }
+  const start = video?.video_id ? (initialStartRef.current[video.video_id] ?? 0) : 0
+
   const embedSrc = useMemo(() => {
     if (!video) return ''
     const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
-    const start = Math.floor(progressMap[video.video_id]?.seconds ?? 0)
     return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
       start > 3 ? `&start=${start}` : ''
     }`

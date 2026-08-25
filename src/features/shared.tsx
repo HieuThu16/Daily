@@ -143,8 +143,9 @@ export function useIncrementalList(total: number, step = 48, resetKey: unknown =
   }, [visibleCount, total, step])
 
   const showMore = () => setVisibleCount((prev) => Math.min(prev + step, total))
+  const showAll = () => setVisibleCount(total)
 
-  return { visibleCount, sentinel, showMore, hasMore: visibleCount < total, remaining: Math.max(0, total - visibleCount) }
+  return { visibleCount, sentinel, showMore, showAll, hasMore: visibleCount < total, remaining: Math.max(0, total - visibleCount) }
 }
 
 /**

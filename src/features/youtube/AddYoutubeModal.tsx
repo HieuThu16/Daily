@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, Check, CheckCircle2, Loader2, Pause, Play, Save, Search } from 'lucide-react'
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Pause, Play, Plus, Save, Search, Tag } from 'lucide-react'
 import { Modal } from '../shared'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
@@ -7,6 +7,8 @@ import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
 import { matchesKeyword } from '../../lib/vietnameseRank'
 import { useToast } from '../ToastContext'
 import { apiFetch } from '../../lib/apiFetch'
+import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
+import { INITIAL_YOUTUBE_CATEGORIES, guessChannelCategory, type CustomCategoryItem } from './YoutubeView'
 
 export type YoutubeLinkKind = 'channel' | 'video' | 'invalid'
 
@@ -145,10 +147,14 @@ export function AddYoutubeModal({
   onClose,
   onSaved,
   initialUrl = '',
+  customCategories = INITIAL_YOUTUBE_CATEGORIES,
+  onAddCustomCategory,
 }: {
   onClose: () => void
-  onSaved: () => void
+  onSaved: (savedCategory?: string) => void
   initialUrl?: string
+  customCategories?: CustomCategoryItem[]
+  onAddCustomCategory?: (label: string, icon?: string) => Promise<string | undefined>
 }) {
   const { showToast } = useToast()
   const [text, setText] = useState(initialUrl)
@@ -167,7 +173,44 @@ export function AddYoutubeModal({
   const [error, setError] = useState('')
   const stopRef = useRef(false)
 
+  // Quản lý thể loại lưu
+  const [categories, setCategories] = useState<CustomCategoryItem[]>(() =>
+    customCategories && customCategories.length > 0 ? customCategories : INITIAL_YOUTUBE_CATEGORIES,
+  )
+  const [selectedCategory, setSelectedCategory] = useState<string>('Review phim')
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
+  const [categoryPickerOpenPaste, setCategoryPickerOpenPaste] = useState(false)
+  const [userPickedCategory, setUserPickedCategory] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatIcon] = useState('🏷️')
+  const [isAddingCategory, setIsAddingCategory] = useState(false)
+  const categoryDropdownRef = useRef<HTMLDivElement>(null)
+  const categoryDropdownRefPaste = useRef<HTMLDivElement>(null)
+
   const parsed = useMemo(() => classifyYoutubeInput(text), [text])
+
+  // Cập nhật danh sách thể loại từ props
+  useEffect(() => {
+    if (customCategories && customCategories.length > 0) {
+      setCategories(customCategories)
+    }
+  }, [customCategories])
+
+  // Đóng dropdown khi bấm ra ngoài
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setCategoryPickerOpen(false)
+      }
+      if (categoryDropdownRefPaste.current && !categoryDropdownRefPaste.current.contains(e.target as Node)) {
+        setCategoryPickerOpenPaste(false)
+      }
+    }
+    if (categoryPickerOpen || categoryPickerOpenPaste) {
+      document.addEventListener('mousedown', onClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [categoryPickerOpen, categoryPickerOpenPaste])
 
   // Link chia sẻ từ app khác: điền sẵn, khỏi phải dán tay.
   useEffect(() => {
@@ -190,6 +233,13 @@ export function AddYoutubeModal({
   const scanChannel = async (url: string) => {
     const { plan } = await post({ action: 'plan', creatorUrl: url })
     setActivePlan(plan)
+
+    // Tự động đoán thể loại theo tên kênh nếu người dùng chưa chọn thủ công
+    if (!userPickedCategory && plan.channelName) {
+      const guessed = guessChannelCategory(plan.channelName)
+      setSelectedCategory(guessed)
+    }
+
     let pages = 0
 
     for (let entryIndex = 0; entryIndex < plan.entries.length; entryIndex++) {
@@ -229,6 +279,12 @@ export function AddYoutubeModal({
   const loadPastedVideos = async () => {
     if (parsed.videos.length === 0) return
     const metas = await Promise.all(parsed.videos.map((v) => fetchYouTubeMeta(v.url)))
+
+    if (!userPickedCategory && metas[0]?.author) {
+      const guessed = guessChannelCategory(metas[0].author)
+      setSelectedCategory(guessed)
+    }
+
     const knownIds = new Set<string>()
     if (supabase) {
       const { data } = await supabase
@@ -295,6 +351,40 @@ export function AddYoutubeModal({
       return next
     })
 
+  const handleSelectCategory = (catName: string) => {
+    setSelectedCategory(catName)
+    setUserPickedCategory(true)
+    setCategoryPickerOpen(false)
+    setCategoryPickerOpenPaste(false)
+    showToast(`Đã chọn thể loại: ${catName}`, 'info')
+  }
+
+  const handleCreateCategory = async () => {
+    const trimmed = newCatName.trim()
+    if (!trimmed) return
+    let catLabel = trimmed
+    if (onAddCustomCategory) {
+      const res = await onAddCustomCategory(trimmed, newCatIcon)
+      if (res) catLabel = res
+    } else {
+      const newCat: CustomCategoryItem = {
+        id: `cat_${Date.now()}`,
+        label: trimmed,
+        icon: newCatIcon || '🏷️',
+      }
+      const updated = [...categories, newCat]
+      setCategories(updated)
+      await saveAppSetting('youtube_custom_categories', updated)
+    }
+    setSelectedCategory(catLabel)
+    setUserPickedCategory(true)
+    setNewCatName('')
+    setIsAddingCategory(false)
+    setCategoryPickerOpen(false)
+    setCategoryPickerOpenPaste(false)
+    showToast(`Đã thêm thể loại "${catLabel}"`, 'success')
+  }
+
   const handleSave = async () => {
     const chosen = discovered.filter((v) => selectedIds.has(v.videoId))
     if (chosen.length === 0) return
@@ -317,8 +407,32 @@ export function AddYoutubeModal({
         },
         { concurrency: 5, onProgress: (current, total) => setSavingProgress({ current, total }) },
       )
+
+      // Cập nhật thể loại cho kênh trong youtube_channel_categories
+      if (selectedCategory) {
+        try {
+          const currentMap = await getRemoteAppSetting<Record<string, string>>('youtube_channel_categories', {})
+          const updatedMap = { ...currentMap }
+          if (activePlan?.channelId) updatedMap[activePlan.channelId] = selectedCategory
+          if (activePlan?.channelName) updatedMap[activePlan.channelName] = selectedCategory
+          parsed.channels.forEach((url) => {
+            updatedMap[url] = selectedCategory
+          })
+          chosen.forEach((v) => {
+            if (v.creatorId) updatedMap[v.creatorId] = selectedCategory
+            if (v.channelName) updatedMap[v.channelName] = selectedCategory
+          })
+          if (chosen.some((v) => v.manual)) {
+            updatedMap['manual'] = selectedCategory
+          }
+          await saveAppSetting('youtube_channel_categories', updatedMap)
+        } catch (catErr) {
+          console.warn('[AddYoutubeModal] Lỗi lưu thể loại:', catErr)
+        }
+      }
+
       setState('saved')
-      onSaved()
+      onSaved(selectedCategory)
       setTimeout(onClose, 900)
     } catch (err: any) {
       showToast(`Lỗi khi lưu video: ${err?.message ?? err}`)
@@ -328,6 +442,145 @@ export function AddYoutubeModal({
 
   const freshCount = discovered.filter((v) => !v.isKnown).length
   const knownCount = discovered.length - freshCount
+  const currentCatObj = categories.find((c) => c.label === selectedCategory)
+  const currentCatIcon = currentCatObj?.icon || '🏷️'
+
+  /** Render menu dropdown chọn thể loại */
+  const renderCategoryDropdown = (isOpen: boolean, onCloseDropdown: () => void) => {
+    if (!isOpen) return null
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: 'calc(100% + 6px)',
+          zIndex: 100,
+          minWidth: 260,
+          maxWidth: 320,
+          background: 'var(--card-bg)',
+          border: '1px solid var(--card-border)',
+          borderRadius: 14,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
+          padding: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Chọn thể loại lưu
+          </span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{categories.length} mục</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, maxHeight: 180, overflowY: 'auto', paddingRight: 2 }}>
+          {categories.map((cat) => {
+            const isChosen = cat.label === selectedCategory
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => handleSelectCategory(cat.label)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 8px',
+                  borderRadius: 8,
+                  border: `1px solid ${isChosen ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: isChosen ? 'rgba(124, 58, 237, 0.12)' : 'var(--bg-main)',
+                  color: isChosen ? 'var(--primary)' : 'var(--text-main)',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  transition: 'all 0.12s ease',
+                }}
+              >
+                <span>{cat.icon || '🏷️'}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Thêm thể loại mới nhanh */}
+        {isAddingCategory ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--card-border)', paddingTop: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="text"
+                placeholder="Tên thể loại mới..."
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleCreateCategory()
+                  }
+                }}
+                autoFocus
+                style={{
+                  flex: 1,
+                  padding: '5px 8px',
+                  borderRadius: 6,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--bg-main)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.75rem',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void handleCreateCategory()}
+                disabled={!newCatName.trim()}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 6,
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Lưu
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsAddingCategory(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 5,
+              padding: '6px 8px',
+              borderRadius: 8,
+              border: '1px dashed var(--card-border)',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              fontSize: '0.73rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginTop: 2,
+            }}
+          >
+            <Plus size={12} />
+            <span>Thêm thể loại mới</span>
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <Modal
@@ -344,6 +597,55 @@ export function AddYoutubeModal({
               onChange={(e) => setText(e.target.value)}
               placeholder={'Dán link kênh hoặc link video, mỗi dòng một link:\nhttps://www.youtube.com/@web5ngay\nhttps://youtu.be/xxxxxxxxxxx'}
             />
+
+            {/* Chọn thể loại ngay tại màn hình dán link */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 12,
+                background: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 700 }}>
+                <Tag size={15} color="var(--primary)" />
+                <span>Thể loại lưu vào:</span>
+              </div>
+              <div style={{ position: 'relative' }} ref={categoryDropdownRefPaste}>
+                <button
+                  type="button"
+                  onClick={() => setCategoryPickerOpenPaste((v) => !v)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(124, 58, 237, 0.08)',
+                    border: '1px solid var(--primary)',
+                    color: 'var(--primary)',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>{currentCatIcon}</span>
+                  <span>{selectedCategory}</span>
+                  <ChevronDown
+                    size={14}
+                    style={{
+                      transform: categoryPickerOpenPaste ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.15s ease',
+                    }}
+                  />
+                </button>
+                {renderCategoryDropdown(categoryPickerOpenPaste, () => setCategoryPickerOpenPaste(false))}
+              </div>
+            </div>
 
             <label className="tv-keyword-field">
               <span className="tv-keyword-label">
@@ -439,6 +741,63 @@ export function AddYoutubeModal({
                   <div className="tv-sync-progress-fill running" style={{ width: `${activeJob ? activeJob.percent : 30}%` }} />
                 </div>
               )}
+            </div>
+
+            {/* Nút chọn thể loại khi quét / danh sách video */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 12,
+                background: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
+                marginTop: 6,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Tag size={14} color="var(--primary)" />
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>Thể loại lưu:</span>
+                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span>{currentCatIcon}</span>
+                  <span>{selectedCategory}</span>
+                </span>
+              </div>
+
+              <div style={{ position: 'relative' }} ref={categoryDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setCategoryPickerOpen((v) => !v)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(124, 58, 237, 0.1)',
+                    border: '1px solid var(--primary)',
+                    color: 'var(--primary)',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Bấm để đổi thể loại lưu cho các video này"
+                >
+                  <Tag size={12} />
+                  <span>Đổi thể loại</span>
+                  <ChevronDown
+                    size={13}
+                    style={{
+                      transform: categoryPickerOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.15s ease',
+                    }}
+                  />
+                </button>
+                {renderCategoryDropdown(categoryPickerOpen, () => setCategoryPickerOpen(false))}
+              </div>
             </div>
 
             {error && <div className="tv-hint tv-bad">{error}</div>}

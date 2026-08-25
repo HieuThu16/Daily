@@ -114,7 +114,7 @@ export function moveItem<T>(arr: T[], from: number, to: number): T[] {
 }
 
 /** Tự động đoán thể loại ban đầu của kênh dựa vào tên kênh hoặc nguồn gốc */
-function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'review'): string {
+export function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'review'): string {
   const lower = (name || '').toLowerCase()
   if (sourceTable === 'review' || lower.includes('review') || lower.includes('phim') || lower.includes('movie') || lower.includes('cinema')) {
     return 'Review phim'
@@ -438,8 +438,8 @@ export function YoutubeView() {
 
       // 2. Video tải theo trang từ cả 2 bảng
       const [tvVideosRes, revVideosRes, tvWatchedRes, revWatchedRes] = await Promise.all([
-        supabase?.from('tvshow_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(600),
-        supabase?.from('review_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(600),
+        supabase?.from('tvshow_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(3000),
+        supabase?.from('review_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(3000),
         supabase?.from('tvshow_watched').select('video_id'),
         supabase?.from('review_watched').select('video_id'),
       ])
@@ -1326,30 +1326,88 @@ export function YoutubeView() {
             </div>
           ) : (
             /* CHẾ ĐỘ XEM THEO DANH SÁCH VIDEO */
-            <div className="yt-grid">
-              {filteredSavedVideos.slice(0, videoList.visibleCount).map((video) => (
-                <YoutubeVideoCard
-                  key={video.id}
-                  video={video}
-                  watched={watchedSet.has(video.video_id)}
-                  inProgress={inProgressSet.has(video.video_id)}
-                  progress={progressMap[video.video_id]}
-                  playing={playingVideoId === video.video_id}
-                  onPlay={() => setPlayingVideoId(video.video_id)}
-                  onToggleWatched={() => void handleToggleWatched(video)}
-                  onOpen={() => navigate(`/youtube/watch/${video.video_id}`)}
-                  onPlayMini={() =>
-                    playInMini({
-                      videoId: video.video_id,
-                      title: video.title,
-                      channelName: video.creator_name,
-                      thumbnail: video.thumbnail,
-                      startSeconds: progressMap[video.video_id]?.seconds,
-                    })
-                  }
-                />
-              ))}
-            </div>
+            <>
+              <div className="yt-grid">
+                {filteredSavedVideos.slice(0, videoList.visibleCount).map((video) => (
+                  <YoutubeVideoCard
+                    key={video.id}
+                    video={video}
+                    watched={watchedSet.has(video.video_id)}
+                    inProgress={inProgressSet.has(video.video_id)}
+                    progress={progressMap[video.video_id]}
+                    playing={playingVideoId === video.video_id}
+                    onPlay={() => setPlayingVideoId(video.video_id)}
+                    onToggleWatched={() => void handleToggleWatched(video)}
+                    onOpen={() => navigate(`/youtube/watch/${video.video_id}`)}
+                    onPlayMini={() =>
+                      playInMini({
+                        videoId: video.video_id,
+                        title: video.title,
+                        channelName: video.creator_name,
+                        thumbnail: video.thumbnail,
+                        startSeconds: progressMap[video.video_id]?.seconds,
+                      })
+                    }
+                  />
+                ))}
+              </div>
+
+              {/* NÚT TẢI THÊM VIDEO */}
+              {videoList.hasMore ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '30px 0 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      className="tv-btn primary"
+                      onClick={videoList.showMore}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '11px 26px',
+                        borderRadius: 14,
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        boxShadow: '0 4px 14px rgba(124, 58, 237, 0.25)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <ChevronDown size={17} />
+                      <span>Tải thêm video ({videoList.remaining > 36 ? '+36 video' : `còn ${videoList.remaining}`})</span>
+                    </button>
+
+                    {videoList.remaining > 36 && (
+                      <button
+                        type="button"
+                        className="tv-btn"
+                        onClick={videoList.showAll}
+                        style={{
+                          padding: '11px 18px',
+                          borderRadius: 14,
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--card-border)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Hiện tất cả ({filteredSavedVideos.length})
+                      </button>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Đang hiển thị {Math.min(videoList.visibleCount, filteredSavedVideos.length)} trên tổng số {filteredSavedVideos.length} video
+                  </span>
+                </div>
+              ) : (
+                filteredSavedVideos.length > 36 && (
+                  <div style={{ textAlign: 'center', margin: '24px 0 16px', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600 }}>
+                    Đã hiển thị toàn bộ {filteredSavedVideos.length} video.
+                  </div>
+                )
+              )}
+              <div ref={videoList.sentinel} style={{ height: 20 }} />
+            </>
           )}
         </>
       )}
@@ -1360,8 +1418,10 @@ export function YoutubeView() {
       {addOpen && (
         <AddYoutubeModal
           initialUrl={sharedUrl}
+          customCategories={customCategories}
           onClose={() => setAddOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
+          onAddCustomCategory={handleAddCustomCategory}
         />
       )}
 
@@ -2049,13 +2109,24 @@ function ChannelDetailView({
     channelName: currentVideo?.creator_name ?? undefined,
     thumbnail: currentVideo?.thumbnail,
   })
-  const start = Math.floor(progressMap[currentVideo?.video_id]?.seconds ?? 0)
-  const embedBase = currentVideo?.embed_url || (currentVideo?.video_id ? `https://www.youtube.com/embed/${currentVideo.video_id}` : '')
-  const embedSrc = embedBase
-    ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
-        start > 3 ? `&start=${start}` : ''
-      }`
-    : ''
+  // Chỉ lấy start time 1 lần khi bắt đầu phát video (không phụ thuộc vào progressMap thay đổi liên tục)
+  const initialStartRef = useRef<Record<string, number>>({})
+  const vId = currentVideo?.video_id
+  if (vId && initialStartRef.current[vId] === undefined) {
+    initialStartRef.current[vId] = Math.floor(progressMap[vId]?.seconds ?? 0)
+  }
+  const start = vId ? (initialStartRef.current[vId] ?? 0) : 0
+
+  const embedSrc = useMemo(() => {
+    if (!currentVideo) return ''
+    const embedBase = currentVideo.embed_url || (currentVideo.video_id ? `https://www.youtube.com/embed/${currentVideo.video_id}` : '')
+    return embedBase
+      ? `${embedBase}${embedBase.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
+          start > 3 ? `&start=${start}` : ''
+        }`
+      : ''
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideo?.video_id, currentVideo?.embed_url])
 
   return (
     <div className="tv-detail">
@@ -2287,11 +2358,23 @@ function YoutubeVideoCard({
     thumbnail: video.thumbnail,
   })
 
-  const start = Math.floor(progress?.seconds ?? 0)
-  const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
-  const src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
-    start > 3 ? `&start=${start}` : ''
-  }`
+  // Lưu start time lúc bắt đầu bấm phát để iframe src không bị cập nhật liên tục làm giật video
+  const initialStartRef = useRef<number | null>(null)
+  if (playing && initialStartRef.current === null) {
+    initialStartRef.current = Math.floor(progress?.seconds ?? 0)
+  } else if (!playing && initialStartRef.current !== null) {
+    initialStartRef.current = null
+  }
+
+  const start = initialStartRef.current ?? 0
+  const src = useMemo(() => {
+    if (!playing) return ''
+    const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
+    return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
+      start > 3 ? `&start=${start}` : ''
+    }`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, video.video_id, video.embed_url])
   const percent = progress?.percent ?? (watched ? 100 : 0)
   const meta = [video.creator_name || 'Kênh YouTube', timeAgo(video.published_at)].filter(Boolean).join(' · ')
 

@@ -218,19 +218,23 @@ export function useYouTubeProgress(
     }
     window.addEventListener('message', handleMessage)
 
-    // Báo cho YouTube iframe biết parent đang lắng nghe
-    const pingTimer = setInterval(() => {
+    // Báo cho YouTube iframe biết parent đang lắng nghe (bắt tay ban đầu khi mount/iframe sẵn sàng)
+    const sendListening = () => {
       const el = getIframeEl()
       if (el?.contentWindow) {
         try {
           el.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*')
         } catch {}
       }
-    }, 2000)
+    }
+    sendListening()
+    const t1 = setTimeout(sendListening, 500)
+    const t2 = setTimeout(sendListening, 1500)
 
     return () => {
       window.removeEventListener('message', handleMessage)
-      clearInterval(pingTimer)
+      clearTimeout(t1)
+      clearTimeout(t2)
     }
   }, [getIframeEl])
 

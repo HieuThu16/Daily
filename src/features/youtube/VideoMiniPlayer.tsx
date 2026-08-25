@@ -55,10 +55,14 @@ export function VideoMiniPlayer() {
 
   if (!current) return null
 
-  const start = Math.max(0, Math.floor(current.startSeconds ?? 0))
-  const src =
-    `https://www.youtube.com/embed/${current.videoId}` +
-    `?autoplay=1&rel=0&enablejsapi=1&playsinline=1${start > 0 ? `&start=${start}` : ''}`
+  const src = useMemo(() => {
+    if (!current) return ''
+    const start = Math.max(0, Math.floor(current.startSeconds ?? 0))
+    return (
+      `https://www.youtube.com/embed/${current.videoId}` +
+      `?autoplay=1&rel=0&enablejsapi=1&playsinline=1${start > 0 ? `&start=${start}` : ''}`
+    )
+  }, [current?.videoId])
 
   return (
     <div className="yt-mini" role="complementary" aria-label="Video đang phát">
