@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, CheckCircle2, Circle, 
@@ -7,7 +7,7 @@ import {
   Check, 
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2, Info,
-  Plus, Trash2
+  Plus, Trash2, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
@@ -187,7 +187,80 @@ export function YoutubeView() {
       state: { title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail },
     })
   }
+
+  // Quản lý cuộn và vuốt kéo danh sách tab thể loại trên Desktop
   const tabsScrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+  const isDraggingRef = useRef(false)
+  const startXRef = useRef(0)
+  const scrollLeftRef = useRef(0)
+  const hasMovedRef = useRef(false)
+
+  const checkScroll = useCallback(() => {
+    const el = tabsScrollRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 6)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6)
+  }, [])
+
+  useEffect(() => {
+    const el = tabsScrollRef.current
+    if (!el) return
+    checkScroll()
+
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) {
+        e.preventDefault()
+        el.scrollLeft += e.deltaY * 0.9
+        checkScroll()
+      }
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    el.addEventListener('scroll', checkScroll, { passive: true })
+    window.addEventListener('resize', checkScroll)
+
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('scroll', checkScroll)
+      window.removeEventListener('resize', checkScroll)
+    }
+  }, [checkScroll, dynamicCategoryTabs.length])
+
+  const scrollTabs = (offset: number) => {
+    const el = tabsScrollRef.current
+    if (!el) return
+    el.scrollBy({ left: offset, behavior: 'smooth' })
+    setTimeout(checkScroll, 250)
+  }
+
+  const handleTabsMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = tabsScrollRef.current
+    if (!el) return
+    isDraggingRef.current = true
+    startXRef.current = e.pageX - el.offsetLeft
+    scrollLeftRef.current = el.scrollLeft
+    hasMovedRef.current = false
+  }
+
+  const handleTabsMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return
+    const el = tabsScrollRef.current
+    if (!el) return
+    e.preventDefault()
+    const x = e.pageX - el.offsetLeft
+    const walk = (x - startXRef.current) * 1.3
+    if (Math.abs(walk) > 4) {
+      hasMovedRef.current = true
+    }
+    el.scrollLeft = scrollLeftRef.current - walk
+    checkScroll()
+  }
+
+  const handleTabsMouseUpOrLeave = () => {
+    isDraggingRef.current = false
+  }
 
   /** Cào video chưa có ở TẤT CẢ kênh đã thêm, rồi đưa video mới sang Xem chung. */
   const handleSyncAllChannels = async () => {
@@ -704,9 +777,27 @@ export function YoutubeView() {
 
   return (
     <section className="tv-page">
-      {/* 1. THANH TAB HẠNG MỤC TRƯỢT NGANG (Kéo từ trái qua phải) */}
+      {/* 1. THANH TAB HẠNG MỤC TRƯỢT NGANG (Kéo từ trái qua phải & vuốt chuột trên desktop) */}
       <div className="yt-category-tabs-container">
-        <div className="yt-category-tabs-track" ref={tabsScrollRef}>
+        {canScrollLeft && (
+          <button
+            type="button"
+            className="yt-category-scroll-btn left"
+            onClick={() => scrollTabs(-220)}
+            aria-label="Cuộn sang trái"
+          >
+            <ChevronLeft size={16} />
+          </button>
+        )}
+
+        <div
+          className="yt-category-tabs-track"
+          ref={tabsScrollRef}
+          onMouseDown={handleTabsMouseDown}
+          onMouseMove={handleTabsMouseMove}
+          onMouseUp={handleTabsMouseUpOrLeave}
+          onMouseLeave={handleTabsMouseUpOrLeave}
+        >
           {dynamicCategoryTabs.map((tab) => {
             const isActive = activeCategoryTab === tab.id
             return (
@@ -714,7 +805,11 @@ export function YoutubeView() {
                 key={tab.id}
                 type="button"
                 className={`yt-category-tab ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveCategoryTab(tab.id)}
+                onClick={(e) => {
+                  if (hasMovedRef.current) return
+                  setActiveCategoryTab(tab.id)
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+                }}
               >
                 <span className="yt-tab-icon">{tab.icon}</span>
                 <span className="yt-tab-label">{tab.label}</span>
@@ -723,6 +818,17 @@ export function YoutubeView() {
             )
           })}
         </div>
+
+        {canScrollRight && (
+          <button
+            type="button"
+            className="yt-category-scroll-btn right"
+            onClick={() => scrollTabs(220)}
+            aria-label="Cuộn sang phải"
+          >
+            <ChevronRight size={16} />
+          </button>
+        )}
       </div>
 
       {/* 2. THANH TÌM KIẾM THÔNG MINH (TÌM VIDEO ĐÃ CÓ & CHƯA CÓ TRÊN YOUTUBE) */}

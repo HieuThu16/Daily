@@ -2078,6 +2078,8 @@
   background: var(--bg-main);
   padding: 6px 0 10px;
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
 }
 
 .yt-category-tabs-track {
@@ -2089,11 +2091,53 @@
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
-  padding: 2px 2px;
+  padding: 4px 4px;
+  width: 100%;
+  cursor: grab;
+  user-select: none;
+}
+
+.yt-category-tabs-track:active {
+  cursor: grabbing;
 }
 
 .yt-category-tabs-track::-webkit-scrollbar {
   display: none; /* Chrome, Safari */
+}
+
+.yt-category-scroll-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+  width: 32px;
+  height: 32px;
+  border-radius: 99px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+
+.yt-category-scroll-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.yt-category-scroll-btn.left {
+  left: 0;
+}
+
+.yt-category-scroll-btn.right {
+  right: 0;
 }
 
 .yt-category-tab {
