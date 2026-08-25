@@ -6,13 +6,18 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { BL_SHARD_COUNT, blShardOf } from '../../src/features/manga/blShards.ts'
 
-const SRC = 'public/data/bl_manga.json'
+const SRC = existsSync('src/data/bl_manga.json')
+  ? 'src/data/bl_manga.json'
+  : existsSync('public/data/bl_manga.json')
+  ? 'public/data/bl_manga.json'
+  : existsSync('data/bl_manga.json')
+  ? 'data/bl_manga.json'
+  : null
+
 const OUT_DIR = 'public/data/bl'
 
-// Chạy tự động trước mỗi lần build. Trên máy build của Vercel không có file gốc
-// (đã loại trong .vercelignore vì quá 100MB) — lúc đó dùng luôn mảnh đã sinh sẵn.
-if (!existsSync(SRC)) {
-  console.log(`Không thấy ${SRC} — giữ nguyên ${OUT_DIR} đã có sẵn.`)
+if (!SRC) {
+  console.log(`Không thấy file nguồn bl_manga.json — giữ nguyên ${OUT_DIR} đã có sẵn.`)
   process.exit(0)
 }
 

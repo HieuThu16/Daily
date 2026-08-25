@@ -5,11 +5,17 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 const SOURCES = [
+  'src/data/romance_manga.json',
   'public/data/romance_manga.json',
+  'src/data/shoujo_manga.json',
   'public/data/shoujo_manga.json',
+  'src/data/sliceoflife_manga.json',
   'public/data/sliceoflife_manga.json',
+  'src/data/shounenai_manga.json',
   'public/data/shounenai_manga.json',
+  'src/data/dammy_manga.json',
   'public/data/dammy_manga.json',
+  'src/data/school_life_manga.json',
   'public/data/school_life_manga.json',
   'dist/data/school_life_manga.json',
 ]
