@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
 import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
 import './tiktok.css'
-import { apiFetch } from '../../lib/apiFetch'
+import { apiPost } from '../../lib/apiFetch'
 
 export type FeedVideo = {
   video_id: string
@@ -111,13 +111,7 @@ export function TikTokPage() {
 
   /** Feed "Dành cho bạn": xin video đề xuất ngẫu nhiên từ TikTok qua API của mình. */
   const fetchForYou = useCallback(async (): Promise<FeedVideo[]> => {
-    const res = await apiFetch('/api/crawl-tiktok', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'feed', count: 20 }),
-    })
-    const data = await res.json()
-    if (!res.ok || data.error) throw new Error(data.error || 'Không tải được video')
+    const data = await apiPost('/api/crawl-tiktok', { action: 'feed', count: 20 }, 'Không tải được video')
     return data.videos || []
   }, [])
 
@@ -151,13 +145,7 @@ export function TikTokPage() {
   /** Tìm kiếm thật trên TikTok theo từ khoá hoặc @kênh. */
   const fetchSearch = useCallback(async (): Promise<FeedVideo[]> => {
     if (!searchTerm) return []
-    const res = await apiFetch('/api/crawl-tiktok', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'search', query: searchTerm }),
-    })
-    const data = await res.json()
-    if (!res.ok || data.error) throw new Error(data.error || 'Không tìm được video')
+    const data = await apiPost('/api/crawl-tiktok', { action: 'search', query: searchTerm }, 'Không tìm được video')
     return data.videos || []
   }, [searchTerm])
 
@@ -266,13 +254,7 @@ export function TikTokPage() {
         return { ...p, [videoId]: { loading: true, items: [] } }
       })
       try {
-        const res = await apiFetch('/api/crawl-tiktok', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_comments', videoId }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) throw new Error(data.error || 'Không tải được bình luận')
+        const data = await apiPost('/api/crawl-tiktok', { action: 'get_comments', videoId }, 'Không tải được bình luận')
         setComments((p) => ({ ...p, [videoId]: { loading: false, items: data.comments || [] } }))
       } catch (err: any) {
         setComments((p) => ({ ...p, [videoId]: { loading: false, items: [], error: err.message } }))
@@ -303,13 +285,11 @@ export function TikTokPage() {
     setCrawling(true)
     setCrawlProgress('đang tìm video...')
     try {
-      const idsRes = await apiFetch('/api/crawl-tiktok', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'channel_ids', channelUrl: `https://www.tiktok.com/@${username}` }),
-      })
-      const idsData = await idsRes.json()
-      if (!idsRes.ok || idsData.error) throw new Error(idsData.error || 'Không tìm được video của kênh')
+      const idsData = await apiPost(
+        '/api/crawl-tiktok',
+        { action: 'channel_ids', channelUrl: `https://www.tiktok.com/@${username}` },
+        'Không tìm được video của kênh',
+      )
       const ids: string[] = idsData.ids || []
       if (ids.length === 0) throw new Error(`Không tìm thấy video nào của @${username}`)
 
@@ -317,13 +297,7 @@ export function TikTokPage() {
       let saved = 0
       for (let i = 0; i < ids.length; i += 20) {
         const batch = ids.slice(i, i + 20)
-        const res = await apiFetch('/api/crawl-tiktok', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'channel_meta', username, ids: batch }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) throw new Error(data.error || 'Lỗi khi lưu video')
+        const data = await apiPost('/api/crawl-tiktok', { action: 'channel_meta', username, ids: batch }, 'Lỗi khi lưu video')
         saved += data.saved || 0
         setCrawlProgress(`${saved}/${ids.length}`)
       }

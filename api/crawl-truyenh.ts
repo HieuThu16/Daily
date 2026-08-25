@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { requireAuth } from './_auth'
+import { requireAuth } from './_auth.js'
 
 export const config = { maxDuration: 60 };
 

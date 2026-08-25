@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { groupVideosIntoSeries } from '../src/lib/tiktokSeries.js'
-import { requireAuth } from './_auth'
+import { requireAuth } from './_auth.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -340,7 +340,7 @@ async function fetchOembed(url: string) {
       headers: BASE_HEADERS,
     })
     if (!res.ok) return null
-    const data = await res.json()
+    const data = (await res.json()) as any
     return {
       url,
       title: data.title || null,

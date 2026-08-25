@@ -6,7 +6,7 @@
  */
 
 import { detectPart, movieKey } from './partDetector.js'
-import type { MovieMatch, NormalizedVideo, ReviewSeries, SeriesVideo } from './types'
+import type { MovieMatch, NormalizedVideo, ReviewSeries, SeriesVideo } from './types.js'
 
 function toSeriesVideo(video: NormalizedVideo): SeriesVideo {
   return { ...video, part: detectPart(video.title, video.description) }

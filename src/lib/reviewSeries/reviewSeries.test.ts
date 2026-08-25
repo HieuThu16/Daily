@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { detectPart, movieKey } from './partDetector'
 import { resolveSeries } from './seriesResolver'
 import { evaluateCompletion } from './completion'
-import type { NormalizedVideo } from './types'
+import type { NormalizedVideo } from './types.js'
 
 const video = (over: Partial<NormalizedVideo>): NormalizedVideo => ({
   platform: 'youtube',

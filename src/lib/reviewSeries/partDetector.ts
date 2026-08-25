@@ -5,7 +5,7 @@
  * "Phần 3" đều về cùng một dạng — người đăng gõ thiếu dấu là chuyện thường.
  */
 
-import type { PartInfo } from './types'
+import type { PartInfo } from './types.js'
 
 /** Bỏ dấu, hạ hoa thường, gộp khoảng trắng. Dùng chung cho mọi so khớp. */
 export function deaccent(value: string): string {

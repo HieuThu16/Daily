@@ -4,7 +4,7 @@
  * Lấy phụ đề gốc của video YouTube rồi dịch sang tiếng Việt theo lô.
  * Phải chạy ở server vì YouTube chặn CORS với endpoint timedtext.
  */
-import { requireAuth } from './_auth'
+import { requireAuth } from './_auth.js'
 
 
 export const config = { maxDuration: 60 }

@@ -7,7 +7,7 @@
  *      mạnh cho completion. Đừng bịa `itemCount`, để rỗng và chấp nhận UNKNOWN.
  */
 
-import type { NormalizedVideo, PlatformPlaylist } from './types'
+import type { NormalizedVideo, PlatformPlaylist } from './types.js'
 import type { CreatorFeed } from './youtube'
 
 const API = 'https://open.tiktokapis.com/v2'

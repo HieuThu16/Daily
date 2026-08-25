@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { apiFetch, readJson } from './apiFetch'
 export type YouTubeSearchResult = {
   videoId: string
   title: string
@@ -21,7 +21,7 @@ export async function searchYouTubeVideos(query: string): Promise<YouTubeSearchR
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`)
     }
-    const data = await res.json()
+    const data = await readJson(res, 'Không tìm được video YouTube')
     return (data.items || []) as YouTubeSearchResult[]
   } catch (err) {
     console.warn('Lỗi tìm kiếm video YouTube:', err)

@@ -6,7 +6,7 @@
  * bằng chứng thì UNKNOWN/STALLED, tuyệt đối không tự suy ra COMPLETE.
  */
 
-import type { CompletionResult, ReviewSeries } from './types'
+import type { CompletionResult, ReviewSeries } from './types.js'
 
 export type CompletionInput = {
   series: ReviewSeries

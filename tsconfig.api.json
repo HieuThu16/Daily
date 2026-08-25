@@ -1,0 +1,30 @@
+{
+  /*
+   * Các hàm serverless trong api/ trước đây KHÔNG nằm trong tsconfig nào — `tsc -b`
+   * xanh mà chưa hề soi tới chúng. Một lần thiếu đuôi file trong import tương đối
+   * (`'./_auth'` thay vì `'./_auth.js'`) đã làm cả 7 endpoint chết khi deploy:
+   * hàm vỡ lúc nạp module, Vercel trả trang lỗi HTML, client `await res.json()`
+   * ném lỗi cú pháp JSON chẳng liên quan gì tới nguyên nhân thật.
+   *
+   * Vite dev tự phân giải giúp nên chạy máy vẫn ngon, chỉ vỡ khi lên Vercel.
+   *
+   * "module"/"moduleResolution": "NodeNext" là mấu chốt — khớp với
+   * `"type": "module"` trong package.json, và làm trình biên dịch báo TS2835
+   * ngay khi thiếu đuôi. Đừng đổi sang "Bundler": mất luôn lớp chặn này.
+   */
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.api.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "moduleDetection": "force",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["api"]
+}

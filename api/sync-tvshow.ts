@@ -10,7 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { startSync, syncOnePage, writeVideos } from '../src/lib/tvshowSeries/pageSync.js'
-import { requireAuth } from './_auth'
+import { requireAuth } from './_auth.js'
 
 export const config = { maxDuration: 60 }
 

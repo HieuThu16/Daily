@@ -5,7 +5,7 @@
  * Cần API key (biến môi trường YOUTUBE_API_KEY).
  */
 
-import type { NormalizedVideo, PlatformPlaylist } from './types'
+import type { NormalizedVideo, PlatformPlaylist } from './types.js'
 
 const API = 'https://www.googleapis.com/youtube/v3'
 

@@ -5,7 +5,7 @@
  * Tìm kiếm video YouTube qua YouTube Data API v3 chính thức,
  * có dự phòng qua Invidious / oEmbed khi không có API key.
  */
-import { requireAuth } from './_auth'
+import { requireAuth } from './_auth.js'
 
 
 export const config = { maxDuration: 30 }
@@ -36,7 +36,7 @@ export default async function handler(req: any, res: any) {
       const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=25&q=${encodeURIComponent(query)}&key=${apiKey}`
       const response = await fetch(url)
       if (response.ok) {
-        const data = await response.json()
+        const data = (await response.json()) as any
         const items: YouTubeSearchResultItem[] = (data.items || []).map((item: any) => ({
           videoId: item.id?.videoId || '',
           title: item.snippet?.title || '',

@@ -7,7 +7,7 @@
 import { fetchChannelInfo, fetchPlaylistPage, fetchPlaylists } from '../reviewSeries/youtube.js'
 import { resolveSeries } from '../reviewSeries/seriesResolver.js'
 import { evaluateCompletion } from '../reviewSeries/completion.js'
-import type { NormalizedVideo, PlatformPlaylist } from '../reviewSeries/types'
+import type { NormalizedVideo, PlatformPlaylist } from '../reviewSeries/types.js'
 
 type Db = any
 

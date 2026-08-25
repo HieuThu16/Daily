@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { requireAuth } from './_auth'
+import { requireAuth } from './_auth.js'
 
 export const config = { maxDuration: 60 };
 
@@ -238,7 +238,8 @@ export async function crawlOtruyenStory(inputUrl: string, existingChapters?: any
 
   const res = await fetch(apiUrl);
   if (!res.ok) throw new Error(`OTruyen API lỗi HTTP ${res.status}`);
-  const json = await res.json();
+  // JSON của OTruyen, không có schema — các dòng dưới đã phòng bằng ?. và ||
+  const json = (await res.json()) as any;
   if (json?.status !== 'success' || !json?.data?.item) {
     throw new Error(json?.message || 'Không tìm thấy truyện trên OTruyen');
   }
