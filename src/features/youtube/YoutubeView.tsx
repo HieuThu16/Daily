@@ -10,7 +10,8 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
-import { mergeSearchPages, searchYouTubePage, type YouTubeSearchResult } from '../../lib/youtubeSearch'
+import { publishedLabel } from './YoutubeWatchPage'
+import { formatViews, mergeSearchPages, searchYouTubePage, type SearchOrder, type YouTubeSearchResult } from '../../lib/youtubeSearch'
 import { Modal, useIncrementalList } from '../shared'
 import { DualSubtitles } from './DualSubtitles'
 import { useHeaderActions, useHideHeader } from '../HeaderAction'
@@ -156,6 +157,8 @@ export function YoutubeView() {
   /** Token trang kế; null nghĩa là đã hết kết quả. */
   const [ytNextPage, setYtNextPage] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  /** Thứ tự kết quả; đổi là tìm lại vì YouTube xếp ở phía nó, không xếp tại chỗ. */
+  const [ytOrder, setYtOrder] = useState<SearchOrder>('relevance')
   const [savingVideoId, setSavingVideoId] = useState<string | null>(null)
 
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
@@ -410,12 +413,13 @@ export function YoutubeView() {
   }, [allVideos])
 
   // Tìm kiếm trực tuyến từ YouTube API khi người dùng kích hoạt
-  const handlePerformYouTubeSearch = async (queryToSearch = search) => {
+  const handlePerformYouTubeSearch = async (queryToSearch = search, order: SearchOrder = ytOrder) => {
     const q = queryToSearch.trim()
     if (!q) return
+    setYtOrder(order)
     setIsSearchingYouTube(true)
     try {
-      const page = await searchYouTubePage(q)
+      const page = await searchYouTubePage(q, null, order)
       setYtSearchResults(page.items)
       setYtNextPage(page.nextPageToken)
       if (page.items.length === 0) {
@@ -437,7 +441,7 @@ export function YoutubeView() {
     if (!q || !ytNextPage || isLoadingMore) return
     setIsLoadingMore(true)
     try {
-      const page = await searchYouTubePage(q, ytNextPage)
+      const page = await searchYouTubePage(q, ytNextPage, ytOrder)
       setYtSearchResults((prev) => mergeSearchPages(prev, page.items))
       setYtNextPage(page.nextPageToken)
       if (page.items.length === 0) showToast('Hết kết quả rồi', 'info')
@@ -780,6 +784,26 @@ export function YoutubeView() {
 
           {ytSearchResults.length > 0 ? (
             <>
+              {/* Đổi thứ tự là tìm lại từ YouTube, không xếp lại 50 cái đang có —
+                  "nhiều view nhất" phải xét cả kho chứ không phải trong 50 này. */}
+              <div className="yt-order-row">
+                {([
+                  ['relevance', 'Liên quan'],
+                  ['viewCount', 'Nhiều view'],
+                  ['date', 'Mới nhất'],
+                ] as [SearchOrder, string][]).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`yt-order-chip${ytOrder === value ? ' on' : ''}`}
+                    disabled={isSearchingYouTube}
+                    onClick={() => void handlePerformYouTubeSearch(search, value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
               {ytSearchResults.map((item) => {
                 const isAlreadySaved = savedVideoIdSet.has(item.videoId)
@@ -879,6 +903,13 @@ export function YoutubeView() {
                       >
                         {item.title}
                       </div>
+                      {(item.viewCount || item.publishedAt) && (
+                        <div className="yt-card-stats">
+                          {formatViews(item.viewCount)}
+                          {item.viewCount && item.publishedAt ? ' · ' : ''}
+                          {item.publishedAt ? publishedLabel(item.publishedAt) : ''}
+                        </div>
+                      )}
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 600 }}>{item.channelTitle}</span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

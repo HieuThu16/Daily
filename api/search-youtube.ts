@@ -29,6 +29,54 @@ export type YouTubeSearchResultItem = {
   channelId?: string
   thumbnail: string
   publishedAt?: string
+  /** Lượt xem; chỉ có khi lấy được thống kê. */
+  viewCount?: number
+  /** Độ dài (giây). */
+  duration?: number
+}
+
+/** Thứ tự YouTube trả kết quả. */
+export type SearchOrder = 'relevance' | 'viewCount' | 'date'
+
+const ORDERS: SearchOrder[] = ['relevance', 'viewCount', 'date']
+
+/** ISO 8601 'PT1H2M3S' -> giây. */
+function parseIsoDuration(iso: string): number {
+  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso || '')
+  if (!m) return 0
+  return Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0)
+}
+
+/**
+ * Bổ sung lượt xem và độ dài cho danh sách vừa tìm được.
+ *
+ * `search` của YouTube không trả hai thứ này, phải gọi thêm `videos`. Đắt rẻ
+ * chênh nhau rất xa: search tốn 100 đơn vị quota, còn videos chỉ tốn 1 cho tối
+ * đa 50 id — nên gọi thêm gần như miễn phí.
+ *
+ * Hỏng thì trả lại nguyên danh sách: thiếu số view còn hơn mất kết quả.
+ */
+async function attachStats(items: YouTubeSearchResultItem[], apiKey: string): Promise<YouTubeSearchResultItem[]> {
+  const ids = items.map((i) => i.videoId).filter(Boolean)
+  if (ids.length === 0) return items
+  try {
+    const url =
+      `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails` +
+      `&id=${ids.slice(0, 50).join(',')}&key=${apiKey}`
+    const r = await fetch(url)
+    if (!r.ok) return items
+    const data = (await r.json()) as any
+    const byId = new Map<string, { viewCount: number; duration: number }>()
+    for (const row of data.items || []) {
+      byId.set(row.id, {
+        viewCount: Number(row.statistics?.viewCount ?? 0),
+        duration: parseIsoDuration(row.contentDetails?.duration ?? ''),
+      })
+    }
+    return items.map((i) => ({ ...i, ...(byId.get(i.videoId) ?? {}) }))
+  } catch {
+    return items
+  }
 }
 
 export default async function handler(req: any, res: any) {
@@ -39,6 +87,8 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Thiếu từ khoá tìm kiếm (q)' })
   }
   const pageToken = String(req.query?.pageToken || req.body?.pageToken || '').trim()
+  const rawOrder = String(req.query?.order || req.body?.order || 'relevance')
+  const order: SearchOrder = ORDERS.includes(rawOrder as SearchOrder) ? (rawOrder as SearchOrder) : 'relevance'
 
   const apiKey = process.env.YOUTUBE_API_KEY || process.env.VITE_YOUTUBE_API_KEY
 
@@ -47,7 +97,7 @@ export default async function handler(req: any, res: any) {
     try {
       const url =
         `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=50` +
-        `&relevanceLanguage=vi&regionCode=VN` +
+        `&relevanceLanguage=vi&regionCode=VN&order=${order}` +
         `&q=${encodeURIComponent(query)}&key=${apiKey}` +
         (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
       const response = await fetch(url)
@@ -63,9 +113,13 @@ export default async function handler(req: any, res: any) {
           publishedAt: item.snippet?.publishedAt || '',
         })).filter((item: YouTubeSearchResultItem) => Boolean(item.videoId))
 
+        const withStats = await attachStats(items, apiKey)
         return res.status(200).json({
-          items: rankVietnameseFirst(items),
+          // Chọn "nhiều view" hay "mới nhất" là đã nói rõ muốn thứ tự nào rồi;
+          // xếp lại theo tiếng Việt lúc đó là phá đúng thứ người dùng vừa chọn.
+          items: order === 'relevance' ? rankVietnameseFirst(withStats) : withStats,
           source: 'youtube-api',
+          order,
           nextPageToken: data.nextPageToken || null,
         })
       }
@@ -86,9 +140,11 @@ export default async function handler(req: any, res: any) {
     try {
       // Invidious phân trang bằng số trang, không phải token — quy ước token là số trang.
       const page = Number(pageToken) > 1 ? Number(pageToken) : 1
+      // Invidious đặt tên khác YouTube cho cùng ý nghĩa.
+      const invSort = order === 'viewCount' ? 'view_count' : order === 'date' ? 'upload_date' : 'relevance'
       const invUrl =
         `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}` +
-        `&region=VN`
+        `&region=VN&sort_by=${invSort}`
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 4000)
       const invRes = await fetch(invUrl, { signal: controller.signal })
@@ -105,12 +161,16 @@ export default async function handler(req: any, res: any) {
             channelId: item.authorId || '',
             thumbnail: item.videoThumbnails?.[0]?.url || `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
             publishedAt: item.published ? new Date(item.published * 1000).toISOString() : undefined,
+            // Invidious trả sẵn hai thứ này, khỏi phải gọi thêm như YouTube API.
+            viewCount: Number(item.viewCount ?? 0) || undefined,
+            duration: Number(item.lengthSeconds ?? 0) || undefined,
           })).filter((item: YouTubeSearchResultItem) => Boolean(item.videoId))
 
           // Còn đủ một trang thì đoán là còn nữa; Invidious không nói tổng số.
           return res.status(200).json({
-            items: rankVietnameseFirst(items),
+            items: order === 'relevance' ? rankVietnameseFirst(items) : items,
             source: 'invidious',
+            order,
             nextPageToken: items.length >= 20 ? String(page + 1) : null,
           })
         }
@@ -120,5 +180,5 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  return res.status(200).json({ items: [], source: 'none', nextPageToken: null })
+  return res.status(200).json({ items: [], source: 'none', order, nextPageToken: null })
 }

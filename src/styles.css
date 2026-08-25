@@ -12223,3 +12223,21 @@ svg.lucide-library {
 .tv-keyword-hint { font-size: 0.7rem; color: var(--text-muted); line-height: 1.4; }
 
 .tv-keyword-skipped { font-weight: 500; color: var(--text-muted); }
+
+/* Chip chọn thứ tự kết quả tìm kiếm YouTube. */
+.yt-order-row { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+
+.yt-order-chip {
+  padding: 6px 13px;
+  border-radius: 99px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.yt-order-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.yt-order-chip:disabled { opacity: 0.6; cursor: default; }
+
+.yt-card-stats { margin-top: 4px; font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }

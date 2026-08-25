@@ -7,6 +7,24 @@ export type YouTubeSearchResult = {
   channelId?: string
   thumbnail: string
   publishedAt?: string
+  /** Lượt xem; có thể thiếu nếu không lấy được thống kê. */
+  viewCount?: number
+  /** Độ dài (giây). */
+  duration?: number
+}
+
+/** Thứ tự sắp xếp kết quả tìm kiếm. */
+export type SearchOrder = 'relevance' | 'viewCount' | 'date'
+
+/** '1,2 tr lượt xem' — số đầy đủ dài quá, đọc trên điện thoại rất mệt. */
+export function formatViews(views?: number): string {
+  if (!views || views <= 0) return ''
+  if (views >= 1_000_000) {
+    const m = views / 1_000_000
+    return `${m >= 10 ? Math.round(m) : m.toFixed(1).replace(/\.0$/, '')} tr lượt xem`
+  }
+  if (views >= 1_000) return `${Math.round(views / 1000)}N lượt xem`
+  return `${views} lượt xem`
 }
 
 export type YouTubeSearchPage = {
@@ -22,13 +40,17 @@ export type YouTubeSearchPage = {
  * mỗi lần gọi tốn 100 đơn vị quota YouTube (hạn mức ~100 lượt/ngày), nên đừng
  * gọi vòng lặp tự động, để người dùng chủ động bấm "xem thêm".
  */
-export async function searchYouTubePage(query: string, pageToken?: string | null): Promise<YouTubeSearchPage> {
+export async function searchYouTubePage(
+  query: string,
+  pageToken?: string | null,
+  order: SearchOrder = 'relevance',
+): Promise<YouTubeSearchPage> {
   const trimmed = query.trim()
   if (!trimmed) return { items: [], nextPageToken: null }
 
   try {
     const url =
-      `/api/search-youtube?q=${encodeURIComponent(trimmed)}` +
+      `/api/search-youtube?q=${encodeURIComponent(trimmed)}&order=${order}` +
       (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
     const res = await apiFetch(url)
     if (!res.ok) {
