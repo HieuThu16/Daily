@@ -25,6 +25,33 @@ const SETTINGS_KEY = 'book-reader-settings'
 const DEFAULT_SETTINGS: ReaderSettings = { fontSize: 17, lineHeight: 1.8, font: 'serif', theme: 'light' }
 const COMPLETED_RATIO = 0.98
 
+/** Chiều cao thanh nút trích dẫn, và khoảng hở với chữ. */
+const QUOTE_BAR_HEIGHT = 52
+const QUOTE_BAR_GAP = 10
+
+/**
+ * Đặt thanh nút ngay CẠNH chỗ bôi đen thay vì dưới đáy màn hình.
+ *
+ * Trên di động, bôi đen xong trình duyệt bật menu hệ thống ("Sao chép / Tìm
+ * trên Google") ngay tại chỗ đó — thanh nút nằm dưới đáy vừa xa vừa dễ bị đè.
+ *
+ * Đặt phía TRÊN vùng chọn nếu còn chỗ; sát mép trên quá thì lật xuống dưới.
+ */
+export function quoteBarTop(
+  selectionTop: number | null,
+  viewportHeight: number,
+  barHeight = QUOTE_BAR_HEIGHT,
+): number {
+  // Không đo được vùng chọn thì rơi về đáy như cũ.
+  if (selectionTop === null || !Number.isFinite(selectionTop)) {
+    return Math.max(0, viewportHeight - barHeight - 24)
+  }
+  const above = selectionTop - barHeight - QUOTE_BAR_GAP
+  if (above >= 8) return above
+  // Không đủ chỗ phía trên -> lật xuống dưới vùng chọn.
+  return Math.min(selectionTop + QUOTE_BAR_GAP * 3, viewportHeight - barHeight - 8)
+}
+
 export function BookReaderPage() {
   const { mediaItemId = '' } = useParams()
   const { showToast } = useToast()
@@ -43,6 +70,8 @@ export function BookReaderPage() {
   const [bookCover, setBookCover] = useState<string | null>(null)
   /** Đoạn đang bôi đen, để hiện nút "Lưu trích dẫn". */
   const [selection, setSelection] = useState('')
+  /** Mép trên của vùng bôi đen (toạ độ màn hình); null nghĩa là không đo được. */
+  const [selectionTop, setSelectionTop] = useState<number | null>(null)
   const [savingQuote, setSavingQuote] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
   const [contentByIdx, setContentByIdx] = useState<Record<number, string>>({})
@@ -395,11 +424,43 @@ export function BookReaderPage() {
     return <p key={index}>{parts}</p>
   }
 
-  // Bôi đen trong nội dung -> ghi lại đoạn để hiện nút lưu trích dẫn.
-  const captureSelection = () => {
-    const text = window.getSelection()?.toString().trim() ?? ''
+  /*
+   * Bôi đen trong nội dung -> ghi lại đoạn VÀ vị trí để hiện thanh nút ngay đó.
+   *
+   * Trước đây chỉ nghe onTouchEnd/onMouseUp: trên di động, chạm nhả tay xong
+   * trình duyệt còn đang chỉnh vùng chọn nên nhiều lúc bắt hụt. `selectionchange`
+   * bắn đúng mỗi lần vùng chọn đổi nên đáng tin hơn.
+   */
+  const captureSelection = useCallback(() => {
+    const sel = window.getSelection()
+    const text = sel?.toString().trim() ?? ''
+    if (!text) {
+      setSelection('')
+      setSelectionTop(null)
+      return
+    }
     setSelection(text)
-  }
+    try {
+      const rect = sel?.getRangeAt(0).getBoundingClientRect()
+      setSelectionTop(rect && rect.height > 0 ? rect.top : null)
+    } catch {
+      setSelectionTop(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Hoãn một nhịp: lúc selectionchange bắn, vùng chọn có thể chưa chốt xong.
+    let timer: number | undefined
+    const onChange = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(captureSelection, 120)
+    }
+    document.addEventListener('selectionchange', onChange)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('selectionchange', onChange)
+    }
+  }, [captureSelection])
 
   const saveQuote = async () => {
     if (!selection) return
@@ -647,7 +708,12 @@ export function BookReaderPage() {
         ref={scroller}
         onScroll={onScroll}
         onMouseUp={captureSelection}
-        onTouchEnd={captureSelection}
+        /*
+         * Chặn menu ngữ cảnh của trình duyệt: giữ lâu trên chữ ở Android/iOS sẽ
+         * bật "Sao chép / Tìm trên Google" đè lên thanh nút của app, khiến không
+         * bấm đánh dấu được. Vùng chọn vẫn hoạt động bình thường.
+         */
+        onContextMenu={(e) => e.preventDefault()}
         style={{
           fontSize: settings.fontSize,
           lineHeight: settings.lineHeight,
@@ -691,7 +757,12 @@ export function BookReaderPage() {
       </div>
 
       {selection && (
-        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 24, zIndex: 40, display: 'flex', gap: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.25)', borderRadius: 12 }}>
+        <div
+          className="quote-bar"
+          style={{
+            top: quoteBarTop(selectionTop, typeof window === 'undefined' ? 800 : window.innerHeight),
+          }}
+        >
           <button
             className="primary"
             onClick={saveQuote}

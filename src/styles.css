@@ -12466,3 +12466,39 @@ svg.lucide-library {
   color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
 }
+
+/* ---- Thanh nút trích dẫn / tô sáng trong trang đọc sách ---- */
+
+.quote-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  animation: quoteBarIn 0.14s ease-out;
+}
+
+@keyframes quoteBarIn {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/*
+ * iOS bật "callout" (Sao chép / Tra cứu) khi giữ lâu trên chữ, đè lên thanh nút.
+ * Tắt callout nhưng VẪN cho bôi đen — user-select phải giữ là text.
+ */
+.book-reader-page {
+  -webkit-touch-callout: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quote-bar { animation: none; }
+}
