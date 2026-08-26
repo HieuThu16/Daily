@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import {
   Home, Compass, Bookmark, RefreshCw, ExternalLink,
   CheckCircle2, Share2, Loader2, X, ChevronUp, ChevronDown,
-  MessageCircle, Music2, ArrowLeft, Play, Search, Download,
+  MessageCircle, Music2, ArrowLeft, Play, Search, Download, Plus,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
 import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
 import './tiktok.css'
@@ -48,6 +49,44 @@ function shuffle<T>(arr: T[]): T[] {
     ;[out[i], out[j]] = [out[j], out[i]]
   }
   return out
+}
+
+/** Dòng trong kho Supabase -> video của feed. Dùng chung cho tab Kho và tìm kiếm. */
+function mapLibraryRows(rows: any[]): FeedVideo[] {
+  return rows.map((v: any) => ({
+    video_id: v.video_id,
+    title: v.title,
+    canonical_url: v.canonical_url,
+    embed_url: v.embed_url || `https://www.tiktok.com/embed/v2/${v.video_id}`,
+    thumbnail: v.thumbnail,
+    duration: v.duration,
+    creator_id: v.creator_id,
+    creator_name: v.creator_name,
+    avatar: null,
+    comment_count: null,
+    share_count: null,
+    play_count: null,
+    music: null,
+    published_at: v.published_at,
+  }))
+}
+
+/** Số ngày coi là "mới"; video mới hơn mốc này được đẩy lên trước. */
+const RECENT_DAYS = 240
+
+/**
+ * Đẩy video mới đăng lên trước, nhưng vẫn xáo trong từng nhóm.
+ * Xếp thuần theo ngày thì mở lần nào cũng đúng thứ tự đó, chán ngay.
+ */
+export function preferRecent(list: FeedVideo[], now = Date.now()): FeedVideo[] {
+  const cutoff = now - RECENT_DAYS * 86_400_000
+  const fresh: FeedVideo[] = []
+  const older: FeedVideo[] = []
+  for (const v of list) {
+    const t = v.published_at ? Date.parse(v.published_at) : NaN
+    ;(Number.isFinite(t) && t >= cutoff ? fresh : older).push(v)
+  }
+  return [...shuffle(fresh), ...shuffle(older)]
 }
 
 export function TikTokPage() {
@@ -110,9 +149,40 @@ export function TikTokPage() {
   }
 
   /** Feed "Dành cho bạn": xin video đề xuất ngẫu nhiên từ TikTok qua API của mình. */
+  /**
+   * Feed "Dành cho bạn": lấy KHO TRƯỚC rồi mới gọi TikTok.
+   *
+   * Gọi TikTok mất vài giây và hay bị chặn — phải dò qua 13 trang hashtag rồi
+   * mới có kết quả. Kho Supabase thì trả về gần như tức thì, nên hiện kho ra
+   * cho xem ngay, còn video mới của TikTok thì nối vào sau.
+   *
+   * Ưu tiên video mới đăng: xáo trong nhóm mới trước rồi mới tới nhóm cũ, để
+   * feed vừa mới vừa không lặp y hệt mỗi lần mở.
+   */
   const fetchForYou = useCallback(async (): Promise<FeedVideo[]> => {
+    let fromLibrary: FeedVideo[] = []
+    if (supabase) {
+      try {
+        const { data } = await supabase
+          .from('review_videos')
+          .select('*')
+          .eq('platform', 'tiktok')
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .limit(200)
+        fromLibrary = preferRecent(mapLibraryRows(data ?? []))
+      } catch (err) {
+        console.warn('[tiktok] không đọc được kho:', err)
+      }
+    }
+
+    if (fromLibrary.length >= 8) {
+      // Đủ xem rồi: gọi TikTok ngầm để lần mở sau có video mới, khỏi bắt chờ.
+      void apiPost('/api/crawl-tiktok', { action: 'feed', count: 20 }, 'x').catch(() => {})
+      return fromLibrary
+    }
+
     const data = await apiPost('/api/crawl-tiktok', { action: 'feed', count: 20 }, 'Không tải được video')
-    return data.videos || []
+    return [...fromLibrary, ...(data.videos || [])]
   }, [])
 
   /** Feed "Kho của tôi": video TikTok đã lưu trong Supabase, xáo trộn cho giống feed thật. */
@@ -124,29 +194,57 @@ export function TikTokPage() {
       .eq('platform', 'tiktok')
       .limit(300)
     if (dbErr) throw new Error(dbErr.message)
-    return shuffle(data || []).map((v: any) => ({
-      video_id: v.video_id,
-      title: v.title,
-      canonical_url: v.canonical_url,
-      embed_url: v.embed_url || `https://www.tiktok.com/embed/v2/${v.video_id}`,
-      thumbnail: v.thumbnail,
-      duration: v.duration,
-      creator_id: v.creator_id,
-      creator_name: v.creator_name,
-      avatar: null,
-      comment_count: null,
-      share_count: null,
-      play_count: null,
-      music: null,
-      published_at: v.published_at,
-    }))
+    return shuffle(mapLibraryRows(data || []))
   }, [])
 
-  /** Tìm kiếm thật trên TikTok theo từ khoá hoặc @kênh. */
+  /**
+   * Tìm kiếm: kho của mình TRƯỚC, rồi mới tới TikTok.
+   *
+   * TikTok không cho tìm toàn văn từ server — API tìm thật của họ đòi chữ ký
+   * X-Bogus/msToken. Phía TikTok chỉ tra được hashtag và @kênh, nên gõ chữ
+   * thường sẽ trượt. Kho của mình thì tìm trong tiêu đề được thật, lại nhanh.
+   */
   const fetchSearch = useCallback(async (): Promise<FeedVideo[]> => {
-    if (!searchTerm) return []
-    const data = await apiPost('/api/crawl-tiktok', { action: 'search', query: searchTerm }, 'Không tìm được video')
-    return data.videos || []
+    const q = searchTerm.trim()
+    if (!q) return []
+
+    const results: FeedVideo[] = []
+    const seen = new Set<string>()
+    const add = (list: FeedVideo[]) => {
+      for (const v of list) {
+        if (v.video_id && !seen.has(v.video_id)) {
+          seen.add(v.video_id)
+          results.push(v)
+        }
+      }
+    }
+
+    // 1. Kho của mình — tìm thật trong tiêu đề và tên kênh.
+    if (supabase && !q.startsWith('@')) {
+      try {
+        const pattern = `%${q.replace(/[%_]/g, '')}%`
+        const { data } = await supabase
+          .from('review_videos')
+          .select('*')
+          .eq('platform', 'tiktok')
+          .or(`title.ilike.${pattern},creator_name.ilike.${pattern}`)
+          .limit(100)
+        add(mapLibraryRows(data ?? []))
+      } catch (err) {
+        console.warn('[tiktok] không tìm được trong kho:', err)
+      }
+    }
+
+    // 2. TikTok: hashtag hoặc @kênh. Hỏng thì vẫn còn kết quả trong kho.
+    try {
+      const data = await apiPost('/api/crawl-tiktok', { action: 'search', query: q }, 'Không tìm được video')
+      add(data.videos || [])
+    } catch (err) {
+      if (results.length === 0) throw err
+      console.warn('[tiktok] TikTok không trả kết quả:', err)
+    }
+
+    return results
   }, [searchTerm])
 
   const loadFeed = useCallback(
@@ -273,14 +371,15 @@ export function TikTokPage() {
   }, [showComments, current?.video_id])
 
   const [crawling, setCrawling] = useState(false)
+  const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [crawlProgress, setCrawlProgress] = useState('')
 
   /**
    * Cào cả kênh: gom ID từ embed + kho lưu trữ Wayback, rồi lấy metadata theo từng lô
    * (TikTok chặn tốc độ nên phải chia nhỏ, chạy vài phút cho kênh nhiều video).
    */
-  const crawlChannel = async () => {
-    const username = current?.creator_id || current?.creator_name
+  const crawlChannel = async (fromUsername?: string) => {
+    const username = fromUsername || current?.creator_id || current?.creator_name
     if (!username) return
     setCrawling(true)
     setCrawlProgress('đang tìm video...')
@@ -358,11 +457,9 @@ export function TikTokPage() {
 
       {/* ---- Feed chính ---- */}
       <main className="tt-main">
-        {/* Thanh tab nổi trên đầu, giống app điện thoại */}
+        {/* Thanh trên: chỉ ô tìm và nút nhập kênh. Nút quay lại / làm mới /
+            cào kênh đã bỏ — cào kênh đang xem chuyển xuống hàng nút bên video. */}
         <div className="tt-topbar">
-          <button className="tt-top-back" onClick={() => navigate('/home')} title="Về Daily">
-            <ArrowLeft size={22} />
-          </button>
           <div className="tt-top-tabs">
             <button className={tab === 'foryou' ? 'active' : ''} onClick={() => setTab('foryou')}>
               Dành cho bạn
@@ -390,27 +487,16 @@ export function TikTokPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Tìm trên TikTok: từ khoá hoặc @kênh"
+              placeholder="Tìm trong kho, hoặc #hashtag / @kênh"
             />
           </form>
-          {current && (
-            <button
-              className="tt-top-refresh"
-              onClick={() => void crawlChannel()}
-              disabled={crawling}
-              title={`Cào toàn bộ kênh @${current.creator_id || current.creator_name} về Kho`}
-            >
-              {crawling ? (
-                <span className="tt-crawl-progress">
-                  <Loader2 size={16} className="tv-spin" /> {crawlProgress}
-                </span>
-              ) : (
-                <Download size={20} />
-              )}
-            </button>
-          )}
-          <button className="tt-top-refresh" onClick={() => loadFeed('replace')} title="Làm mới">
-            <RefreshCw size={20} className={loading ? 'tv-spin' : ''} />
+          <button
+            type="button"
+            className="tt-add-channel"
+            onClick={() => setAddChannelOpen(true)}
+            title="Nhập link kênh TikTok để cào về Kho"
+          >
+            <Plus size={16} /> Nhập kênh
           </button>
         </div>
 
@@ -518,6 +604,15 @@ export function TikTokPage() {
                         <span className="tt-rail-label">{formatCount(vid.comment_count) || 'Bình luận'}</span>
                       </button>
 
+                      <button
+                        className="tt-rail-btn"
+                        disabled={crawling}
+                        onClick={() => void crawlChannel(vid.creator_id || vid.creator_name || undefined)}
+                        title={`Cào toàn bộ kênh @${vid.creator_id || vid.creator_name} về Kho`}
+                      >
+                        {crawling ? <Loader2 size={22} className="tv-spin" /> : <Download size={22} />}
+                        <span>{crawling ? crawlProgress || '…' : 'Cào kênh'}</span>
+                      </button>
                       <button className="tt-rail-btn" onClick={() => copyLink(vid.canonical_url)} title="Chia sẻ">
                         <span className="tt-rail-icon">
                           <Share2 size={28} />
@@ -624,6 +719,74 @@ export function TikTokPage() {
           </div>
         </aside>
       )}
+
+      {addChannelOpen && (
+        <AddTikTokChannelModal
+          busy={crawling}
+          progress={crawlProgress}
+          onClose={() => setAddChannelOpen(false)}
+          onSubmit={(username) => {
+            setAddChannelOpen(false)
+            void crawlChannel(username)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+/** Lấy @tên kênh từ link TikTok dán vào, hoặc từ chính chuỗi người dùng gõ. */
+export function parseTikTokUsername(input: string): string {
+  const text = input.trim()
+  if (!text) return ''
+  const fromUrl = text.match(/tiktok\.com\/@([\w.-]+)/i)
+  if (fromUrl) return fromUrl[1]
+  return text.replace(/^@/, '').replace(/[^\w.-]/g, '')
+}
+
+/** Dán link kênh TikTok để cào toàn bộ video về Kho — giống nút thêm kênh bên YouTube. */
+function AddTikTokChannelModal({
+  busy,
+  progress,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean
+  progress: string
+  onClose: () => void
+  onSubmit: (username: string) => void
+}) {
+  const [text, setText] = useState('')
+  const username = parseTikTokUsername(text)
+
+  return (
+    <Modal title="Nhập kênh TikTok" onClose={onClose}>
+      <label>
+        Link kênh hoặc @tên
+        <input
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="https://www.tiktok.com/@tenkenh  hoặc  @tenkenh"
+        />
+      </label>
+
+      {username && (
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+          Sẽ cào kênh <b>@{username}</b> về Kho của tôi. Kênh nhiều video thì chạy vài phút —
+          TikTok chặn tốc độ nên phải lấy từng lô.
+        </p>
+      )}
+
+      <button
+        type="button"
+        className="primary"
+        style={{ width: '100%', marginTop: 12 }}
+        disabled={!username || busy}
+        onClick={() => onSubmit(username)}
+      >
+        {busy ? progress || 'Đang cào…' : 'Bắt đầu cào'}
+      </button>
+    </Modal>
   )
 }

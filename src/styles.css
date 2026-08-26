@@ -12404,3 +12404,27 @@ svg.lucide-library {
 @media (prefers-reduced-motion: reduce) {
   .nudge-banner { animation: none; }
 }
+
+/* Nút nhập kênh TikTok trên thanh trên cùng. */
+.tt-add-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: 99px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 0.79rem;
+  font-weight: 800;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.tt-add-channel:active { transform: scale(0.96); }
+
+/* Màn hẹp thì chỉ còn dấu cộng, chữ ẩn đi cho đỡ chật. */
+@media (max-width: 520px) {
+  .tt-add-channel { padding: 7px 9px; }
+  .tt-add-channel span { display: none; }
+}
