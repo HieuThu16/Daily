@@ -15,6 +15,7 @@ import { AudioQueuePicker, AudioQueuePlayer } from './library/AudioQueue'
 import { MarqueeText } from './library/MarqueeText'
 import { RowMenu } from './library/RowMenu'
 import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId, detectMusicGenre } from '../lib/youtubeMeta'
+import { cleanMovieTitle, fetchLinkPreview } from '../lib/linkPreview'
 import { normalizeStorageUrl } from '../lib/storageUrl'
 import { shareMusicToAll } from '../lib/musicShare'
 import { dedupeMusic } from '../lib/musicDedupe'
@@ -225,6 +226,50 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const [endDateVal, setEndDateVal] = useState<string>('')
   const [isConverting, setIsConverting] = useState(false)
   const [autofilling, setAutofilling] = useState(false)
+  const [movieLink, setMovieLink] = useState('')
+  const [movieLinkNote, setMovieLinkNote] = useState('')
+  /** Mô tả lấy từ link; form không có ô nhập nên chỉ điền ngầm khi lưu. */
+  const [movieDesc, setMovieDesc] = useState('')
+
+  /**
+   * Dán link trang đánh giá phim -> tự điền tên, ảnh bìa, mô tả.
+   *
+   * Đọc thẻ Open Graph nên trang nào cũng chạy, không cần khoá API riêng.
+   * Chỉ điền vào ô đang TRỐNG: gõ tay rồi mà bị link ghi đè thì rất khó chịu.
+   */
+  const autofillFromMovieLink = async (url: string) => {
+    setMovieLink(url)
+    if (!url.trim().startsWith('http')) {
+      setMovieLinkNote('')
+      return
+    }
+    setAutofilling(true)
+    setMovieLinkNote('')
+    try {
+      const preview = await fetchLinkPreview(url)
+      const title = cleanMovieTitle(preview.title, preview.siteName)
+      if (!title && !preview.image) {
+        setMovieLinkNote('Trang này không cho đọc thông tin. Thử link IMDb, TMDB hoặc Wikipedia.')
+        return
+      }
+      const filled: string[] = []
+      if (title) {
+        setName((prev) => (prev.trim() ? prev : title))
+        filled.push('tên phim')
+      }
+      if (preview.image) {
+        setCoverUrlVal((prev) => (prev.trim() ? prev : preview.image))
+        filled.push('ảnh bìa')
+      }
+      if (preview.description) {
+        setMovieDesc((prev) => (prev.trim() ? prev : preview.description))
+        filled.push('mô tả')
+      }
+      setMovieLinkNote(filled.length ? `Đã điền: ${filled.join(', ')}.` : 'Các ô đã có sẵn nội dung nên không ghi đè.')
+    } finally {
+      setAutofilling(false)
+    }
+  }
   const [logDate, setLogDate] = useState<string>(localDate())
   const [logTime, setLogTime] = useState<string>(getCurrentTimeString())
   const [statusVal, setStatusVal] = useState<Media['status']>('PLANNED')
@@ -389,6 +434,10 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
     setCoverPreview(false)
     setShowArtistSuggestions(false)
     setShowMusicGenreSuggestions(false)
+    // Không dọn thì mở form lần sau vẫn còn link phim và mô tả của lần trước.
+    setMovieLink('')
+    setMovieLinkNote('')
+    setMovieDesc('')
   }
 
   // Nút "+" của trang dùng ô hành động trên header chung, giống Habits và Người.
@@ -670,7 +719,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             type: kind,
             status: statusVal,
             is_favorite: false,
-            description: null,
+            description: kind === 'MOVIE' ? movieDesc.trim() || null : null,
             log_date: logDate,
             log_time: logTime,
             channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
@@ -1925,6 +1974,23 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           )}
 
           {/* 2. Movie Genre Field with Manage Button */}
+          {activeModal.kind === 'MOVIE' && (
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              Dán link trang phim (không phải link xem)
+              <div className="yt-url-field">
+                <input
+                  value={movieLink}
+                  onChange={(e) => void autofillFromMovieLink(e.target.value)}
+                  placeholder="IMDb, TMDB, Letterboxd, Wikipedia…"
+                />
+                {autofilling && <RefreshCw size={14} className="spin" aria-label="Đang đọc thông tin" />}
+              </div>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                {movieLinkNote || 'Tự điền tên phim, ảnh bìa và mô tả. Chỉ điền vào ô đang trống.'}
+              </span>
+            </label>
+          )}
+
           {activeModal.kind === 'MOVIE' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
