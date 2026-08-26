@@ -44,9 +44,17 @@ export function WatchTogetherPage() {
   const visible = box === 'INBOX' ? inbox : sent
 
   const open = (s: WatchShare) => {
-    if (s.kind === 'VIDEO') navigate(`/youtube/watch/${s.ref_id}`)
-    else if (s.url) window.open(s.url, '_blank', 'noopener')
-    else showToast('Mục này không có đường mở trực tiếp.', 'info')
+    if (s.kind === 'VIDEO') {
+      // Gửi kèm đường quay về để nút "Quay lại" bên kia trở lại đúng đây,
+      // thay vì đổ sang kho YouTube.
+      navigate(`/youtube/watch/${s.ref_id}`, {
+        state: { from: '/watch', fromLabel: 'Xem chung', title: s.title, thumbnail: s.thumbnail },
+      })
+    } else if (s.url) {
+      window.open(s.url, '_blank', 'noopener')
+    } else {
+      showToast('Mục này không có đường mở trực tiếp.', 'info')
+    }
   }
 
   const remove = async (s: WatchShare) => {

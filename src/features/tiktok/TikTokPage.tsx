@@ -71,8 +71,12 @@ function mapLibraryRows(rows: any[]): FeedVideo[] {
   }))
 }
 
-/** Số ngày coi là "mới"; video mới hơn mốc này được đẩy lên trước. */
-const RECENT_DAYS = 240
+/**
+ * Số ngày coi là "mới"; video mới hơn mốc này được đẩy lên trước.
+ * preferRecent chỉ XẾP LẠI chứ không lọc bỏ, nên mốc hẹp không làm mất video —
+ * hết video mới thì phần còn lại vẫn hiện, chỉ là không được ưu tiên.
+ */
+const RECENT_DAYS = 10
 
 /**
  * Đẩy video mới đăng lên trước, nhưng vẫn xáo trong từng nhóm.

@@ -22,6 +22,10 @@ describe('parseTikTokUsername', () => {
 })
 
 const NOW = Date.parse('2026-08-25T00:00:00Z')
+/** Trong cửa sổ RECENT_DAYS (10 ngày) tính từ NOW. */
+const MOI = '2026-08-23T00:00:00Z'
+/** Ngoài cửa sổ — cũ hơn 10 ngày. */
+const CU = '2026-07-01T00:00:00Z'
 const v = (id: string, iso: string | null) =>
   ({ video_id: id, published_at: iso }) as never
 
@@ -35,14 +39,14 @@ describe('preferRecent', () => {
     Array.from({ length: n }, (_, i) => v(prefix + i, iso))
 
   it('MOI dang len truoc het, roi moi toi cu', () => {
-    const list = [...many(10, '2019-01-01T00:00:00Z', 'cu'), ...many(10, '2026-08-01T00:00:00Z', 'moi')]
+    const list = [...many(10, CU, 'cu'), ...many(10, MOI, 'moi')]
     const out = preferRecent(list, NOW) as Array<{ video_id: string }>
     expect(out.slice(0, 10).every((x) => x.video_id.startsWith('moi'))).toBe(true)
     expect(out.slice(10).every((x) => x.video_id.startsWith('cu'))).toBe(true)
   })
 
   it('khong co ngay thi xep vao nhom cu, khong bi mat', () => {
-    const list = [...many(10, null, 'khongngay'), ...many(10, '2026-08-01T00:00:00Z', 'moi')]
+    const list = [...many(10, null, 'khongngay'), ...many(10, MOI, 'moi')]
     const out = preferRecent(list, NOW) as Array<{ video_id: string }>
     expect(out).toHaveLength(20)
     expect(out.slice(0, 10).every((x) => x.video_id.startsWith('moi'))).toBe(true)
@@ -53,7 +57,7 @@ describe('preferRecent', () => {
   })
 
   it('giu du so luong', () => {
-    const list = many(15, '2026-08-01T00:00:00Z', 'a').concat(many(15, '2019-01-01T00:00:00Z', 'b'))
+    const list = many(15, MOI, 'a').concat(many(15, CU, 'b'))
     expect(preferRecent(list, NOW)).toHaveLength(30)
   })
 })

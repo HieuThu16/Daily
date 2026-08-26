@@ -39,7 +39,15 @@ export type WatchVideo = {
  * Thông tin kèm theo lúc điều hướng từ kết quả tìm kiếm.
  * Có sẵn thì hiện ngay tiêu đề, khỏi chờ gọi oEmbed.
  */
-export type WatchHint = { title?: string; channelName?: string; thumbnail?: string }
+export type WatchHint = {
+  title?: string
+  channelName?: string
+  thumbnail?: string
+  /** Đường quay lại nơi đã bấm vào; thiếu thì về kho video như cũ. */
+  from?: string
+  /** Chữ trên nút quay lại, hợp với nơi sẽ quay về. */
+  fromLabel?: string
+}
 
 const COLUMNS =
   'id,video_id,creator_id,creator_name,title,description,canonical_url,embed_url,thumbnail,duration,published_at'
@@ -96,11 +104,29 @@ export function buildFallbackVideo(
   }
 }
 
+/**
+ * Nút quay lại nên về đâu.
+ *
+ * Trước đây cứng /youtube, nên mở video từ tab Xem chung rồi bấm quay lại là
+ * lạc sang kho YouTube — mất chỗ đang xem dở.
+ */
+export function backTarget(hint?: WatchHint | null): { to: string; label: string } {
+  return {
+    to: hint?.from || '/youtube',
+    label: hint?.fromLabel || 'Kho video',
+  }
+}
+
 /** Trang xem một video: khung phát lớn, tiêu đề, hàng nút, mô tả, video cùng kênh. */
 export function YoutubeWatchPage() {
   const { videoId = '' } = useParams()
   const navigate = useNavigate()
   const hint = useLocation().state as WatchHint | null
+  /*
+   * Nút quay lại trước đây cứng /youtube, nên mở video từ tab Xem chung rồi bấm
+   * quay lại là lạc sang kho YouTube — mất chỗ đang xem dở.
+   */
+  const { to: backTo, label: backLabel } = backTarget(hint)
   const { showToast } = useToast()
   const { playInMini } = useVideoMiniPlayer()
   const progressMap = useVideoProgressMap()
@@ -242,7 +268,7 @@ export function YoutubeWatchPage() {
     return (
       <div className="yt-watch">
         <div className="yt-watch-main">
-          <button type="button" className="tv-btn" onClick={() => navigate('/youtube')}>
+          <button type="button" className="tv-btn" onClick={() => navigate(backTo)}>
             <ArrowLeft size={15} /> Quay lại
           </button>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Không tìm thấy video này trong kho.</p>
@@ -254,8 +280,8 @@ export function YoutubeWatchPage() {
   return (
     <div className="yt-watch">
       <div className="yt-watch-main">
-        <button type="button" className="yt-watch-back" onClick={() => navigate('/youtube')}>
-          <ArrowLeft size={16} /> Kho video
+        <button type="button" className="yt-watch-back" onClick={() => navigate(backTo)}>
+          <ArrowLeft size={16} /> {backLabel}
         </button>
 
         <div className="yt-watch-player">

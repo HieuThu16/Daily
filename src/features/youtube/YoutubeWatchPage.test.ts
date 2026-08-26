@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFallbackVideo } from './YoutubeWatchPage'
+import { backTarget, buildFallbackVideo } from './YoutubeWatchPage'
 
 describe('buildFallbackVideo', () => {
   it('uu tien thong tin gui kem luc dieu huong', () => {
@@ -31,5 +31,27 @@ describe('buildFallbackVideo', () => {
 
   it('danh dau notInApp de UI biet ma hien ghi chu', () => {
     expect(buildFallbackVideo('x', { title: 'A' }).notInApp).toBe(true)
+  })
+})
+
+describe('backTarget', () => {
+  it('mo tu Xem chung thi quay ve Xem chung', () => {
+    expect(backTarget({ from: '/watch', fromLabel: 'Xem chung' })).toEqual({
+      to: '/watch',
+      label: 'Xem chung',
+    })
+  })
+
+  it('khong biet tu dau thi ve kho video nhu cu', () => {
+    expect(backTarget(null)).toEqual({ to: '/youtube', label: 'Kho video' })
+    expect(backTarget(undefined)).toEqual({ to: '/youtube', label: 'Kho video' })
+  })
+
+  it('chi co tieu de, khong co duong quay ve -> van ve kho video', () => {
+    expect(backTarget({ title: 'Phim hay' }).to).toBe('/youtube')
+  })
+
+  it('duong rong coi nhu khong co, khong dieu huong toi trang trong', () => {
+    expect(backTarget({ from: '', fromLabel: '' })).toEqual({ to: '/youtube', label: 'Kho video' })
   })
 })
