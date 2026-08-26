@@ -9,7 +9,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { startSync, syncOnePage, writeVideos } from '../src/lib/tvshowSeries/pageSync.js'
+import { startPlaylistSync, startSync, syncOnePage, writeVideos } from '../src/lib/tvshowSeries/pageSync.js'
+import { youtubePlaylistId } from '../src/lib/youtubeMeta.js'
 import { requireAuth } from './_auth.js'
 
 export const config = { maxDuration: 60 }
@@ -33,7 +34,11 @@ export default async function handler(req: any, res: any) {
       const bad = validateChannelUrl(creatorUrl)
       if (bad) return res.status(400).json({ error: bad })
 
-      const plan = await startSync(creatorUrl, YOUTUBE_API_KEY)
+      // Link có `list=` thì cào đúng danh sách phát đó, không quét cả kênh.
+      const playlistId = youtubePlaylistId(creatorUrl)
+      const plan = playlistId
+        ? await startPlaylistSync(playlistId, YOUTUBE_API_KEY)
+        : await startSync(creatorUrl, YOUTUBE_API_KEY)
       await db.from('tvshow_creators').upsert(
         {
           platform: 'youtube',

@@ -179,3 +179,27 @@ export function detectMusicGenre(rawTitle: string, author?: string): string {
   if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/.test(text)) return 'V-Pop'
   return 'Pop'
 }
+
+/**
+ * Lấy id danh sách phát từ link; không có thì null.
+ *
+ * Nhận cả link `/playlist?list=…` lẫn link xem video đang ở trong danh sách
+ * (`/watch?v=…&list=…`) — dán từ thanh địa chỉ lúc đang xem là ra dạng sau.
+ *
+ * Bỏ qua `list=WL` (Xem sau) và `LL` (Video đã thích): hai cái đó riêng tư,
+ * API không đọc được, có nhận cũng chỉ báo lỗi.
+ */
+export function youtubePlaylistId(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url.trim())
+  } catch {
+    return null
+  }
+  const host = parsed.hostname.replace(/^www\./, '')
+  if (host !== 'youtube.com' && host !== 'm.youtube.com' && host !== 'music.youtube.com') return null
+
+  const id = parsed.searchParams.get('list') ?? ''
+  if (id === 'WL' || id === 'LL') return null
+  return /^[A-Za-z0-9_-]{12,}$/.test(id) ? id : null
+}

@@ -59,6 +59,46 @@ export async function startSync(creatorUrl: string, key: string, fetchImpl: type
 }
 
 /**
+ * Kế hoạch cào một danh sách phát cụ thể (link `?list=…`), thay vì cả kênh.
+ *
+ * Dùng chung `syncOnePage` với cào kênh — chỉ khác chỗ dựng kế hoạch: đúng một
+ * mục, không phải uploads, nên `syncOnePage` gắn video vào đúng playlist đó.
+ *
+ * `itemCount` do YouTube trả về nên thanh tiến độ biết trước tổng số trang.
+ */
+export async function startPlaylistSync(
+  playlistId: string,
+  key: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SyncPlan> {
+  const url =
+    `https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails` +
+    `&id=${encodeURIComponent(playlistId)}&key=${key}`
+  const res = await fetchImpl(url)
+  if (!res.ok) throw new Error(`YouTube trả lỗi ${res.status} khi đọc danh sách phát`)
+  const data = (await res.json()) as any
+  const item = data.items?.[0]
+  // Danh sách riêng tư hoặc đã xoá vẫn trả 200 với mảng rỗng — phải tự bắt.
+  if (!item) throw new Error('Không tìm thấy danh sách phát này (có thể là riêng tư hoặc đã xoá)')
+
+  const name = String(item.snippet?.title ?? 'Danh sách phát')
+  const entry: PlanEntry = {
+    playlistId,
+    name,
+    itemCount: Number(item.contentDetails?.itemCount ?? 0) || null,
+    isUploads: false,
+  }
+
+  return {
+    creatorUrl: `https://www.youtube.com/playlist?list=${playlistId}`,
+    channelId: String(item.snippet?.channelId ?? ''),
+    channelName: String(item.snippet?.channelTitle ?? name),
+    entries: [entry],
+    totalPages: pagesOf(entry.itemCount),
+  }
+}
+
+/**
  * Xử lý đúng một trang cho TV Show: tải → bỏ video đã có → ghi video mới → đếm lại series.
  */
 export async function syncOnePage(

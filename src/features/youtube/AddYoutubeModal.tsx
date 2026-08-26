@@ -3,19 +3,22 @@ import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Pause, Play, Pl
 import { Modal } from '../shared'
 import { supabase } from '../../lib/supabase'
 import { mapWithProgress } from '../../lib/mapWithProgress'
-import { fetchYouTubeMeta, youtubeVideoId } from '../../lib/youtubeMeta'
+import { fetchYouTubeMeta, youtubePlaylistId, youtubeVideoId } from '../../lib/youtubeMeta'
 import { matchesKeyword } from '../../lib/vietnameseRank'
 import { useToast } from '../ToastContext'
 import { apiFetch } from '../../lib/apiFetch'
 import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
 import { INITIAL_YOUTUBE_CATEGORIES, guessChannelCategory, type CustomCategoryItem } from './YoutubeView'
 
-export type YoutubeLinkKind = 'channel' | 'video' | 'invalid'
+export type YoutubeLinkKind = 'channel' | 'playlist' | 'video' | 'invalid'
 
 /** Một link YouTube là kênh hay video lẻ — không đoán được thì 'invalid'. */
 export function classifyYoutubeLink(raw: string): YoutubeLinkKind {
   const line = raw.trim()
   if (!line) return 'invalid'
+  // Xét danh sách phát TRƯỚC video: link lúc đang xem có cả `v=` lẫn `list=`,
+  // mà dán link danh sách phát thì ý là muốn cả danh sách chứ không phải một video.
+  if (youtubePlaylistId(line)) return 'playlist'
   if (youtubeVideoId(line)) return 'video'
   try {
     const host = new URL(line).hostname.replace(/^www\./, '')
@@ -29,10 +32,13 @@ export function classifyYoutubeLink(raw: string): YoutubeLinkKind {
 /** Tách ô dán thành 3 nhóm: link kênh, link video, link hỏng. Không trùng lặp. */
 export function classifyYoutubeInput(text: string): {
   channels: string[]
+  /** Link danh sách phát; cào y như kênh nên gộp luôn vào `channels`. */
+  playlists: string[]
   videos: Array<{ videoId: string; url: string }>
   invalid: string[]
 } {
   const channels: string[] = []
+  const playlists: string[] = []
   const videos: Array<{ videoId: string; url: string }> = []
   const invalid: string[] = []
   const seen = new Set<string>()
@@ -47,11 +53,14 @@ export function classifyYoutubeInput(text: string): {
       if (!videos.some((v) => v.videoId === videoId)) videos.push({ videoId, url: line })
     } else if (kind === 'channel') {
       channels.push(line)
+    } else if (kind === 'playlist') {
+      playlists.push(line)
+      channels.push(line)
     } else {
       invalid.push(line)
     }
   }
-  return { channels, videos, invalid }
+  return { channels, playlists, videos, invalid }
 }
 
 type DiscoveredVideo = {
@@ -595,7 +604,7 @@ export function AddYoutubeModal({
               className="tv-links-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={'Dán link kênh hoặc link video, mỗi dòng một link:\nhttps://www.youtube.com/@web5ngay\nhttps://youtu.be/xxxxxxxxxxx'}
+              placeholder={'Dán link kênh, danh sách phát hoặc video, mỗi dòng một link:\nhttps://www.youtube.com/@web5ngay\nhttps://www.youtube.com/playlist?list=PLxxxxxxxx\nhttps://youtu.be/xxxxxxxxxxx'}
             />
 
             {/* Chọn thể loại ngay tại màn hình dán link */}
@@ -663,7 +672,8 @@ export function AddYoutubeModal({
 
             <div className="tv-sync-badge-summary">
               <span className="tv-sync-pill-valid">
-                <Check size={12} /> {parsed.channels.length} kênh · {parsed.videos.length} video lẻ
+                <Check size={12} /> {parsed.channels.length - parsed.playlists.length} kênh
+                {parsed.playlists.length > 0 ? ` · ${parsed.playlists.length} danh sách phát` : ''} · {parsed.videos.length} video lẻ
               </span>
               {parsed.invalid.length > 0 && (
                 <span className="tv-sync-pill-invalid">
