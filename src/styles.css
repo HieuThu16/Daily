@@ -12502,3 +12502,13 @@ svg.lucide-library {
 @media (prefers-reduced-motion: reduce) {
   .quote-bar { animation: none; }
 }
+
+/* Trích một dòng nhật ký trong mục Nhìn lại — xem lướt là nhớ ra hôm đó. */
+.lookback-quote {
+  font-style: italic;
+  opacity: 0.85;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

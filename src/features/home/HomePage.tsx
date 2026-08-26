@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BarChart3, Clock } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { buildDayReview } from '../../lib/dayReview'
@@ -26,7 +26,20 @@ export function HomePage() {
   const [tab, setTab] = useState<ReportTab>('day')
   // Mở Home là thấy thống kê ngày; dòng thời gian nằm ở tab bên cạnh.
   const [daySubTab, setDaySubTab] = useState<DaySubTab>('stats')
-  const [dateKey, setDateKey] = useState(localDate())
+  /*
+   * Nhận ngày từ URL (?date=YYYY-MM-DD) để thông báo "Nhìn lại" bấm vào là mở
+   * thẳng ngày đó, thay vì bắt tự bấm lùi từng ngày.
+   */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlDate = searchParams.get('date') ?? ''
+  const [dateKey, setDateKey] = useState(() =>
+    /^\d{4}-\d{2}-\d{2}$/.test(urlDate) ? urlDate : localDate(),
+  )
+
+  // Đổi ngày thì bỏ tham số đi, khỏi dính lại lúc bấm sang ngày khác.
+  useEffect(() => {
+    if (urlDate && urlDate !== dateKey) setSearchParams({}, { replace: true })
+  }, [urlDate, dateKey, setSearchParams])
   const data = useHomeData(dateKey)
   const mangaLogs = useMangaReadingLogs()
   const bookSessionLogs = useBookReadingSessionLogs()

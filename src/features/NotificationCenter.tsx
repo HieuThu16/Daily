@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronLeft, ChevronRight, Clock, Flame, Clapperboard, Sparkles, X } from 'lucide-react'
+import { AlertCircle, Bell, BookMarked, Brain, Cake, CalendarHeart, Check, ChevronLeft, ChevronRight, Clock, Flame, Clapperboard, RotateCcw, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useBackdropClose } from './shared'
 import { localDate } from '../lib/date'
@@ -13,6 +13,12 @@ import { useMangaUpdates, mangaPath } from './manga/mangaUpdates'
 import { useNewVideos } from './newVideos'
 import { useDeck } from './study/useDeck'
 import { useToast } from './ToastContext'
+import {
+  buildLookBack, sameDayLastMonth, sameDayLastWeek, summaryLine, type LookBackSummary,
+} from '../lib/lookBack'
+import { getMangaReadingLogs } from '../lib/mangaReadingLog'
+import { getBookReadingSessionLogs } from '../lib/bookReadingLog'
+import { getVideoWatchLogs } from '../lib/videoWatchLog'
 import type { Habit, HabitLog, Person, PersonOccasion, SharedEvent, Todo } from '../types'
 
 /** Số ngày tới được coi là "dịp sắp đến" và đưa vào hộp thư. */
@@ -70,6 +76,54 @@ function useUnloggedHabits() {
   }, [habits, logs])
 }
 
+/**
+ * Nhìn lại ngày này tuần trước và tháng trước.
+ *
+ * Chỉ nạp đúng hai ngày cần chứ không kéo cả bảng: hai mốc là hai ngày cụ thể
+ * nên lọc thẳng ở truy vấn.
+ */
+function useLookBack(): LookBackSummary[] {
+  const [summaries, setSummaries] = useState<LookBackSummary[]>([])
+
+  useEffect(() => {
+    if (!supabase) return
+    const client = supabase
+    const today = localDate()
+    const days = [sameDayLastWeek(today), sameDayLastMonth(today)]
+
+    const load = async () => {
+      try {
+        const [entries, todos, habitLogs] = await Promise.all([
+          client.from('daily_entries').select('entry_date,content').in('entry_date', days).is('deleted_at', null),
+          client.from('todos').select('completed,completed_at').eq('completed', true),
+          client.from('habit_logs').select('date,completed').in('date', days),
+        ])
+        const onDays = <T extends { log_date?: string }>(rows: T[]) =>
+          rows.filter((r) => days.includes(String(r.log_date ?? '').slice(0, 10)))
+
+        setSummaries(
+          buildLookBack(today, {
+            entries: entries.data ?? [],
+            todos: todos.data ?? [],
+            habitLogs: (habitLogs.data ?? []) as Array<{ date: string; completed: boolean }>,
+            // Ba loại này lưu trên máy, không phải Supabase.
+            mangaLogs: getMangaReadingLogs().filter((l) => days.includes(String(l.readAt ?? '').slice(0, 10))),
+            bookLogs: onDays(getBookReadingSessionLogs()),
+            videoLogs: onDays(getVideoWatchLogs()),
+          }),
+        )
+      } catch {
+        setSummaries([])
+      }
+    }
+    void load()
+    window.addEventListener('focus', load)
+    return () => window.removeEventListener('focus', load)
+  }, [])
+
+  return summaries
+}
+
 /** Kỷ niệm chung rơi đúng ngày này của các năm trước. */
 function useMemoryAnniversaries(): Array<Anniversary<SharedEvent>> {
   const [events, setEvents] = useState<SharedEvent[]>([])
@@ -87,11 +141,12 @@ function useMemoryAnniversaries(): Array<Anniversary<SharedEvent>> {
   return useMemo(() => anniversariesOn(events, today), [events, today])
 }
 
-type Section = 'tasks' | 'study' | 'manga' | 'videos' | 'people' | 'memories' | 'habits'
+type Section = 'tasks' | 'study' | 'manga' | 'videos' | 'people' | 'memories' | 'habits' | 'lookback'
 
-const SECTION_ORDER: Section[] = ['memories', 'study', 'tasks', 'videos', 'manga', 'people', 'habits']
+const SECTION_ORDER: Section[] = ['lookback', 'memories', 'study', 'tasks', 'videos', 'manga', 'people', 'habits']
 
 const SECTION_PATH: Record<Section, string> = {
+  lookback: '/home',
   tasks: '/tasks',
   study: '/english',
   manga: '/bl',
@@ -113,6 +168,7 @@ export function NotificationCenter() {
   const occasions = useUpcomingOccasions()
   const unloggedHabits = useUnloggedHabits()
   const anniversaries = useMemoryAnniversaries()
+  const lookBack = useLookBack()
   const english = useDeck('english')
   const knowledge = useDeck('knowledge')
   const [open, setOpen] = useState(false)
@@ -128,6 +184,7 @@ export function NotificationCenter() {
   ].filter((d) => d.due > 0)
 
   const counts: Record<Section, number> = {
+    lookback: lookBack.length,
     tasks: tasks.length,
     study: dueDecks.reduce((sum, d) => sum + d.due, 0),
     manga: updates.length,
@@ -268,6 +325,7 @@ export function NotificationCenter() {
     { id: 'manga', label: 'Truyện', icon: BookMarked },
     { id: 'videos', label: 'Video mới', icon: Clapperboard },
     { id: 'people', label: 'Dịp', icon: Cake },
+    { id: 'lookback', label: 'Nhìn lại', icon: RotateCcw },
     { id: 'memories', label: 'Kỷ niệm', icon: CalendarHeart },
     { id: 'habits', label: 'Thói quen', icon: Flame },
   ]
@@ -405,6 +463,28 @@ export function NotificationCenter() {
                         </li>
                       )
                     })}
+                  </ul>
+                ) : section === 'lookback' ? (
+                  <ul className="task-bell-list">
+                    {lookBack.map((s) => (
+                      <li
+                        key={s.kind}
+                        className="task-bell-item"
+                        onClick={() => goTo(`/home?date=${s.date}`)}
+                      >
+                        <div className="task-bell-item-content">
+                          <span className="task-bell-item-title">{s.label}</span>
+                          <span className="task-bell-item-sub">{summaryLine(s)}</span>
+                          {s.preview.length > 0 && (
+                            <span className="task-bell-item-sub lookback-quote">“{s.preview[0]}”</span>
+                          )}
+                          <div className="task-bell-item-tags">
+                            <span className="task-tag-badge tag-category">{s.date}</span>
+                          </div>
+                        </div>
+                        <ChevronRight size={15} className="task-bell-item-arrow" />
+                      </li>
+                    ))}
                   </ul>
                 ) : section === 'memories' ? (
                   <ul className="task-bell-list">
