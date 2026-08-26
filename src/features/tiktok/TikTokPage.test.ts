@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTikTokUsername, preferRecent } from './TikTokPage'
+import { parseTikTokUsername, preferRecent, sortFeed } from './TikTokPage'
 
 describe('parseTikTokUsername', () => {
   it('lay ten kenh tu link day du', () => {
@@ -59,5 +59,64 @@ describe('preferRecent', () => {
   it('giu du so luong', () => {
     const list = many(15, MOI, 'a').concat(many(15, CU, 'b'))
     expect(preferRecent(list, NOW)).toHaveLength(30)
+  })
+})
+
+const vid = (id: string, play: number | null, iso: string | null) =>
+  ({ video_id: id, play_count: play, published_at: iso }) as never
+const ids = (list: unknown[]) => (list as Array<{ video_id: string }>).map((x) => x.video_id)
+
+describe('sortFeed', () => {
+  it('mac dinh thi giu nguyen thu tu, khong dong vao', () => {
+    const list = [vid('a', 1, null), vid('b', 999, null)]
+    expect(sortFeed(list, 'default')).toBe(list)
+  })
+
+  it('theo view: nhieu nhat truoc', () => {
+    const out = sortFeed([vid('it', 10, null), vid('nhieu', 9000, null), vid('vua', 500, null)], 'views')
+    expect(ids(out)).toEqual(['nhieu', 'vua', 'it'])
+  })
+
+  it('theo ngay: moi nhat truoc', () => {
+    const out = sortFeed(
+      [vid('cu', null, '2020-01-01T00:00:00Z'), vid('moi', null, '2026-08-01T00:00:00Z')],
+      'date',
+    )
+    expect(ids(out)).toEqual(['moi', 'cu'])
+  })
+
+  it('THIEU so lieu thi xuong cuoi, KHONG coi nhu 0 luot xem', () => {
+    /*
+     * Video trong kho khong co play_count. Coi la 0 thi chung lan vao nhom it view.
+     *
+     * Dung NHIEU phan tu xen ke: co hai nhanh xu ly gia tri thieu (a null va b
+     * null), ma voi 2 phan tu thi V8 chi goi trung mot nhanh - dot bien o nhanh
+     * kia se bi che, test pass gia.
+     */
+    const list = [
+      vid('trong0', null, null), vid('co1', 10, null),
+      vid('trong1', null, null), vid('co2', 5000, null),
+      vid('trong2', null, null), vid('co3', 700, null),
+      vid('trong3', null, null), vid('co4', 90, null),
+    ]
+    const out = ids(sortFeed(list, 'views'))
+    // Bon video co so lieu phai dung TRUOC, xep giam dan
+    expect(out.slice(0, 4)).toEqual(['co2', 'co3', 'co4', 'co1'])
+    expect(out.slice(4).every((x) => x.startsWith('trong'))).toBe(true)
+  })
+
+  it('cac video cung thieu so lieu thi giu nguyen thu tu cu', () => {
+    const out = sortFeed([vid('a', null, null), vid('b', null, null), vid('c', null, null)], 'views')
+    expect(ids(out)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('ngay hong coi nhu thieu, khong lam vo', () => {
+    const out = sortFeed([vid('hong', null, 'khong-phai-ngay'), vid('that', null, '2026-01-01T00:00:00Z')], 'date')
+    expect(ids(out)).toEqual(['that', 'hong'])
+  })
+
+  it('khong lam mat video nao', () => {
+    const list = Array.from({ length: 20 }, (_, i) => vid('v' + i, i % 3 ? i * 100 : null, null))
+    expect(sortFeed(list, 'views')).toHaveLength(20)
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Home, Compass, Bookmark, RefreshCw, ExternalLink,
@@ -91,6 +91,44 @@ export function preferRecent(list: FeedVideo[], now = Date.now()): FeedVideo[] {
     ;(Number.isFinite(t) && t >= cutoff ? fresh : older).push(v)
   }
   return [...shuffle(fresh), ...shuffle(older)]
+}
+
+/** Kiểu sắp xếp feed TikTok. */
+export type FeedOrder = 'default' | 'views' | 'date'
+
+/**
+ * Sắp xếp feed đã tải.
+ *
+ * Khác YouTube (hỏi lại API để xếp), ở đây toàn bộ video đã nằm sẵn trong bộ
+ * nhớ nên xếp tại chỗ — bấm là đổi ngay, không tốn thêm lượt gọi mạng.
+ *
+ * Lưu ý về lượt xem: chỉ video lấy TRỰC TIẾP từ TikTok mới có `play_count`.
+ * Video trong kho không có (bảng review_videos không lưu cột này, và đường cào
+ * qua embed/Wayback cũng không trả về). Nên video thiếu số liệu bị đẩy xuống
+ * cuối thay vì coi như 0 lượt xem — coi là 0 thì chúng lẫn vào nhóm ít view.
+ */
+export function sortFeed(list: FeedVideo[], order: FeedOrder): FeedVideo[] {
+  if (order === 'default') return list
+
+  const value = (v: FeedVideo) =>
+    order === 'views'
+      ? typeof v.play_count === 'number'
+        ? v.play_count
+        : null
+      : v.published_at
+        ? Date.parse(v.published_at) || null
+        : null
+
+  return [...list]
+    .map((item, i) => ({ item, i, key: value(item) }))
+    .sort((a, b) => {
+      // Thiếu số liệu thì xuống cuối, giữ nguyên thứ tự cũ giữa chúng với nhau.
+      if (a.key === null && b.key === null) return a.i - b.i
+      if (a.key === null) return 1
+      if (b.key === null) return -1
+      return b.key - a.key || a.i - b.i
+    })
+    .map((x) => x.item)
 }
 
 export function TikTokPage() {
@@ -365,7 +403,18 @@ export function TikTokPage() {
     [],
   )
 
-  const current = videos[index]
+  const [feedOrder, setFeedOrder] = useState<FeedOrder>('default')
+
+  /** Danh sách thực sự hiện ra, đã áp thứ tự đang chọn. */
+  const shownVideos = useMemo(() => sortFeed(videos, feedOrder), [videos, feedOrder])
+  /** Bao nhiêu video thiếu số view — nói thật thay vì im lặng xếp chúng xuống cuối. */
+  const missingViews = useMemo(
+    () => videos.filter((v) => typeof v.play_count !== 'number').length,
+    [videos],
+  )
+
+  // Phải lấy theo danh sách ĐÃ SẮP, không thì bình luận và nút cào kênh trỏ nhầm video.
+  const current = shownVideos[index]
 
   useEffect(() => {
     if (showComments && current && !comments[current.video_id]) {
@@ -376,6 +425,7 @@ export function TikTokPage() {
 
   const [crawling, setCrawling] = useState(false)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
+
   const [crawlProgress, setCrawlProgress] = useState('')
 
   /**
@@ -504,6 +554,33 @@ export function TikTokPage() {
           </button>
         </div>
 
+        {/* Sắp xếp: xếp tại chỗ trên video đã tải, không gọi lại mạng. */}
+        {videos.length > 1 && (
+          <div className="tt-order-row">
+            {([
+              ['default', 'Mặc định'],
+              ['views', 'Nhiều view'],
+              ['date', 'Mới nhất'],
+            ] as [FeedOrder, string][]).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`tt-order-chip${feedOrder === value ? ' on' : ''}`}
+                onClick={() => {
+                  setFeedOrder(value)
+                  setIndex(0)
+                  scrollRef.current?.scrollTo({ top: 0 })
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            {feedOrder === 'views' && missingViews > 0 && (
+              <span className="tt-order-note">{missingViews} video trong kho không có số view</span>
+            )}
+          </div>
+        )}
+
         {loading && (
           <div className="tt-state">
             <Loader2 size={34} className="tv-spin" />
@@ -523,7 +600,7 @@ export function TikTokPage() {
 
         {!loading && !error && videos.length > 0 && (
           <div className="tt-scroll" ref={scrollRef} onScroll={handleScroll}>
-            {videos.map((vid, i) => {
+            {shownVideos.map((vid, i) => {
               const near = Math.abs(i - index) <= 1
               const isWatched = watchedIds.has(vid.video_id)
               return (

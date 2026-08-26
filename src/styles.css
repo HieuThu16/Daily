@@ -12428,3 +12428,41 @@ svg.lucide-library {
   .tt-add-channel { padding: 7px 9px; }
   .tt-add-channel span { display: none; }
 }
+
+/* Chip sắp xếp feed TikTok. */
+.tt-order-row {
+  position: absolute;
+  top: 58px;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tt-order-row::-webkit-scrollbar { display: none; }
+
+.tt-order-chip {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.tt-order-chip.on { background: #fff; color: #111; }
+
+/* Nói thẳng vì sao một số video bị xếp xuống cuối. */
+.tt-order-note {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
