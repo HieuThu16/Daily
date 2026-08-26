@@ -27,3 +27,18 @@ src/data/*.json
 
 # Sinh tự động mỗi build — không commit để Vercel luôn có giá trị mới nhất
 public/version.json
+
+# Dữ liệu nguồn của truyện ngôn tình — CHỈ dùng để chạy `npm run build:ngontinh`,
+# app không còn tải chúng lúc chạy. Thứ được deploy là ngontinh_index.json (7.7MB)
+# và ngontinh/ch-*.json, cả hai đều có trong git.
+#
+# CẢNH BÁO: git không giữ bản sao mấy file này nữa. Muốn build lại chỉ mục thì
+# phải có chúng trên máy, hoặc cào lại bằng các script trong tools/crawl/.
+public/data/extra_manga.json
+public/data/ngontinh_manga_[1-4].json
+public/data/school_life_list.json
+public/data/shoujo_manga.json
+public/data/shounenai_manga.json
+public/data/sliceoflife_manga.json
+public/data/dammy_manga.json
+public/data/mangadex_school_*.json
