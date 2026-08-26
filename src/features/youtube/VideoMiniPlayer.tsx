@@ -53,8 +53,12 @@ export function VideoMiniPlayer() {
     thumbnail: current?.thumbnail,
   })
 
-  if (!current) return null
-
+  /*
+   * useMemo PHẢI đứng trước mọi `return` sớm. Trước đây nó nằm sau
+   * `if (!current) return null`, nên số hook chạy được đổi theo việc có video
+   * hay không — React ném "Rendered fewer hooks than expected" ngay lúc đóng
+   * khung video.
+   */
   const src = useMemo(() => {
     if (!current) return ''
     const start = Math.max(0, Math.floor(current.startSeconds ?? 0))
@@ -62,7 +66,9 @@ export function VideoMiniPlayer() {
       `https://www.youtube.com/embed/${current.videoId}` +
       `?autoplay=1&rel=0&enablejsapi=1&playsinline=1${start > 0 ? `&start=${start}` : ''}`
     )
-  }, [current?.videoId])
+  }, [current])
+
+  if (!current) return null
 
   return (
     <div className="yt-mini" role="complementary" aria-label="Video đang phát">

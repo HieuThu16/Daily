@@ -5,7 +5,7 @@ import {
   ExternalLink, Bookmark, ArrowUp, Sparkles, BookOpen 
 } from 'lucide-react';
 import type { NgontinhManga } from '../../types/manga';
-import { fetchNgontinhList, getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
+import { fetchNgontinhBySlug, getNgontinhProgress, saveNgontinhProgress, fetchNgontinhChapterImages } from './ngontinhService';
 import { hydrateMangadexManga } from './mangadexService';
 import { recordMangaReading, useMangaReadingTracker } from '../../lib/mangaReadingLog';
 import { useHideHeader } from '../HeaderAction';
@@ -38,11 +38,9 @@ export const NgontinhReaderPage: React.FC = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const list = await fetchNgontinhList();
-        if (isMounted && slug) {
-          const found = list.find(m => m.slug === slug);
-          if (found) setManga(await hydrateMangadexManga(found));
-        }
+        // fetchNgontinhBySlug ghép sẵn mục lục chương từ mảnh tương ứng.
+        const found = slug ? await fetchNgontinhBySlug(slug) : null;
+        if (isMounted && found) setManga(await hydrateMangadexManga(found));
       } catch (err) {
         console.error('Failed to load manga for reader', err);
       } finally {

@@ -21,7 +21,8 @@
     "split:ngontinh": "node --import tsx tools/data/split_ngontinh_data.mjs",
     "import:books": "node --import tsx tools/data/import_books_full_v2.mjs",
     "lint": "eslint . --max-warnings 9999",
-    "lint:strict": "eslint ."
+    "lint:strict": "eslint .",
+    "build:ngontinh": "node --import tsx tools/data/build_ngontinh_index.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

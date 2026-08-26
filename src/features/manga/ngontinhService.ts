@@ -1,51 +1,92 @@
 import type { NgontinhManga, ReadingProgress, HotMangaData } from '../../types/manga';
 import { fetchMangadexChapterImages, isMangadexManga } from './mangadexService';
+import { ngontinhShardPath } from './ngontinhShards';
 
 const FAVORITES_KEY = 'daily_ngontinh_favorites';
 const HISTORY_KEY = 'daily_ngontinh_history';
 
+/**
+ * Danh sách truyện cho lưới bìa — chỉ tải file chỉ mục (~7MB).
+ *
+ * Trước đây hàm này tải 4 file ngontinh_manga_*.json (112MB) rồi tuần tự thêm
+ * extra_manga.json (41MB) và school_life_list.json (16MB) = 169MB, chỉ để vẽ
+ * lưới bìa. 98% dung lượng là url ảnh từng trang của từng chương — thứ mà
+ * reader vốn đã tự gọi lại từ otruyenapi.
+ *
+ * Mục lục chương KHÔNG còn nằm ở đây; gọi `fetchNgontinhChapters(slug)` khi mở
+ * truyện. Chạy `npm run build:ngontinh` để sinh lại chỉ mục.
+ */
 export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
   try {
-    const [res1, res2, res3, res4] = await Promise.all([
-      fetch('/data/ngontinh_manga_1.json'),
-      fetch('/data/ngontinh_manga_2.json'),
-      fetch('/data/ngontinh_manga_3.json'),
-      fetch('/data/ngontinh_manga_4.json'),
-    ]);
-    const [d1, d2, d3, d4] = await Promise.all([
-      res1.ok ? res1.json().catch(() => []) : [],
-      res2.ok ? res2.json().catch(() => []) : [],
-      res3.ok ? res3.json().catch(() => []) : [],
-      res4.ok ? res4.json().catch(() => []) : [],
-    ]);
-    const list = [
-      ...(Array.isArray(d1) ? d1 : []),
-      ...(Array.isArray(d2) ? d2 : []),
-      ...(Array.isArray(d3) ? d3 : []),
-      ...(Array.isArray(d4) ? d4 : []),
-      ...(await fetchExtraList()),
-      ...(await fetchOtruyenGenreList('/data/school_life_list.json')),
-    ];
-    if (list.length > 0) {
-      return dedupeBySlug(list);
-    }
-  } catch (err) {
-    console.warn('Could not load split ngontinh data', err);
-  }
-
-  try {
-    const res = await fetch('/data/ngontinh_manga.json');
+    const res = await fetch('/data/ngontinh_index.json');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        return data;
+        return data.map((m: any) => ({ ...m, chapters: m.chapters ?? [] }));
       }
     }
   } catch (err) {
-    console.warn('Could not load /data/ngontinh_manga.json from public', err);
+    console.warn('Không tải được /data/ngontinh_index.json', err);
   }
 
+  // Chưa chạy build:ngontinh thì quay về cách cũ để app vẫn có dữ liệu.
+  return fetchNgontinhListLegacy();
+}
+
+/** Đường cũ: tải các file gốc. Nặng, chỉ dùng khi chưa có chỉ mục. */
+async function fetchNgontinhListLegacy(): Promise<NgontinhManga[]> {
+  try {
+    const parts = await Promise.all(
+      ['1', '2', '3', '4'].map((n) =>
+        fetch(`/data/ngontinh_manga_${n}.json`)
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []),
+      ),
+    );
+    const list = [
+      ...parts.flat().filter(Boolean),
+      ...(await fetchExtraList()),
+      ...(await fetchOtruyenGenreList('/data/school_life_list.json')),
+    ];
+    if (list.length > 0) return dedupeBySlug(list);
+  } catch (err) {
+    console.warn('Could not load split ngontinh data', err);
+  }
   return [];
+}
+
+/** Nhớ mảnh đã tải để đọc nhiều chương trong cùng truyện khỏi tải lại. */
+const chapterShardCache = new Map<string, Record<string, any[]>>();
+
+/**
+ * Mục lục chương của một truyện, tải đúng mảnh chứa nó (~0.7MB).
+ * Không có mảnh (chưa build) thì trả rỗng — reader tự gọi otruyenapi.
+ */
+export async function fetchNgontinhChapters(slug: string): Promise<any[]> {
+  if (!slug) return [];
+  const path = ngontinhShardPath(slug);
+  const cached = chapterShardCache.get(path);
+  if (cached) return cached[slug] ?? [];
+
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return [];
+    const map = await res.json();
+    chapterShardCache.set(path, map);
+    return map?.[slug] ?? [];
+  } catch (err) {
+    console.warn(`Không tải được mục lục chương ${path}`, err);
+    return [];
+  }
+}
+
+/** Truyện kèm mục lục chương — dùng cho trang chi tiết và trang đọc. */
+export async function fetchNgontinhBySlug(slug: string): Promise<NgontinhManga | null> {
+  const [list, chapters] = await Promise.all([fetchNgontinhList(), fetchNgontinhChapters(slug)]);
+  const found = list.find((m) => m.slug === slug);
+  if (!found) return null;
+  // Đường cũ đã kèm sẵn chương thì giữ nguyên, khỏi ghi đè bằng mảng rỗng.
+  return chapters.length > 0 ? { ...found, chapters } : found;
 }
 
 // Các bộ crawl thêm (romance, shoujo, slice of life, shounen ai, đam mỹ) đã gộp và

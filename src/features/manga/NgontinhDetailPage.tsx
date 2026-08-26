@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import type { MangaChapter, NgontinhManga } from '../../types/manga';
 import { 
-  fetchNgontinhList, fetchNgontinhHotData, 
+  fetchNgontinhList, fetchNgontinhHotData, fetchNgontinhChapters, 
   getNgontinhFavorites, toggleNgontinhFavorite, 
   getNgontinhHistory,
   getNgontinhFollows, toggleNgontinhFollow
@@ -44,13 +44,16 @@ export const NgontinhDetailPage: React.FC = () => {
     const loadMangaDetail = async () => {
       setLoading(true);
       try {
-        const [list, hot] = await Promise.all([
+        // Mục lục chương giờ nằm ở mảnh riêng, tải kèm theo slug.
+        const [list, hot, chapters] = await Promise.all([
           fetchNgontinhList(),
           fetchNgontinhHotData(),
+          slug ? fetchNgontinhChapters(slug) : Promise.resolve([]),
         ]);
 
         if (isMounted && slug) {
-          const match = list.find((m) => m.slug === slug);
+          const base = list.find((m) => m.slug === slug);
+          const match = base && chapters.length > 0 ? { ...base, chapters } : base;
           const found = match ? await hydrateMangadexManga(match) : undefined;
           if (found) {
             if (hot?.hot) {
