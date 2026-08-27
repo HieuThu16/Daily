@@ -845,6 +845,34 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return result
   }, [channels, activeCategoryTab, search])
 
+  // Tính số lượng video theo từng trạng thái xem trong tab hiện tại
+  const watchStatusCounts = useMemo(() => {
+    const base = activeCategoryTab === 'ALL'
+      ? allVideos
+      : allVideos.filter((v) => v.channel_category === activeCategoryTab)
+
+    let inProgress = 0
+    let watched = 0
+    let unwatched = 0
+
+    for (const v of base) {
+      if (watchedSet.has(v.video_id)) {
+        watched++
+      } else if (inProgressSet.has(v.video_id)) {
+        inProgress++
+      } else {
+        unwatched++
+      }
+    }
+
+    return {
+      all: base.length,
+      in_progress: inProgress,
+      watched,
+      unwatched,
+    }
+  }, [allVideos, activeCategoryTab, watchedSet, inProgressSet])
+
   // Lọc Video ĐÃ CÓ trong App theo Tab Thể Loại của Kênh
   const filteredSavedVideos = useMemo(() => {
     let result = [...allVideos]
@@ -1095,10 +1123,10 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           3 dòng màn hình điện thoại, đẩy video xuống quá sâu. */}
       <div className="chip-scroll-row" style={{ margin: '8px 0 14px' }}>
         {([
-            { id: 'all', label: 'Tất cả video', icon: null, count: allVideos.length },
-            { id: 'in_progress', label: 'Đang xem', icon: Clock, count: inProgressSet.size },
-            { id: 'watched', label: 'Đã xem', icon: CheckCircle2, count: watchedSet.size },
-            { id: 'unwatched', label: 'Chưa xem', icon: Circle, count: Math.max(0, allVideos.length - inProgressSet.size - watchedSet.size) },
+            { id: 'all', label: 'Tất cả video', icon: null, count: watchStatusCounts.all },
+            { id: 'in_progress', label: 'Đang xem', icon: Clock, count: watchStatusCounts.in_progress },
+            { id: 'watched', label: 'Đã xem', icon: CheckCircle2, count: watchStatusCounts.watched },
+            { id: 'unwatched', label: 'Chưa xem', icon: Circle, count: watchStatusCounts.unwatched },
         ] as const).map((filter) => {
             const isActive = watchFilter === filter.id
             const Icon = filter.icon
