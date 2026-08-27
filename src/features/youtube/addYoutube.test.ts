@@ -25,3 +25,16 @@ describe('phân biệt link kênh và link video', () => {
     expect(result.invalid).toEqual(['không-phải-link'])
   })
 })
+
+describe('isShortVideo logic', () => {
+  it('nhận diện chính xác video dưới 5 phút (< 300s)', async () => {
+    const { isShortVideo } = await import('./YoutubeView')
+    expect(isShortVideo({ duration: 59 })).toBe(true)
+    expect(isShortVideo({ duration: 299 })).toBe(true)
+    expect(isShortVideo({ duration: 300 })).toBe(false)
+    expect(isShortVideo({ duration: 600 })).toBe(false)
+    expect(isShortVideo({ duration: null })).toBe(false)
+    expect(isShortVideo({ duration: undefined })).toBe(false)
+    expect(isShortVideo({ duration: 0 })).toBe(false)
+  })
+})

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Video, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -77,6 +77,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
   { id: 'youtube', label: 'YouTube', icon: Youtube, colorClass: 'icon-box-rose' },
+  { id: 'youtubeshorts', label: 'YouTube Shorts', icon: Video, colorClass: 'icon-box-rose' },
   { id: 'tiktok', label: 'TikTok', icon: Flame, colorClass: 'icon-box-rose' },
   { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
   { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
@@ -279,7 +280,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
     { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] as Tab[] },
-    { title: 'Giải trí & Video', ids: ['youtube', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
+    { title: 'Giải trí & Video', ids: ['youtube', 'youtubeshorts', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people', 'watch'] as Tab[] },
@@ -606,6 +607,8 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/share" element={<ShareTarget />} />
                       <Route path="/youtube" element={<YoutubeView />} />
                       <Route path="/youtube/watch/:videoId" element={<YoutubeWatchPage />} />
+                      <Route path="/youtubeshorts" element={<YoutubeView isShorts />} />
+                      <Route path="/youtubeshorts/watch/:videoId" element={<YoutubeWatchPage />} />
                       <Route path="/tvshow" element={<Navigate to="/youtube" replace />} />
                       <Route path="/reviews" element={<Navigate to="/youtube" replace />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />

@@ -154,9 +154,15 @@ export function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'rev
   return sourceTable === 'tvshow' ? 'TV Shows' : 'Review phim'
 }
 
-export function YoutubeView() {
+/** Kiểm tra video ngắn (< 5 phút = 300 giây) */
+export const isShortVideo = (v: { duration?: number | null }): boolean => {
+  return typeof v.duration === 'number' && v.duration > 0 && v.duration < 300
+}
+
+export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const { showToast } = useToast()
   const navigate = useNavigate()
+  const watchBasePath = isShorts ? '/youtubeshorts' : '/youtube'
   const [channels, setChannels] = useState<ChannelItem[]>([])
   const [allVideos, setAllVideos] = useState<VideoRow[]>([])
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
@@ -205,8 +211,14 @@ export function YoutubeView() {
    * video này thường chưa có trong kho nên không tra được từ database.
    */
   const openSearchResult = (item: YouTubeSearchResult) => {
-    navigate(`/youtube/watch/${item.videoId}`, {
-      state: { title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail },
+    navigate(`${watchBasePath}/watch/${item.videoId}`, {
+      state: {
+        title: item.title,
+        channelName: item.channelTitle,
+        thumbnail: item.thumbnail,
+        from: watchBasePath,
+        fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube',
+      },
     })
   }
 
@@ -478,7 +490,10 @@ export function YoutubeView() {
       const tvVideos = ((tvVideosRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType: 'tvshow' as const }))
       const revVideos = ((revVideosRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType: 'review' as const }))
 
-      const combinedVideos = [...tvVideos, ...revVideos]
+      const rawCombinedVideos = [...tvVideos, ...revVideos]
+      const combinedVideos = isShorts
+        ? rawCombinedVideos.filter(isShortVideo)
+        : rawCombinedVideos.filter((v) => !isShortVideo(v))
 
       const combinedWatchedIds = new Set([
         ...(((tvWatchedRes?.data ?? []) as { video_id: string }[]).map(w => w.video_id)),
@@ -510,6 +525,7 @@ export function YoutubeView() {
       for (const c of tvCreators) {
         const key = c.creator_id || c.creator_name || c.id
         const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
+        if (isShorts && stat.total === 0) continue
         const assignedCat = catMap[key] || catMap[c.creator_name] || c.category || guessChannelCategory(c.creator_name, 'tvshow')
         channelCardsMap.set(key, {
           id: c.id,
@@ -531,6 +547,7 @@ export function YoutubeView() {
       for (const c of revCreators) {
         const key = c.creator_id || c.creator_name || c.id
         const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
+        if (isShorts && stat.total === 0) continue
         const assignedCat = catMap[key] || catMap[c.creator_name] || c.category || guessChannelCategory(c.creator_name, 'review')
         if (channelCardsMap.has(key)) {
           const existing = channelCardsMap.get(key)!
@@ -833,6 +850,7 @@ export function YoutubeView() {
     return (
       <ChannelDetailView
         channel={selectedChannel}
+        isShorts={isShorts}
         onBack={() => setSelectedChannel(null)}
         onChangeCategory={(newCat) => {
           const key = selectedChannel.creator_id || selectedChannel.creator_name || selectedChannel.id
@@ -1452,7 +1470,7 @@ export function YoutubeView() {
                     playing={playingVideoId === video.video_id}
                     onPlay={() => setPlayingVideoId(video.video_id)}
                     onToggleWatched={() => void handleToggleWatched(video)}
-                    onOpen={() => navigate(`/youtube/watch/${video.video_id}`)}
+                    onOpen={() => navigate(`${watchBasePath}/watch/${video.video_id}`, { state: { from: watchBasePath, fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube' } })}
                     onPlayMini={() =>
                       playInMini({
                         videoId: video.video_id,
@@ -2136,6 +2154,7 @@ function QuickAddCategoryModal({
 /** Màn hình xem chi tiết 1 Kênh */
 function ChannelDetailView({
   channel,
+  isShorts = false,
   onBack,
   onChangeCategory,
   customCategories,
@@ -2144,6 +2163,7 @@ function ChannelDetailView({
   onDeleteCustomCategory,
 }: {
   channel: ChannelItem
+  isShorts?: boolean
   onBack: () => void
   onChangeCategory: (cat: string) => void
   customCategories: CustomCategoryItem[]
@@ -2168,8 +2188,12 @@ function ChannelDetailView({
 
   useEffect(() => {
     void (async () => {
+      const table = channel.sourceTable === 'review' ? 'review_videos' : 'tvshow_videos'
+      const watchedTable = channel.sourceTable === 'review' ? 'review_watched' : 'tvshow_watched'
+      const sourceType: 'tvshow' | 'review' = channel.sourceTable === 'review' ? 'review' : 'tvshow'
+
       let query = supabase
-        ?.from('tvshow_videos')
+        ?.from(table)
         .select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration')
         .is('unavailable_at', null)
 
@@ -2181,12 +2205,15 @@ function ChannelDetailView({
         query = query?.eq('creator_name', channel.creator_name)
       }
 
-      const watchedRes = await supabase?.from('tvshow_watched').select('video_id')
+      const watchedRes = await supabase?.from(watchedTable).select('video_id')
       const watchedIds = new Set(((watchedRes?.data ?? []) as { video_id: string }[]).map((r) => r.video_id))
-      const sets = getVideoStatusSets('tvshow', watchedIds)
+      const sets = getVideoStatusSets(sourceType, watchedIds)
 
       const videoRes = await query?.order('part_number', { ascending: true, nullsFirst: false }).order('published_at', { ascending: false })
-      const rows = (videoRes?.data ?? []) as VideoRow[]
+      const rawRows = ((videoRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType }))
+      const rows = isShorts
+        ? rawRows.filter(isShortVideo)
+        : rawRows.filter((v) => !isShortVideo(v))
 
       setVideos(rows)
       setWatched(sets.watchedSet)
@@ -2197,7 +2224,7 @@ function ChannelDetailView({
       setPlayingId(firstUnwatched ? firstUnwatched.video_id : (rows[0]?.video_id ?? null))
       setLoading(false)
     })()
-  }, [channel])
+  }, [channel, isShorts])
 
   const filteredVideos = useMemo(() => {
     let res = [...videos]
