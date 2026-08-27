@@ -137,6 +137,7 @@ async function saveManualVideo(v: DiscoveredVideo) {
       canonical_url: v.canonicalUrl ?? `https://www.youtube.com/watch?v=${v.videoId}`,
       embed_url: `https://www.youtube.com/embed/${v.videoId}`,
       thumbnail: v.thumbnail ?? `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+      duration: v.duration ?? null,
       part_number: 1,
       total_parts: 1,
       is_final: true,

@@ -178,6 +178,26 @@ export async function fetchPlaylistPage(
     if (v.videoId) videos.push(v)
   }
 
+  // Tự động lấy độ dài (duration) của các video vừa cào được
+  if (videos.length > 0) {
+    try {
+      const ids = videos.map((v) => v.videoId).filter(Boolean).join(',')
+      const details = await api('videos', { part: 'contentDetails', id: ids }, key, fetchImpl)
+      const durMap = new Map<string, number>()
+      for (const it of details.items ?? []) {
+        const sec = parseDuration(it.contentDetails?.duration)
+        if (sec && sec > 0) durMap.set(it.id, sec)
+      }
+      for (const v of videos) {
+        if (durMap.has(v.videoId)) {
+          v.duration = durMap.get(v.videoId)!
+        }
+      }
+    } catch (err) {
+      console.warn('Không lấy được duration từ YouTube API:', err)
+    }
+  }
+
   return { videos, nextPageToken: page.nextPageToken, skipped }
 }
 
