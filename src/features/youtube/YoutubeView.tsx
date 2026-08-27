@@ -32,7 +32,6 @@ import {
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { AddYoutubeModal } from './AddYoutubeModal'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
-import { OfflineVideoModal } from './OfflineVideoModal'
 import '../tvshow/tvShow.css'
 
 
@@ -220,7 +219,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [sharedUrl] = useState(() => new URLSearchParams(window.location.search).get('youtube') ?? '')
   const [addOpen, setAddOpen] = useState(Boolean(sharedUrl))
   const [syncingAll, setSyncingAll] = useState(false)
-  const [offlineOpen, setOfflineOpen] = useState(false)
   const [editingChannelCategory, setEditingChannelCategory] = useState<ChannelItem | null>(null)
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -356,7 +354,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   useHeaderActions([
     { label: 'Thêm kênh / video', icon: 'plus', onClick: () => setAddOpen(true) },
     { label: syncingAll ? 'Đang cào…' : 'Cào video mới tất cả kênh', icon: 'radio', onClick: () => void handleSyncAllChannels() },
-    { label: 'Video trong máy', icon: 'download', onClick: () => setOfflineOpen(true) },
   ])
 
   useVideoStatusListener(() => {
@@ -1620,8 +1617,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           )}
         </>
       )}
-
-      {offlineOpen && <OfflineVideoModal onClose={() => setOfflineOpen(false)} />}
 
       {/* MODAL THÊM KÊNH / VIDEO (tự phân biệt link) */}
       {addOpen && (
