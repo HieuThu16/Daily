@@ -143,6 +143,32 @@ async function resolveIds(username: string, ids: string[]): Promise<RawEntry[]> 
   return out
 }
 
+/**
+ * Link phát của một video, lấy tươi ngay lúc cần.
+ *
+ * KHÔNG lưu vào Supabase được: link ký sẵn chữ ký và hạn dùng (`x-expires`),
+ * cất đi vài tiếng là hỏng. Nên mỗi lần xem lại đi lấy lại một lần.
+ *
+ * Trang /embed/v2/<id> để dữ liệu ở `videoData.itemInfos.video.urls` — khác chỗ
+ * với embed theo kênh (`videoList[].playAddr`), nên phải đọc riêng.
+ */
+async function fetchPlayUrl(videoId: string): Promise<string | null> {
+  const res = await fetch(`https://www.tiktok.com/embed/v2/${videoId}`, { headers: BASE_HEADERS })
+  if (!res.ok) return null
+  const state = extractJsonScript(await res.text(), '__FRONTITY_CONNECT_STATE__')
+  return pickPlayUrl(state, videoId)
+}
+
+/**
+ * Moi ra link phát từ state của trang embed. Tách riêng để test được —
+ * TikTok đổi hình dạng JSON là chỗ này gãy trước, và gãy im lặng.
+ */
+export function pickPlayUrl(state: any, videoId: string): string | null {
+  const page = state?.source?.data?.[`/embed/v2/${videoId}`]
+  const url = page?.videoData?.itemInfos?.video?.urls?.[0]
+  return typeof url === 'string' && url.startsWith('https://') ? url : null
+}
+
 /** ID video TikTok mã hoá sẵn thời điểm đăng ở 32 bit cao. */
 function idToDate(id: string): string | null {
   try {
@@ -623,6 +649,14 @@ export default async function handler(req: any, res: any) {
     }
 
     // Resolve metadata thật (title, thumbnail, author) cho link dán tay, qua TikTok oEmbed
+    if (action === 'play_url') {
+      const videoId = String(req.body?.videoId || '').trim()
+      if (!/^\d{6,}$/.test(videoId)) return res.status(400).json({ error: 'videoId không hợp lệ' })
+      const playUrl = await fetchPlayUrl(videoId)
+      if (!playUrl) return res.status(404).json({ error: 'Không lấy được link phát cho video này' })
+      return res.status(200).json({ success: true, play_url: playUrl })
+    }
+
     if (action === 'resolve_links') {
       const urls: string[] = (req.body?.urls || []).slice(0, 100)
       if (urls.length === 0) return res.status(400).json({ error: 'Thiếu danh sách link' })

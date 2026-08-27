@@ -144,6 +144,8 @@ export function TikTokPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const seenIds = useRef<Set<string>>(new Set())
+  /** Video đang đi xin link phát — chặn gọi trùng khi component vẽ lại. */
+  const fetchingPlayUrl = useRef<Set<string>>(new Set())
 
   const [watchedIds, setWatchedIds] = useState<Set<string>>(() => {
     try {
@@ -423,6 +425,37 @@ export function TikTokPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showComments, current?.video_id])
 
+  /**
+   * Video trong kho không có sẵn link phát: link TikTok ký kèm hạn dùng nên
+   * không lưu được, phải xin lại mỗi lần xem. Lấy cho video đang xem và video
+   * kế tiếp, để lướt xuống là phát ngay chứ không phải chờ.
+   */
+  useEffect(() => {
+    const need = [shownVideos[index], shownVideos[index + 1]].filter(
+      (v): v is FeedVideo => Boolean(v && !v.play_url),
+    )
+    if (need.length === 0) return
+    let alive = true
+    for (const vid of need) {
+      if (fetchingPlayUrl.current.has(vid.video_id)) continue
+      fetchingPlayUrl.current.add(vid.video_id)
+      void apiPost('/api/crawl-tiktok', { action: 'play_url', videoId: vid.video_id }, 'x')
+        .then((data) => {
+          if (!alive || !data?.play_url) return
+          setVideos((prev) =>
+            prev.map((v) => (v.video_id === vid.video_id ? { ...v, play_url: data.play_url } : v)),
+          )
+        })
+        .catch(() => {
+          // Không lấy được thì để nguyên ảnh bìa; lần cuộn tới sau sẽ thử lại.
+          fetchingPlayUrl.current.delete(vid.video_id)
+        })
+    }
+    return () => {
+      alive = false
+    }
+  }, [shownVideos, index])
+
   const [crawling, setCrawling] = useState(false)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
 
@@ -448,13 +481,26 @@ export function TikTokPage() {
 
       showToast(`🔎 Tìm thấy ${ids.length} video của @${username}, bắt đầu lưu...`, 'supabase')
       let saved = 0
+      let done = 0
       for (let i = 0; i < ids.length; i += 20) {
         const batch = ids.slice(i, i + 20)
-        const data = await apiPost('/api/crawl-tiktok', { action: 'channel_meta', username, ids: batch }, 'Lỗi khi lưu video')
-        saved += data.saved || 0
-        setCrawlProgress(`${saved}/${ids.length}`)
+        // Một lô hỏng (TikTok chặn tốc độ) không được làm hỏng cả lần cào —
+        // bỏ lô đó, chạy tiếp, rồi báo thật số lấy được ở cuối.
+        try {
+          const data = await apiPost('/api/crawl-tiktok', { action: 'channel_meta', username, ids: batch }, 'Lỗi khi lưu video')
+          saved += data.saved || 0
+        } catch {
+          /* bỏ lô này */
+        }
+        done += batch.length
+        setCrawlProgress(`đã xong ${done}/${ids.length} video…`)
       }
-      showToast(`✅ Đã lưu ${saved} video của @${username} vào Kho`, 'supabase')
+      showToast(
+        saved === ids.length
+          ? `✅ Xong — đã lưu đủ ${saved} video của @${username} vào Kho`
+          : `✅ Xong — lưu được ${saved}/${ids.length} video của @${username} vào Kho`,
+        'supabase',
+      )
     } catch (err: any) {
       showToast(`⚠️ ${err.message}`, 'delete')
     } finally {
@@ -623,20 +669,11 @@ export function TikTokPage() {
                       ) : (
                         <div className="tt-player-ph">
                           {vid.thumbnail && <img src={vid.thumbnail} alt="" loading="lazy" />}
-                          {/* Không nhúng iframe TikTok: nó tự chèn màn chắn
-                              "Sensitive content" và banner "Watch now" đè kín
-                              khung. Thà hiện ảnh bìa rồi mở app TikTok. */}
-                          {near && (
-                            <a
-                              className="tt-open-tiktok"
-                              href={vid.canonical_url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <Play size={22} />
-                              <span>Xem trên TikTok</span>
-                            </a>
-                          )}
+                          {/* Không nhúng iframe TikTok (màn chắn "Sensitive
+                              content" đè kín) và không đẩy sang app TikTok —
+                              xem ngay trong app. Ảnh bìa chỉ hiện trong lúc
+                              chờ xin link phát. */}
+                          {near && <span className="tt-player-wait"><Loader2 size={26} className="tv-spin" /></span>}
                         </div>
                       )}
 
@@ -813,9 +850,11 @@ export function TikTokPage() {
           busy={crawling}
           progress={crawlProgress}
           onClose={() => setAddChannelOpen(false)}
-          onSubmit={(username) => {
+          onSubmit={async (username) => {
+            // Giữ modal mở tới khi cào XONG: đóng ngay thì người dùng không biết
+            // còn bao nhiêu video, tưởng xong rồi trong khi mới chạy được một lô.
+            await crawlChannel(username)
             setAddChannelOpen(false)
-            void crawlChannel(username)
           }}
         />
       )}
@@ -842,7 +881,7 @@ function AddTikTokChannelModal({
   busy: boolean
   progress: string
   onClose: () => void
-  onSubmit: (username: string) => void
+  onSubmit: (username: string) => void | Promise<void>
 }) {
   const [text, setText] = useState('')
   const username = parseTikTokUsername(text)
@@ -871,10 +910,16 @@ function AddTikTokChannelModal({
         className="primary"
         style={{ width: '100%', marginTop: 12 }}
         disabled={!username || busy}
-        onClick={() => onSubmit(username)}
+        onClick={() => void onSubmit(username)}
       >
         {busy ? progress || 'Đang cào…' : 'Bắt đầu cào'}
       </button>
+
+      {busy && (
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '10px 0 0', textAlign: 'center' }}>
+          Đóng bảng này cũng được — vẫn cào tiếp, xong sẽ báo.
+        </p>
+      )}
     </Modal>
   )
 }
