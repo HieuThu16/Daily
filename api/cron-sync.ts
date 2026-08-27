@@ -46,7 +46,14 @@ export default async function handler(req: any, res: any) {
   if (YOUTUBE_API_KEY) {
     for (const kind of ['review', 'tvshow'] as const) {
       const mod = kind === 'review' ? review : tvshow
-      const { data: creators } = await db.from(`${kind}_creators`).select('creator_url')
+      // Lọc platform: review_creators chứa CẢ kênh TikTok (crawl-tiktok ghi vào
+      // cùng bảng), đưa link tiktok cho hàm sync YouTube là chắc chắn ném lỗi.
+      // Lọc deleted_at: kênh đã xoá mà vẫn cào thì video vừa xoá lại mọc lại.
+      const { data: creators } = await db
+        .from(`${kind}_creators`)
+        .select('creator_url')
+        .eq('platform', 'youtube')
+        .is('deleted_at', null)
       for (const { creator_url: creatorUrl } of (creators ?? []) as { creator_url: string }[]) {
         try {
           const plan = await mod.startSync(creatorUrl, YOUTUBE_API_KEY)

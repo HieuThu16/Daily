@@ -293,7 +293,17 @@ export function YoutubeView() {
       const { data } = await supabase!.auth.getSession()
       const token = data.session?.access_token
       if (!token) throw new Error('Cần đăng nhập')
-      const res = await fetch('/api/cron-sync?scope=youtube', { headers: { Authorization: `Bearer ${token}` } })
+      // Cào cả chục kênh mất hơn chục giây; 3G/4G chập chờn là fetch ném
+      // "Failed to fetch" trống trơn. Đặt hạn rõ ràng và dịch ra tiếng người.
+      let res: Response
+      try {
+        res = await fetch('/api/cron-sync?scope=youtube', {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(120_000),
+        })
+      } catch {
+        throw new Error('Mất kết nối giữa chừng — kiểm tra mạng rồi thử lại')
+      }
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
       const saved = (json.report ?? []).reduce((sum: number, r: any) => sum + (Number(r.saved) || 0), 0)
