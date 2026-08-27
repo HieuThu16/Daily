@@ -158,13 +158,17 @@ export function AddYoutubeModal({
   onSaved,
   initialUrl = '',
   customCategories = INITIAL_YOUTUBE_CATEGORIES,
+  categoryTagMap = {},
   onAddCustomCategory,
+  onAddTagToCategory,
 }: {
   onClose: () => void
   onSaved: (savedCategory?: string) => void
   initialUrl?: string
   customCategories?: CustomCategoryItem[]
+  categoryTagMap?: Record<string, string[]>
   onAddCustomCategory?: (label: string, icon?: string) => Promise<string | undefined>
+  onAddTagToCategory?: (category: string, tag: string) => Promise<string | undefined>
 }) {
   const { showToast } = useToast()
   const [text, setText] = useState(initialUrl)
@@ -183,11 +187,14 @@ export function AddYoutubeModal({
   const [error, setError] = useState('')
   const stopRef = useRef(false)
 
-  // Quản lý thể loại lưu
+  // Quản lý thể loại & Tag lưu
   const [categories, setCategories] = useState<CustomCategoryItem[]>(() =>
     customCategories && customCategories.length > 0 ? customCategories : INITIAL_YOUTUBE_CATEGORIES,
   )
   const [selectedCategory, setSelectedCategory] = useState<string>('Review phim')
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  const [isAddingTag, setIsAddingTag] = useState(false)
+  const [newTagInput, setNewTagInput] = useState('')
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [categoryPickerOpenPaste, setCategoryPickerOpenPaste] = useState(false)
   const [userPickedCategory, setUserPickedCategory] = useState(false)
@@ -366,6 +373,10 @@ export function AddYoutubeModal({
     setUserPickedCategory(true)
     setCategoryPickerOpen(false)
     setCategoryPickerOpenPaste(false)
+    const validTags = categoryTagMap[catName] || []
+    if (selectedTag && !validTags.includes(selectedTag)) {
+      setSelectedTag(null)
+    }
     showToast(`Đã chọn thể loại: ${catName}`, 'info')
   }
 
@@ -387,12 +398,31 @@ export function AddYoutubeModal({
       await saveAppSetting('youtube_custom_categories', updated)
     }
     setSelectedCategory(catLabel)
+    setSelectedTag(null)
     setUserPickedCategory(true)
     setNewCatName('')
     setIsAddingCategory(false)
     setCategoryPickerOpen(false)
     setCategoryPickerOpenPaste(false)
     showToast(`Đã thêm thể loại "${catLabel}"`, 'success')
+  }
+
+  const handleCreateTag = async () => {
+    const trimmed = newTagInput.trim()
+    if (!trimmed || !selectedCategory) return
+    if (onAddTagToCategory) {
+      const created = await onAddTagToCategory(selectedCategory, trimmed)
+      if (created) {
+        setSelectedTag(created)
+        setNewTagInput('')
+        setIsAddingTag(false)
+        showToast(`Đã thêm tag #${created}`, 'success')
+      }
+    } else {
+      setSelectedTag(trimmed)
+      setNewTagInput('')
+      setIsAddingTag(false)
+    }
   }
 
   const handleSave = async () => {
@@ -439,6 +469,32 @@ export function AddYoutubeModal({
         } catch (catErr) {
           console.warn('[AddYoutubeModal] Lỗi lưu thể loại:', catErr)
         }
+
+        // Cập nhật Tag cho kênh trong youtube_channel_tags
+        try {
+          const currentTagMap = await getRemoteAppSetting<Record<string, string>>('youtube_channel_tags', {})
+          const updatedTagMap = { ...currentTagMap }
+          const assignTag = (key: string) => {
+            if (selectedTag) {
+              updatedTagMap[key] = selectedTag
+            } else {
+              delete updatedTagMap[key]
+            }
+          }
+          if (activePlan?.channelId) assignTag(activePlan.channelId)
+          if (activePlan?.channelName) assignTag(activePlan.channelName)
+          parsed.channels.forEach((url) => assignTag(url))
+          chosen.forEach((v) => {
+            if (v.creatorId) assignTag(v.creatorId)
+            if (v.channelName) assignTag(v.channelName)
+          })
+          if (chosen.some((v) => v.manual)) {
+            assignTag('manual')
+          }
+          await saveAppSetting('youtube_channel_tags', updatedTagMap)
+        } catch (tagErr) {
+          console.warn('[AddYoutubeModal] Lỗi lưu tag:', tagErr)
+        }
       }
 
       setState('saved')
@@ -454,6 +510,139 @@ export function AddYoutubeModal({
   const knownCount = discovered.length - freshCount
   const currentCatObj = categories.find((c) => c.label === selectedCategory)
   const currentCatIcon = currentCatObj?.icon || '🏷️'
+  const availableTags = categoryTagMap[selectedCategory] || []
+
+  /** Render hàng chọn tag con thuộc thể loại đang chọn */
+  const renderTagSelector = () => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '8px 12px',
+        borderRadius: 12,
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+          <Tag size={13} color="var(--primary)" />
+          <span>Tag con của "{selectedCategory}":</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsAddingTag(!isAddingTag)}
+          style={{
+            border: 'none',
+            background: 'none',
+            color: 'var(--primary)',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+          }}
+        >
+          <Plus size={12} /> Thêm tag
+        </button>
+      </div>
+
+      {isAddingTag && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 700 }}>#</span>
+            <input
+              type="text"
+              placeholder={`Nhập tag mới cho "${selectedCategory}"...`}
+              value={newTagInput}
+              onChange={(e) => setNewTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void handleCreateTag()
+                }
+              }}
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '4px 8px 4px 20px',
+                borderRadius: 6,
+                border: '1px solid var(--card-border)',
+                background: 'var(--bg-main)',
+                color: 'var(--text-main)',
+                fontSize: '0.76rem',
+                outline: 'none',
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleCreateTag()}
+            disabled={!newTagInput.trim()}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 6,
+              background: 'var(--primary)',
+              color: '#fff',
+              border: 'none',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Lưu
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 90, overflowY: 'auto' }}>
+        <button
+          type="button"
+          onClick={() => setSelectedTag(null)}
+          style={{
+            padding: '3px 8px',
+            borderRadius: 6,
+            border: `1px solid ${selectedTag === null ? 'var(--primary)' : 'var(--card-border)'}`,
+            background: selectedTag === null ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-main)',
+            color: selectedTag === null ? 'var(--primary)' : 'var(--text-muted)',
+            fontSize: '0.74rem',
+            fontWeight: selectedTag === null ? 700 : 500,
+            cursor: 'pointer',
+          }}
+        >
+          (Không gắn tag)
+        </button>
+        {availableTags.map((tag) => {
+          const isChosen = selectedTag === tag
+          return (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => setSelectedTag(isChosen ? null : tag)}
+              style={{
+                padding: '3px 8px',
+                borderRadius: 6,
+                border: `1px solid ${isChosen ? 'var(--primary)' : 'var(--card-border)'}`,
+                background: isChosen ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-main)',
+                color: isChosen ? 'var(--primary)' : 'var(--text-main)',
+                fontSize: '0.74rem',
+                fontWeight: isChosen ? 800 : 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span>#{tag}</span>
+              {isChosen && <Check size={11} />}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 
   /** Render menu dropdown chọn thể loại */
   const renderCategoryDropdown = (isOpen: boolean) => {
@@ -657,6 +846,9 @@ export function AddYoutubeModal({
               </div>
             </div>
 
+            {/* Chọn Tag con thuộc thể loại đã chọn */}
+            {renderTagSelector()}
+
             <label className="tv-keyword-field">
               <span className="tv-keyword-label">
                 <Search size={13} /> Chỉ cào video có chữ (để trống = lấy hết kênh)
@@ -810,6 +1002,9 @@ export function AddYoutubeModal({
                 {renderCategoryDropdown(categoryPickerOpen)}
               </div>
             </div>
+
+            {/* Chọn Tag con thuộc thể loại đã chọn */}
+            {renderTagSelector()}
 
             {error && <div className="tv-hint tv-bad">{error}</div>}
 

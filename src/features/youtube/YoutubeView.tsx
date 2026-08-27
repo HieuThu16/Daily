@@ -7,7 +7,7 @@ import {
   Check, 
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2, Info,
-  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock
+  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock, Tag
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
@@ -46,8 +46,10 @@ export const INITIAL_YOUTUBE_CATEGORIES: CustomCategoryItem[] = [
 ]
 export const DEFAULT_YOUTUBE_CATEGORIES = INITIAL_YOUTUBE_CATEGORIES
 
-export type CustomCategoryItem = { id: string; label: string; icon: string }
+export type CustomCategoryItem = { id: string; label: string; icon: string; tags?: string[] }
 export type ChannelCategoryMap = Record<string, string>
+export type CategoryTagMap = Record<string, string[]>
+export type ChannelTagMap = Record<string, string>
 
 export type ChannelItem = {
   id: string
@@ -61,6 +63,7 @@ export type ChannelItem = {
   cover: string | null
   lastSyncedAt: string | null
   category: string
+  tag?: string
   sourceTable?: 'tvshow' | 'review'
 }
 
@@ -79,6 +82,7 @@ export type VideoRow = {
   unavailable_at: string | null
   duration?: number | null
   channel_category?: string
+  channel_tag?: string
   sourceType?: 'tvshow' | 'review'
 }
 
@@ -199,10 +203,18 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   
   // Hạng mục đang chọn trên thanh tab trượt ngang (mặc định 'ALL')
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('ALL')
+  // Tag đang chọn thuộc thể loại hiện tại (mặc định 'ALL')
+  const [activeTagTab, setActiveTagTab] = useState<string>('ALL')
   // Bản đồ lưu Thể loại của từng Kênh (Lưu trên Supabase qua user_app_settings)
   const [channelCategoryMap, setChannelCategoryMap] = useState<ChannelCategoryMap>({})
+  // Bản đồ lưu các Tag theo từng Thể loại (Lưu trên Supabase qua user_app_settings)
+  const [categoryTagMap, setCategoryTagMap] = useState<CategoryTagMap>({})
+  // Bản đồ lưu Tag gán cho từng Kênh (Lưu trên Supabase qua user_app_settings)
+  const [channelTagMap, setChannelTagMap] = useState<ChannelTagMap>({})
   // Thể loại tùy chỉnh do người dùng thêm mới (Lưu trên Supabase qua user_app_settings)
   const [customCategories, setCustomCategories] = useState<CustomCategoryItem[]>([])
+  // Modal thêm nhanh Tag cho thể loại đang chọn
+  const [quickAddTagCategory, setQuickAddTagCategory] = useState<string | null>(null)
 
   // TÌM KIẾM YOUTUBE API (Tìm video đã có VÀ chưa có trong app)
   const [searchScope, setSearchScope] = useState<'all' | 'saved' | 'youtube'>('all')
@@ -363,13 +375,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     setInProgressSet(new Set([...tvSets.inProgressSet, ...reviewSets.inProgressSet]))
   })
 
-  // Tải bản đồ Thể loại kênh & Thể loại tùy chỉnh từ Supabase
+  // Tải bản đồ Thể loại kênh, Thể loại tùy chỉnh & Tags từ Supabase
   useEffect(() => {
     let alive = true
     void Promise.all([
       getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}),
       getRemoteAppSetting<CustomCategoryItem[]>('youtube_custom_categories', INITIAL_YOUTUBE_CATEGORIES),
-    ]).then(([map, customList]) => {
+      getRemoteAppSetting<CategoryTagMap>('youtube_category_tags', {}),
+      getRemoteAppSetting<ChannelTagMap>('youtube_channel_tags', {}),
+    ]).then(([map, customList, catTags, chTags]) => {
       if (alive) {
         if (map) setChannelCategoryMap(map)
         if (Array.isArray(customList) && customList.length > 0) {
@@ -377,6 +391,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         } else {
           setCustomCategories(INITIAL_YOUTUBE_CATEGORIES)
         }
+        if (catTags) setCategoryTagMap(catTags)
+        if (chTags) setChannelTagMap(chTags)
       }
     })
     return () => { alive = false }
@@ -395,6 +411,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       id: `cat_${Date.now()}`,
       label: trimmed,
       icon: icon || '🏷️',
+      tags: [],
     }
     const updated = [...customCategories, newCat]
     setCustomCategories(updated)
@@ -428,6 +445,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         }
       })
 
+      // Đổi key trong categoryTagMap
+      if (categoryTagMap[oldLabel]) {
+        const updatedCatTags = { ...categoryTagMap }
+        updatedCatTags[trimmed] = updatedCatTags[oldLabel]
+        delete updatedCatTags[oldLabel]
+        setCategoryTagMap(updatedCatTags)
+        void saveAppSetting('youtube_category_tags', updatedCatTags)
+      }
+
       if (hasChange) {
         setChannelCategoryMap(updatedMap)
         setChannels((prev) =>
@@ -456,30 +482,156 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     const updated = customCategories.filter((c) => c.id !== catId)
     setCustomCategories(updated)
     await saveAppSetting('youtube_custom_categories', updated)
+
+    // Xóa tags của thể loại này
+    if (categoryTagMap[target.label]) {
+      const updatedCatTags = { ...categoryTagMap }
+      delete updatedCatTags[target.label]
+      setCategoryTagMap(updatedCatTags)
+      void saveAppSetting('youtube_category_tags', updatedCatTags)
+    }
+
     showToast(`Đã xoá thể loại "${target.label}"`, 'info')
   }
 
-  // Đổi thể loại của 1 Kênh (Lưu ngay vào state, local và Supabase)
-  const handleChangeChannelCategory = async (channelKey: string, newCategory: string) => {
-    const updated = { ...channelCategoryMap, [channelKey]: newCategory }
-    setChannelCategoryMap(updated)
+  // 1. Thêm Tag vào một thể loại
+  const handleAddTagToCategory = async (category: string, tag: string): Promise<string | undefined> => {
+    const trimmedTag = tag.trim().replace(/^#+/, '')
+    if (!trimmedTag || !category) return undefined
+    const currentTags = categoryTagMap[category] || []
+    if (currentTags.some((t) => t.toLowerCase() === trimmedTag.toLowerCase())) {
+      showToast(`Tag #${trimmedTag} đã có trong mục "${category}"`, 'info')
+      return trimmedTag
+    }
+    const updatedTags = [...currentTags, trimmedTag]
+    const updatedMap = { ...categoryTagMap, [category]: updatedTags }
+    setCategoryTagMap(updatedMap)
+    await saveAppSetting('youtube_category_tags', updatedMap)
+    showToast(`Đã thêm tag #${trimmedTag} vào "${category}"`, 'success')
+    return trimmedTag
+  }
+
+  // 2. Sửa tên Tag trong một thể loại
+  const handleUpdateTagInCategory = async (category: string, oldTag: string, newTag: string): Promise<string | undefined> => {
+    const trimmedNew = newTag.trim().replace(/^#+/, '')
+    if (!trimmedNew || !category || oldTag === trimmedNew) return undefined
+    const currentTags = categoryTagMap[category] || []
+    const updatedTags = currentTags.map((t) => (t === oldTag ? trimmedNew : t))
+    const updatedCatTags = { ...categoryTagMap, [category]: updatedTags }
+    setCategoryTagMap(updatedCatTags)
+    await saveAppSetting('youtube_category_tags', updatedCatTags)
+
+    // Cập nhật tag ở các kênh đang dùng oldTag
+    const updatedChTags: ChannelTagMap = {}
+    let chChanged = false
+    Object.entries(channelTagMap).forEach(([k, v]) => {
+      if (v === oldTag) {
+        updatedChTags[k] = trimmedNew
+        chChanged = true
+      } else {
+        updatedChTags[k] = v
+      }
+    })
+    if (chChanged) {
+      setChannelTagMap(updatedChTags)
+      setChannels((prev) => prev.map((c) => (c.tag === oldTag ? { ...c, tag: trimmedNew } : c)))
+      setAllVideos((prev) => prev.map((v) => (v.channel_tag === oldTag ? { ...v, channel_tag: trimmedNew } : v)))
+      if (selectedChannel && selectedChannel.tag === oldTag) {
+        setSelectedChannel({ ...selectedChannel, tag: trimmedNew })
+      }
+      await saveAppSetting('youtube_channel_tags', updatedChTags)
+    }
+
+    if (activeTagTab === oldTag) {
+      setActiveTagTab(trimmedNew)
+    }
+
+    showToast(`Đã đổi tên tag #${oldTag} thành #${trimmedNew}`, 'success')
+    return trimmedNew
+  }
+
+  // 3. Xóa Tag khỏi một thể loại
+  const handleDeleteTagFromCategory = async (category: string, tagToDelete: string) => {
+    if (!category || !tagToDelete) return
+    const currentTags = categoryTagMap[category] || []
+    const updatedTags = currentTags.filter((t) => t !== tagToDelete)
+    const updatedCatTags = { ...categoryTagMap, [category]: updatedTags }
+    setCategoryTagMap(updatedCatTags)
+    await saveAppSetting('youtube_category_tags', updatedCatTags)
+
+    // Gỡ tag ở các kênh
+    const updatedChTags: ChannelTagMap = {}
+    let chChanged = false
+    Object.entries(channelTagMap).forEach(([k, v]) => {
+      if (v === tagToDelete) {
+        chChanged = true
+      } else {
+        updatedChTags[k] = v
+      }
+    })
+    if (chChanged) {
+      setChannelTagMap(updatedChTags)
+      setChannels((prev) => prev.map((c) => (c.tag === tagToDelete ? { ...c, tag: undefined } : c)))
+      setAllVideos((prev) => prev.map((v) => (v.channel_tag === tagToDelete ? { ...v, channel_tag: undefined } : v)))
+      if (selectedChannel && selectedChannel.tag === tagToDelete) {
+        setSelectedChannel({ ...selectedChannel, tag: undefined })
+      }
+      await saveAppSetting('youtube_channel_tags', updatedChTags)
+    }
+
+    if (activeTagTab === tagToDelete) {
+      setActiveTagTab('ALL')
+    }
+
+    showToast(`Đã xoá tag #${tagToDelete}`, 'info')
+  }
+
+  // 4. Đổi Thể loại & Tag của 1 Kênh (Lưu ngay vào state, local và Supabase)
+  const handleChangeChannelCategoryAndTag = async (channelKey: string, newCategory: string, newTag?: string | null) => {
+    const updatedCatMap = { ...channelCategoryMap, [channelKey]: newCategory }
+    setChannelCategoryMap(updatedCatMap)
+
+    const updatedTagMap = { ...channelTagMap }
+    if (newTag) {
+      updatedTagMap[channelKey] = newTag
+    } else {
+      delete updatedTagMap[channelKey]
+    }
+    setChannelTagMap(updatedTagMap)
+
     setChannels((prev) =>
       prev.map((c) => {
         const key = c.creator_id || c.creator_name || c.id
         if (key === channelKey || c.creator_name === channelKey || c.id === channelKey) {
-          return { ...c, category: newCategory }
+          return { ...c, category: newCategory, tag: newTag || undefined }
         }
         return c
       })
     )
+
+    setAllVideos((prev) =>
+      prev.map((v) => {
+        const key = v.creator_id || v.creator_name || 'manual'
+        if (key === channelKey || v.creator_name === channelKey) {
+          return { ...v, channel_category: newCategory, channel_tag: newTag || undefined }
+        }
+        return v
+      })
+    )
+
     if (selectedChannel) {
       const sKey = selectedChannel.creator_id || selectedChannel.creator_name || selectedChannel.id
       if (sKey === channelKey || selectedChannel.creator_name === channelKey) {
-        setSelectedChannel({ ...selectedChannel, category: newCategory })
+        setSelectedChannel({ ...selectedChannel, category: newCategory, tag: newTag || undefined })
       }
     }
-    await saveAppSetting('youtube_channel_categories', updated)
-    showToast(`Đã chuyển kênh sang mục "${newCategory}"`, 'info')
+
+    await Promise.all([
+      saveAppSetting('youtube_channel_categories', updatedCatMap),
+      saveAppSetting('youtube_channel_tags', updatedTagMap),
+    ])
+
+    showToast(`Đã lưu thể loại & tag cho kênh`, 'success')
     setEditingChannelCategory(null)
   }
 
@@ -490,15 +642,17 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
     void (async () => {
       // 1. Tải creators từ cả tvshow_creators và review_creators
-      const [tvCreatorsRes, revCreatorsRes, catMapRemote] = await Promise.all([
+      const [tvCreatorsRes, revCreatorsRes, catMapRemote, tagMapRemote] = await Promise.all([
         supabase?.from('tvshow_creators').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
         supabase?.from('review_creators').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
         getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}),
+        getRemoteAppSetting<ChannelTagMap>('youtube_channel_tags', {}),
       ])
 
       const tvCreators = (tvCreatorsRes?.data ?? []) as any[]
       const revCreators = (revCreatorsRes?.data ?? []) as any[]
       const catMap = catMapRemote || channelCategoryMap
+      const tagMap = tagMapRemote || channelTagMap
 
       // 2. Video tải theo trang từ cả 2 bảng
       const [tvVideosRes, revVideosRes, tvWatchedRes, revWatchedRes] = await Promise.all([
@@ -552,6 +706,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
         if (isShorts && stat.total === 0) continue
         const assignedCat = catMap[key] || catMap[c.creator_name] || c.category || guessChannelCategory(c.creator_name, 'tvshow')
+        const assignedTag = tagMap[key] || tagMap[c.creator_name] || undefined
         channelCardsMap.set(key, {
           id: c.id,
           platform: c.platform,
@@ -564,6 +719,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           cover: stat.cover,
           lastSyncedAt: c.last_synced_at,
           category: assignedCat,
+          tag: assignedTag,
           sourceTable: 'tvshow',
         })
       }
@@ -574,12 +730,14 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
         if (isShorts && stat.total === 0) continue
         const assignedCat = catMap[key] || catMap[c.creator_name] || c.category || guessChannelCategory(c.creator_name, 'review')
+        const assignedTag = tagMap[key] || tagMap[c.creator_name] || undefined
         if (channelCardsMap.has(key)) {
           const existing = channelCardsMap.get(key)!
           existing.videoCount += stat.total
           existing.inProgressCount += stat.inProgress
           existing.watchedCount += stat.watched
           if (!existing.cover) existing.cover = stat.cover
+          if (!existing.tag && assignedTag) existing.tag = assignedTag
         } else {
           channelCardsMap.set(key, {
             id: c.id,
@@ -593,6 +751,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             cover: stat.cover,
             lastSyncedAt: c.last_synced_at,
             category: assignedCat,
+            tag: assignedTag,
             sourceTable: 'review',
           })
         }
@@ -602,6 +761,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       const manualStat = statsByCreator.get('manual')
       if (manualStat && manualStat.total > 0 && !channelCardsMap.has('manual')) {
         const assignedCat = catMap['manual'] || 'Khác'
+        const assignedTag = tagMap['manual'] || undefined
         channelCardsMap.set('manual', {
           id: 'manual',
           platform: 'youtube',
@@ -614,23 +774,34 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           cover: manualStat.cover,
           lastSyncedAt: null,
           category: assignedCat,
+          tag: assignedTag,
         })
       }
 
-      // Gắn category của Kênh vào từng Video tương ứng
+      // Gắn category & tag của Kênh vào từng Video tương ứng
       const channelsList = Array.from(channelCardsMap.values())
       const channelCatLookup = new Map<string, string>()
+      const channelTagLookup = new Map<string, string>()
       channelsList.forEach((c) => {
         const cat = c.category
-        if (c.creator_id) channelCatLookup.set(c.creator_id, cat)
-        if (c.creator_name) channelCatLookup.set(c.creator_name, cat)
+        const tag = c.tag
+        if (c.creator_id) {
+          channelCatLookup.set(c.creator_id, cat)
+          if (tag) channelTagLookup.set(c.creator_id, tag)
+        }
+        if (c.creator_name) {
+          channelCatLookup.set(c.creator_name, cat)
+          if (tag) channelTagLookup.set(c.creator_name, tag)
+        }
         channelCatLookup.set(c.id, cat)
+        if (tag) channelTagLookup.set(c.id, tag)
       })
 
       const taggedVideos = combinedVideos.map((v) => {
         const key = v.creator_id || v.creator_name || 'manual'
         const cat = channelCatLookup.get(key) || channelCatLookup.get(v.creator_name || '') || 'Khác'
-        return { ...v, channel_category: cat }
+        const tag = channelTagLookup.get(key) || channelTagLookup.get(v.creator_name || '') || undefined
+        return { ...v, channel_category: cat, channel_tag: tag }
       })
 
       if (alive) {
@@ -820,13 +991,31 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return tabs
   }, [allVideos.length, categoryTabStats, customCategories])
 
-  // Lọc Kênh theo Tab Thể Loại và Ô Tìm Kiếm
+  // Tính số lượng video cho từng Tag trong Thể loại hiện tại
+  const tagCounts = useMemo(() => {
+    if (activeCategoryTab === 'ALL') return {}
+    const counts: Record<string, number> = {}
+    const tags = categoryTagMap[activeCategoryTab] || []
+    tags.forEach((t) => { counts[t] = 0 })
+    allVideos.forEach((v) => {
+      if (v.channel_category === activeCategoryTab && v.channel_tag && counts[v.channel_tag] !== undefined) {
+        counts[v.channel_tag]++
+      }
+    })
+    return counts
+  }, [allVideos, activeCategoryTab, categoryTagMap])
+
+  // Lọc Kênh theo Tab Thể Loại, Tag con và Ô Tìm Kiếm
   const filteredChannels = useMemo(() => {
     let result = [...channels]
 
     // Lọc theo Tab thể loại đang chọn
     if (activeCategoryTab !== 'ALL') {
       result = result.filter((c) => c.category === activeCategoryTab)
+      // Lọc theo Tag con nếu có chọn
+      if (activeTagTab !== 'ALL') {
+        result = result.filter((c) => c.tag === activeTagTab)
+      }
     }
 
     // Lọc theo từ khóa tìm kiếm
@@ -835,18 +1024,23 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       result = result.filter(
         (c) =>
           c.creator_name.toLowerCase().includes(q) ||
-          c.category.toLowerCase().includes(q)
+          c.category.toLowerCase().includes(q) ||
+          (c.tag && c.tag.toLowerCase().includes(q))
       )
     }
 
     return result
-  }, [channels, activeCategoryTab, search])
+  }, [channels, activeCategoryTab, activeTagTab, search])
 
   // Tính số lượng video theo từng trạng thái xem trong tab hiện tại
   const watchStatusCounts = useMemo(() => {
-    const base = activeCategoryTab === 'ALL'
+    let base = activeCategoryTab === 'ALL'
       ? allVideos
       : allVideos.filter((v) => v.channel_category === activeCategoryTab)
+
+    if (activeCategoryTab !== 'ALL' && activeTagTab !== 'ALL') {
+      base = base.filter((v) => v.channel_tag === activeTagTab)
+    }
 
     let inProgress = 0
     let watched = 0
@@ -868,15 +1062,19 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       watched,
       unwatched,
     }
-  }, [allVideos, activeCategoryTab, watchedSet, inProgressSet])
+  }, [allVideos, activeCategoryTab, activeTagTab, watchedSet, inProgressSet])
 
-  // Lọc Video ĐÃ CÓ trong App theo Tab Thể Loại của Kênh
+  // Lọc Video ĐÃ CÓ trong App theo Tab Thể Loại & Tag con của Kênh
   const filteredSavedVideos = useMemo(() => {
     let result = [...allVideos]
 
     // Lọc theo Tab thể loại của kênh
     if (activeCategoryTab !== 'ALL') {
       result = result.filter((v) => v.channel_category === activeCategoryTab)
+      // Lọc theo Tag con nếu có chọn
+      if (activeTagTab !== 'ALL') {
+        result = result.filter((v) => v.channel_tag === activeTagTab)
+      }
     }
 
     // Lọc theo trạng thái xem
@@ -894,7 +1092,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       result = result.filter(
         (v) =>
           v.title.toLowerCase().includes(q) ||
-          (v.creator_name && v.creator_name.toLowerCase().includes(q))
+          (v.creator_name && v.creator_name.toLowerCase().includes(q)) ||
+          (v.channel_tag && v.channel_tag.toLowerCase().includes(q))
       )
     } else if (activeCategoryTab === 'ALL' && watchFilter === 'all') {
       // Khi vừa vào hoặc ở tab Tất cả: xáo trộn ngẫu nhiên để thấy đa dạng video
@@ -902,7 +1101,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     }
 
     return result
-  }, [allVideos, activeCategoryTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed])
+  }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed])
 
   const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}`)
 
@@ -926,14 +1125,19 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         channel={selectedChannel}
         isShorts={isShorts}
         onBack={() => setSelectedChannel(null)}
-        onChangeCategory={(newCat) => {
+        onChangeCategoryAndTag={(newCat, newTag) => {
           const key = selectedChannel.creator_id || selectedChannel.creator_name || selectedChannel.id
-          void handleChangeChannelCategory(key, newCat)
+          void handleChangeChannelCategoryAndTag(key, newCat, newTag)
+          setSelectedChannel((prev) => (prev ? { ...prev, category: newCat, tag: newTag || undefined } : null))
         }}
         customCategories={customCategories}
+        categoryTagMap={categoryTagMap}
         onAddCustomCategory={handleAddCustomCategory}
         onUpdateCustomCategory={handleUpdateCustomCategory}
         onDeleteCustomCategory={handleDeleteCustomCategory}
+        onAddTagToCategory={handleAddTagToCategory}
+        onUpdateTagInCategory={handleUpdateTagInCategory}
+        onDeleteTagFromCategory={handleDeleteTagFromCategory}
       />
     )
   }
@@ -971,6 +1175,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                 onClick={(e) => {
                   if (hasMovedRef.current) return
                   setActiveCategoryTab(tab.id)
+                  setActiveTagTab('ALL')
                   e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
                 }}
               >
@@ -1013,6 +1218,95 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           </button>
         )}
       </div>
+
+      {/* 1.5. THANH TAG CON THUỘC THỂ LOẠI ĐANG CHỌN */}
+      {activeCategoryTab !== 'ALL' && (
+        <div
+          className="chip-scroll-row"
+          style={{
+            margin: '4px 0 10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '2px 0',
+          }}
+        >
+          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 2 }}>
+            <Tag size={13} /> Tags:
+          </span>
+
+          <button
+            type="button"
+            className={`tv-filter-pill ${activeTagTab === 'ALL' ? 'active' : ''}`}
+            onClick={() => setActiveTagTab('ALL')}
+            style={{
+              padding: '4px 10px',
+              fontSize: '0.74rem',
+              borderRadius: 8,
+              border: `1px solid ${activeTagTab === 'ALL' ? 'var(--primary)' : 'var(--card-border)'}`,
+              background: activeTagTab === 'ALL' ? 'var(--primary)' : 'var(--card-bg)',
+              color: activeTagTab === 'ALL' ? '#ffffff' : 'var(--text-main)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              fontWeight: activeTagTab === 'ALL' ? 700 : 500,
+            }}
+          >
+            Tất cả (#{categoryTabStats[activeCategoryTab]?.videos || 0})
+          </button>
+
+          {(categoryTagMap[activeCategoryTab] || []).map((tag) => {
+            const isActive = activeTagTab === tag
+            const count = tagCounts[tag] || 0
+            return (
+              <button
+                key={tag}
+                type="button"
+                className={`tv-filter-pill ${isActive ? 'active' : ''}`}
+                onClick={() => setActiveTagTab(tag)}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '0.74rem',
+                  borderRadius: 8,
+                  border: `1px solid ${isActive ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: isActive ? 'var(--primary)' : 'var(--card-bg)',
+                  color: isActive ? '#ffffff' : 'var(--text-main)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  fontWeight: isActive ? 700 : 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span>#{tag}</span>
+                <span style={{ opacity: 0.75, fontSize: '0.7rem' }}>({count})</span>
+              </button>
+            )
+          })}
+
+          <button
+            type="button"
+            onClick={() => setQuickAddTagCategory(activeCategoryTab)}
+            style={{
+              padding: '4px 8px',
+              fontSize: '0.72rem',
+              borderRadius: 8,
+              border: '1px dashed var(--primary)',
+              background: 'rgba(59, 130, 246, 0.08)',
+              color: 'var(--primary)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+            }}
+            title={`Thêm tag mới vào mục "${activeCategoryTab}"`}
+          >
+            <Plus size={12} /> Thêm tag
+          </button>
+        </div>
+      )}
 
       {/* 2. THANH TÌM KIẾM THÔNG MINH (TÌM VIDEO ĐÃ CÓ & CHƯA CÓ TRÊN YOUTUBE) */}
       <form onSubmit={handleSearchSubmit} className="tv-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -1623,25 +1917,32 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         <AddYoutubeModal
           initialUrl={sharedUrl}
           customCategories={customCategories}
+          categoryTagMap={categoryTagMap}
           onClose={() => setAddOpen(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
           onAddCustomCategory={handleAddCustomCategory}
+          onAddTagToCategory={handleAddTagToCategory}
         />
       )}
 
-      {/* MODAL ĐỔI THỂ LOẠI CHO KÊNH */}
+      {/* MODAL ĐỔI THỂ LOẠI & TAG CHO KÊNH */}
       {editingChannelCategory && (
         <ChannelCategoryModal
           channelName={editingChannelCategory.creator_name}
           currentCategory={editingChannelCategory.category}
+          currentTag={editingChannelCategory.tag}
           customCategories={customCategories}
-          onSelectCategory={(newCat) => {
+          categoryTagMap={categoryTagMap}
+          onSaveCategoryAndTag={(newCat, newTag) => {
             const key = editingChannelCategory.creator_id || editingChannelCategory.creator_name || editingChannelCategory.id
-            void handleChangeChannelCategory(key, newCat)
+            void handleChangeChannelCategoryAndTag(key, newCat, newTag)
           }}
           onAddCustomCategory={handleAddCustomCategory}
           onUpdateCustomCategory={handleUpdateCustomCategory}
           onDeleteCustomCategory={handleDeleteCustomCategory}
+          onAddTagToCategory={handleAddTagToCategory}
+          onUpdateTagInCategory={handleUpdateTagInCategory}
+          onDeleteTagFromCategory={handleDeleteTagFromCategory}
           onClose={() => setEditingChannelCategory(null)}
         />
       )}
@@ -1650,6 +1951,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       {showAddCategoryModal && (
         <QuickAddCategoryModal
           customCategories={customCategories}
+          categoryTagMap={categoryTagMap}
           onAddCustomCategory={async (name, icon) => {
             const created = await handleAddCustomCategory(name, icon)
             if (created) {
@@ -1659,7 +1961,22 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           }}
           onUpdateCustomCategory={handleUpdateCustomCategory}
           onDeleteCustomCategory={handleDeleteCustomCategory}
+          onAddTagToCategory={handleAddTagToCategory}
+          onUpdateTagInCategory={handleUpdateTagInCategory}
+          onDeleteTagFromCategory={handleDeleteTagFromCategory}
           onClose={() => setShowAddCategoryModal(false)}
+        />
+      )}
+
+      {/* MODAL QUẢN LÝ & THÊM TAG NHANH CHO THỂ LOẠI ĐANG MỞ */}
+      {quickAddTagCategory && (
+        <QuickAddTagModal
+          category={quickAddTagCategory}
+          tags={categoryTagMap[quickAddTagCategory] || []}
+          onAddTag={handleAddTagToCategory}
+          onUpdateTag={handleUpdateTagInCategory}
+          onDeleteTag={handleDeleteTagFromCategory}
+          onClose={() => setQuickAddTagCategory(null)}
         />
       )}
     </section>
@@ -1668,30 +1985,257 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
 const QUICK_EMOJIS = ['🏷️', '🎧', '🎵', '🎮', '🍲', '✈️', '💄', '⚽', '📚', '💡', '🎬', '💼', '🚗', '🎨', '🐾', '📻', '💪', '🔥']
 
-/** Modal đổi thể loại hoặc tạo mới thể loại lưu Supabase */
+/** Modal quản lý & thêm tag nhanh cho thể loại đang chọn */
+function QuickAddTagModal({
+  category,
+  tags = [],
+  onAddTag,
+  onUpdateTag,
+  onDeleteTag,
+  onClose,
+}: {
+  category: string
+  tags: string[]
+  onAddTag: (category: string, tag: string) => Promise<string | undefined>
+  onUpdateTag: (category: string, oldTag: string, newTag: string) => Promise<string | undefined>
+  onDeleteTag: (category: string, tag: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [newTagInput, setNewTagInput] = useState('')
+  const [editingTag, setEditingTag] = useState<string | null>(null)
+  const [editingTagInput, setEditingTagInput] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newTagInput.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await onAddTag(category, newTagInput.trim())
+      setNewTagInput('')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleSaveEdit = async (oldTag: string) => {
+    if (!editingTagInput.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      await onUpdateTag(category, oldTag, editingTagInput.trim())
+      setEditingTag(null)
+      setEditingTagInput('')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal title={`🏷️ Quản lý Tags cho mục "${category}"`} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
+          Thêm hoặc quản lý các tag con riêng cho thể loại <strong>{category}</strong> (ví dụ: Naruto, Luffy, Lập trình...):
+        </p>
+
+        {/* Form thêm tag mới */}
+        <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 700 }}>#</span>
+            <input
+              type="text"
+              placeholder="Nhập tên tag mới (vd: Naruto, Luffy)..."
+              value={newTagInput}
+              onChange={(e) => setNewTagInput(e.target.value)}
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '9px 12px 9px 24px',
+                borderRadius: 10,
+                border: '1px solid var(--card-border)',
+                background: 'var(--bg-main)',
+                color: 'var(--text-main)',
+                fontSize: '0.86rem',
+                outline: 'none',
+              }}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!newTagInput.trim() || isSubmitting}
+            style={{
+              padding: '9px 16px',
+              borderRadius: 10,
+              background: newTagInput.trim() ? 'var(--primary)' : 'var(--card-border)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              cursor: newTagInput.trim() ? 'pointer' : 'not-allowed',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Plus size={14} /> Thêm tag
+          </button>
+        </form>
+
+        {/* Danh sách các tag hiện có */}
+        <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: 10 }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Danh sách tags hiện có ({tags.length}):
+          </div>
+          {tags.length === 0 ? (
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '12px 0', textAlign: 'center' }}>
+              Chưa có tag nào trong thể loại này. Hãy nhập tag mới ở trên!
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
+              {tags.map((tag) => {
+                const isEditing = editingTag === tag
+                if (isEditing) {
+                  return (
+                    <div key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(168, 85, 247, 0.15)', border: '1px solid #a855f7', padding: '4px 6px', borderRadius: 8 }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a855f7' }}>#</span>
+                      <input
+                        type="text"
+                        value={editingTagInput}
+                        onChange={(e) => setEditingTagInput(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void handleSaveEdit(tag)
+                          if (e.key === 'Escape') setEditingTag(null)
+                        }}
+                        style={{
+                          padding: '3px 6px',
+                          borderRadius: 6,
+                          border: '1px solid var(--card-border)',
+                          background: 'var(--card-bg)',
+                          color: 'var(--text-main)',
+                          fontSize: '0.78rem',
+                          outline: 'none',
+                          width: 100,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveEdit(tag)}
+                        style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 2 }}
+                        title="Lưu"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTag(null)}
+                        style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
+                        title="Hủy"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div
+                    key={tag}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 10px',
+                      borderRadius: 8,
+                      background: 'var(--card-bg)',
+                      border: '1px solid var(--card-border)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      color: 'var(--text-main)',
+                    }}
+                  >
+                    <span>#{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTag(tag)
+                        setEditingTagInput(tag)
+                      }}
+                      style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 1, opacity: 0.7 }}
+                      title="Sửa tên tag"
+                    >
+                      <Edit3 size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDeleteTag(category, tag)}
+                      style={{ border: 'none', background: 'none', color: 'var(--rose, #ef4444)', cursor: 'pointer', padding: 1, opacity: 0.7 }}
+                      title="Xóa tag"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+          <button
+            type="button"
+            className="tv-btn primary"
+            onClick={onClose}
+            style={{ padding: '8px 18px', borderRadius: 10, fontSize: '0.82rem' }}
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/** Modal đổi thể loại & Tag cho kênh hoặc tạo mới thể loại lưu Supabase */
 function ChannelCategoryModal({
   channelName,
   currentCategory,
+  currentTag,
   customCategories,
-  onSelectCategory,
+  categoryTagMap,
+  onSaveCategoryAndTag,
   onAddCustomCategory,
   onUpdateCustomCategory,
   onDeleteCustomCategory,
+  onAddTagToCategory,
+  onUpdateTagInCategory: _onUpdateTagInCategory,
+  onDeleteTagFromCategory,
   onClose,
 }: {
   channelName: string
   currentCategory: string
+  currentTag?: string
   customCategories: CustomCategoryItem[]
-  onSelectCategory: (category: string) => void
+  categoryTagMap: CategoryTagMap
+  onSaveCategoryAndTag: (category: string, tag?: string | null) => void
   onAddCustomCategory: (label: string, icon?: string) => Promise<string | undefined>
   onUpdateCustomCategory: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
   onDeleteCustomCategory: (id: string) => Promise<void>
+  onAddTagToCategory: (category: string, tag: string) => Promise<string | undefined>
+  onUpdateTagInCategory: (category: string, oldTag: string, newTag: string) => Promise<string | undefined>
+  onDeleteTagFromCategory: (category: string, tag: string) => Promise<void>
   onClose: () => void
 }) {
+  const [selectedCat, setSelectedCat] = useState(currentCategory || 'Review phim')
+  const [selectedTag, setSelectedTag] = useState<string | null>(currentTag || null)
+  const [newTagInput, setNewTagInput] = useState('')
+  const [isAddingTag, setIsAddingTag] = useState(false)
   const [editingCat, setEditingCat] = useState<CustomCategoryItem | null>(null)
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [selectedEmoji, setSelectedEmoji] = useState('🏷️')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const currentCategoryTags = categoryTagMap[selectedCat] || []
 
   const startEdit = (cat: CustomCategoryItem) => {
     setEditingCat(cat)
@@ -1713,15 +2257,15 @@ function ChannelCategoryModal({
       if (editingCat) {
         const updated = await onUpdateCustomCategory(editingCat.id, newCategoryInput.trim(), selectedEmoji)
         if (updated) {
-          if (currentCategory === editingCat.label) {
-            onSelectCategory(updated)
+          if (selectedCat === editingCat.label) {
+            setSelectedCat(updated)
           }
           cancelEdit()
         }
       } else {
         const created = await onAddCustomCategory(newCategoryInput.trim(), selectedEmoji)
         if (created) {
-          onSelectCategory(created)
+          setSelectedCat(created)
           setNewCategoryInput('')
         }
       }
@@ -1730,12 +2274,22 @@ function ChannelCategoryModal({
     }
   }
 
+  const handleCreateTag = async () => {
+    if (!newTagInput.trim() || !selectedCat) return
+    const created = await onAddTagToCategory(selectedCat, newTagInput.trim())
+    if (created) {
+      setSelectedTag(created)
+      setNewTagInput('')
+      setIsAddingTag(false)
+    }
+  }
+
   const allItems = customCategories.map((c) => ({ ...c, isCustom: true }))
 
   return (
-    <Modal title={`🏷️ Thể loại cho kênh: ${channelName}`} onClose={onClose}>
+    <Modal title={`🏷️ Thể loại & Tag cho: ${channelName}`} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* KHU VỰC TẠO HOẶC SỬA THỂ LOẠI - ĐẶT NGAY TRÊN ĐẦU */}
+        {/* KHU VỰC TẠO HOẶC SỬA THỂ LOẠI */}
         <div style={{
           background: editingCat ? 'rgba(168, 85, 247, 0.08)' : 'var(--bg-subtle, rgba(59, 130, 246, 0.05))',
           padding: '12px 14px',
@@ -1753,7 +2307,7 @@ function ChannelCategoryModal({
               ) : (
                 <>
                   <Plus size={15} style={{ color: 'var(--primary)' }} />
-                  <span>➕ Tạo thể loại mới (Lưu Supabase):</span>
+                  <span>➕ Tạo thể loại mới:</span>
                 </>
               )}
             </div>
@@ -1801,7 +2355,7 @@ function ChannelCategoryModal({
           <form onSubmit={handleFormSubmit} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <input
               type="text"
-              placeholder="Nhập tên thể loại (vd: Sách nói, Âm nhạc, Nấu ăn...)"
+              placeholder="Nhập tên thể loại (vd: Anime, Sách nói, Nấu ăn...)"
               value={newCategoryInput}
               onChange={(e) => setNewCategoryInput(e.target.value)}
               style={{
@@ -1846,15 +2400,15 @@ function ChannelCategoryModal({
           </form>
         </div>
 
-        {/* DANH SÁCH THỂ LOẠI ĐÃ CÓ */}
+        {/* BƯỚC 1: CHỌN THỂ LOẠI */}
         <div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 8px', fontWeight: 600 }}>
-            Hoặc bấm chọn thể loại cho kênh này:
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 8px', fontWeight: 700 }}>
+            1. Chọn thể loại chính cho kênh:
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: 260, overflowY: 'auto', padding: 2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, maxHeight: 180, overflowY: 'auto', padding: 2 }}>
             {allItems.map((cat) => {
-              const isSelected = currentCategory === cat.label
+              const isSelected = selectedCat === cat.label
               const isBeingEdited = editingCat?.id === cat.id
               return (
                 <div
@@ -1862,7 +2416,7 @@ function ChannelCategoryModal({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    borderRadius: 12,
+                    borderRadius: 10,
                     border: `1px solid ${isBeingEdited ? '#a855f7' : isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
                     background: isBeingEdited ? 'rgba(168, 85, 247, 0.12)' : isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
                     transition: 'all 0.15s ease',
@@ -1871,15 +2425,22 @@ function ChannelCategoryModal({
                 >
                   <button
                     type="button"
-                    onClick={() => onSelectCategory(cat.label)}
+                    onClick={() => {
+                      setSelectedCat(cat.label)
+                      // Reset tag nếu tag cũ không thuộc cat mới
+                      const newCatTags = categoryTagMap[cat.label] || []
+                      if (selectedTag && !newCatTags.includes(selectedTag)) {
+                        setSelectedTag(null)
+                      }
+                    }}
                     style={{
                       flex: 1,
-                      padding: '10px 10px',
+                      padding: '8px 10px',
                       border: 'none',
                       background: 'transparent',
                       color: isSelected ? 'var(--primary)' : 'var(--text-main)',
                       fontWeight: isSelected ? 800 : 600,
-                      fontSize: '0.82rem',
+                      fontSize: '0.8rem',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -1890,7 +2451,7 @@ function ChannelCategoryModal({
                   >
                     <span>{cat.icon}</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.label}</span>
-                    {isSelected && <Check size={14} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                    {isSelected && <Check size={13} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
                   </button>
 
                   {cat.isCustom && (
@@ -1901,30 +2462,11 @@ function ChannelCategoryModal({
                           e.stopPropagation()
                           startEdit(cat as CustomCategoryItem)
                         }}
-                        title="Sửa tên hoặc icon thể loại này"
-                        style={{
-                          padding: '6px 5px',
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--primary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          opacity: 0.75,
-                          transition: 'opacity 0.15s, transform 0.15s',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '1'
-                          e.currentTarget.style.transform = 'scale(1.2)'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = '0.75'
-                          e.currentTarget.style.transform = 'scale(1)'
-                        }}
+                        title="Sửa thể loại này"
+                        style={{ padding: '4px', border: 'none', background: 'transparent', color: 'var(--primary)', cursor: 'pointer' }}
                       >
-                        <Edit3 size={13} />
+                        <Edit3 size={11} />
                       </button>
-
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1933,27 +2475,9 @@ function ChannelCategoryModal({
                           void onDeleteCustomCategory(cat.id)
                         }}
                         title="Xoá thể loại này"
-                        style={{
-                          padding: '6px 5px',
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--text-muted)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          opacity: 0.6,
-                          transition: 'opacity 0.15s, color 0.15s',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '1'
-                          e.currentTarget.style.color = 'var(--rose, #ef4444)'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = '0.6'
-                          e.currentTarget.style.color = 'var(--text-muted)'
-                        }}
+                        style={{ padding: '4px', border: 'none', background: 'transparent', color: 'var(--rose, #ef4444)', cursor: 'pointer' }}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={11} />
                       </button>
                     </div>
                   )}
@@ -1962,29 +2486,230 @@ function ChannelCategoryModal({
             })}
           </div>
         </div>
+
+        {/* BƯỚC 2: CHỌN HOẶC THÊM TAG CON THUỘC THỂ LOẠI ĐÃ CHỌN */}
+        <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, fontWeight: 700 }}>
+              2. Chọn Tag con thuộc "{selectedCat}" (tùy chọn):
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsAddingTag(!isAddingTag)}
+              style={{
+                border: 'none',
+                background: 'none',
+                color: 'var(--primary)',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <Plus size={13} /> Thêm tag mới
+            </button>
+          </div>
+
+          {/* Ô nhập tạo tag mới */}
+          {isAddingTag && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 700, fontSize: '0.8rem' }}>#</span>
+                <input
+                  type="text"
+                  placeholder={`Nhập tag mới cho "${selectedCat}" (vd: Naruto, Luffy)...`}
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void handleCreateTag()
+                    }
+                  }}
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px 6px 22px',
+                    borderRadius: 8,
+                    border: '1px solid var(--card-border)',
+                    background: 'var(--bg-main)',
+                    color: 'var(--text-main)',
+                    fontSize: '0.78rem',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleCreateTag()}
+                disabled={!newTagInput.trim()}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Lưu tag
+              </button>
+            </div>
+          )}
+
+          {/* Danh sách các tag con */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto' }}>
+            <button
+              type="button"
+              onClick={() => setSelectedTag(null)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 8,
+                border: `1px solid ${selectedTag === null ? 'var(--primary)' : 'var(--card-border)'}`,
+                background: selectedTag === null ? 'rgba(59, 130, 246, 0.12)' : 'var(--card-bg)',
+                color: selectedTag === null ? 'var(--primary)' : 'var(--text-muted)',
+                fontSize: '0.78rem',
+                fontWeight: selectedTag === null ? 700 : 500,
+                cursor: 'pointer',
+              }}
+            >
+              (Không gắn tag)
+            </button>
+
+            {currentCategoryTags.map((tag) => {
+              const isTagSelected = selectedTag === tag
+              return (
+                <div
+                  key={tag}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    borderRadius: 8,
+                    border: `1px solid ${isTagSelected ? 'var(--primary)' : 'var(--card-border)'}`,
+                    background: isTagSelected ? 'rgba(59, 130, 246, 0.15)' : 'var(--card-bg)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTag(isTagSelected ? null : tag)}
+                    style={{
+                      padding: '5px 8px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: isTagSelected ? 'var(--primary)' : 'var(--text-main)',
+                      fontSize: '0.78rem',
+                      fontWeight: isTagSelected ? 800 : 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <span>#{tag}</span>
+                    {isTagSelected && <Check size={12} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void onDeleteTagFromCategory(selectedCat, tag)
+                      if (selectedTag === tag) setSelectedTag(null)
+                    }}
+                    style={{
+                      padding: '4px 6px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      opacity: 0.6,
+                    }}
+                    title="Xóa tag này"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* NÚT LƯU THỂ LOẠI & TAG */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6, borderTop: '1px solid var(--card-border)', paddingTop: 10 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '9px 16px',
+              borderRadius: 10,
+              border: '1px solid var(--card-border)',
+              background: 'var(--card-bg)',
+              color: 'var(--text-main)',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Hủy
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSaveCategoryAndTag(selectedCat, selectedTag)}
+            style={{
+              padding: '9px 22px',
+              borderRadius: 10,
+              border: 'none',
+              background: 'var(--primary)',
+              color: '#fff',
+              fontSize: '0.84rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <Check size={15} /> Lưu Thể loại & Tag
+          </button>
+        </div>
       </div>
     </Modal>
   )
 }
 
-/** Modal thêm nhanh thể loại mới từ thanh Tab */
+/** Modal thêm & quản lý thể loại + tags từ thanh Tab */
 function QuickAddCategoryModal({
   customCategories = [],
+  categoryTagMap = {},
   onAddCustomCategory,
   onUpdateCustomCategory,
   onDeleteCustomCategory,
+  onAddTagToCategory,
+  onUpdateTagInCategory,
+  onDeleteTagFromCategory,
   onClose,
 }: {
   customCategories?: CustomCategoryItem[]
+  categoryTagMap?: CategoryTagMap
   onAddCustomCategory: (label: string, icon?: string) => Promise<void>
   onUpdateCustomCategory?: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
   onDeleteCustomCategory?: (id: string) => Promise<void>
+  onAddTagToCategory?: (category: string, tag: string) => Promise<string | undefined>
+  onUpdateTagInCategory?: (category: string, oldTag: string, newTag: string) => Promise<string | undefined>
+  onDeleteTagFromCategory?: (category: string, tag: string) => Promise<void>
   onClose: () => void
 }) {
   const [editingCat, setEditingCat] = useState<CustomCategoryItem | null>(null)
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [selectedEmoji, setSelectedEmoji] = useState('🏷️')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [managingTagsForCat, setManagingTagsForCat] = useState<string | null>(null)
 
   const startEdit = (cat: CustomCategoryItem) => {
     setEditingCat(cat)
@@ -2016,12 +2741,12 @@ function QuickAddCategoryModal({
   }
 
   return (
-    <Modal title={editingCat ? `✏️ Sửa thể loại: ${editingCat.label}` : "✨ Quản lý & Thêm thể loại mới"} onClose={onClose}>
+    <Modal title={editingCat ? `✏️ Sửa thể loại: ${editingCat.label}` : "✨ Quản lý Thể loại & Tags"} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
           {editingCat
             ? 'Thay đổi biểu tượng hoặc đổi tên thể loại. Dữ liệu sẽ được tự động đồng bộ lên Supabase:'
-            : 'Tạo thể loại mới để phân nhóm video và kênh YouTube. Thể loại này sẽ được lưu trên Supabase và xuất hiện trên thanh Tab của bạn:'}
+            : 'Tạo thể loại mới để phân nhóm video và kênh YouTube. Mỗi thể loại có thể tạo thêm nhiều Tag con:'}
         </p>
 
         <div>
@@ -2058,7 +2783,7 @@ function QuickAddCategoryModal({
               <span style={{ fontSize: '1.4rem' }}>{selectedEmoji}</span>
               <input
                 type="text"
-                placeholder="Ví dụ: Sách nói, Âm nhạc, Nấu ăn, Du lịch..."
+                placeholder="Ví dụ: Anime, Sách nói, Âm nhạc, Nấu ăn, Du lịch..."
                 value={newCategoryInput}
                 onChange={(e) => setNewCategoryInput(e.target.value)}
                 autoFocus
@@ -2142,66 +2867,45 @@ function QuickAddCategoryModal({
           </div>
         </form>
 
-        {/* DANH SÁCH CÁC THỂ LOẠI TỰ TẠO (ĐỂ SỬA HOẶC XOÁ) */}
+        {/* DANH SÁCH CÁC THỂ LOẠI (KÈM NÚT QUẢN LÝ TAGS) */}
         {customCategories.length > 0 && (
           <div style={{ marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--card-border)' }}>
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
-              Danh sách thể loại bạn đã tạo ({customCategories.length}):
+              Danh sách thể loại ({customCategories.length}) & Quản lý Tags con:
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
-              {customCategories.map((cat) => (
-                <div
-                  key={cat.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: 10,
-                    background: editingCat?.id === cat.id ? 'rgba(168, 85, 247, 0.15)' : 'var(--card-bg)',
-                    border: `1px solid ${editingCat?.id === cat.id ? '#a855f7' : 'var(--card-border)'}`,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                    <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button
-                      type="button"
-                      onClick={() => startEdit(cat)}
-                      title="Sửa thể loại này"
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: 6,
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        color: 'var(--primary)',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 3,
-                      }}
-                    >
-                      <Edit3 size={11} /> Sửa
-                    </button>
-                    {onDeleteCustomCategory && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+              {customCategories.map((cat) => {
+                const tags = categoryTagMap[cat.label] || []
+                return (
+                  <div
+                    key={cat.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      background: editingCat?.id === cat.id ? 'rgba(168, 85, 247, 0.15)' : 'var(--card-bg)',
+                      border: `1px solid ${editingCat?.id === cat.id ? '#a855f7' : 'var(--card-border)'}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)', minWidth: 0 }}>
+                      <span>{cat.icon}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.label}</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>({tags.length} tags)</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (editingCat?.id === cat.id) cancelEdit()
-                          void onDeleteCustomCategory(cat.id)
-                        }}
-                        title="Xoá thể loại này"
+                        onClick={() => setManagingTagsForCat(cat.label)}
                         style={{
                           padding: '4px 8px',
                           borderRadius: 6,
-                          border: '1px solid rgba(244, 63, 94, 0.3)',
-                          background: 'rgba(244, 63, 94, 0.1)',
-                          color: 'var(--rose, #f43f5e)',
-                          fontSize: '0.75rem',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          color: 'var(--primary)',
+                          fontSize: '0.74rem',
                           fontWeight: 700,
                           cursor: 'pointer',
                           display: 'inline-flex',
@@ -2209,16 +2913,75 @@ function QuickAddCategoryModal({
                           gap: 3,
                         }}
                       >
-                        <Trash2 size={11} /> Xóa
+                        <Tag size={11} /> Tags ({tags.length})
                       </button>
-                    )}
+
+                      <button
+                        type="button"
+                        onClick={() => startEdit(cat)}
+                        title="Sửa thể loại này"
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          border: '1px solid var(--card-border)',
+                          background: 'var(--bg-main)',
+                          color: 'var(--text-main)',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                        }}
+                      >
+                        <Edit3 size={11} /> Sửa
+                      </button>
+
+                      {onDeleteCustomCategory && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingCat?.id === cat.id) cancelEdit()
+                            void onDeleteCustomCategory(cat.id)
+                          }}
+                          title="Xoá thể loại này"
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            border: '1px solid rgba(244, 63, 94, 0.3)',
+                            background: 'rgba(244, 63, 94, 0.1)',
+                            color: 'var(--rose, #f43f5e)',
+                            fontSize: '0.74rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                          }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
       </div>
+
+      {/* Modal quản lý tags cho thể loại cụ thể */}
+      {managingTagsForCat && onAddTagToCategory && onUpdateTagInCategory && onDeleteTagFromCategory && (
+        <QuickAddTagModal
+          category={managingTagsForCat}
+          tags={categoryTagMap[managingTagsForCat] || []}
+          onAddTag={onAddTagToCategory}
+          onUpdateTag={onUpdateTagInCategory}
+          onDeleteTag={onDeleteTagFromCategory}
+          onClose={() => setManagingTagsForCat(null)}
+        />
+      )}
     </Modal>
   )
 }
@@ -2228,20 +2991,28 @@ function ChannelDetailView({
   channel,
   isShorts = false,
   onBack,
-  onChangeCategory,
+  onChangeCategoryAndTag,
   customCategories,
+  categoryTagMap,
   onAddCustomCategory,
   onUpdateCustomCategory,
   onDeleteCustomCategory,
+  onAddTagToCategory,
+  onUpdateTagInCategory,
+  onDeleteTagFromCategory,
 }: {
   channel: ChannelItem
   isShorts?: boolean
   onBack: () => void
-  onChangeCategory: (cat: string) => void
+  onChangeCategoryAndTag: (cat: string, tag?: string | null) => void
   customCategories: CustomCategoryItem[]
+  categoryTagMap: CategoryTagMap
   onAddCustomCategory: (label: string, icon?: string) => Promise<string | undefined>
   onUpdateCustomCategory: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
   onDeleteCustomCategory: (id: string) => Promise<void>
+  onAddTagToCategory: (category: string, tag: string) => Promise<string | undefined>
+  onUpdateTagInCategory: (category: string, oldTag: string, newTag: string) => Promise<string | undefined>
+  onDeleteTagFromCategory: (category: string, tag: string) => Promise<void>
 }) {
   useHideHeader(true)
   const [videos, setVideos] = useState<VideoRow[]>([])
@@ -2251,7 +3022,7 @@ function ChannelDetailView({
   const [, setLoading] = useState(true)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [search] = useState('')
-  const [filterMode, setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
+  const [filterMode, _setFilterMode] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -2355,26 +3126,31 @@ function ChannelDetailView({
           </button>
           <div>
             <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>{channel.creator_name}</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => setShowCategoryPicker(true)}
                 style={{
-                  padding: '2px 8px',
-                  borderRadius: 6,
+                  padding: '3px 9px',
+                  borderRadius: 8,
                   background: 'rgba(59, 130, 246, 0.12)',
                   color: 'var(--primary)',
-                  fontSize: '0.72rem',
+                  fontSize: '0.74rem',
                   fontWeight: 700,
                   border: 'none',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 4,
+                  gap: 6,
                 }}
               >
-                <span>{channel.category || 'Khác'}</span>
-                <Edit3 size={10} />
+                <span>🏷️ {channel.category || 'Khác'}</span>
+                {channel.tag && (
+                  <span style={{ background: 'rgba(59, 130, 246, 0.25)', padding: '1px 6px', borderRadius: 6, fontSize: '0.72rem' }}>
+                    #{channel.tag}
+                  </span>
+                )}
+                <Edit3 size={11} />
               </button>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{videos.length} video</span>
             </div>
@@ -2434,43 +3210,21 @@ function ChannelDetailView({
       {/* Danh sách video trong kênh */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0 }}>Danh sách video ({filteredVideos.length})</h3>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['all', 'unwatched', 'in_progress', 'watched'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`tv-filter-pill ${filterMode === m ? 'active' : ''}`}
-              onClick={() => setFilterMode(m)}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 8,
-                border: '1px solid var(--card-border)',
-                background: filterMode === m ? 'var(--primary)' : 'var(--card-bg)',
-                color: filterMode === m ? '#fff' : 'var(--text-main)',
-                fontSize: '0.74rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {m === 'all' ? 'Tất cả' : m === 'unwatched' ? 'Chưa xem' : m === 'in_progress' ? 'Đang xem' : 'Đã xem'}
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
         {filteredVideos.map((v) => {
-          const isSelected = v.video_id === playingId
+          const isPlaying = v.video_id === playingId
           const isWatched = watched.has(v.video_id)
           return (
             <div
-              key={v.id}
+              key={v.id || v.video_id}
               onClick={() => setPlayingId(v.video_id)}
               style={{
                 padding: 10,
                 borderRadius: 12,
-                border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--card-border)'}`,
-                background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'var(--card-bg)',
+                border: `1px solid ${isPlaying ? 'var(--primary)' : 'var(--card-border)'}`,
+                background: isPlaying ? 'rgba(59, 130, 246, 0.08)' : 'var(--card-bg)',
                 cursor: 'pointer',
                 display: 'flex',
                 gap: 10,
@@ -2504,14 +3258,19 @@ function ChannelDetailView({
         <ChannelCategoryModal
           channelName={channel.creator_name}
           currentCategory={channel.category}
+          currentTag={channel.tag}
           customCategories={customCategories}
-          onSelectCategory={(newCat) => {
-            onChangeCategory(newCat)
+          categoryTagMap={categoryTagMap}
+          onSaveCategoryAndTag={(newCat, newTag) => {
+            onChangeCategoryAndTag(newCat, newTag)
             setShowCategoryPicker(false)
           }}
           onAddCustomCategory={onAddCustomCategory}
           onUpdateCustomCategory={onUpdateCustomCategory}
           onDeleteCustomCategory={onDeleteCustomCategory}
+          onAddTagToCategory={onAddTagToCategory}
+          onUpdateTagInCategory={onUpdateTagInCategory}
+          onDeleteTagFromCategory={onDeleteTagFromCategory}
           onClose={() => setShowCategoryPicker(false)}
         />
       )}
