@@ -1014,14 +1014,15 @@ export function YoutubeView() {
       </form>
 
       {/* 2.5. BỘ LỌC TRẠNG THÁI XEM (ĐANG XEM, ĐÃ XEM, CHƯA XEM) & NÚT XÁO TRỘN NGẪU NHIÊN */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, margin: '8px 0 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {([
+      {/* Một dòng lướt ngang: 4 bộ lọc + nút xáo trộn mà xuống dòng thì ăn mất
+          3 dòng màn hình điện thoại, đẩy video xuống quá sâu. */}
+      <div className="chip-scroll-row" style={{ margin: '8px 0 14px' }}>
+        {([
             { id: 'all', label: 'Tất cả video', icon: null, count: allVideos.length },
             { id: 'in_progress', label: 'Đang xem', icon: Clock, count: inProgressSet.size },
             { id: 'watched', label: 'Đã xem', icon: CheckCircle2, count: watchedSet.size },
             { id: 'unwatched', label: 'Chưa xem', icon: Circle, count: Math.max(0, allVideos.length - inProgressSet.size - watchedSet.size) },
-          ] as const).map((filter) => {
+        ] as const).map((filter) => {
             const isActive = watchFilter === filter.id
             const Icon = filter.icon
             return (
@@ -1061,8 +1062,7 @@ export function YoutubeView() {
                 </span>
               </button>
             )
-          })}
-        </div>
+        })}
 
         {/* Nút Xáo trộn ngẫu nhiên khi ở tab Tất cả */}
         {activeCategoryTab === 'ALL' && viewMode === 'video' && !search.trim() && (

@@ -12512,3 +12512,23 @@ svg.lucide-library {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Một hàng chip lướt ngang, không xuống dòng — dùng chỗ nào có nhiều bộ lọc
+   mà màn hình điện thoại quá hẹp để xếp hết trên một dòng. */
+.chip-scroll-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chip-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-scroll-row > * {
+  flex: 0 0 auto;
+}

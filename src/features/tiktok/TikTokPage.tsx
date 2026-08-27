@@ -620,16 +620,23 @@ export function TikTokPage() {
                           autoPlay={i === index}
                           onClick={() => setMuted((m) => !m)}
                         />
-                      ) : near ? (
-                        <iframe
-                          src={vid.embed_url}
-                          title={vid.title || vid.video_id}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                        />
                       ) : (
                         <div className="tt-player-ph">
                           {vid.thumbnail && <img src={vid.thumbnail} alt="" loading="lazy" />}
+                          {/* Không nhúng iframe TikTok: nó tự chèn màn chắn
+                              "Sensitive content" và banner "Watch now" đè kín
+                              khung. Thà hiện ảnh bìa rồi mở app TikTok. */}
+                          {near && (
+                            <a
+                              className="tt-open-tiktok"
+                              href={vid.canonical_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <Play size={22} />
+                              <span>Xem trên TikTok</span>
+                            </a>
+                          )}
                         </div>
                       )}
 
