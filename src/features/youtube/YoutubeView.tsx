@@ -155,8 +155,32 @@ export function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'rev
 }
 
 /** Kiểm tra video ngắn (< 5 phút = 300 giây) */
-export const isShortVideo = (v: { duration?: number | null }): boolean => {
-  return typeof v.duration === 'number' && v.duration > 0 && v.duration < 300
+export const isShortVideo = (
+  v: { duration?: number | null; title?: string | null; canonical_url?: string | null; video_id?: string | null },
+  progressMap?: Record<string, { durationSeconds?: number | null }>
+): boolean => {
+  const dur = typeof v.duration === 'number' && v.duration > 0
+    ? v.duration
+    : (v.video_id && progressMap?.[v.video_id]?.durationSeconds ? progressMap[v.video_id]?.durationSeconds : undefined)
+
+  if (typeof dur === 'number' && dur > 0) {
+    return dur < 300
+  }
+
+  const title = (v.title || '').toLowerCase()
+  const url = (v.canonical_url || '').toLowerCase()
+  if (
+    url.includes('/shorts/') ||
+    title.includes('#shorts') ||
+    title.includes('#short') ||
+    title.includes('[short') ||
+    title.includes('(short') ||
+    title.includes('#reels') ||
+    title.includes('#tiktok')
+  ) {
+    return true
+  }
+  return false
 }
 
 export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
@@ -490,10 +514,14 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       const tvVideos = ((tvVideosRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType: 'tvshow' as const }))
       const revVideos = ((revVideosRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType: 'review' as const }))
 
-      const rawCombinedVideos = [...tvVideos, ...revVideos]
+      const rawCombinedVideos = [...tvVideos, ...revVideos].map((v) => ({
+        ...v,
+        duration: typeof v.duration === 'number' && v.duration > 0 ? v.duration : (progressMap[v.video_id]?.durationSeconds ?? v.duration),
+      }))
+
       const combinedVideos = isShorts
-        ? rawCombinedVideos.filter(isShortVideo)
-        : rawCombinedVideos.filter((v) => !isShortVideo(v))
+        ? rawCombinedVideos.filter((v) => isShortVideo(v, progressMap))
+        : rawCombinedVideos.filter((v) => !isShortVideo(v, progressMap))
 
       const combinedWatchedIds = new Set([
         ...(((tvWatchedRes?.data ?? []) as { video_id: string }[]).map(w => w.video_id)),
@@ -615,6 +643,27 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         setInProgressSet(statusSets.inProgressSet)
         setStatusMap(statusSets.statusMap)
         setLoading(false)
+
+        // Tự động kiểm tra và điền thời lượng cho các video chưa có thời lượng
+        const missing = rawCombinedVideos.filter((v) => typeof v.duration !== 'number' || v.duration <= 0).map((v) => v.video_id)
+        if (missing.length > 0) {
+          void (async () => {
+            try {
+              const { data: sess } = await supabase!.auth.getSession()
+              const token = sess.session?.access_token
+              if (!token) return
+              const r = await fetch('/api/video-durations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ videoIds: missing.slice(0, 100) }),
+              })
+              const resJson = await r.json().catch(() => ({}))
+              if (resJson?.durations && Object.keys(resJson.durations).length > 0) {
+                setReloadKey((k) => k + 1)
+              }
+            } catch {}
+          })()
+        }
       }
     })()
 
@@ -2210,10 +2259,14 @@ function ChannelDetailView({
       const sets = getVideoStatusSets(sourceType, watchedIds)
 
       const videoRes = await query?.order('part_number', { ascending: true, nullsFirst: false }).order('published_at', { ascending: false })
-      const rawRows = ((videoRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType }))
+      const rawRows = ((videoRes?.data ?? []) as VideoRow[]).map(v => ({
+        ...v,
+        sourceType,
+        duration: typeof v.duration === 'number' && v.duration > 0 ? v.duration : (progressMap[v.video_id]?.durationSeconds ?? v.duration),
+      }))
       const rows = isShorts
-        ? rawRows.filter(isShortVideo)
-        : rawRows.filter((v) => !isShortVideo(v))
+        ? rawRows.filter((r) => isShortVideo(r, progressMap))
+        : rawRows.filter((r) => !isShortVideo(r, progressMap))
 
       setVideos(rows)
       setWatched(sets.watchedSet)

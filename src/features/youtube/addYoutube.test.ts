@@ -36,5 +36,11 @@ describe('isShortVideo logic', () => {
     expect(isShortVideo({ duration: null })).toBe(false)
     expect(isShortVideo({ duration: undefined })).toBe(false)
     expect(isShortVideo({ duration: 0 })).toBe(false)
+    // Test theo progressMap
+    expect(isShortVideo({ video_id: 'vid1', duration: null }, { vid1: { durationSeconds: 120 } })).toBe(true)
+    expect(isShortVideo({ video_id: 'vid2', duration: null }, { vid2: { durationSeconds: 400 } })).toBe(false)
+    // Test theo hashtag / url
+    expect(isShortVideo({ title: 'Hướng dẫn code #shorts' })).toBe(true)
+    expect(isShortVideo({ canonical_url: 'https://www.youtube.com/shorts/abc123' })).toBe(true)
   })
 })
