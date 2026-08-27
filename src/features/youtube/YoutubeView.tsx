@@ -7,7 +7,8 @@ import {
   Check, 
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2, Info,
-  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock, Tag
+  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock, Tag,
+  Flame, ArrowUpDown, Zap
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
@@ -50,6 +51,7 @@ export type CustomCategoryItem = { id: string; label: string; icon: string; tags
 export type ChannelCategoryMap = Record<string, string>
 export type CategoryTagMap = Record<string, string[]>
 export type ChannelTagMap = Record<string, string>
+export type YoutubeSortMode = 'date' | 'viewCount' | 'oldest'
 
 export type ChannelItem = {
   id: string
@@ -224,7 +226,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [ytNextPage, setYtNextPage] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   /** Thứ tự kết quả; đổi là tìm lại vì YouTube xếp ở phía nó, không xếp tại chỗ. */
-  const [ytOrder, setYtOrder] = useState<SearchOrder>('relevance')
+  const [ytOrder, setYtOrder] = useState<SearchOrder>('date')
+  const [sortMode, setSortMode] = useState<YoutubeSortMode>('date')
   const [savingVideoId, setSavingVideoId] = useState<string | null>(null)
 
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
@@ -887,7 +890,17 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (search.trim()) {
-      void handlePerformYouTubeSearch(search)
+      void handlePerformYouTubeSearch(search, sortMode === 'viewCount' ? 'viewCount' : 'date')
+    }
+  }
+
+  // Đổi tiêu chí sắp xếp (Mới đăng / Nhiều view / Cũ nhất)
+  const handleSortChange = (newSort: YoutubeSortMode) => {
+    setSortMode(newSort)
+    const newYtOrder: SearchOrder = newSort === 'viewCount' ? 'viewCount' : 'date'
+    setYtOrder(newYtOrder)
+    if (search.trim()) {
+      void handlePerformYouTubeSearch(search, newYtOrder)
     }
   }
 
@@ -1095,15 +1108,35 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           (v.creator_name && v.creator_name.toLowerCase().includes(q)) ||
           (v.channel_tag && v.channel_tag.toLowerCase().includes(q))
       )
-    } else if (activeCategoryTab === 'ALL' && watchFilter === 'all') {
-      // Khi vừa vào hoặc ở tab Tất cả: xáo trộn ngẫu nhiên để thấy đa dạng video
-      result = shuffleArray(result, shuffleSeed)
     }
 
-    return result
-  }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed])
+    // Sắp xếp video: Mặc định là Mới đăng ưu tiên ('date'), hoặc Nhiều view ('viewCount'), hoặc Cũ nhất ('oldest')
+    result.sort((a, b) => {
+      if (sortMode === 'date') {
+        const tA = a.published_at ? new Date(a.published_at).getTime() : 0
+        const tB = b.published_at ? new Date(b.published_at).getTime() : 0
+        return tB - tA
+      }
+      if (sortMode === 'oldest') {
+        const tA = a.published_at ? new Date(a.published_at).getTime() : 0
+        const tB = b.published_at ? new Date(b.published_at).getTime() : 0
+        return tA - tB
+      }
+      if (sortMode === 'viewCount') {
+        const pA = progressMap[a.video_id]?.percent || 0
+        const pB = progressMap[b.video_id]?.percent || 0
+        if (pA !== pB) return pB - pA
+        const tA = a.published_at ? new Date(a.published_at).getTime() : 0
+        const tB = b.published_at ? new Date(b.published_at).getTime() : 0
+        return tB - tA
+      }
+      return 0
+    })
 
-  const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}`)
+    return result
+  }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap])
+
+  const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}|${sortMode}`)
 
 
   /** Nút "Đã xem": bật/tắt trạng thái xem hết của đúng video đó. */
@@ -1458,6 +1491,58 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                 </span>
               </button>
             )
+        })}
+
+        <div style={{ width: 1, height: 18, background: 'var(--card-border)', margin: '0 4px', flexShrink: 0 }} />
+
+        {/* BỘ LỌC SẮP XẾP: MỚI ĐĂNG (ƯU TIÊN MẶC ĐỊNH) & NHIỀU VIEW & CŨ NHẤT */}
+        {([
+          { id: 'date', label: 'Mới đăng', icon: Zap, title: 'Ưu tiên hiển thị video mới đăng gần nhất (Mặc định)' },
+          { id: 'viewCount', label: 'Nhiều view', icon: Flame, title: 'Ưu tiên hiển thị video có nhiều lượt xem' },
+          { id: 'oldest', label: 'Cũ nhất', icon: ArrowUpDown, title: 'Hiển thị video từ cũ nhất đến mới nhất' },
+        ] as const).map((s) => {
+          const isActive = sortMode === s.id
+          const Icon = s.icon
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className={`tv-filter-pill ${isActive ? 'active' : ''}`}
+              onClick={() => handleSortChange(s.id)}
+              title={s.title}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '5px 12px',
+                borderRadius: 10,
+                border: `1px solid ${isActive ? 'var(--primary)' : 'var(--card-border)'}`,
+                background: isActive ? 'var(--primary)' : 'var(--card-bg)',
+                color: isActive ? '#ffffff' : 'var(--text-main)',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Icon size={12} />
+              <span>{s.label}</span>
+              {s.id === 'date' && (
+                <span
+                  style={{
+                    padding: '1px 5px',
+                    borderRadius: 99,
+                    fontSize: '0.65rem',
+                    fontWeight: 800,
+                    background: isActive ? 'rgba(255, 255, 255, 0.3)' : 'rgba(59, 130, 246, 0.15)',
+                    color: isActive ? '#ffffff' : 'var(--primary)',
+                  }}
+                >
+                  Ưu tiên
+                </span>
+              )}
+            </button>
+          )
         })}
 
         {/* Nút Xáo trộn ngẫu nhiên khi ở tab Tất cả */}
