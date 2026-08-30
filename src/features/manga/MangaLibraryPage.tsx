@@ -269,6 +269,35 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
   }, [countKey, visibleCount])
 
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const tabsRef = useRef<HTMLDivElement | null>(null)
+  const isDraggingRef = useRef(false)
+  const startXRef = useRef(0)
+  const scrollLeftRef = useRef(0)
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!tabsRef.current) return
+    isDraggingRef.current = true
+    startXRef.current = e.pageX - tabsRef.current.offsetLeft
+    scrollLeftRef.current = tabsRef.current.scrollLeft
+  }
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || !tabsRef.current) return
+    const x = e.pageX - tabsRef.current.offsetLeft
+    const walk = (x - startXRef.current) * 1.2
+    tabsRef.current.scrollLeft = scrollLeftRef.current - walk
+  }
+
+  const handlePointerUp = () => {
+    isDraggingRef.current = false
+  }
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!tabsRef.current) return
+    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
+      tabsRef.current.scrollLeft += e.deltaY * 0.8
+    }
+  }
 
   const refreshHistory = () => setHistory(config.getHistory())
 
@@ -491,7 +520,15 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
       )}
 
       <div className={`${p}-top-nav-bar`}>
-        <div className={`${p}-nav-tabs`}>
+        <div
+          ref={tabsRef}
+          className={`${p}-nav-tabs`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          onWheel={handleWheel}
+        >
           <button
             className={`${p}-nav-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveTab('all')}

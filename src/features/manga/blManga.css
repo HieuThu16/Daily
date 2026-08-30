@@ -25,18 +25,30 @@
 .bl-nav-tabs {
   display: flex;
   background: var(--surface-bg, #f1f5f9);
-  padding: 4px;
-  border-radius: 12px;
-  gap: 4px;
-  overflow-x: auto;
+  padding: 5px;
+  border-radius: 14px;
+  gap: 6px;
+  overflow-x: auto !important;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  touch-action: pan-x;
+  user-select: none;
+  cursor: grab;
   scrollbar-width: none;
+  -ms-overflow-style: none;
   max-width: 100%;
-  flex-wrap: nowrap;
+  flex-wrap: nowrap !important;
+}
+
+.bl-nav-tabs:active {
+  cursor: grabbing;
 }
 
 .bl-nav-tabs::-webkit-scrollbar {
   display: none;
+  width: 0;
+  height: 0;
 }
 
 .bl-nav-tab-btn {

@@ -23,6 +23,7 @@ export type CrawlReport = {
   startedAt: string
   finishedAt: string
   isTimedOut: boolean
+  isStoppedByUser: boolean
 }
 
 export type CrawlerState = {
@@ -55,6 +56,7 @@ class MangaChapterCrawlerManager {
   private listeners = new Set<Listener>()
   private abortController: AbortController | null = null
   private timerInterval: any = null
+  private isUserAborted = false
 
   public getState(): CrawlerState {
     return { ...this.state }
@@ -83,6 +85,7 @@ class MangaChapterCrawlerManager {
   }
 
   public stop() {
+    this.isUserAborted = true
     if (this.abortController) {
       this.abortController.abort()
       this.abortController = null
@@ -91,8 +94,6 @@ class MangaChapterCrawlerManager {
       clearInterval(this.timerInterval)
       this.timerInterval = null
     }
-    this.state.isRunning = false
-    this.notify()
   }
 
   public async startCrawl(category: MangaCategory): Promise<void> {
@@ -100,6 +101,7 @@ class MangaChapterCrawlerManager {
       return
     }
 
+    this.isUserAborted = false
     this.abortController = new AbortController()
     const signal = this.abortController.signal
 
@@ -334,6 +336,7 @@ class MangaChapterCrawlerManager {
         startedAt: new Date(startTime).toLocaleTimeString('vi-VN'),
         finishedAt: new Date().toLocaleTimeString('vi-VN'),
         isTimedOut,
+        isStoppedByUser: this.isUserAborted,
       }
 
       this.state = {

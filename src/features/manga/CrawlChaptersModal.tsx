@@ -248,13 +248,22 @@ export function GlobalCrawlerWatcher() {
         </div>
       )}
 
-      {/* Modal Báo cáo kết quả cào sau 15 phút / khi hoàn tất */}
+      {/* Modal Báo cáo kết quả cào sau 15 phút / khi dừng giữa chừng / khi hoàn tất */}
       {report && (
         <Modal
-          title={report.isTimedOut ? '⏱️ Báo cáo cào chapter (Hết 15 phút)' : '🎉 Báo cáo cào chapter hoàn tất'}
+          title={
+            report.isStoppedByUser
+              ? '⏱️ Báo cáo cào chapter (Đã dừng giữa chừng)'
+              : report.isTimedOut
+                ? '⏱️ Báo cáo cào chapter (Hết 15 phút)'
+                : '🎉 Báo cáo cào chapter hoàn tất'
+          }
           onClose={() => mangaChapterCrawler.clearReport()}
         >
           <div style={{ padding: '4px 0 10px', color: 'var(--text-main)' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+              Dữ liệu cào đến đâu đã được hệ thống <strong>tự động lưu ngay đến đó</strong>. Bạn có thể mở đọc ngay các chapter mới bên dưới:
+            </div>
             {/* Header Thống kê */}
             <div
               style={{
