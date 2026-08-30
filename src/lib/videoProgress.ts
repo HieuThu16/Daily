@@ -59,6 +59,18 @@ function writeLocal(map: Record<string, VideoProgress>) {
   window.dispatchEvent(new CustomEvent(EVENT_NAME))
 }
 
+/** Xóa 1 video khỏi lịch sử xem */
+export function removeVideoProgress(videoId: string) {
+  const map = getLocalProgress()
+  delete map[videoId]
+  writeLocal(map)
+}
+
+/** Xóa toàn bộ lịch sử xem */
+export function clearAllVideoProgress() {
+  writeLocal({})
+}
+
 async function upsertRemote(rows: VideoProgress[]) {
   if (!supabase || rows.length === 0) return
   try {

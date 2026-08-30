@@ -152,6 +152,12 @@ export function YoutubeWatchPage() {
   const [isCollected, setIsCollected] = useState(() => isItemInCollection('YOUTUBE', videoId))
   const [visibleSiblingCount, setVisibleSiblingCount] = useState(12)
 
+  useVideoStatusListener(() => {
+    if (!video) return
+    const sets = getVideoStatusSets(video.sourceType)
+    setWatchedSet(sets.watchedSet)
+  })
+
   useEffect(() => {
     setIsCollected(isItemInCollection('YOUTUBE', videoId))
     setVisibleSiblingCount(12)
@@ -336,6 +342,12 @@ export function YoutubeWatchPage() {
   const toggleWatched = async () => {
     if (!video) return
     const next = watched ? 'UNWATCHED' : 'COMPLETED'
+    setWatchedSet((prev) => {
+      const nextSet = new Set(prev)
+      if (next === 'COMPLETED') nextSet.add(video.video_id)
+      else nextSet.delete(video.video_id)
+      return nextSet
+    })
     await updateVideoStatusRecord(video.video_id, video.sourceType, next, {
       title: video.title,
       channel_name: video.creator_name ?? undefined,

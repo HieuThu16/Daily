@@ -53,10 +53,10 @@ export function getVideoStatus(
 }
 
 /**
- * Lấy sets trạng thái theo loại (tvshow hoặc review)
+ * Lấy sets trạng thái theo loại (tvshow hoặc review hoặc 'all')
  */
 export function getVideoStatusSets(
-  type: VideoSectionType,
+  type?: VideoSectionType | 'all',
   supabaseWatchedIds: Set<string> = new Set()
 ): {
   watchedSet: Set<string>
@@ -76,7 +76,7 @@ export function getVideoStatusSets(
 
   // 2. Thêm các bản ghi từ local storage
   for (const record of Object.values(records)) {
-    if (record && record.type === type) {
+    if (record && (!type || type === 'all' || record.type === type)) {
       if (record.status === 'COMPLETED') {
         watchedSet.add(record.video_id)
         inProgressSet.delete(record.video_id)

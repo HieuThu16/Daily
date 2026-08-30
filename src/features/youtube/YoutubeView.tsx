@@ -35,6 +35,8 @@ import {
   progressLabel,
   useVideoProgressMap,
   useYouTubeProgress,
+  removeVideoProgress,
+  clearAllVideoProgress,
 } from '../../lib/videoProgress'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { AddYoutubeModal } from './AddYoutubeModal'
@@ -144,13 +146,66 @@ export function shuffleArray<T>(arr: T[], seed: number): T[] {
   return copy
 }
 
+/** Chuẩn hóa tên kênh hoặc khóa tìm kiếm */
+export function normalizeChannelKey(str?: string | null): string {
+  if (!str) return ''
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+/** Tìm kênh phù hợp nhất cho video */
+export function findMatchingChannel(
+  v: { creator_id?: string | null; creator_name?: string | null; series_key?: string | null },
+  channels: ChannelItem[]
+): ChannelItem | undefined {
+  if (!channels || channels.length === 0) return undefined
+
+  // 1. Khớp theo creator_id trực tiếp
+  if (v.creator_id) {
+    const direct = channels.find((c) => (c.creator_id && c.creator_id === v.creator_id) || c.id === v.creator_id)
+    if (direct) return direct
+  }
+
+  const vNameNorm = normalizeChannelKey(v.creator_name)
+  const vKeyNorm = normalizeChannelKey(v.series_key)
+  const vIdNorm = normalizeChannelKey(v.creator_id)
+
+  // 2. Khớp theo tên kênh đã chuẩn hóa
+  if (vNameNorm) {
+    const byName = channels.find((c) => {
+      const cNameNorm = normalizeChannelKey(c.creator_name)
+      return cNameNorm && (cNameNorm === vNameNorm || cNameNorm.includes(vNameNorm) || vNameNorm.includes(cNameNorm))
+    })
+    if (byName) return byName
+  }
+
+  // 3. Khớp theo series_key hoặc ID kênh
+  if (vKeyNorm || vIdNorm) {
+    const byKey = channels.find((c) => {
+      const cNameNorm = normalizeChannelKey(c.creator_name)
+      const cIdNorm = normalizeChannelKey(c.creator_id)
+      return (
+        (vKeyNorm && cNameNorm && (cNameNorm === vKeyNorm || cNameNorm.includes(vKeyNorm) || vKeyNorm.includes(cNameNorm))) ||
+        (vIdNorm && cIdNorm && cIdNorm === vIdNorm) ||
+        (vIdNorm && cNameNorm && cNameNorm === vIdNorm)
+      )
+    })
+    if (byKey) return byKey
+  }
+
+  return undefined
+}
+
 /** Tự động đoán thể loại ban đầu của kênh dựa vào tên kênh hoặc nguồn gốc */
 export function guessChannelCategory(name: string, sourceTable?: 'tvshow' | 'review'): string {
   const lower = (name || '').toLowerCase()
   if (sourceTable === 'review' || lower.includes('review') || lower.includes('phim') || lower.includes('movie') || lower.includes('cinema')) {
     return 'Review phim'
   }
-  if (lower.includes('học') || lower.includes('web5ngay') || lower.includes('sách') || lower.includes('tri thức') || lower.includes('ted') || lower.includes('tư duy') || lower.includes('tiếng anh') || lower.includes('english')) {
+  if (lower.includes('học') || lower.includes('web5ngay') || lower.includes('kiến thức') || lower.includes('sách') || lower.includes('tri thức') || lower.includes('ted') || lower.includes('tư duy') || lower.includes('tiếng anh') || lower.includes('english')) {
     return 'Học tập & Tri thức'
   }
   if (lower.includes('công nghệ') || lower.includes('tech') || lower.includes('khoa học') || lower.includes('vật lý') || lower.includes('ai') || lower.includes('lập trình') || lower.includes('code')) {
@@ -208,9 +263,17 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [inProgressSet, setInProgressSet] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'channel' | 'video'>('video')
+  const [viewMode, setViewMode] = useState<'channel' | 'video' | 'history'>('video')
   const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [shuffleSeed, setShuffleSeed] = useState(() => Math.random())
+
+  // Lắng nghe sự kiện đổi trạng thái xem video toàn app
+  useVideoStatusListener(() => {
+    const statusSets = getVideoStatusSets('tvshow')
+    const revSets = getVideoStatusSets('review')
+    setWatchedSet(new Set([...statusSets.watchedSet, ...revSets.watchedSet]))
+    setInProgressSet(new Set([...statusSets.inProgressSet, ...revSets.inProgressSet]))
+  })
   
   // Hạng mục đang chọn trên thanh tab trượt ngang (mặc định 'ALL')
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('ALL')
@@ -600,21 +663,30 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
   // 4. Đổi Thể loại & Tag của 1 Kênh (Lưu ngay vào state, local và Supabase)
   const handleChangeChannelCategoryAndTag = async (channelKey: string, newCategory: string, newTag?: string | null) => {
+    const targetNorm = normalizeChannelKey(channelKey)
     const updatedCatMap = { ...channelCategoryMap, [channelKey]: newCategory }
+    if (targetNorm) updatedCatMap[targetNorm] = newCategory
     setChannelCategoryMap(updatedCatMap)
 
     const updatedTagMap = { ...channelTagMap }
     if (newTag) {
       updatedTagMap[channelKey] = newTag
+      if (targetNorm) updatedTagMap[targetNorm] = newTag
     } else {
       delete updatedTagMap[channelKey]
+      if (targetNorm) delete updatedTagMap[targetNorm]
     }
     setChannelTagMap(updatedTagMap)
 
     setChannels((prev) =>
       prev.map((c) => {
-        const key = c.creator_id || c.creator_name || c.id
-        if (key === channelKey || c.creator_name === channelKey || c.id === channelKey) {
+        const cNorm = normalizeChannelKey(c.creator_name || c.creator_id || c.id)
+        if (
+          c.id === channelKey ||
+          c.creator_id === channelKey ||
+          c.creator_name === channelKey ||
+          (targetNorm && cNorm && (cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)))
+        ) {
           return { ...c, category: newCategory, tag: newTag || undefined }
         }
         return c
@@ -623,8 +695,12 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
     setAllVideos((prev) =>
       prev.map((v) => {
-        const key = v.creator_id || v.creator_name || 'manual'
-        if (key === channelKey || v.creator_name === channelKey) {
+        const vNorm = normalizeChannelKey(v.creator_name || v.creator_id || v.series_key)
+        if (
+          v.creator_id === channelKey ||
+          v.creator_name === channelKey ||
+          (targetNorm && vNorm && (vNorm === targetNorm || vNorm.includes(targetNorm) || targetNorm.includes(vNorm)))
+        ) {
           return { ...v, channel_category: newCategory, channel_tag: newTag || undefined }
         }
         return v
@@ -632,8 +708,13 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     )
 
     if (selectedChannel) {
-      const sKey = selectedChannel.creator_id || selectedChannel.creator_name || selectedChannel.id
-      if (sKey === channelKey || selectedChannel.creator_name === channelKey) {
+      const sNorm = normalizeChannelKey(selectedChannel.creator_name || selectedChannel.creator_id || selectedChannel.id)
+      if (
+        selectedChannel.id === channelKey ||
+        selectedChannel.creator_id === channelKey ||
+        selectedChannel.creator_name === channelKey ||
+        (targetNorm && sNorm && (sNorm === targetNorm || sNorm.includes(targetNorm) || targetNorm.includes(sNorm)))
+      ) {
         setSelectedChannel({ ...selectedChannel, category: newCategory, tag: newTag || undefined })
       }
     }
@@ -643,7 +724,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       saveAppSetting('youtube_channel_tags', updatedTagMap),
     ])
 
-    showToast(`Đã lưu thể loại & tag cho kênh`, 'success')
+    showToast(`Đã lưu thể loại "${newCategory}" cho kênh`, 'success')
     setEditingChannelCategory(null)
   }
 
@@ -693,131 +774,87 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
       const statusSets = getVideoStatusSets('tvshow', combinedWatchedIds)
 
-      // Thống kê video theo creator
-      const statsByCreator = new Map<string, { total: number; inProgress: number; watched: number; cover: string | null }>()
-
-      for (const v of combinedVideos) {
-        const key = v.creator_id || v.creator_name || 'manual'
-        const stat = statsByCreator.get(key) ?? { total: 0, inProgress: 0, watched: 0, cover: null }
-        stat.total += 1
-        if (statusSets.watchedSet.has(v.video_id)) {
-          stat.watched += 1
-        } else if (statusSets.inProgressSet.has(v.video_id)) {
-          stat.inProgress += 1
-        }
-        if (!stat.cover && v.thumbnail) stat.cover = v.thumbnail
-        statsByCreator.set(key, stat)
-      }
-
-      // Xây dựng danh sách Channel Cards tổng hợp
+      // Xây dựng danh sách Channel Cards tổng hợp từ cả 2 nguồn
       const channelCardsMap = new Map<string, ChannelItem>()
 
-      // Kênh TV Show
-      for (const c of tvCreators) {
+      const registerCreator = (c: any, defaultSource: 'tvshow' | 'review') => {
         const key = c.creator_id || c.creator_name || c.id
-        const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
-        if (isShorts && stat.total === 0) continue
-        const assignedCat = catMap[key] || catMap[c.creator_name] || c.category || guessChannelCategory(c.creator_name, 'tvshow')
-        const assignedTag = tagMap[key] || tagMap[c.creator_name] || undefined
-        channelCardsMap.set(key, {
+        const normName = normalizeChannelKey(c.creator_name)
+        const normKey = normalizeChannelKey(key)
+
+        const assignedCat =
+          catMap[key] ||
+          catMap[c.creator_name] ||
+          catMap[normName] ||
+          catMap[normKey] ||
+          c.category ||
+          guessChannelCategory(c.creator_name, defaultSource)
+
+        const assignedTag =
+          tagMap[key] ||
+          tagMap[c.creator_name] ||
+          tagMap[normName] ||
+          tagMap[normKey] ||
+          undefined
+
+        const channelItem: ChannelItem = {
           id: c.id,
-          platform: c.platform,
-          creator_url: c.creator_url,
+          platform: c.platform || 'youtube',
+          creator_url: c.creator_url || '',
           creator_name: c.creator_name || 'Kênh YouTube',
-          creator_id: c.creator_id,
-          videoCount: stat.total,
-          inProgressCount: stat.inProgress,
-          watchedCount: stat.watched,
-          cover: stat.cover,
-          lastSyncedAt: c.last_synced_at,
+          creator_id: c.creator_id || null,
+          videoCount: 0,
+          inProgressCount: 0,
+          watchedCount: 0,
+          cover: null,
+          lastSyncedAt: c.last_synced_at || null,
           category: assignedCat,
           tag: assignedTag,
-          sourceTable: 'tvshow',
-        })
-      }
+          sourceTable: defaultSource,
+        }
 
-      // Kênh Review Phim
-      for (const c of revCreators) {
-        const key = c.creator_id || c.creator_name || c.id
-        const stat = statsByCreator.get(key) || statsByCreator.get(c.creator_name) || { total: 0, inProgress: 0, watched: 0, cover: null }
-        if (isShorts && stat.total === 0) continue
-        const assignedCat = catMap[key] || catMap[c.creator_name] || c.category || guessChannelCategory(c.creator_name, 'review')
-        const assignedTag = tagMap[key] || tagMap[c.creator_name] || undefined
-        if (channelCardsMap.has(key)) {
-          const existing = channelCardsMap.get(key)!
-          existing.videoCount += stat.total
-          existing.inProgressCount += stat.inProgress
-          existing.watchedCount += stat.watched
-          if (!existing.cover) existing.cover = stat.cover
-          if (!existing.tag && assignedTag) existing.tag = assignedTag
-        } else {
-          channelCardsMap.set(key, {
-            id: c.id,
-            platform: c.platform,
-            creator_url: c.creator_url,
-            creator_name: c.creator_name || 'Kênh Review Phim',
-            creator_id: c.creator_id,
-            videoCount: stat.total,
-            inProgressCount: stat.inProgress,
-            watchedCount: stat.watched,
-            cover: stat.cover,
-            lastSyncedAt: c.last_synced_at,
-            category: assignedCat,
-            tag: assignedTag,
-            sourceTable: 'review',
-          })
+        const mapKey = normName || normKey || key
+        if (!channelCardsMap.has(mapKey)) {
+          channelCardsMap.set(mapKey, channelItem)
         }
       }
 
-      // Video tự thêm
-      const manualStat = statsByCreator.get('manual')
-      if (manualStat && manualStat.total > 0 && !channelCardsMap.has('manual')) {
-        const assignedCat = catMap['manual'] || 'Khác'
-        const assignedTag = tagMap['manual'] || undefined
-        channelCardsMap.set('manual', {
-          id: 'manual',
-          platform: 'youtube',
-          creator_url: '',
-          creator_name: 'Video tự thêm',
-          creator_id: 'manual',
-          videoCount: manualStat.total,
-          inProgressCount: manualStat.inProgress,
-          watchedCount: manualStat.watched,
-          cover: manualStat.cover,
-          lastSyncedAt: null,
-          category: assignedCat,
-          tag: assignedTag,
-        })
+      for (const c of tvCreators) registerCreator(c, 'tvshow')
+      for (const c of revCreators) registerCreator(c, 'review')
+
+      const channelListRaw = Array.from(channelCardsMap.values())
+
+      // Thống kê video: gom toàn bộ video của kênh vào đúng channel card
+      for (const v of combinedVideos) {
+        const matched = findMatchingChannel(v, channelListRaw)
+        if (matched) {
+          matched.videoCount += 1
+          if (statusSets.watchedSet.has(v.video_id)) {
+            matched.watchedCount += 1
+          } else if (statusSets.inProgressSet.has(v.video_id)) {
+            matched.inProgressCount += 1
+          }
+          if (!matched.cover && v.thumbnail) {
+            matched.cover = v.thumbnail
+          }
+        }
       }
 
-      // Gắn category & tag của Kênh vào từng Video tương ứng
-      const channelsList = Array.from(channelCardsMap.values())
-      const channelCatLookup = new Map<string, string>()
-      const channelTagLookup = new Map<string, string>()
-      channelsList.forEach((c) => {
-        const cat = c.category
-        const tag = c.tag
-        if (c.creator_id) {
-          channelCatLookup.set(c.creator_id, cat)
-          if (tag) channelTagLookup.set(c.creator_id, tag)
-        }
-        if (c.creator_name) {
-          channelCatLookup.set(c.creator_name, cat)
-          if (tag) channelTagLookup.set(c.creator_name, tag)
-        }
-        channelCatLookup.set(c.id, cat)
-        if (tag) channelTagLookup.set(c.id, tag)
-      })
-
+      // Gắn category & tag của Kênh vào từng Video tương ứng (100% video của kênh nhận đúng category)
       const taggedVideos = combinedVideos.map((v) => {
-        const key = v.creator_id || v.creator_name || 'manual'
-        const cat = channelCatLookup.get(key) || channelCatLookup.get(v.creator_name || '') || 'Khác'
-        const tag = channelTagLookup.get(key) || channelTagLookup.get(v.creator_name || '') || undefined
-        return { ...v, channel_category: cat, channel_tag: tag }
+        const matched = findMatchingChannel(v, channelListRaw)
+        const cat = matched?.category || guessChannelCategory(v.creator_name || v.title || '', v.sourceType)
+        const tag = matched?.tag
+        return {
+          ...v,
+          creator_name: matched?.creator_name || v.creator_name,
+          channel_category: cat,
+          channel_tag: tag,
+        }
       })
 
       if (alive) {
-        setChannels(channelsList)
+        setChannels(channelListRaw)
         setAllVideos(taggedVideos)
         setWatchedSet(statusSets.watchedSet)
         setInProgressSet(statusSets.inProgressSet)
@@ -1069,9 +1106,11 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     let unwatched = 0
 
     for (const v of base) {
-      if (watchedSet.has(v.video_id)) {
+      const isW = watchedSet.has(v.video_id) || progressMap[v.video_id]?.status === 'COMPLETED' || (progressMap[v.video_id]?.percent ?? 0) >= 90
+      const isIP = !isW && (inProgressSet.has(v.video_id) || (progressMap[v.video_id]?.percent ?? 0) > 0)
+      if (isW) {
         watched++
-      } else if (inProgressSet.has(v.video_id)) {
+      } else if (isIP) {
         inProgress++
       } else {
         unwatched++
@@ -1084,7 +1123,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       watched,
       unwatched,
     }
-  }, [allVideos, activeCategoryTab, activeTagTab, watchedSet, inProgressSet])
+  }, [allVideos, activeCategoryTab, activeTagTab, watchedSet, inProgressSet, progressMap])
 
   // Lọc Video ĐÃ CÓ trong App theo Tab Thể Loại & Tag con của Kênh
   const filteredSavedVideos = useMemo(() => {
@@ -1101,11 +1140,18 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
     // Lọc theo trạng thái xem
     if (watchFilter === 'unwatched') {
-      result = result.filter((v) => !watchedSet.has(v.video_id) && !inProgressSet.has(v.video_id))
+      result = result.filter((v) => {
+        const isW = watchedSet.has(v.video_id) || progressMap[v.video_id]?.status === 'COMPLETED' || (progressMap[v.video_id]?.percent ?? 0) >= 90
+        const isIP = !isW && (inProgressSet.has(v.video_id) || (progressMap[v.video_id]?.percent ?? 0) > 0)
+        return !isW && !isIP
+      })
     } else if (watchFilter === 'in_progress') {
-      result = result.filter((v) => inProgressSet.has(v.video_id))
+      result = result.filter((v) => {
+        const isW = watchedSet.has(v.video_id) || progressMap[v.video_id]?.status === 'COMPLETED' || (progressMap[v.video_id]?.percent ?? 0) >= 90
+        return !isW && (inProgressSet.has(v.video_id) || (progressMap[v.video_id]?.percent ?? 0) > 0)
+      })
     } else if (watchFilter === 'watched') {
-      result = result.filter((v) => watchedSet.has(v.video_id))
+      result = result.filter((v) => watchedSet.has(v.video_id) || progressMap[v.video_id]?.status === 'COMPLETED' || (progressMap[v.video_id]?.percent ?? 0) >= 90)
     }
 
     // Lọc theo tìm kiếm
@@ -1145,13 +1191,104 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return result
   }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap])
 
+  // Danh sách video trong Lịch sử xem (kết hợp videoProgress và videoStatus)
+  const historyVideos = useMemo(() => {
+    const videoLookup = new Map<string, VideoRow>()
+    allVideos.forEach((v) => videoLookup.set(v.video_id, v))
+
+    const historyItems: Array<{
+      video: VideoRow
+      seconds: number
+      percent: number
+      status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
+      updatedAt: string
+    }> = []
+
+    // 1. Từ progressMap (lưu thời gian xem thực tế từng giây)
+    Object.values(progressMap).forEach((p) => {
+      if (!p || !p.videoId || p.percent <= 0) return
+      let v = videoLookup.get(p.videoId)
+      if (!v) {
+        v = {
+          id: `hist-${p.videoId}`,
+          video_id: p.videoId,
+          series_key: null,
+          creator_id: null,
+          creator_name: p.channelName || 'YouTube',
+          title: p.title || 'Video YouTube',
+          canonical_url: `https://www.youtube.com/watch?v=${p.videoId}`,
+          embed_url: `https://www.youtube.com/embed/${p.videoId}`,
+          thumbnail: p.thumbnail || `https://i.ytimg.com/vi/${p.videoId}/hqdefault.jpg`,
+          part_number: null,
+          published_at: null,
+          unavailable_at: null,
+          duration: p.durationSeconds,
+        }
+      }
+      historyItems.push({
+        video: v,
+        seconds: p.seconds,
+        percent: p.percent,
+        status: p.status,
+        updatedAt: p.updatedAt || new Date().toISOString(),
+      })
+    })
+
+    // 2. Từ watchedSet nếu chưa có trong historyItems
+    const existingIds = new Set(historyItems.map((h) => h.video.video_id))
+    watchedSet.forEach((vid) => {
+      if (!existingIds.has(vid)) {
+        const v = videoLookup.get(vid)
+        if (v) {
+          historyItems.push({
+            video: v,
+            seconds: v.duration || 0,
+            percent: 100,
+            status: 'COMPLETED',
+            updatedAt: new Date(0).toISOString(),
+          })
+        }
+      }
+    })
+
+    // Lọc theo tìm kiếm nếu có gõ
+    let result = historyItems
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      result = result.filter(
+        (h) =>
+          h.video.title.toLowerCase().includes(q) ||
+          (h.video.creator_name && h.video.creator_name.toLowerCase().includes(q))
+      )
+    }
+
+    // Sắp xếp xem gần nhất lên đầu
+    return result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }, [allVideos, progressMap, watchedSet, search])
+
   // Tải từng mẻ nhỏ 12 video/kênh giúp trang nhẹ mượt, không giật lag
   const videoList = useIncrementalList(filteredSavedVideos.length, 12, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}|${sortMode}`)
   const channelList = useIncrementalList(filteredChannels.length, 12, `${search}|${watchFilter}|${activeCategoryTab}`)
+  const historyList = useIncrementalList(historyVideos.length, 12, `${search}|${historyVideos.length}`)
 
   /** Nút "Đã xem": bật/tắt trạng thái xem hết của đúng video đó. */
   const handleToggleWatched = async (video: VideoRow) => {
-    const next: VideoStatus = watchedSet.has(video.video_id) ? 'UNWATCHED' : 'COMPLETED'
+    const isW = watchedSet.has(video.video_id) || progressMap[video.video_id]?.status === 'COMPLETED' || (progressMap[video.video_id]?.percent ?? 0) >= 90
+    const next: VideoStatus = isW ? 'UNWATCHED' : 'COMPLETED'
+
+    // Cập nhật UI ngay lập tức
+    setWatchedSet((prev) => {
+      const nextSet = new Set(prev)
+      if (next === 'COMPLETED') nextSet.add(video.video_id)
+      else nextSet.delete(video.video_id)
+      return nextSet
+    })
+    setInProgressSet((prev) => {
+      const nextSet = new Set(prev)
+      nextSet.delete(video.video_id)
+      return nextSet
+    })
+
     await updateVideoStatusRecord(video.video_id, video.sourceType || 'tvshow', next, {
       title: video.title,
       channel_name: video.creator_name || undefined,
@@ -1430,8 +1567,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             </button>
           </div>
         ) : (
-          /* Xem theo Video (mặc định, giống YouTube) hay gom theo Kênh */
-          <div style={{ display: 'inline-flex', background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 12, padding: 3 }}>
+          <div style={{ display: 'inline-flex', background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 12, padding: 3, gap: 2 }}>
             <button
               type="button"
               className={`tv-btn ${viewMode === 'video' ? 'primary' : ''}`}
@@ -1447,6 +1583,14 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
               onClick={() => setViewMode('channel')}
             >
               <LayoutGrid size={14} /> Kênh ({filteredChannels.length})
+            </button>
+            <button
+              type="button"
+              className={`tv-btn ${viewMode === 'history' ? 'primary' : ''}`}
+              style={{ padding: '6px 12px', fontSize: '0.78rem', border: 'none', borderRadius: 9 }}
+              onClick={() => setViewMode('history')}
+            >
+              <Clock size={14} /> Lịch sử ({historyVideos.length})
             </button>
           </div>
         )}
@@ -1815,6 +1959,104 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240, gap: 10, color: 'var(--text-muted)' }}>
               <Loader2 size={24} className="tv-spin" /> Đang tải kho video YouTube...
             </div>
+          ) : viewMode === 'history' ? (
+            /* CHẾ ĐỘ XEM LỊCH SỬ VIDEO */
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0 16px', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Clock size={18} color="var(--primary)" />
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                    Lịch sử xem gần đây ({historyVideos.length})
+                  </h3>
+                </div>
+
+                {historyVideos.length > 0 && (
+                  <button
+                    type="button"
+                    className="tv-btn"
+                    onClick={() => {
+                      if (window.confirm('Bạn có chắc muốn xóa toàn bộ lịch sử xem video?')) {
+                        clearAllVideoProgress()
+                        showToast('🗑️ Đã xóa toàn bộ lịch sử xem', 'info')
+                      }
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(244, 63, 94, 0.3)',
+                      background: 'rgba(244, 63, 94, 0.08)',
+                      color: 'var(--rose, #f43f5e)',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Trash2 size={13} /> Xóa toàn bộ lịch sử
+                  </button>
+                )}
+              </div>
+
+              {historyVideos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>
+                  <Clock size={40} style={{ opacity: 0.3, marginBottom: 10 }} />
+                  <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: '0.92rem' }}>Chưa có lịch sử xem video nào</p>
+                  <p style={{ margin: 0, fontSize: '0.8rem' }}>Khi bạn xem video hoặc đánh dấu đã xem, video sẽ xuất hiện ở đây.</p>
+                </div>
+              ) : (
+                <div className="yt-grid">
+                  {historyVideos.slice(0, historyList.visibleCount).map((item) => (
+                    <HistoryVideoCard
+                      key={item.video.video_id}
+                      item={item}
+                      onOpen={() => navigate(`${watchBasePath}/watch/${item.video.video_id}`, { state: { from: watchBasePath, fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube' } })}
+                      onPlayMini={() =>
+                        playInMini({
+                          videoId: item.video.video_id,
+                          title: item.video.title,
+                          channelName: item.video.creator_name,
+                          thumbnail: item.video.thumbnail,
+                          startSeconds: item.seconds,
+                        })
+                      }
+                      onRemove={() => {
+                        removeVideoProgress(item.video.video_id)
+                        showToast('🗑️ Đã xóa khỏi lịch sử', 'info')
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {historyList.hasMore && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '24px 0 16px' }}>
+                  <button
+                    type="button"
+                    className="tv-btn primary"
+                    onClick={historyList.showMore}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '10px 24px',
+                      borderRadius: 14,
+                      fontSize: '0.86rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <ChevronDown size={17} />
+                    <span>Tải thêm ({historyList.remaining > 12 ? '+12 video' : `còn ${historyList.remaining}`})</span>
+                  </button>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Đang hiển thị {Math.min(historyList.visibleCount, historyVideos.length)} trên tổng số {historyVideos.length} video
+                  </span>
+                </div>
+              )}
+              <div ref={historyList.sentinel} style={{ height: 20 }} />
+            </>
           ) : viewMode === 'channel' && !search.trim() ? (
             /* CHẾ ĐỘ XEM THEO KÊNH */
             <>
@@ -3149,8 +3391,17 @@ function ChannelDetailView({
   const [showCategoryPicker, setShowCategoryPicker] = useState(false)
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const initialStartRef = useRef<Record<string, number>>({})
   const progressMap = useVideoProgressMap()
   const { playInMini } = useVideoMiniPlayer()
+
+  useVideoStatusListener(() => {
+    const sourceType: 'tvshow' | 'review' = channel.sourceTable === 'review' ? 'review' : 'tvshow'
+    const sets = getVideoStatusSets(sourceType)
+    setWatched(sets.watchedSet)
+    setInProgress(sets.inProgressSet)
+    setStatusMap(sets.statusMap)
+  })
 
   useEffect(() => {
     void (async () => {
@@ -3223,7 +3474,6 @@ function ChannelDetailView({
     thumbnail: currentVideo?.thumbnail,
   })
   // Chỉ lấy start time 1 lần khi bắt đầu phát video (không phụ thuộc vào progressMap thay đổi liên tục)
-  const initialStartRef = useRef<Record<string, number>>({})
   const vId = currentVideo?.video_id
   if (vId && initialStartRef.current[vId] === undefined) {
     initialStartRef.current[vId] = Math.floor(progressMap[vId]?.seconds ?? 0)
@@ -3599,6 +3849,189 @@ function YoutubeVideoCard({
               <span>YouTube</span>
             </a>
           </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+/** Thẻ Video hiển thị trong Tab Lịch Sử */
+function HistoryVideoCard({
+  item,
+  onOpen,
+  onPlayMini,
+  onRemove,
+}: {
+  item: {
+    video: VideoRow
+    seconds: number
+    percent: number
+    status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
+    updatedAt: string
+  }
+  onOpen: () => void
+  onPlayMini: () => void
+  onRemove: () => void
+}) {
+  const { video, percent, updatedAt } = item
+  const meta = [video.creator_name || 'YouTube', timeAgo(updatedAt)].filter(Boolean).join(' · ')
+  const audioPlayer = useOptionalAudioPlayer()
+  const { isSaved: isAudioSaved, sizeLabel: audioSizeLabel } = useOfflineAudioState(video.video_id)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const { showToast } = useToast()
+
+  const handleAudioAction = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setAudioLoading(true)
+      let playUrl: string | null = null
+
+      if (isAudioSaved) {
+        playUrl = await getOfflineAudioPlayUrl(video.video_id)
+      } else {
+        showToast('⏳ Đang tải và chuyển video thành Audio...', 'info')
+        await downloadAndSaveYoutubeAudio(video.video_id, {
+          title: video.title,
+          channelName: video.creator_name || undefined,
+          thumbnail: video.thumbnail || undefined,
+          durationSeconds: video.duration || undefined,
+        })
+        playUrl = await getOfflineAudioPlayUrl(video.video_id)
+        showToast(`🎉 Đã lưu Audio (${audioSizeLabel || 'đã nén'}) vào máy!`)
+      }
+
+      if (playUrl && audioPlayer) {
+        audioPlayer.playTrack({
+          id: `yt-${video.video_id}`,
+          type: 'MUSIC',
+          name: video.title,
+          audio_url: playUrl,
+          cover_url: video.thumbnail,
+          artist: video.creator_name || 'YouTube Audio',
+          status: 'IN_PROGRESS',
+          is_favorite: false,
+          description: null,
+        })
+        showToast('🎧 Đang phát Audio trên toàn hệ thống!')
+      }
+    } catch (err: any) {
+      console.warn('Chuyển sang phát audio nền:', err)
+      showToast('🎧 Đang phát chế độ Audio chạy nền...', 'info')
+      onPlayMini()
+    } finally {
+      setAudioLoading(false)
+    }
+  }
+
+  return (
+    <article className="yt-card">
+      <div
+        className="yt-thumb"
+        role="button"
+        tabIndex={0}
+        aria-label={`Xem ${video.title}`}
+        onClick={onOpen}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}
+      >
+        {video.thumbnail ? (
+          <img src={video.thumbnail} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <div className="yt-thumb-placeholder">
+            <Youtube size={36} />
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="yt-play-overlay"
+          aria-label="Xem video"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpen()
+          }}
+        >
+          <Play size={26} />
+        </button>
+
+        {/* Nút xóa khỏi lịch sử */}
+        <button
+          type="button"
+          title="Xóa khỏi lịch sử"
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: '#fff',
+            border: 'none',
+            display: 'grid',
+            placeItems: 'center',
+            cursor: 'pointer',
+            zIndex: 3,
+          }}
+        >
+          <Trash2 size={13} />
+        </button>
+
+        {/* Badge tiến độ */}
+        <div className="yt-progress-badge">
+          {percent >= 90 ? 'Đã xem hết' : `Đang xem ${percent}%`}
+        </div>
+
+        {/* Thanh tiến độ */}
+        <div className="yt-progress-bar">
+          <div
+            className={`yt-progress-fill ${percent >= 90 ? 'completed' : ''}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="yt-info">
+        <h3
+          className="yt-title"
+          title={video.title}
+          role="button"
+          tabIndex={0}
+          onClick={onOpen}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}
+        >
+          {video.title}
+        </h3>
+        <p className="yt-meta">{meta}</p>
+
+        <div className="yt-card-actions">
+          <button
+            type="button"
+            className="yt-card-btn primary"
+            onClick={onOpen}
+          >
+            <Play size={13} /> Xem tiếp
+          </button>
+
+          <button
+            type="button"
+            className="yt-card-btn audio"
+            disabled={audioLoading}
+            onClick={handleAudioAction}
+            title={isAudioSaved ? `Phát audio offline (${audioSizeLabel})` : 'Tải & Nghe YouTube Audio'}
+          >
+            {audioLoading ? (
+              <Loader2 size={13} className="tv-spin" />
+            ) : isAudioSaved ? (
+              <Volume2 size={13} />
+            ) : (
+              <Headphones size={13} />
+            )}
+            <span>{isAudioSaved ? 'Audio' : 'Nghe Audio'}</span>
+          </button>
         </div>
       </div>
     </article>
