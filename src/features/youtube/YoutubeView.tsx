@@ -1135,8 +1135,9 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return result
   }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap])
 
-  const videoList = useIncrementalList(filteredSavedVideos.length, 36, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}|${sortMode}`)
-
+  // Tải từng mẻ nhỏ 12 video/kênh giúp trang nhẹ mượt, không giật lag
+  const videoList = useIncrementalList(filteredSavedVideos.length, 12, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}|${sortMode}`)
+  const channelList = useIncrementalList(filteredChannels.length, 12, `${search}|${watchFilter}|${activeCategoryTab}`)
 
   /** Nút "Đã xem": bật/tắt trạng thái xem hết của đúng video đó. */
   const handleToggleWatched = async (video: VideoRow) => {
@@ -1806,108 +1807,138 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             </div>
           ) : viewMode === 'channel' && !search.trim() ? (
             /* CHẾ ĐỘ XEM THEO KÊNH */
-            <div className="tv-creators-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {filteredChannels.map((channel) => {
-                const watchedPct = channel.videoCount > 0 ? Math.round((channel.watchedCount / channel.videoCount) * 100) : 0
+            <>
+              <div className="tv-creators-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                {filteredChannels.slice(0, channelList.visibleCount).map((channel) => {
+                  const watchedPct = channel.videoCount > 0 ? Math.round((channel.watchedCount / channel.videoCount) * 100) : 0
 
-                return (
-                  <div
-                    key={channel.id}
-                    className="tv-creator-card"
-                    onClick={() => setSelectedChannel(channel)}
+                  return (
+                    <div
+                      key={channel.id}
+                      className="tv-creator-card"
+                      onClick={() => setSelectedChannel(channel)}
+                      style={{
+                        position: 'relative',
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
+                        borderRadius: 16,
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      {/* Ảnh bìa kênh */}
+                      <div style={{ position: 'relative', height: 120, background: 'var(--border)', overflow: 'hidden' }}>
+                        {channel.cover ? (
+                          <img src={channel.cover} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(168, 85, 247, 0.15))' }}>
+                            <Youtube size={36} color="var(--rose, #f43f5e)" />
+                          </div>
+                        )}
+                        {/* Badge Thể loại của Kênh (Bấm vào để đổi thể loại) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingChannelCategory(channel)
+                          }}
+                          title="Nhấn để đổi thể loại cho kênh này"
+                          style={{
+                            position: 'absolute',
+                            top: 10,
+                            left: 10,
+                            padding: '4px 10px',
+                            borderRadius: 99,
+                            background: 'rgba(0, 0, 0, 0.72)',
+                            color: '#ffffff',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            backdropFilter: 'blur(8px)',
+                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            zIndex: 2,
+                          }}
+                        >
+                          <span>{channel.category || 'Khác'}</span>
+                          <Edit3 size={10} style={{ opacity: 0.8 }} />
+                        </button>
+
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: 8,
+                            right: 8,
+                            padding: '3px 8px',
+                            borderRadius: 8,
+                            background: 'rgba(0, 0, 0, 0.75)',
+                            color: '#fff',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {channel.videoCount} video
+                        </div>
+                      </div>
+
+                      {/* Thông tin kênh */}
+                      <div style={{ padding: '14px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 6px', lineHeight: 1.3 }}>
+                            {channel.creator_name}
+                          </h3>
+                        </div>
+
+                        {/* Tiến độ đã xem */}
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: 4, color: 'var(--text-muted)' }}>
+                            <span>Đã xem {channel.watchedCount}/{channel.videoCount}</span>
+                            <span style={{ fontWeight: 800, color: watchedPct >= 100 ? 'var(--emerald)' : 'var(--primary)' }}>{watchedPct}%</span>
+                          </div>
+                          <div style={{ width: '100%', height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${watchedPct}%`, height: '100%', background: watchedPct >= 100 ? 'var(--emerald)' : 'linear-gradient(90deg, #f43f5e, #be123c)', borderRadius: 2 }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Nút tải thêm kênh */}
+              {channelList.hasMore && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '24px 0 16px' }}>
+                  <button
+                    type="button"
+                    className="tv-btn primary"
+                    onClick={channelList.showMore}
                     style={{
-                      position: 'relative',
-                      background: 'var(--card-bg)',
-                      border: '1px solid var(--card-border)',
-                      borderRadius: 16,
-                      overflow: 'hidden',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '10px 22px',
+                      borderRadius: 14,
+                      fontSize: '0.86rem',
+                      fontWeight: 700,
                       cursor: 'pointer',
-                      transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
-                      display: 'flex',
-                      flexDirection: 'column',
                     }}
                   >
-                    {/* Ảnh bìa kênh */}
-                    <div style={{ position: 'relative', height: 120, background: 'var(--border)', overflow: 'hidden' }}>
-                      {channel.cover ? (
-                        <img src={channel.cover} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(168, 85, 247, 0.15))' }}>
-                          <Youtube size={36} color="var(--rose, #f43f5e)" />
-                        </div>
-                      )}
-                      {/* Badge Thể loại của Kênh (Bấm vào để đổi thể loại) */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setEditingChannelCategory(channel)
-                        }}
-                        title="Nhấn để đổi thể loại cho kênh này"
-                        style={{
-                          position: 'absolute',
-                          top: 10,
-                          left: 10,
-                          padding: '4px 10px',
-                          borderRadius: 99,
-                          background: 'rgba(0, 0, 0, 0.72)',
-                          color: '#ffffff',
-                          fontSize: '0.72rem',
-                          fontWeight: 800,
-                          backdropFilter: 'blur(8px)',
-                          border: '1px solid rgba(255, 255, 255, 0.25)',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          zIndex: 2,
-                        }}
-                      >
-                        <span>{channel.category || 'Khác'}</span>
-                        <Edit3 size={10} style={{ opacity: 0.8 }} />
-                      </button>
-
-                      <div
-                        style={{
-                          position: 'absolute',
-                          bottom: 8,
-                          right: 8,
-                          padding: '3px 8px',
-                          borderRadius: 8,
-                          background: 'rgba(0, 0, 0, 0.75)',
-                          color: '#fff',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {channel.videoCount} video
-                      </div>
-                    </div>
-
-                    {/* Thông tin kênh */}
-                    <div style={{ padding: '14px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                      <div>
-                        <h3 style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 6px', lineHeight: 1.3 }}>
-                          {channel.creator_name}
-                        </h3>
-                      </div>
-
-                      {/* Tiến độ đã xem */}
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: 4, color: 'var(--text-muted)' }}>
-                          <span>Đã xem {channel.watchedCount}/{channel.videoCount}</span>
-                          <span style={{ fontWeight: 800, color: watchedPct >= 100 ? 'var(--emerald)' : 'var(--primary)' }}>{watchedPct}%</span>
-                        </div>
-                        <div style={{ width: '100%', height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ width: `${watchedPct}%`, height: '100%', background: watchedPct >= 100 ? 'var(--emerald)' : 'linear-gradient(90deg, #f43f5e, #be123c)', borderRadius: 2 }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                    <ChevronDown size={17} />
+                    <span>Tải thêm kênh ({channelList.remaining > 12 ? '+12 kênh' : `còn ${channelList.remaining}`})</span>
+                  </button>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    Đang hiển thị {Math.min(channelList.visibleCount, filteredChannels.length)} trên tổng số {filteredChannels.length} kênh
+                  </span>
+                </div>
+              )}
+              <div ref={channelList.sentinel} style={{ height: 20 }} />
+            </>
           ) : (
             /* CHẾ ĐỘ XEM THEO DANH SÁCH VIDEO */
             <>
@@ -1936,7 +1967,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
               {/* NÚT TẢI THÊM VIDEO */}
               {videoList.hasMore ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '30px 0 20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, margin: '24px 0 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
                     <button
                       type="button"
@@ -1946,25 +1977,25 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 8,
-                        padding: '11px 26px',
+                        padding: '10px 24px',
                         borderRadius: 14,
-                        fontSize: '0.88rem',
+                        fontSize: '0.86rem',
                         fontWeight: 700,
                         boxShadow: '0 4px 14px rgba(124, 58, 237, 0.25)',
                         cursor: 'pointer',
                       }}
                     >
                       <ChevronDown size={17} />
-                      <span>Tải thêm video ({videoList.remaining > 36 ? '+36 video' : `còn ${videoList.remaining}`})</span>
+                      <span>Tải thêm video ({videoList.remaining > 12 ? '+12 video' : `còn ${videoList.remaining}`})</span>
                     </button>
 
-                    {videoList.remaining > 36 && (
+                    {videoList.remaining > 12 && (
                       <button
                         type="button"
                         className="tv-btn"
                         onClick={videoList.showAll}
                         style={{
-                          padding: '11px 18px',
+                          padding: '10px 18px',
                           borderRadius: 14,
                           fontSize: '0.84rem',
                           fontWeight: 700,
@@ -1982,7 +2013,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                   </span>
                 </div>
               ) : (
-                filteredSavedVideos.length > 36 && (
+                filteredSavedVideos.length > 12 && (
                   <div style={{ textAlign: 'center', margin: '24px 0 16px', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 600 }}>
                     Đã hiển thị toàn bộ {filteredSavedVideos.length} video.
                   </div>
@@ -3171,6 +3202,8 @@ function ChannelDetailView({
     return res
   }, [videos, search, filterMode, watched, inProgress])
 
+  const channelVideoList = useIncrementalList(filteredVideos.length, 20, `${search}|${filterMode}`)
+
   const currentVideo = videos.find((v) => v.video_id === playingId) || videos[0]
   // Tự ghi "đang xem" + % đã xem; lưu ngay khi thu nhỏ hoặc tắt app.
   const player = useYouTubeProgress(iframeRef, {
@@ -3295,7 +3328,7 @@ function ChannelDetailView({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
-        {filteredVideos.map((v) => {
+        {filteredVideos.slice(0, channelVideoList.visibleCount).map((v) => {
           const isPlaying = v.video_id === playingId
           const isWatched = watched.has(v.video_id)
           return (
@@ -3313,7 +3346,7 @@ function ChannelDetailView({
               }}
             >
               <div style={{ position: 'relative', width: 90, height: 56, flexShrink: 0, borderRadius: 8, overflow: 'hidden', background: '#000' }}>
-                {v.thumbnail && <img src={v.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                {v.thumbnail && <img src={v.thumbnail} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -3334,6 +3367,17 @@ function ChannelDetailView({
             </div>
           )
         })}
+        {channelVideoList.hasMore && (
+          <button
+            type="button"
+            className="tv-btn"
+            onClick={channelVideoList.showMore}
+            style={{ padding: '8px 12px', fontSize: '0.76rem', fontWeight: 700, margin: '4px 0' }}
+          >
+            Tải thêm ({channelVideoList.remaining > 20 ? '+20 video' : `còn ${channelVideoList.remaining}`})
+          </button>
+        )}
+        <div ref={channelVideoList.sentinel} style={{ height: 10 }} />
       </div>
 
       {showCategoryPicker && (
