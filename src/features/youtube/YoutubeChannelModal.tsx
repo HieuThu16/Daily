@@ -147,6 +147,7 @@ export function YoutubeChannelModal({
   const [activeTab, setActiveTab] = useState<'latest' | 'playlists'>('latest')
   const [search, setSearch] = useState('')
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistGroup | null>(null)
+  const [visibleVideoCount, setVisibleVideoCount] = useState(16)
 
   // Danh sách video sắp xếp mới nhất
   const sortedLatestVideos = useMemo(() => {
@@ -160,6 +161,7 @@ export function YoutubeChannelModal({
   // Lọc tìm kiếm trong danh sách video
   const filteredVideos = useMemo(() => {
     const q = search.trim().toLowerCase()
+    setVisibleVideoCount(16)
     if (!q) return sortedLatestVideos
     return sortedLatestVideos.filter((v) => v.title.toLowerCase().includes(q))
   }, [sortedLatestVideos, search])
@@ -381,7 +383,7 @@ export function YoutubeChannelModal({
                     gap: 14,
                   }}
                 >
-                  {filteredVideos.map((v) => {
+                  {filteredVideos.slice(0, visibleVideoCount).map((v) => {
                     const isCurrent = v.video_id === currentVideoId
                     const isWatched = watchedSet.has(v.video_id)
                     const p = progressMap[v.video_id]
@@ -492,6 +494,32 @@ export function YoutubeChannelModal({
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {/* Nút tải thêm video khi còn video */}
+              {visibleVideoCount < filteredVideos.length && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '20px 0 10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleVideoCount((c) => c + 16)}
+                    style={{
+                      padding: '9px 24px',
+                      borderRadius: 12,
+                      background: 'var(--primary, #2563eb)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                    }}
+                  >
+                    Tải thêm video (+{Math.min(16, filteredVideos.length - visibleVideoCount)} video)
+                  </button>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #a1a1aa)', fontWeight: 600 }}>
+                    Đang hiển thị {Math.min(visibleVideoCount, filteredVideos.length)} trên tổng số {filteredVideos.length} video
+                  </span>
                 </div>
               )}
             </div>

@@ -142,9 +142,11 @@ export function YoutubeWatchPage() {
   const [showDescription, setShowDescription] = useState(false)
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [isCollected, setIsCollected] = useState(() => isItemInCollection('YOUTUBE', videoId))
+  const [visibleSiblingCount, setVisibleSiblingCount] = useState(12)
 
   useEffect(() => {
     setIsCollected(isItemInCollection('YOUTUBE', videoId))
+    setVisibleSiblingCount(12)
   }, [videoId])
 
   const handleToggleCollect = async () => {
@@ -461,7 +463,7 @@ export function YoutubeWatchPage() {
         </div>
 
         {siblings.length === 0 && <p className="yt-watch-side-empty">Kho chưa có video nào khác của kênh này.</p>}
-        {siblings.map((item) => {
+        {siblings.slice(0, visibleSiblingCount).map((item) => {
           const itemProgress = progressMap[item.video_id]
           const itemWatched = watchedSet.has(item.video_id) || itemProgress?.status === 'COMPLETED'
           return (
@@ -492,6 +494,29 @@ export function YoutubeWatchPage() {
             </button>
           )
         })}
+
+        {/* Nút Xem thêm video của kênh trong Sidebar */}
+        {visibleSiblingCount < siblings.length && (
+          <div style={{ padding: '8px 0', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setVisibleSiblingCount((c) => c + 12)}
+              style={{
+                width: '100%',
+                padding: '8px 14px',
+                borderRadius: 10,
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: 'var(--text-main)',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Xem thêm ({siblings.length - visibleSiblingCount} video còn lại)
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Modal Chi tiết Kênh: 2 Tab Video Mới Nhất & Danh Sách Phát */}
