@@ -780,22 +780,40 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       const registerCreator = (c: any, defaultSource: 'tvshow' | 'review') => {
         const key = c.creator_id || c.creator_name || c.id
         const normName = normalizeChannelKey(c.creator_name)
+        const normId = normalizeChannelKey(c.creator_id)
         const normKey = normalizeChannelKey(key)
 
         const assignedCat =
           catMap[key] ||
+          catMap[c.creator_id] ||
           catMap[c.creator_name] ||
           catMap[normName] ||
+          catMap[normId] ||
           catMap[normKey] ||
           c.category ||
           guessChannelCategory(c.creator_name, defaultSource)
 
         const assignedTag =
           tagMap[key] ||
+          tagMap[c.creator_id] ||
           tagMap[c.creator_name] ||
           tagMap[normName] ||
+          tagMap[normId] ||
           tagMap[normKey] ||
           undefined
+
+        // Extract URL-based keys
+        const urlKeys: string[] = []
+        if (c.creator_url) {
+          const parts = (c.creator_url as string).replace(/\/$/, '').split('/')
+          const lastPart = parts[parts.length - 1]
+          if (lastPart) {
+            urlKeys.push(lastPart, normalizeChannelKey(lastPart))
+            if (lastPart.startsWith('@')) urlKeys.push(lastPart.slice(1), normalizeChannelKey(lastPart.slice(1)))
+          }
+          const chIdx = parts.indexOf('channel')
+          if (chIdx !== -1 && parts[chIdx + 1]) urlKeys.push(parts[chIdx + 1], normalizeChannelKey(parts[chIdx + 1]))
+        }
 
         const channelItem: ChannelItem = {
           id: c.id,
@@ -813,83 +831,143 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           sourceTable: defaultSource,
         }
 
-        const mapKey = normName || normKey || key
-        if (!channelCardsMap.has(mapKey)) {
-          channelCardsMap.set(mapKey, channelItem)
+        // Đăng ký dưới TẤT CẢ key variant để reverse-index hoạt động đầy đủ
+        const allKeys = [normName, normId, normKey, c.creator_name, c.creator_id, ...urlKeys].filter(Boolean)
+        let registered = false
+        for (const k of allKeys) {
+          if (!k) continue
+          if (!channelCardsMap.has(k)) {
+            channelCardsMap.set(k, channelItem)
+            registered = true
+          }
+        }
+        // Nếu chưa đăng ký được key nào (tất cả đều bị trùng), vẫn đảm bảo ít nhất 1 key
+        if (!registered) {
+          const fallbackKey = normName || normKey || c.id
+          if (fallbackKey && !channelCardsMap.has(fallbackKey)) {
+            channelCardsMap.set(fallbackKey, channelItem)
+          }
         }
       }
 
       for (const c of tvCreators) registerCreator(c, 'tvshow')
       for (const c of revCreators) registerCreator(c, 'review')
 
-      const channelListRaw = Array.from(channelCardsMap.values())
+      // Deduplicate: vì cùng 1 ChannelItem có thể được đăng ký dưới nhiều key
+      const channelListRaw = Array.from(new Set(channelCardsMap.values()))
 
-      // Thống kê video: gom toàn bộ video của kênh vào đúng channel card
-      // Helper: tìm kênh bằng creator_id/creator_name trực tiếp từ channelCardsMap nếu findMatchingChannel fail
-      const findChannelFallback = (v: VideoRow): ChannelItem | undefined => {
-        const matched = findMatchingChannel(v, channelListRaw)
-        if (matched) return matched
-        // Fallback: tra theo creator_id hoặc creator_name normalized
-        if (v.creator_id) {
-          const byId = channelCardsMap.get(normalizeChannelKey(v.creator_id))
-          if (byId) return byId
+      // ─── BUILD COMPREHENSIVE REVERSE INDEX: video key → ChannelItem ───────────
+      // Mỗi kênh được đăng ký dưới NHIỀU KEY VARIANT để đảm bảo video nào cũng match được
+      const videoKeyToChannel = new Map<string, ChannelItem>()
+
+      const registerChannelKeys = (ch: ChannelItem) => {
+        const tryRegister = (k: string | null | undefined) => {
+          if (!k) return
+          // raw key
+          if (!videoKeyToChannel.has(k)) videoKeyToChannel.set(k, ch)
+          // lowercase
+          const lower = k.toLowerCase()
+          if (!videoKeyToChannel.has(lower)) videoKeyToChannel.set(lower, ch)
+          // fully normalized (strip diacritics + non-alphanumeric)
+          const norm = normalizeChannelKey(k)
+          if (norm && !videoKeyToChannel.has(norm)) videoKeyToChannel.set(norm, ch)
         }
-        if (v.creator_name) {
-          const byName = channelCardsMap.get(normalizeChannelKey(v.creator_name))
-          if (byName) return byName
+
+        tryRegister(ch.creator_id)
+        tryRegister(ch.creator_name)
+
+        // Extract handle from creator_url: e.g. youtube.com/@web5ngay → "@web5ngay" & "web5ngay"
+        if (ch.creator_url) {
+          const parts = ch.creator_url.replace(/\/$/, '').split('/')
+          const lastPart = parts[parts.length - 1]
+          if (lastPart) {
+            tryRegister(lastPart)
+            // strip leading "@"
+            if (lastPart.startsWith('@')) tryRegister(lastPart.slice(1))
+          }
+          // Also try "channel/UCxxx" style → extract the ID
+          const chIdx = parts.indexOf('channel')
+          if (chIdx !== -1 && parts[chIdx + 1]) tryRegister(parts[chIdx + 1])
+          // "user/xxx" style
+          const uIdx = parts.indexOf('user')
+          if (uIdx !== -1 && parts[uIdx + 1]) tryRegister(parts[uIdx + 1])
         }
-        return undefined
       }
 
+      for (const ch of channelListRaw) registerChannelKeys(ch)
+
+      // Fast O(1) lookup: video → ChannelItem using ALL possible video keys
+      const getChannelForVideo = (v: VideoRow): ChannelItem | undefined => {
+        const tryKeys = (...keys: (string | null | undefined)[]): ChannelItem | undefined => {
+          for (const k of keys) {
+            if (!k) continue
+            const ch = videoKeyToChannel.get(k)
+              || videoKeyToChannel.get(k.toLowerCase())
+              || videoKeyToChannel.get(normalizeChannelKey(k))
+            if (ch) return ch
+          }
+          return undefined
+        }
+
+        // Priority: creator_id > creator_name > series_key > URL-extracted ID
+        return (
+          tryKeys(v.creator_id) ||
+          tryKeys(v.creator_name) ||
+          tryKeys(v.series_key) ||
+          // series_key may be a playlist ID or "UCxxx" style channel ID
+          (v.series_key ? tryKeys(v.series_key.replace(/^PL/i, '').split('_')[0]) : undefined) ||
+          undefined
+        )
+      }
+
+      // ─── THỐNG KÊ videoCount cho từng Channel Card ─────────────────────────────
       for (const v of combinedVideos) {
-        const matched = findChannelFallback(v)
-        if (matched) {
-          matched.videoCount += 1
+        const ch = getChannelForVideo(v)
+        if (ch) {
+          ch.videoCount += 1
           if (statusSets.watchedSet.has(v.video_id)) {
-            matched.watchedCount += 1
+            ch.watchedCount += 1
           } else if (statusSets.inProgressSet.has(v.video_id)) {
-            matched.inProgressCount += 1
+            ch.inProgressCount += 1
           }
-          if (!matched.cover && v.thumbnail) {
-            matched.cover = v.thumbnail
-          }
+          if (!ch.cover && v.thumbnail) ch.cover = v.thumbnail
         }
       }
 
-      // Gắn category & tag của Kênh vào từng Video tương ứng (100% video của kênh nhận đúng category)
+      // ─── GẮN channel_category & channel_tag vào từng Video ────────────────────
+      // Ưu tiên: 1) category kênh đã match, 2) catMap trực tiếp từ creator video, 3) guessChannelCategory
       const taggedVideos = combinedVideos.map((v) => {
-        const matched = findChannelFallback(v)
+        const ch = getChannelForVideo(v)
 
-        // Ưu tiên: 1) category từ kênh đã khớp, 2) tra catMap trực tiếp từ creator của video, 3) guessChannelCategory
-        let cat = matched?.category
+        let cat = ch?.category
         if (!cat) {
           const vKey = v.creator_id || v.creator_name || ''
-          const vNormName = normalizeChannelKey(v.creator_name)
-          const vNormKey = normalizeChannelKey(v.creator_id)
+          const vNorm = normalizeChannelKey(vKey)
           cat =
             catMap[vKey] ||
             catMap[v.creator_name || ''] ||
-            catMap[vNormName] ||
-            catMap[vNormKey] ||
-            guessChannelCategory(v.creator_name || v.title || '', v.sourceType)
+            catMap[vNorm] ||
+            catMap[normalizeChannelKey(v.creator_id)] ||
+            catMap[normalizeChannelKey(v.series_key)] ||
+            guessChannelCategory(v.creator_name || v.series_key || v.title || '', v.sourceType)
         }
 
-        let tag = matched?.tag
+        let tag = ch?.tag
         if (!tag) {
           const vKey = v.creator_id || v.creator_name || ''
-          const vNormName = normalizeChannelKey(v.creator_name)
-          const vNormKey = normalizeChannelKey(v.creator_id)
+          const vNorm = normalizeChannelKey(vKey)
           tag =
             tagMap[vKey] ||
             tagMap[v.creator_name || ''] ||
-            tagMap[vNormName] ||
-            tagMap[vNormKey] ||
+            tagMap[vNorm] ||
+            tagMap[normalizeChannelKey(v.creator_id)] ||
+            tagMap[normalizeChannelKey(v.series_key)] ||
             undefined
         }
 
         return {
           ...v,
-          creator_name: matched?.creator_name || v.creator_name,
+          creator_name: ch?.creator_name || v.creator_name,
           channel_category: cat,
           channel_tag: tag,
         }
