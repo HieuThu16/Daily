@@ -2324,32 +2324,93 @@
 
 .yt-actions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 6px;
-  margin-top: 7px;
+  margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.yt-actions::-webkit-scrollbar {
+  display: none;
 }
 
 .yt-action {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 9px;
+  gap: 5px;
+  padding: 4px 9px;
   border-radius: 999px;
   border: 1px solid var(--card-border);
   background: var(--card-bg);
-  color: var(--text-muted);
+  color: var(--text-main);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.16s ease;
+  user-select: none;
 }
 
-.yt-action:hover { color: var(--text-main); }
+.yt-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
 
-.yt-action.on {
-  background: rgba(16, 185, 129, 0.14);
+.yt-action:active {
+  transform: scale(0.96);
+}
+
+/* Biểu tượng màu sắc riêng biệt cho 4 nút */
+.yt-action-pip .yt-action-icon-pip,
+.yt-action-pip svg {
+  color: #3b82f6;
+}
+.yt-action-pip:hover {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #2563eb;
+}
+
+.yt-action-watched .yt-action-icon-watched,
+.yt-action-watched .yt-action-icon-unwatched,
+.yt-action-watched svg {
+  color: #10b981;
+}
+.yt-action-watched:hover {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #059669;
+}
+.yt-action-watched.on {
+  background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.4);
   color: #10b981;
+  font-weight: 700;
+}
+
+.yt-action-together svg {
+  color: #ec4899;
+}
+.yt-action-together:hover {
+  background: rgba(236, 72, 153, 0.08);
+  border-color: rgba(236, 72, 153, 0.35);
+  color: #db2777;
+}
+
+.yt-action-yt .yt-action-icon-yt,
+.yt-action-yt svg {
+  color: #ef4444;
+}
+.yt-action-yt:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #dc2626;
 }
 
 /* ===== Khung video nhỏ chạy nền trong app ===== */

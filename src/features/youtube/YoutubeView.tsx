@@ -6,7 +6,7 @@ import {
   Youtube, 
   Check, 
   Loader2, LayoutGrid, 
-  Edit3, Globe, BookmarkPlus, PictureInPicture2, Info,
+  Edit3, Globe, BookmarkPlus, PictureInPicture2,
   Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock, Tag,
   Flame, ArrowUpDown, Zap
 } from 'lucide-react'
@@ -199,7 +199,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'channel' | 'video'>('video')
-  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
   const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [shuffleSeed, setShuffleSeed] = useState(() => Math.random())
   
@@ -1920,8 +1919,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                     watched={watchedSet.has(video.video_id)}
                     inProgress={inProgressSet.has(video.video_id)}
                     progress={progressMap[video.video_id]}
-                    playing={playingVideoId === video.video_id}
-                    onPlay={() => setPlayingVideoId(video.video_id)}
                     onToggleWatched={() => void handleToggleWatched(video)}
                     onOpen={() => navigate(`${watchBasePath}/watch/${video.video_id}`, { state: { from: watchBasePath, fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube' } })}
                     onPlayMini={() =>
@@ -3389,14 +3386,12 @@ export function timeAgo(iso: string | null | undefined, now: Date = new Date()):
   return `${Math.floor(days / 365)} năm trước`
 }
 
-/** Thẻ video kiểu YouTube: bấm vào là phát ngay tại chỗ. */
+/** Thẻ video kiểu YouTube: bấm vào là mở trang xem chi tiết. */
 function YoutubeVideoCard({
   video,
   watched,
   inProgress,
   progress,
-  playing,
-  onPlay,
   onToggleWatched,
   onPlayMini,
   onOpen,
@@ -3405,37 +3400,10 @@ function YoutubeVideoCard({
   watched: boolean
   inProgress: boolean
   progress?: { percent: number; status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'; seconds?: number }
-  playing: boolean
-  onPlay: () => void
   onToggleWatched: () => void
   onPlayMini: () => void
   onOpen: () => void
 }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  useYouTubeProgress(playing ? iframeRef : null, {
-    videoId: video.video_id,
-    title: video.title,
-    channelName: video.creator_name ?? undefined,
-    thumbnail: video.thumbnail,
-  })
-
-  // Lưu start time lúc bắt đầu bấm phát để iframe src không bị cập nhật liên tục làm giật video
-  const initialStartRef = useRef<number | null>(null)
-  if (playing && initialStartRef.current === null) {
-    initialStartRef.current = Math.floor(progress?.seconds ?? 0)
-  } else if (!playing && initialStartRef.current !== null) {
-    initialStartRef.current = null
-  }
-
-  const start = initialStartRef.current ?? 0
-  const src = useMemo(() => {
-    if (!playing) return ''
-    const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
-    return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
-      start > 3 ? `&start=${start}` : ''
-    }`
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, video.video_id, video.embed_url])
   const percent = progress?.percent ?? (watched ? 100 : 0)
   const meta = [video.creator_name || 'Kênh YouTube', timeAgo(video.published_at)].filter(Boolean).join(' · ')
 
@@ -3443,28 +3411,23 @@ function YoutubeVideoCard({
     <article className="yt-card">
       <div
         className="yt-thumb"
-        role={playing ? undefined : 'button'}
-        tabIndex={playing ? undefined : 0}
-        aria-label={playing ? undefined : `Phát ${video.title}`}
-        onClick={playing ? undefined : onPlay}
-        onKeyDown={playing ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlay() } }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Xem ${video.title}`}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onOpen()
+          }
+        }}
       >
-        {playing ? (
-          <iframe
-            ref={iframeRef}
-            src={src}
-            title={video.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        ) : (
-          <>
-            {video.thumbnail && <img src={video.thumbnail} alt="" loading="lazy" />}
-            <span className="yt-play"><Play size={22} fill="#fff" /></span>
-            {video.duration ? <span className="yt-duration">{formatVideoDuration(video.duration)}</span> : null}
-            {percent > 0 && <span className="yt-seen-bar"><i style={{ width: `${Math.min(100, percent)}%` }} /></span>}
-          </>
-        )}
+        {video.thumbnail && <img src={video.thumbnail} alt="" loading="lazy" />}
+        <span className="yt-play" title="Xem video">
+          <Play size={24} fill="#fff" />
+        </span>
+        {video.duration ? <span className="yt-duration">{formatVideoDuration(video.duration)}</span> : null}
+        {percent > 0 && <span className="yt-seen-bar"><i style={{ width: `${Math.min(100, percent)}%` }} /></span>}
       </div>
 
       <div className="yt-body">
@@ -3480,18 +3443,30 @@ function YoutubeVideoCard({
             </p>
           )}
           <div className="yt-actions">
-            <button type="button" className="yt-action" onClick={onOpen} title="Mở trang chi tiết video">
-              <Info size={13} /> Chi tiết
+            <button
+              type="button"
+              className="yt-action yt-action-pip"
+              onClick={onPlayMini}
+              title="Phát ở khung nhỏ, đi tab khác vẫn chạy"
+            >
+              <PictureInPicture2 size={13} className="yt-action-icon-pip" />
+              <span>Phát nền</span>
             </button>
-            <button type="button" className="yt-action" onClick={onPlayMini} title="Phát ở khung nhỏ, đi tab khác vẫn chạy">
-              <PictureInPicture2 size={13} /> Phát nền
-            </button>
-            <button type="button" className={`yt-action ${watched ? 'on' : ''}`} onClick={onToggleWatched}>
-              {watched ? <CheckCircle2 size={13} /> : <Circle size={13} />}
-              {watched ? 'Đã xem' : 'Đánh dấu đã xem'}
+            <button
+              type="button"
+              className={`yt-action yt-action-watched ${watched ? 'on' : ''}`}
+              onClick={onToggleWatched}
+              title={watched ? 'Đánh dấu chưa xem' : 'Đánh dấu đã xem'}
+            >
+              {watched ? (
+                <CheckCircle2 size={13} className="yt-action-icon-watched" />
+              ) : (
+                <Circle size={13} className="yt-action-icon-unwatched" />
+              )}
+              <span>{watched ? 'Đã xem' : 'Đánh dấu đã xem'}</span>
             </button>
             <WatchTogetherButton
-              className="yt-action"
+              className="yt-action yt-action-together"
               size={13}
               item={{
                 kind: 'VIDEO',
@@ -3502,8 +3477,15 @@ function YoutubeVideoCard({
                 url: video.canonical_url,
               }}
             />
-            <a className="yt-action" href={video.canonical_url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={12} /> YouTube
+            <a
+              className="yt-action yt-action-yt"
+              href={video.canonical_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Mở trên YouTube"
+            >
+              <ExternalLink size={12} className="yt-action-icon-yt" />
+              <span>YouTube</span>
             </a>
           </div>
         </div>
