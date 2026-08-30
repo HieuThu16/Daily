@@ -104,7 +104,7 @@ class MangaChapterCrawlerManager {
     const signal = this.abortController.signal
 
     const startTime = Date.now()
-    const maxDurationMs = 5 * 60 * 1000 // 5 phút
+    const maxDurationMs = 15 * 60 * 1000 // 15 phút
 
     this.state = {
       isRunning: true,

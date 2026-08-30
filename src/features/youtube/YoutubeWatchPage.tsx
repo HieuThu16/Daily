@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, ExternalLink,
-  PictureInPicture2, Share2, 
+  PictureInPicture2, Share2, ChevronRight, Layers,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta } from '../../lib/youtubeMeta'
 import { useToast } from '../ToastContext'
 import { useHideHeader } from '../HeaderAction'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
+import { YoutubeChannelModal } from './YoutubeChannelModal'
 import {
   progressLabel, useVideoProgressMap, useYouTubeProgress,
 } from '../../lib/videoProgress'
@@ -138,6 +139,7 @@ export function YoutubeWatchPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [showDescription, setShowDescription] = useState(false)
+  const [showChannelModal, setShowChannelModal] = useState(false)
 
   useVideoStatusListener(() => {
     if (video) {
@@ -185,7 +187,7 @@ export function YoutubeWatchPage() {
           .eq('creator_name', current.creator_name ?? '')
           .is('unavailable_at', null)
           .order('published_at', { ascending: false })
-          .limit(40),
+          .limit(500),
         supabase?.from(sourceType === 'tvshow' ? 'tvshow_watched' : 'review_watched').select('video_id'),
       ])
       if (!alive) return
@@ -277,6 +279,8 @@ export function YoutubeWatchPage() {
     )
   }
 
+  const allChannelVideos = useMemo(() => (video ? [video, ...siblings] : []), [video, siblings])
+
   return (
     <div className="yt-watch">
       <div className="yt-watch-main">
@@ -302,13 +306,29 @@ export function YoutubeWatchPage() {
 
         <h1 className="yt-watch-title">{video.title}</h1>
 
-        <div className="yt-watch-meta">
+        <div
+          className="yt-watch-meta"
+          onClick={() => setShowChannelModal(true)}
+          title="Nhấn để xem toàn bộ video & danh sách phát của kênh này"
+          style={{
+            cursor: 'pointer',
+            transition: 'background 0.2s',
+            padding: '8px 10px',
+            borderRadius: 12,
+            margin: '6px -10px',
+          }}
+        >
           <span className="yt-watch-avatar" aria-hidden>
             {(video.creator_name || 'Y').trim().charAt(0).toUpperCase()}
           </span>
           <div className="yt-watch-channel">
-            <strong>{video.creator_name || 'Kênh YouTube'}</strong>
-            <span>{siblings.length + 1} video trong kho</span>
+            <strong style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {video.creator_name || 'Kênh YouTube'}
+              <ChevronRight size={14} style={{ opacity: 0.7 }} />
+            </strong>
+            <span style={{ color: 'var(--primary, #3b82f6)', fontWeight: 600 }}>
+              {allChannelVideos.length} video · Bấm xem kênh & danh sách phát
+            </span>
           </div>
           <span className="yt-watch-published">
             {[publishedLabel(video.published_at), formatDuration(video.duration)].filter(Boolean).join(' · ')}
@@ -383,7 +403,29 @@ export function YoutubeWatchPage() {
       </div>
 
       <aside className="yt-watch-side">
-        <h2>Video khác của kênh</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h2 style={{ margin: 0, fontSize: '0.98rem' }}>Video khác của kênh</h2>
+          <button
+            type="button"
+            onClick={() => setShowChannelModal(true)}
+            style={{
+              background: 'rgba(59, 130, 246, 0.12)',
+              color: 'var(--primary, #3b82f6)',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              borderRadius: 8,
+              padding: '4px 10px',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <Layers size={13} /> Danh sách phát
+          </button>
+        </div>
+
         {siblings.length === 0 && <p className="yt-watch-side-empty">Kho chưa có video nào khác của kênh này.</p>}
         {siblings.map((item) => {
           const itemProgress = progressMap[item.video_id]
@@ -417,6 +459,18 @@ export function YoutubeWatchPage() {
           )
         })}
       </aside>
+
+      {/* Modal Chi tiết Kênh: 2 Tab Video Mới Nhất & Danh Sách Phát */}
+      <YoutubeChannelModal
+        isOpen={showChannelModal}
+        onClose={() => setShowChannelModal(false)}
+        channelName={video.creator_name || 'Kênh YouTube'}
+        videos={allChannelVideos}
+        currentVideoId={video.video_id}
+        watchedSet={watchedSet}
+        progressMap={progressMap}
+        onSelectVideo={(selectedId) => navigate(`/youtube/watch/${selectedId}`)}
+      />
     </div>
   )
 }

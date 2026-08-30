@@ -105,11 +105,11 @@ export function CrawlChaptersModal({
 
         <div style={{ fontSize: '0.84rem', lineHeight: 1.6, color: 'var(--text-main)', marginBottom: 20 }}>
           <p style={{ margin: '0 0 10px' }}>
-            Sau khi nhấn <strong>OK</strong>, tiến trình cào sẽ <strong>tự động chạy nền</strong> trong tối đa <strong>5 phút</strong>.
+            Sau khi nhấn <strong>OK</strong>, tiến trình cào sẽ <strong>tự động chạy nền</strong> trong tối đa <strong>15 phút</strong>.
           </p>
           <ul style={{ margin: '0 0 10px', paddingLeft: 20, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
             <li>Bạn có thể tiếp tục đọc truyện hoặc chuyển trang bình thường.</li>
-            <li>Hết 5 phút (hoặc khi hoàn tất), hệ thống sẽ hiển thị <strong>bảng báo cáo</strong> các chapter mới cào được ngay trên màn hình.</li>
+            <li>Hết 15 phút (hoặc khi hoàn tất), hệ thống sẽ hiển thị <strong>bảng báo cáo</strong> các chapter mới cào được ngay trên màn hình.</li>
           </ul>
         </div>
 
@@ -149,7 +149,7 @@ export function CrawlChaptersModal({
 }
 
 /**
- * Hiển thị thanh tiến độ nền nổi (Floating progress) & Bảng báo cáo sau 5 phút
+ * Hiển thị thanh tiến độ nền nổi (Floating progress) & Bảng báo cáo sau 15 phút
  */
 export function GlobalCrawlerWatcher() {
   const [crawlerState, setCrawlerState] = useState<CrawlerState>(mangaChapterCrawler.getState())
@@ -203,7 +203,7 @@ export function GlobalCrawlerWatcher() {
 
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)' }}>
-              <span>Đang cào nền ({formatTime(crawlerState.elapsedSeconds)} / 05:00)</span>
+              <span>Đang cào nền ({formatTime(crawlerState.elapsedSeconds)} / 15:00)</span>
               {crawlerState.newChaptersFound > 0 && (
                 <span style={{ color: '#10b981', fontWeight: 800 }}>+{crawlerState.newChaptersFound} chap mới</span>
               )}
@@ -248,10 +248,10 @@ export function GlobalCrawlerWatcher() {
         </div>
       )}
 
-      {/* Modal Báo cáo kết quả cào sau 5 phút / khi hoàn tất */}
+      {/* Modal Báo cáo kết quả cào sau 15 phút / khi hoàn tất */}
       {report && (
         <Modal
-          title={report.isTimedOut ? '⏱️ Báo cáo cào chapter (Hết 5 phút)' : '🎉 Báo cáo cào chapter hoàn tất'}
+          title={report.isTimedOut ? '⏱️ Báo cáo cào chapter (Hết 15 phút)' : '🎉 Báo cáo cào chapter hoàn tất'}
           onClose={() => mangaChapterCrawler.clearReport()}
         >
           <div style={{ padding: '4px 0 10px', color: 'var(--text-main)' }}>
