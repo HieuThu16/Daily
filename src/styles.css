@@ -5930,14 +5930,9 @@ input[type='month'] {
     -webkit-backdrop-filter: blur(12px);
   }
 
-  /* Đổi theme / đăng xuất / cài PWA đã có chỗ cố định dưới sidebar; giữ thêm
-     bản sao trên header chỉ làm rối. Nút "+" ở lại vì nó thuộc về trang. */
+  /* Đổi theme / đăng xuất / cài PWA đã có chỗ cố định dưới sidebar */
   .header-actions .icon {
     display: none;
-  }
-
-  .header-action {
-    padding: 9px 14px;
   }
 
   /* ---- Khu chính và cột phụ ---- */
