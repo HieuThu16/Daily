@@ -825,8 +825,24 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       const channelListRaw = Array.from(channelCardsMap.values())
 
       // Thống kê video: gom toàn bộ video của kênh vào đúng channel card
-      for (const v of combinedVideos) {
+      // Helper: tìm kênh bằng creator_id/creator_name trực tiếp từ channelCardsMap nếu findMatchingChannel fail
+      const findChannelFallback = (v: VideoRow): ChannelItem | undefined => {
         const matched = findMatchingChannel(v, channelListRaw)
+        if (matched) return matched
+        // Fallback: tra theo creator_id hoặc creator_name normalized
+        if (v.creator_id) {
+          const byId = channelCardsMap.get(normalizeChannelKey(v.creator_id))
+          if (byId) return byId
+        }
+        if (v.creator_name) {
+          const byName = channelCardsMap.get(normalizeChannelKey(v.creator_name))
+          if (byName) return byName
+        }
+        return undefined
+      }
+
+      for (const v of combinedVideos) {
+        const matched = findChannelFallback(v)
         if (matched) {
           matched.videoCount += 1
           if (statusSets.watchedSet.has(v.video_id)) {
@@ -842,9 +858,35 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
       // Gắn category & tag của Kênh vào từng Video tương ứng (100% video của kênh nhận đúng category)
       const taggedVideos = combinedVideos.map((v) => {
-        const matched = findMatchingChannel(v, channelListRaw)
-        const cat = matched?.category || guessChannelCategory(v.creator_name || v.title || '', v.sourceType)
-        const tag = matched?.tag
+        const matched = findChannelFallback(v)
+
+        // Ưu tiên: 1) category từ kênh đã khớp, 2) tra catMap trực tiếp từ creator của video, 3) guessChannelCategory
+        let cat = matched?.category
+        if (!cat) {
+          const vKey = v.creator_id || v.creator_name || ''
+          const vNormName = normalizeChannelKey(v.creator_name)
+          const vNormKey = normalizeChannelKey(v.creator_id)
+          cat =
+            catMap[vKey] ||
+            catMap[v.creator_name || ''] ||
+            catMap[vNormName] ||
+            catMap[vNormKey] ||
+            guessChannelCategory(v.creator_name || v.title || '', v.sourceType)
+        }
+
+        let tag = matched?.tag
+        if (!tag) {
+          const vKey = v.creator_id || v.creator_name || ''
+          const vNormName = normalizeChannelKey(v.creator_name)
+          const vNormKey = normalizeChannelKey(v.creator_id)
+          tag =
+            tagMap[vKey] ||
+            tagMap[v.creator_name || ''] ||
+            tagMap[vNormName] ||
+            tagMap[vNormKey] ||
+            undefined
+        }
+
         return {
           ...v,
           creator_name: matched?.creator_name || v.creator_name,
