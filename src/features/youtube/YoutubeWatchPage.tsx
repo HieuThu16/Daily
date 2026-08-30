@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, ExternalLink,
   PictureInPicture2, Share2, ChevronRight, Layers, Sparkles,
+  Headphones, Volume2, Trash2, Loader2,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta } from '../../lib/youtubeMeta'
@@ -11,6 +12,13 @@ import { useHideHeader } from '../HeaderAction'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { YoutubeChannelModal } from './YoutubeChannelModal'
 import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService'
+import {
+  useOfflineAudioState,
+  downloadAndSaveYoutubeAudio,
+  getOfflineAudioPlayUrl,
+  deleteOfflineAudio,
+} from '../../lib/youtubeAudioCache'
+import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
   progressLabel, useVideoProgressMap, useYouTubeProgress,
 } from '../../lib/videoProgress'
@@ -148,6 +156,68 @@ export function YoutubeWatchPage() {
     setIsCollected(isItemInCollection('YOUTUBE', videoId))
     setVisibleSiblingCount(12)
   }, [videoId])
+
+  const audioPlayer = useOptionalAudioPlayer()
+  const { isSaved: isAudioSaved, sizeLabel: audioSizeLabel } = useOfflineAudioState(videoId)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const [audioPercent, setAudioPercent] = useState(0)
+
+  const handlePlayAudio = async () => {
+    if (!video) return
+    try {
+      setAudioLoading(true)
+      let playUrl: string | null = null
+
+      if (isAudioSaved) {
+        playUrl = await getOfflineAudioPlayUrl(video.video_id)
+      } else {
+        showToast('⏳ Đang tải và chuyển đổi video thành audio...', 'info')
+        await downloadAndSaveYoutubeAudio(
+          video.video_id,
+          {
+            title: video.title,
+            channelName: video.creator_name || undefined,
+            thumbnail: video.thumbnail || undefined,
+            durationSeconds: video.duration || undefined,
+          },
+          (pct) => setAudioPercent(pct)
+        )
+        playUrl = await getOfflineAudioPlayUrl(video.video_id)
+        showToast(`🎉 Đã lưu Audio (${audioSizeLabel || 'đã nén'}) vào máy!`)
+      }
+
+      if (playUrl && audioPlayer) {
+        audioPlayer.playTrack({
+          id: `yt-${video.video_id}`,
+          type: 'MUSIC',
+          name: video.title,
+          audio_url: playUrl,
+          cover_url: video.thumbnail,
+          artist: video.creator_name || 'YouTube Audio',
+          status: 'IN_PROGRESS',
+          is_favorite: false,
+          description: null,
+        })
+        showToast('🎧 Đang phát Audio (có thể tắt màn hình/chuyển tab vẫn nghe mượt mà)')
+      }
+    } catch (err: any) {
+      console.error('Lỗi phát audio:', err)
+      showToast(`❌ Lỗi tải audio: ${err?.message || err}`, 'delete')
+    } finally {
+      setAudioLoading(false)
+      setAudioPercent(0)
+    }
+  }
+
+  const handleDeleteAudio = async () => {
+    if (!video) return
+    try {
+      await deleteOfflineAudio(video.video_id)
+      showToast('🗑️ Đã xóa file Audio khỏi máy, giải phóng dung lượng thành công!')
+    } catch (err: any) {
+      showToast(`❌ Không xóa được: ${err?.message || err}`, 'delete')
+    }
+  }
 
   const handleToggleCollect = async () => {
     if (!video) return
@@ -359,6 +429,69 @@ export function YoutubeWatchPage() {
         </div>
 
         <div className="yt-watch-actions">
+          {/* Nút Nghe YouTube Audio / Phát Audio */}
+          {isAudioSaved ? (
+            <>
+              <button
+                type="button"
+                className="yt-chip on"
+                onClick={() => void handlePlayAudio()}
+                disabled={audioLoading}
+                style={{
+                  background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                  color: '#ffffff',
+                  borderColor: '#06b6d4',
+                  fontWeight: 700,
+                }}
+                title="Phát audio đã lưu offline trên máy (có thể tắt màn hình điện thoại)"
+              >
+                <Volume2 size={15} />
+                <span>Phát Audio ({audioSizeLabel})</span>
+              </button>
+
+              <button
+                type="button"
+                className="yt-chip"
+                onClick={() => void handleDeleteAudio()}
+                style={{
+                  color: '#ef4444',
+                  borderColor: 'rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                }}
+                title="Xóa file audio khỏi bộ nhớ máy để giải phóng dung lượng"
+              >
+                <Trash2 size={14} />
+                <span>Xóa Audio</span>
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="yt-chip"
+              onClick={() => void handlePlayAudio()}
+              disabled={audioLoading}
+              style={{
+                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15))',
+                color: '#06b6d4',
+                borderColor: 'rgba(6, 182, 212, 0.4)',
+                fontWeight: 700,
+              }}
+              title="Chuyển đổi video thành Audio, lưu vào máy và phát nền"
+            >
+              {audioLoading ? (
+                <>
+                  <Loader2 size={15} className="tv-spin" />
+                  <span>Đang tải audio {audioPercent > 0 ? `${audioPercent}%` : '...'}</span>
+                </>
+              ) : (
+                <>
+                  <Headphones size={15} />
+                  <span>Nghe YouTube Audio</span>
+                </>
+              )}
+            </button>
+          )}
+
           <button type="button" className={`yt-chip ${watched ? 'on' : ''}`} onClick={() => void toggleWatched()}>
             {watched ? <CheckCircle2 size={15} /> : <Circle size={15} />}
             {watched ? 'Đã xem xong' : 'Đánh dấu đã xem'}

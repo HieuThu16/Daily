@@ -8,8 +8,14 @@ import {
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2,
   Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock, Tag,
-  Flame, ArrowUpDown, Zap
+  Flame, ArrowUpDown, Zap, Headphones, Volume2
 } from 'lucide-react'
+import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
+import {
+  useOfflineAudioState,
+  downloadAndSaveYoutubeAudio,
+  getOfflineAudioPlayUrl,
+} from '../../lib/youtubeAudioCache'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
 import { publishedLabel } from './YoutubeWatchPage'
@@ -3430,7 +3436,6 @@ export function timeAgo(iso: string | null | undefined, now: Date = new Date()):
   return `${Math.floor(days / 365)} năm trước`
 }
 
-/** Thẻ video kiểu YouTube: bấm vào là mở trang xem chi tiết. */
 function YoutubeVideoCard({
   video,
   watched,
@@ -3450,6 +3455,51 @@ function YoutubeVideoCard({
 }) {
   const percent = progress?.percent ?? (watched ? 100 : 0)
   const meta = [video.creator_name || 'Kênh YouTube', timeAgo(video.published_at)].filter(Boolean).join(' · ')
+  const audioPlayer = useOptionalAudioPlayer()
+  const { isSaved: isAudioSaved, sizeLabel: audioSizeLabel } = useOfflineAudioState(video.video_id)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const { showToast } = useToast()
+
+  const handleAudioAction = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setAudioLoading(true)
+      let playUrl: string | null = null
+
+      if (isAudioSaved) {
+        playUrl = await getOfflineAudioPlayUrl(video.video_id)
+      } else {
+        showToast('⏳ Đang tải và chuyển video thành Audio...', 'info')
+        await downloadAndSaveYoutubeAudio(video.video_id, {
+          title: video.title,
+          channelName: video.creator_name || undefined,
+          thumbnail: video.thumbnail || undefined,
+          durationSeconds: video.duration || undefined,
+        })
+        playUrl = await getOfflineAudioPlayUrl(video.video_id)
+        showToast(`🎉 Đã lưu Audio (${audioSizeLabel || 'đã nén'}) vào máy!`)
+      }
+
+      if (playUrl && audioPlayer) {
+        audioPlayer.playTrack({
+          id: `yt-${video.video_id}`,
+          type: 'MUSIC',
+          name: video.title,
+          audio_url: playUrl,
+          cover_url: video.thumbnail,
+          artist: video.creator_name || 'YouTube Audio',
+          status: 'IN_PROGRESS',
+          is_favorite: false,
+          description: null,
+        })
+        showToast('🎧 Đang phát Audio trên toàn hệ thống!')
+      }
+    } catch (err: any) {
+      showToast(`❌ Lỗi audio: ${err?.message || err}`, 'delete')
+    } finally {
+      setAudioLoading(false)
+    }
+  }
 
   return (
     <article className="yt-card">
@@ -3487,6 +3537,17 @@ function YoutubeVideoCard({
             </p>
           )}
           <div className="yt-actions">
+            <button
+              type="button"
+              className={`yt-action ${isAudioSaved ? 'on' : ''}`}
+              onClick={handleAudioAction}
+              disabled={audioLoading}
+              title={isAudioSaved ? `Phát Audio (${audioSizeLabel})` : 'Chuyển thành Audio & Nghe'}
+              style={isAudioSaved ? { background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.4)' } : undefined}
+            >
+              {isAudioSaved ? <Volume2 size={13} /> : <Headphones size={13} />}
+              <span>{audioLoading ? 'Đang tải...' : isAudioSaved ? 'Audio' : 'Nghe Audio'}</span>
+            </button>
             <button
               type="button"
               className="yt-action yt-action-pip"
