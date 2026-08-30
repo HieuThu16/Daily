@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, ExternalLink,
-  PictureInPicture2, Share2, ChevronRight, Layers,
+  PictureInPicture2, Share2, ChevronRight, Layers, Sparkles,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta } from '../../lib/youtubeMeta'
@@ -10,6 +10,7 @@ import { useToast } from '../ToastContext'
 import { useHideHeader } from '../HeaderAction'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { YoutubeChannelModal } from './YoutubeChannelModal'
+import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService'
 import {
   progressLabel, useVideoProgressMap, useYouTubeProgress,
 } from '../../lib/videoProgress'
@@ -140,6 +141,26 @@ export function YoutubeWatchPage() {
   const [watchedSet, setWatchedSet] = useState<Set<string>>(new Set())
   const [showDescription, setShowDescription] = useState(false)
   const [showChannelModal, setShowChannelModal] = useState(false)
+  const [isCollected, setIsCollected] = useState(() => isItemInCollection('YOUTUBE', videoId))
+
+  useEffect(() => {
+    setIsCollected(isItemInCollection('YOUTUBE', videoId))
+  }, [videoId])
+
+  const handleToggleCollect = async () => {
+    if (!video) return
+    const res = await toggleSaveToCollection({
+      item_type: 'YOUTUBE',
+      item_id: video.video_id,
+      title: video.title,
+      subtitle: video.creator_name || 'YouTube',
+      image_url: video.thumbnail,
+      url: `/youtube/watch/${video.video_id}`,
+      category: video.creator_name || 'YouTube Video',
+    })
+    setIsCollected(res.added)
+    showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập')
+  }
 
   useVideoStatusListener(() => {
     if (video) {
@@ -367,6 +388,19 @@ export function YoutubeWatchPage() {
               url: `https://www.youtube.com/watch?v=${video.video_id}`,
             }}
           />
+
+          <button
+            type="button"
+            className={`yt-chip ${isCollected ? 'on' : ''}`}
+            onClick={handleToggleCollect}
+            style={{
+              background: isCollected ? 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(139, 92, 246, 0.25))' : undefined,
+              color: isCollected ? '#ec4899' : undefined,
+              borderColor: isCollected ? '#ec4899' : undefined,
+            }}
+          >
+            <Sparkles size={15} /> {isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}
+          </button>
 
           <button type="button" className="yt-chip" onClick={() => void share()}>
             <Share2 size={15} /> Chia sẻ

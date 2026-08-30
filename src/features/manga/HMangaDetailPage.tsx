@@ -25,6 +25,7 @@ import { useHideHeader } from '../HeaderAction';
 import { getCachedCoverBlobUrl, fetchAndCacheCover } from '../../lib/mangaCoverCache';
 import './ngontinhDetail.css';
 import { WatchTogetherButton } from '../watch/WatchTogetherButton';
+import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService';
 
 
 export const HMangaDetailPage: React.FC = () => {
@@ -38,6 +39,7 @@ export const HMangaDetailPage: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [follows, setFollows] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
+  const [isCollected, setIsCollected] = useState<boolean>(false);
   // Chỉ chủ kho (Hieu100) mới thấy nút xoá vĩnh viễn.
   const [canDelete, setCanDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -169,6 +171,27 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
       void handleSyncChapters(true);
     }
   }, [manga?.slug]);
+
+  useEffect(() => {
+    if (slug) {
+      setIsCollected(isItemInCollection('TRUYEN_H', slug));
+    }
+  }, [slug]);
+
+  const handleToggleCollect = async () => {
+    if (!manga || !slug) return;
+    const res = await toggleSaveToCollection({
+      item_type: 'TRUYEN_H',
+      item_id: slug,
+      title: manga.title,
+      subtitle: manga.author || 'Truyện H',
+      image_url: detailCover || manga.cover || null,
+      url: `/truyenh/${slug}`,
+      category: 'Truyện H',
+    });
+    setIsCollected(res.added);
+    showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập');
+  };
 
   const handleToggleFav = () => {
     if (!slug) return;
@@ -481,6 +504,19 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
             </div>
           </div>
         )}
+
+        {/* Action: Thêm vào Bộ sưu tập thẻ 3D */}
+        <button
+          className={`ngontinh-quick-action-card ${isCollected ? 'favorited' : ''}`}
+          onClick={handleToggleCollect}
+          title="Lưu vào Bộ sưu tập thẻ 3D"
+        >
+          <Sparkles size={19} fill={isCollected ? '#ec4899' : 'none'} color={isCollected ? '#ec4899' : 'currentColor'} className="ngontinh-qa-icon" />
+          <div className="ngontinh-qa-text">
+            <span className="ngontinh-qa-title">{isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}</span>
+            <span className="ngontinh-qa-subtitle">{isCollected ? 'Thẻ 3D' : 'Lưu thẻ 3D'}</span>
+          </div>
+        </button>
 
         {/* Action 4: Toggle Favorite */}
         <button 

@@ -21,6 +21,7 @@ import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './blMangaDetail.css';
 import { WatchTogetherButton } from '../watch/WatchTogetherButton';
+import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService';
 
 export const BLMangaDetailPage: React.FC = () => {
   useHideHeader(true);
@@ -33,6 +34,7 @@ export const BLMangaDetailPage: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [follows, setFollows] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
+  const [isCollected, setIsCollected] = useState<boolean>(false);
   const [showAllTags, setShowAllTags] = useState<boolean>(false);
   
   // Chapter filter and sort
@@ -141,6 +143,28 @@ export const BLMangaDetailPage: React.FC = () => {
       void handleSyncChapters(true);
     }
   }, [manga?.slug]);
+
+  useEffect(() => {
+    if (slug) {
+      setIsCollected(isItemInCollection('MANGA', slug));
+    }
+  }, [slug]);
+
+  const handleToggleCollect = async () => {
+    if (!manga || !slug) return;
+    const res = await toggleSaveToCollection({
+      item_type: 'MANGA',
+      item_id: slug,
+      title: manga.title,
+      subtitle: manga.author || 'Truyện BL',
+      image_url: manga.cover || null,
+      url: `/bl/${slug}`,
+      category: 'Truyện BL',
+      metadata: { genre: 'BL' },
+    });
+    setIsCollected(res.added);
+    showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập');
+  };
 
   const handleToggleFav = () => {
     if (!manga) return;
@@ -487,6 +511,19 @@ export const BLMangaDetailPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Action: Sưu tầm Thẻ 3D */}
+        <button
+          className={`bl-quick-action-card ${isCollected ? 'favorited' : ''}`}
+          onClick={handleToggleCollect}
+          title="Lưu vào Bộ sưu tập thẻ 3D"
+        >
+          <Sparkles size={19} fill={isCollected ? '#ec4899' : 'none'} color={isCollected ? '#ec4899' : 'currentColor'} className="bl-qa-icon" />
+          <div className="bl-qa-text">
+            <span className="bl-qa-title">{isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}</span>
+            <span className="bl-qa-subtitle">{isCollected ? 'Thẻ 3D' : 'Lưu thẻ 3D'}</span>
+          </div>
+        </button>
 
         {/* Action 5: Toggle Favorite */}
         <button 

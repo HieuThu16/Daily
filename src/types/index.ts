@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'youtube' | 'youtubeshorts' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'truyenh' | 'english' | 'knowledge' | 'reviews' | 'tiktok' | 'money' | 'calendar' | 'people' | 'watch' | 'nutrition' | 'usage' | 'settings'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'collection' | 'youtube' | 'youtubeshorts' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'truyenh' | 'english' | 'knowledge' | 'reviews' | 'tiktok' | 'money' | 'calendar' | 'people' | 'watch' | 'nutrition' | 'usage' | 'settings'
 
 /** Một thẻ kiến thức: câu hỏi, câu trả lời và thể loại. */
 export type KnowledgeItem = {
@@ -233,6 +233,11 @@ export type Entry = {
   /** Ảnh đính kèm (bucket daily-photos); image_path để xoá file khi gỡ ảnh. */
   image_url?: string | null
   image_path?: string | null
+  /** Đánh dấu "Lần đầu" — hiển thị trong tab Sưu tập thẻ */
+  is_first_time?: boolean
+  /** Đánh dấu "Đặc biệt" — hiển thị trong tab Sưu tập thẻ */
+  is_special?: boolean
+  tags?: string[] | null
 }
 /** Người được mời xem sự kiện chung, định danh bằng email đăng nhập. */
 export type SharedPartner = { id: string; partner_email: string; created_at?: string }

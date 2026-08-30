@@ -319,17 +319,28 @@ export async function syncHMangaChapters(
   }
 
   const freshManga: HManga = data.manga;
+  const cleanCover = (isValidHMangaCover(freshManga.cover) ? freshManga.cover : manga.cover) 
+    || getChapterImageUrl(freshManga.chapters?.[0]?.images?.[0]) 
+    || manga.cover 
+    || '';
+  const mergedManga: HManga = {
+    ...manga,
+    ...freshManga,
+    cover: cleanCover,
+    title: freshManga.title || manga.title,
+    author: (freshManga.author && freshManga.author !== 'Đang cập nhật') ? freshManga.author : manga.author,
+  };
   const oldCount = Array.isArray(manga.chapters) ? manga.chapters.length : 0;
-  const newCount = Array.isArray(freshManga.chapters) ? freshManga.chapters.length : 0;
+  const newCount = Array.isArray(mergedManga.chapters) ? mergedManga.chapters.length : 0;
 
   if (newCount > oldCount) {
     onProgress?.(`Đã tìm thấy ${newCount - oldCount} chapter mới! Đang lưu...`);
-    saveCustomHManga(freshManga);
-    return { updated: true, manga: freshManga, addedCount: newCount - oldCount };
+    saveCustomHManga(mergedManga);
+    return { updated: true, manga: mergedManga, addedCount: newCount - oldCount };
   }
 
-  saveCustomHManga(freshManga);
-  return { updated: false, manga: freshManga, addedCount: 0 };
+  saveCustomHManga(mergedManga);
+  return { updated: false, manga: mergedManga, addedCount: 0 };
 }
 
 export function getHMangaFavorites(): string[] {

@@ -20,6 +20,7 @@ import { useToast } from '../ToastContext';
 import { useHideHeader } from '../HeaderAction';
 import './ngontinhDetail.css';
 import { WatchTogetherButton } from '../watch/WatchTogetherButton';
+import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService';
 
 export const NgontinhDetailPage: React.FC = () => {
   useHideHeader(true);
@@ -32,6 +33,7 @@ export const NgontinhDetailPage: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [follows, setFollows] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, any>>({});
+  const [isCollected, setIsCollected] = useState<boolean>(false);
   const [showAllTags, setShowAllTags] = useState<boolean>(false);
   
   // Chapter filter and sort
@@ -98,6 +100,28 @@ export const NgontinhDetailPage: React.FC = () => {
   const isFav = slug ? favorites.includes(slug) : false;
   const isFollowed = slug ? follows.includes(slug) : false;
   const userProgress = slug ? history[slug] : null;
+
+  useEffect(() => {
+    if (slug) {
+      setIsCollected(isItemInCollection('MANGA', slug));
+    }
+  }, [slug]);
+
+  const handleToggleCollect = async () => {
+    if (!manga || !slug) return;
+    const res = await toggleSaveToCollection({
+      item_type: 'MANGA',
+      item_id: slug,
+      title: manga.title,
+      subtitle: manga.author || 'Ngôn tình',
+      image_url: manga.cover || null,
+      url: `/ngontinh/${slug}`,
+      category: 'Ngôn tình',
+      metadata: { genre: 'NGONTINH' },
+    });
+    setIsCollected(res.added);
+    showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập');
+  };
 
   const handleToggleFav = () => {
     if (!slug) return;
@@ -422,6 +446,19 @@ export const NgontinhDetailPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Action: Sưu tầm Thẻ 3D */}
+        <button
+          className={`ngontinh-quick-action-card ${isCollected ? 'favorited' : ''}`}
+          onClick={handleToggleCollect}
+          title="Lưu vào Bộ sưu tập thẻ 3D"
+        >
+          <Sparkles size={19} fill={isCollected ? '#ec4899' : 'none'} color={isCollected ? '#ec4899' : 'currentColor'} className="ngontinh-qa-icon" />
+          <div className="ngontinh-qa-text">
+            <span className="ngontinh-qa-title">{isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}</span>
+            <span className="ngontinh-qa-subtitle">{isCollected ? 'Thẻ 3D' : 'Lưu thẻ 3D'}</span>
+          </div>
+        </button>
 
         {/* Action 5: Toggle Favorite */}
         <button 

@@ -271,15 +271,18 @@ export function AddYoutubeModal({
           channelName: plan.channelName,
           creatorId: plan.channelId,
         }))
-        // Lọc ngay tại đây thay vì lọc lúc hiện: danh sách khỏi phình vì video
-        // không liên quan, và số "đã tìm thấy" phản ánh đúng thứ sẽ lưu.
-        const kept = crawlKeyword.trim()
+        // Lọc theo từ khóa (nếu có)
+        const matched = crawlKeyword.trim()
           ? pageVideos.filter((v: any) => matchesKeyword(v.title ?? '', crawlKeyword, v.channelName ?? ''))
           : pageVideos
-        if (kept.length < pageVideos.length) {
-          setSkippedByKeyword((n) => n + (pageVideos.length - kept.length))
+        if (matched.length < pageVideos.length) {
+          setSkippedByKeyword((n) => n + (pageVideos.length - matched.length))
         }
-        addVideos(kept, (v) => !v.isKnown)
+
+        // Tự động bỏ qua các video đã có sẵn trong hệ thống
+        const freshOnly = matched.filter((v: any) => !v.isKnown)
+        addVideos(freshOnly, () => true)
+
         setActiveJob({
           channelName: plan.channelName,
           sectionName: entry.name,
@@ -304,23 +307,31 @@ export function AddYoutubeModal({
 
     const knownIds = new Set<string>()
     if (supabase) {
-      const { data } = await supabase
-        .from('tvshow_videos')
-        .select('video_id')
-        .in('video_id', parsed.videos.map((v) => v.videoId))
-      ;((data ?? []) as { video_id: string }[]).forEach((r) => knownIds.add(r.video_id))
+      const [tvRes, reviewRes] = await Promise.all([
+        supabase.from('tvshow_videos').select('video_id').in('video_id', parsed.videos.map((v) => v.videoId)),
+        supabase.from('review_videos').select('video_id').in('video_id', parsed.videos.map((v) => v.videoId)),
+      ])
+      ;((tvRes?.data ?? []) as { video_id: string }[]).forEach((r) => knownIds.add(r.video_id))
+      ;((reviewRes?.data ?? []) as { video_id: string }[]).forEach((r) => knownIds.add(r.video_id))
     }
+
+    // Tự động bỏ qua video dán tay nếu đã có trong hệ thống
+    const freshVideos = parsed.videos.filter((v) => !knownIds.has(v.videoId))
+
     addVideos(
-      parsed.videos.map((v, i) => ({
-        videoId: v.videoId,
-        title: metas[i]?.title ?? `Video ${i + 1}`,
-        thumbnail: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
-        channelName: metas[i]?.author || 'Tự thêm',
-        canonicalUrl: v.url,
-        isKnown: knownIds.has(v.videoId),
-        manual: true,
-      })),
-      (v) => !v.isKnown,
+      freshVideos.map((v) => {
+        const origIdx = parsed.videos.findIndex((pv) => pv.videoId === v.videoId)
+        return {
+          videoId: v.videoId,
+          title: metas[origIdx]?.title ?? `Video`,
+          thumbnail: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+          channelName: metas[origIdx]?.author || 'Tự thêm',
+          canonicalUrl: v.url,
+          isKnown: false,
+          manual: true,
+        }
+      }),
+      () => true,
     )
   }
 

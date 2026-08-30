@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Frown, Heart, History, ImagePlus, Link as Loader2, NotebookPen, Pencil, Plus, Save, Star, Trash2, Youtube, Zap } from 'lucide-react'
+import { BarChart3, Clock, Frown, Heart, History, ImagePlus, Link as Loader2, NotebookPen, Pencil, Plus, Save, Sparkles, Star, Trash2, Youtube, Zap } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
@@ -12,6 +12,7 @@ import { SkeletonList } from './Skeleton'
 import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
 import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 import { compressForUpload } from '../lib/photo'
+import { Memory3DCard } from './daily/Memory3DCard'
 
 const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
   { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
@@ -28,7 +29,7 @@ function useClock() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 }
 
-type PageTab = 'write' | 'stats'
+type PageTab = 'write' | 'collection' | 'stats'
 type StatsPeriod = 'week' | 'month' | 'all'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -155,6 +156,8 @@ export function DailyPage() {
   const [timeOverride, setTimeOverride] = useState('') // rỗng = dùng giờ hiện tại
   const [timeFrom, setTimeFrom] = useState('')
   const [timeTo, setTimeTo] = useState('')
+  const [isFirstTime, setIsFirstTime] = useState(false)
+  const [isSpecial, setIsSpecial] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState('')
   const [editing, setEditing] = useState<Entry | null>(null)
@@ -162,6 +165,10 @@ export function DailyPage() {
   const [editTime, setEditTime] = useState('')
   const [editTimeFrom, setEditTimeFrom] = useState('')
   const [editTimeTo, setEditTimeTo] = useState('')
+  const [editIsFirstTime, setEditIsFirstTime] = useState(false)
+  const [editIsSpecial, setEditIsSpecial] = useState(false)
+  const [collectionFilter, setCollectionFilter] = useState<'ALL' | 'FIRST_TIME' | 'SPECIAL' | 'FAV'>('ALL')
+  const [collectionSearch, setCollectionSearch] = useState('')
   const [uploading, setUploading] = useState(false)
   const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, []))
   const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
@@ -366,7 +373,14 @@ export function DailyPage() {
     setBusy(true)
     setSaveSuccess('')
     const currentTimeString = timeOverride || clock
-    const payload = lines.map((lineText) => ({ content: lineText, entry_date: date, entry_type: selectedType, entry_time: currentTimeString }))
+    const payload = lines.map((lineText) => ({
+      content: lineText,
+      entry_date: date,
+      entry_type: selectedType,
+      entry_time: currentTimeString,
+      is_first_time: isFirstTime,
+      is_special: isSpecial,
+    }))
     const { data, error } = await supabase!.from('daily_entries').insert(payload).select()
     if (error && !navigator.onLine) {
       // Mất mạng: giữ bài trong hàng đợi, có mạng lại tự đẩy lên.
@@ -374,6 +388,8 @@ export function DailyPage() {
       payload.forEach((row) => queueWrite({ table: 'daily_entries', op: 'insert', payload: row }))
       setItems((prev) => [...local, ...prev])
       setContent('')
+      setIsFirstTime(false)
+      setIsSpecial(false)
       showToast(`📴 Đã lưu ${lines.length} bài offline, sẽ tự đồng bộ khi có mạng.`, 'local')
       setBusy(false)
       return
@@ -385,6 +401,8 @@ export function DailyPage() {
         await Promise.all(mentioned.map((person) => supabase!.from('person_daily_logs').upsert({ person_id: person.id, log_date: date, content: lines.join('\n') }, { onConflict: 'user_id,person_id,log_date' })))
       }
       setContent('')
+      setIsFirstTime(false)
+      setIsSpecial(false)
       showToast(`✅ Đã lưu ${lines.length} bài nhật ký mới!`)
       setSaveSuccess(`Đã lưu ${lines.length} nội dung lúc ${currentTimeString} ✨`)
       setTimeout(() => setSaveSuccess(''), 3500)
@@ -424,7 +442,13 @@ export function DailyPage() {
       }
     }
 
-    const patch = { content: editText.trim(), entry_date: date, entry_time: finalTime || null }
+    const patch = {
+      content: editText.trim(),
+      entry_date: date,
+      entry_time: finalTime || null,
+      is_first_time: editIsFirstTime,
+      is_special: editIsSpecial,
+    }
     await supabase!.from('daily_entries').update(patch).eq('id', editing.id)
     setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, ...patch } : i)))
     showToast('✏️ Đã cập nhật bài viết!')
@@ -435,6 +459,8 @@ export function DailyPage() {
     setEditing(entry)
     setEditText(entry.content)
     setDate(entry.entry_date)
+    setEditIsFirstTime(Boolean(entry.is_first_time))
+    setEditIsSpecial(Boolean(entry.is_special))
     const { from, to } = parseTimeRangeFromEntry(entry.entry_time, entry.content)
     setEditTimeFrom(from)
     setEditTimeTo(to)
@@ -546,17 +572,39 @@ export function DailyPage() {
   const groupedByDate = useMemo(() => groupByDate(statsEntries), [statsEntries])
   const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a))
 
+  const collectionEntries = useMemo(() => {
+    return items
+      .filter((i) => Boolean(i.is_first_time) || Boolean(i.is_special))
+      .sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.created_at.localeCompare(a.created_at))
+  }, [items])
+
+  const firstTimeEntries = useMemo(() => collectionEntries.filter((i) => Boolean(i.is_first_time)), [collectionEntries])
+  const specialEntries = useMemo(() => collectionEntries.filter((i) => Boolean(i.is_special)), [collectionEntries])
+  const favCollectionEntries = useMemo(() => collectionEntries.filter((i) => Boolean(i.is_favorite)), [collectionEntries])
+
+  const filteredCollection = useMemo(() => {
+    const q = collectionSearch.trim().toLowerCase()
+    return collectionEntries
+      .filter((i) => {
+        if (collectionFilter === 'FIRST_TIME') return Boolean(i.is_first_time)
+        if (collectionFilter === 'SPECIAL') return Boolean(i.is_special)
+        if (collectionFilter === 'FAV') return Boolean(i.is_favorite)
+        return true
+      })
+      .filter((i) => !q || i.content.toLowerCase().includes(q) || i.entry_date.includes(q))
+  }, [collectionEntries, collectionFilter, collectionSearch])
+
   // ── render ───────────────────────────────────────────────────────────────
 
   return (
     <section className="page-shell">
 
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
         <button
           onClick={() => setPageTab('write')}
           style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
+            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
             border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
             borderColor: pageTab === 'write' ? 'var(--primary)' : 'var(--card-border)',
             background: pageTab === 'write' ? 'var(--primary)' : 'var(--card-bg)',
@@ -567,9 +615,23 @@ export function DailyPage() {
           <NotebookPen size={13} /> Viết nhật ký
         </button>
         <button
+          onClick={() => setPageTab('collection')}
+          style={{
+            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
+            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
+            borderColor: pageTab === 'collection' ? '#8b5cf6' : 'var(--card-border)',
+            background: pageTab === 'collection' ? 'linear-gradient(135deg, #ec4899, #8b5cf6)' : 'var(--card-bg)',
+            color: pageTab === 'collection' ? 'white' : 'var(--text-main)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            boxShadow: pageTab === 'collection' ? '0 3px 12px rgba(139, 92, 246, 0.35)' : 'none',
+          }}
+        >
+          <Sparkles size={13} /> Sưu tập ({collectionEntries.length})
+        </button>
+        <button
           onClick={() => setPageTab('stats')}
           style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.8rem', fontWeight: 700,
+            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
             border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
             borderColor: pageTab === 'stats' ? 'var(--emerald)' : 'var(--card-border)',
             background: pageTab === 'stats' ? 'var(--emerald)' : 'var(--card-bg)',
@@ -761,6 +823,62 @@ export function DailyPage() {
                 {mentionPeople.map((person) => <button key={person.id} type="button" className="eyebrow" onClick={() => setContent((value) => value.replace(/@[^\s@]*$/, `@${person.name} `))}>@{person.name}</button>)}
               </div>
             )}
+            {/* 2 NÚT ĐÁNH DẤU: LẦN ĐẦU & ĐẶC BIỆT (XUẤT HIỆN Ở TAB SƯU TẬP THẺ 3D) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10, padding: '4px 0' }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)' }}>Đánh dấu thẻ:</span>
+              <button
+                type="button"
+                onClick={() => setIsFirstTime(!isFirstTime)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 10,
+                  fontSize: '0.76rem',
+                  fontWeight: 800,
+                  border: isFirstTime ? '1.5px solid #06b6d4' : '1px solid var(--card-border)',
+                  background: isFirstTime ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.25))' : 'var(--bg-main)',
+                  color: isFirstTime ? '#06b6d4' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  boxShadow: isFirstTime ? '0 2px 10px rgba(6, 182, 212, 0.3)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Sparkles size={13} />
+                <span>✨ Lần đầu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSpecial(!isSpecial)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 10,
+                  fontSize: '0.76rem',
+                  fontWeight: 800,
+                  border: isSpecial ? '1.5px solid #f59e0b' : '1px solid var(--card-border)',
+                  background: isSpecial ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(234, 88, 12, 0.25))' : 'var(--bg-main)',
+                  color: isSpecial ? '#f59e0b' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  boxShadow: isSpecial ? '0 2px 10px rgba(245, 158, 11, 0.3)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Star size={13} />
+                <span>🌟 Đặc biệt</span>
+              </button>
+
+              {(isFirstTime || isSpecial) && (
+                <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 700, marginLeft: 'auto' }}>
+                  ✓ Sẽ lưu vào Bộ sưu tập thẻ 3D
+                </span>
+              )}
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
               <button className="primary" onClick={saveEntries} disabled={busy} style={{ padding: '6px 16px', fontSize: '0.84rem' }}>
                 <Save size={15} />
@@ -898,6 +1016,240 @@ export function DailyPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ════════════════ COLLECTION TAB (SƯU TẬP THẺ 3D) ════════════════ */}
+      {pageTab === 'collection' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Header & Bộ lọc Thẻ */}
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(139, 92, 246, 0.12))',
+              border: '1px solid rgba(139, 92, 246, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={18} color="#ec4899" />
+                  <span>Bộ Sưu Tập Kỷ Niệm 3D</span>
+                </h2>
+                <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  Tổng hợp các khoảnh khắc "Lần đầu" và "Đặc biệt" dưới dạng thẻ sưu tập 3D lật xoay
+                </p>
+              </div>
+
+              <span
+                style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                  padding: '4px 12px',
+                  borderRadius: 99,
+                  boxShadow: '0 2px 8px rgba(139, 92, 246, 0.35)',
+                }}
+              >
+                {collectionEntries.length} Thẻ sưu tập
+              </span>
+            </div>
+
+            {/* Thanh Tìm kiếm trong Bộ sưu tập */}
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Tìm trong bộ sưu tập thẻ..."
+                value={collectionSearch}
+                onChange={(e) => setCollectionSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 34px',
+                  borderRadius: 10,
+                  fontSize: '0.82rem',
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--text-main)',
+                  outline: 'none',
+                }}
+              />
+              <Sparkles size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.5, color: '#8b5cf6' }} />
+            </div>
+
+            {/* Filter Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setCollectionFilter('ALL')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: '1.5px solid',
+                  borderColor: collectionFilter === 'ALL' ? '#8b5cf6' : 'var(--card-border)',
+                  background: collectionFilter === 'ALL' ? '#8b5cf6' : 'var(--card-bg)',
+                  color: collectionFilter === 'ALL' ? '#fff' : 'var(--text-main)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                Tất cả ({collectionEntries.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCollectionFilter('FIRST_TIME')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: '1.5px solid',
+                  borderColor: collectionFilter === 'FIRST_TIME' ? '#06b6d4' : 'var(--card-border)',
+                  background: collectionFilter === 'FIRST_TIME' ? '#06b6d4' : 'var(--card-bg)',
+                  color: collectionFilter === 'FIRST_TIME' ? '#fff' : 'var(--text-main)',
+                  transition: 'all 0.15s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span>✨ Lần đầu ({firstTimeEntries.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCollectionFilter('SPECIAL')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: '1.5px solid',
+                  borderColor: collectionFilter === 'SPECIAL' ? '#f59e0b' : 'var(--card-border)',
+                  background: collectionFilter === 'SPECIAL' ? '#f59e0b' : 'var(--card-bg)',
+                  color: collectionFilter === 'SPECIAL' ? '#fff' : 'var(--text-main)',
+                  transition: 'all 0.15s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span>🌟 Đặc biệt ({specialEntries.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCollectionFilter('FAV')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: '1.5px solid',
+                  borderColor: collectionFilter === 'FAV' ? 'var(--amber)' : 'var(--card-border)',
+                  background: collectionFilter === 'FAV' ? 'var(--amber-bg)' : 'var(--card-bg)',
+                  color: collectionFilter === 'FAV' ? 'var(--amber)' : 'var(--text-main)',
+                  transition: 'all 0.15s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <Star size={12} fill={collectionFilter === 'FAV' ? 'var(--amber)' : 'none'} />
+                <span>Yêu thích ({favCollectionEntries.length})</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Grid Thẻ Sưu Tập 3D */}
+          {loading ? (
+            <SkeletonList rows={3} height={260} />
+          ) : filteredCollection.length === 0 ? (
+            <div
+              style={{
+                padding: '36px 20px',
+                textAlign: 'center',
+                background: 'var(--card-bg)',
+                borderRadius: 18,
+                border: '1.5px dashed var(--card-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(139, 92, 246, 0.2))',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#8b5cf6',
+                }}
+              >
+                <Sparkles size={28} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                {collectionEntries.length === 0
+                  ? 'Chưa có thẻ sưu tập nào'
+                  : 'Không tìm thấy thẻ sưu tập phù hợp'}
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: 420, lineHeight: 1.5 }}>
+                {collectionEntries.length === 0
+                  ? 'Khi viết nhật ký ở Tab Viết, hãy bấm chọn nút "✨ Lần đầu" hoặc "🌟 Đặc biệt" để ghi dấu các khoảnh khắc đáng nhớ vào Bộ sưu tập thẻ 3D này nhé!'
+                  : 'Hãy thử đổi bộ lọc hoặc từ khóa tìm kiếm để xem các thẻ khác.'}
+              </p>
+              {collectionEntries.length === 0 && (
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => setPageTab('write')}
+                  style={{
+                    padding: '8px 18px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    borderRadius: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 4,
+                  }}
+                >
+                  <NotebookPen size={14} /> Viết nhật ký & Thêm thẻ ngay
+                </button>
+              )}
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 20,
+                paddingBottom: 20,
+              }}
+            >
+              {filteredCollection.map((entry) => (
+                <Memory3DCard
+                  key={entry.id}
+                  entry={entry}
+                  onEdit={openEntry}
+                  onToggleFavorite={toggleFavorite}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ════════════════ STATS TAB ════════════════════════════════════════ */}
@@ -1158,6 +1510,54 @@ export function DailyPage() {
               )}
             </div>
             {!supabase && <small className="muted">Chưa cấu hình Supabase nên chưa lưu được ảnh.</small>}
+          </div>
+
+          {/* Đánh dấu thẻ Sưu tập: Lần đầu / Đặc biệt trong Modal sửa */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 0' }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)' }}>Đánh dấu thẻ:</span>
+            <button
+              type="button"
+              onClick={() => setEditIsFirstTime(!editIsFirstTime)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 10,
+                fontSize: '0.76rem',
+                fontWeight: 800,
+                border: editIsFirstTime ? '1.5px solid #06b6d4' : '1px solid var(--card-border)',
+                background: editIsFirstTime ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.25))' : 'var(--bg-main)',
+                color: editIsFirstTime ? '#06b6d4' : 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Sparkles size={13} />
+              <span>✨ Lần đầu</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEditIsSpecial(!editIsSpecial)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 10,
+                fontSize: '0.76rem',
+                fontWeight: 800,
+                border: editIsSpecial ? '1.5px solid #f59e0b' : '1px solid var(--card-border)',
+                background: editIsSpecial ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(234, 88, 12, 0.25))' : 'var(--bg-main)',
+                color: editIsSpecial ? '#f59e0b' : 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Star size={13} />
+              <span>🌟 Đặc biệt</span>
+            </button>
           </div>
 
           <div className="modal-actions">

@@ -17,11 +17,14 @@ import {
   Volume2,
   VolumeX,
   Youtube,
+  Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Media } from '../../types'
 import { MarqueeText } from './MarqueeText'
 import { useOptionalAudioPlayer, type RepeatMode } from './AudioPlayerContext'
+import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService'
+import { useToast } from '../ToastContext'
 
 export type LibraryCategory = {
   id: string
@@ -194,6 +197,26 @@ export function LibraryAudioDetail({
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showQueue, setShowQueue] = useState(true)
+  const { showToast } = useToast()
+  const [isCollected, setIsCollected] = useState(() => isItemInCollection('MUSIC', currentTrack.id))
+
+  useEffect(() => {
+    setIsCollected(isItemInCollection('MUSIC', currentTrack.id))
+  }, [currentTrack.id])
+
+  const handleToggleCollect = async () => {
+    const res = await toggleSaveToCollection({
+      item_type: 'MUSIC',
+      item_id: currentTrack.id,
+      title: currentTrack.name,
+      subtitle: currentTrack.artist || 'Bài hát',
+      image_url: currentTrack.cover_url || null,
+      url: `/music`,
+      category: currentTrack.genre || 'Nhạc',
+    })
+    setIsCollected(res.added)
+    showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập')
+  }
 
   // Focus tiêu đề khi đổi bài
   useEffect(() => {
@@ -553,6 +576,19 @@ export function LibraryAudioDetail({
                 <span>Chia sẻ</span>
               </button>
             )}
+            <button
+              type="button"
+              className={`music-quick-action-btn ${isCollected ? 'active' : ''}`}
+              onClick={handleToggleCollect}
+              title={isCollected ? 'Đã lưu vào bộ sưu tập' : 'Lưu vào bộ sưu tập thẻ 3D'}
+              style={{
+                color: isCollected ? '#06b6d4' : undefined,
+                borderColor: isCollected ? '#06b6d4' : undefined,
+              }}
+            >
+              <Sparkles size={14} />
+              <span>{isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}</span>
+            </button>
             <button
               type="button"
               className="music-quick-action-btn"

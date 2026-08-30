@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, ChevronRight, Clock, FileText, History, Pencil } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronRight, Clock, FileText, History, Pencil, Sparkles } from 'lucide-react'
 import { CHARS_PER_PAGE, loadBookDocument, loadChapterList } from '../../lib/book/repository'
 import type { BookChapterMeta, BookDocument, Media } from '../../types'
 import { BookCover } from './BookCover'
 import { useHideHeader } from '../HeaderAction'
+import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService'
+import { useToast } from '../ToastContext'
 
 type BookDetailViewProps = {
   item: Media
@@ -54,6 +56,7 @@ function formatMoment(value: string | null | undefined): string | null {
 export function BookDetailView({ item, onBack, onEdit, onStatusChange, onLogProgress, onShowHistory, logCount }: BookDetailViewProps) {
   useHideHeader(true)
   const nav = useNavigate()
+  const { showToast } = useToast()
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   const [status, setStatus] = useState<Status>('loading')
@@ -61,8 +64,26 @@ export function BookDetailView({ item, onBack, onEdit, onStatusChange, onLogProg
   const [chapters, setChapters] = useState<BookChapterMeta[]>([])
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
-  /** Mục lục hay Thông tin. Mặc định mục lục vì mở sách ra là để đọc tiếp. */
   const [tab, setTab] = useState<'toc' | 'info'>('toc')
+  const [isCollected, setIsCollected] = useState(() => isItemInCollection('BOOK', item.id))
+
+  useEffect(() => {
+    setIsCollected(isItemInCollection('BOOK', item.id))
+  }, [item.id])
+
+  const handleToggleCollect = async () => {
+    const res = await toggleSaveToCollection({
+      item_type: 'BOOK',
+      item_id: item.id,
+      title: item.name,
+      subtitle: item.author || 'Sách',
+      image_url: item.cover_url || null,
+      url: `/books`,
+      category: item.genre || 'Sách',
+    })
+    setIsCollected(res.added)
+    showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập')
+  }
 
   const listen = item.book_format === 'LISTEN'
 
@@ -195,6 +216,18 @@ export function BookDetailView({ item, onBack, onEdit, onStatusChange, onLogProg
         )}
 
         <div className="library-book-detail-actions">
+          <button
+            type="button"
+            onClick={handleToggleCollect}
+            style={{
+              background: isCollected ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(99, 102, 241, 0.25))' : undefined,
+              color: isCollected ? '#a855f7' : undefined,
+              borderColor: isCollected ? '#a855f7' : undefined,
+            }}
+          >
+            <Sparkles size={16} />
+            {isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}
+          </button>
           {(item.status === 'IN_PROGRESS' || item.status === 'COMPLETED') && (
             <>
               <button type="button" onClick={() => onLogProgress(item)}>

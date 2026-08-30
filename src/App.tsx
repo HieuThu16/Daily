@@ -70,6 +70,7 @@ const KnowledgePage = lazy(() => import('./features/knowledge/KnowledgePage').th
 const YoutubeView = lazy(() => import('./features/youtube/YoutubeView').then((m) => ({ default: m.YoutubeView })))
 const YoutubeWatchPage = lazy(() => import('./features/youtube/YoutubeWatchPage').then((m) => ({ default: m.YoutubeWatchPage })))
 const ShareTarget = lazy(() => import('./features/ShareTarget').then((m) => ({ default: m.ShareTarget })))
+const CollectionPage = lazy(() => import('./features/collection/CollectionPage').then((m) => ({ default: m.CollectionPage })))
 
 
 const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -77,6 +78,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'collection', label: 'Sưu tầm', icon: Sparkles, colorClass: 'icon-box-purple' },
   { id: 'youtube', label: 'YouTube', icon: Youtube, colorClass: 'icon-box-rose' },
   { id: 'youtubeshorts', label: 'YouTube Shorts', icon: Video, colorClass: 'icon-box-rose' },
   { id: 'tiktok', label: 'TikTok', icon: Flame, colorClass: 'icon-box-rose' },
@@ -280,7 +282,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
-    { title: 'Nhịp ngày', ids: ['habit', 'daily', 'tasks'] as Tab[] },
+    { title: 'Nhịp ngày & Sưu tập', ids: ['habit', 'daily', 'tasks', 'collection'] as Tab[] },
     { title: 'Giải trí & Video', ids: ['youtube', 'youtubeshorts', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
@@ -605,6 +607,7 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/habit" element={<HabitsPage />} />
                       <Route path="/daily" element={<DailyPage />} />
                       <Route path="/tasks" element={<TasksPage />} />
+                      <Route path="/collection" element={<CollectionPage />} />
                       <Route path="/share" element={<ShareTarget />} />
                       <Route path="/youtube" element={<YoutubeView />} />
                       <Route path="/youtube/watch/:videoId" element={<YoutubeWatchPage />} />
