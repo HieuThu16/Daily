@@ -105,13 +105,16 @@ export function Memory3DCard({
     setIsHovered(false)
     setTilt({ x: 0, y: 0, sheenX: 50, sheenY: 50 })
   }
+  
+  const handleFlip = () => setIsFlipped(!isFlipped)
 
   return (
     <div
       style={{
         perspective: 1200,
         width: '100%',
-        minHeight: 340,
+        height: '100%',
+        minHeight: 410,
         userSelect: 'none',
       }}
     >
@@ -120,12 +123,12 @@ export function Memory3DCard({
         onMouseMove={handleMouseMove}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onClick={() => setIsFlipped(!isFlipped)}
+        onClick={handleFlip}
         style={{
           position: 'relative',
           width: '100%',
           height: '100%',
-          minHeight: 340,
+          minHeight: 410,
           borderRadius: 20,
           cursor: 'pointer',
           transformStyle: 'preserve-3d',

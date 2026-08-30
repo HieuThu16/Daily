@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X, Loader2, Plus, Download, Link as LinkIcon, AlertCircle, Clipboard,
-  ExternalLink, CheckCircle2, Camera, Lock,
+  ExternalLink, CheckCircle2, Camera, Lock, UploadCloud,
 } from 'lucide-react'
 import type { HManga } from './hMangaService'
 import {
@@ -17,6 +17,7 @@ import {
 import { lockH } from './HPinGate'
 import { useToast } from '../ToastContext'
 import { MangaLibraryPage, type MangaLibraryConfig } from './MangaLibraryPage'
+import { UploadMangaScreenshotModal } from './UploadMangaScreenshotModal'
 import './ngontinhManga.css'
 import { Z } from '../../lib/zLayers'
 
@@ -339,6 +340,7 @@ export const HMangaPage: React.FC = () => {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [showCrawlModal, setShowCrawlModal] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
 
   const config = useMemo<MangaLibraryConfig<HManga>>(
     () => ({
@@ -382,6 +384,21 @@ export const HMangaPage: React.FC = () => {
           <button
             type="button"
             className="ngontinh-nav-tab-btn"
+            onClick={() => setShowUploadModal(true)}
+            style={{
+              background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.15), rgba(139, 92, 246, 0.15))',
+              color: '#ec4899',
+              border: '1px solid rgba(236, 72, 153, 0.35)',
+              fontWeight: 700,
+            }}
+            title="Tải ảnh từ bộ sưu tập máy lên kho ảnh chụp"
+          >
+            <UploadCloud size={15} /> Tải ảnh lên
+          </button>
+
+          <button
+            type="button"
+            className="ngontinh-nav-tab-btn"
             onClick={() => navigate('/truyenh/screenshots')}
             style={{
               background: 'rgba(236, 72, 153, 0.15)',
@@ -419,24 +436,34 @@ export const HMangaPage: React.FC = () => {
       ),
 
       extras: (ctx) => (
-        <CrawlModal
-          isOpen={showCrawlModal}
-          onClose={() => setShowCrawlModal(false)}
-          existingMangaList={ctx.list}
-          onOpenExisting={(slug: string) => {
-            setShowCrawlModal(false)
-            navigate(`/truyenh/${slug}`)
-          }}
-          onSuccess={(manga: HManga) => {
-            showToast(`🎉 Đã cào thành công truyện "${manga.title}" (${manga.totalChapters} chương)!`)
-            ctx.reload()
-            navigate(`/truyenh/${manga.slug}`)
-          }}
-        />
+        <>
+          <CrawlModal
+            isOpen={showCrawlModal}
+            onClose={() => setShowCrawlModal(false)}
+            existingMangaList={ctx.list}
+            onOpenExisting={(slug: string) => {
+              setShowCrawlModal(false)
+              navigate(`/truyenh/${slug}`)
+            }}
+            onSuccess={(manga: HManga) => {
+              showToast(`🎉 Đã cào thành công truyện "${manga.title}" (${manga.totalChapters} chương)!`)
+              ctx.reload()
+              navigate(`/truyenh/${manga.slug}`)
+            }}
+          />
+
+          <UploadMangaScreenshotModal
+            isOpen={showUploadModal}
+            onClose={() => setShowUploadModal(false)}
+            onUploaded={() => {
+              showToast('🎉 Đã tải ảnh lên kho thành công! Bạn có thể xem trong Kho ảnh chụp.')
+            }}
+          />
+        </>
       ),
     }),
-    // showCrawlModal đổi thì phải dựng lại config để modal mở/đóng theo.
-    [showCrawlModal],
+    // showCrawlModal và showUploadModal đổi thì phải dựng lại config để modal mở/đóng theo.
+    [showCrawlModal, showUploadModal],
   )
 
   return <MangaLibraryPage config={config} />

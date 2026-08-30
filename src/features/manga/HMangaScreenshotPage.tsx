@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Trash2, BookOpen, Search, X, Images, Eye, ZoomIn, Plus, Minus, UploadCloud } from 'lucide-react';
 import { getHMangaScreenshots, syncHMangaScreenshotsWithSupabase, deleteHMangaScreenshot, type HMangaScreenshot } from './hMangaScreenshot';
+import { UploadMangaScreenshotModal } from './UploadMangaScreenshotModal';
 import { useToast } from '../ToastContext';
 import { Z } from '../../lib/zLayers'
 
@@ -18,6 +19,7 @@ export const HMangaScreenshotPage: React.FC = () => {
   const [previewShot, setPreviewShot] = useState<HMangaScreenshot | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [selectedManga, setSelectedManga] = useState<string>(filterSlug || 'ALL');
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
 
 
   useEffect(() => {
@@ -148,55 +150,83 @@ export const HMangaScreenshotPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Search input right in header */}
-        <div style={{ position: 'relative', width: '220px', maxWidth: '40vw' }}>
-          <Search
-            size={14}
+        {/* Actions in Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
             style={{
-              position: 'absolute',
-              left: '10px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#71717a',
-              pointerEvents: 'none',
+              background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '7px 14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              color: '#ffffff',
+              cursor: 'pointer',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              boxShadow: '0 4px 14px rgba(236, 72, 153, 0.35)',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              transition: 'transform 0.15s ease',
             }}
-          />
-          <input
-            type="text"
-            placeholder="Tìm truyện..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '6px 28px 6px 30px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '8px',
-              color: '#f4f4f5',
-              fontSize: '0.8rem',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
+          >
+            <UploadCloud size={16} />
+            <span>Tải ảnh lên</span>
+          </button>
+
+          {/* Search input right in header */}
+          <div style={{ position: 'relative', width: '180px', maxWidth: '35vw' }}>
+            <Search
+              size={14}
               style={{
                 position: 'absolute',
-                right: '6px',
+                left: '10px',
                 top: '50%',
                 transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
                 color: '#71717a',
-                cursor: 'pointer',
-                padding: '2px',
-                display: 'flex',
+                pointerEvents: 'none',
               }}
-            >
-              <X size={13} />
-            </button>
-          )}
+            />
+            <input
+              type="text"
+              placeholder="Tìm truyện..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 28px 6px 30px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                color: '#f4f4f5',
+                fontSize: '0.8rem',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#71717a',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
+                }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -807,6 +837,16 @@ export const HMangaScreenshotPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Upload Ảnh từ bộ sưu tập máy */}
+      <UploadMangaScreenshotModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUploaded={(newShots) => {
+          setScreenshots((prev) => [...newShots, ...prev]);
+        }}
+        defaultSlug={selectedManga !== 'ALL' ? selectedManga : undefined}
+      />
     </div>
   );
 };

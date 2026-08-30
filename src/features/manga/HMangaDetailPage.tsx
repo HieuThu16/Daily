@@ -5,7 +5,7 @@ import {
   Search, ArrowUpDown, 
   CheckCircle2, Sparkles, Flame, Star, Users, 
   ChevronDown, ChevronUp, ExternalLink, 
-  Bell, RefreshCw, Trash2
+  Bell, RefreshCw, Trash2, UploadCloud, Camera
 } from 'lucide-react';
 import type { MangaChapter } from '../../types/manga';
 import type { HManga } from './hMangaService';
@@ -26,6 +26,7 @@ import { getCachedCoverBlobUrl, fetchAndCacheCover } from '../../lib/mangaCoverC
 import './ngontinhDetail.css';
 import { WatchTogetherButton } from '../watch/WatchTogetherButton';
 import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService';
+import { UploadMangaScreenshotModal } from './UploadMangaScreenshotModal';
 
 
 export const HMangaDetailPage: React.FC = () => {
@@ -45,10 +46,10 @@ export const HMangaDetailPage: React.FC = () => {
   const [deleting, setDeleting] = useState(false);
   const [showAllTags, setShowAllTags] = useState<boolean>(false);
   
-  // Chapter filter and sort
   const [chapterSearch, setChapterSearch] = useState<string>('');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [showAllChapters, setShowAllChapters] = useState<boolean>(false);
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
 
   useEffect(() => {
     void canDeleteHManga().then(setCanDelete);
@@ -548,6 +549,33 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
           </div>
         </button>
 
+        {/* Action: Tải ảnh lên kho */}
+        <button
+          className="ngontinh-quick-action-card"
+          onClick={() => setShowUploadModal(true)}
+          title="Tải ảnh từ máy vào kho ảnh truyện này"
+          style={{ background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(139, 92, 246, 0.12))' }}
+        >
+          <UploadCloud size={19} color="#ec4899" className="ngontinh-qa-icon" />
+          <div className="ngontinh-qa-text">
+            <span className="ngontinh-qa-title" style={{ color: '#ec4899' }}>Tải ảnh lên</span>
+            <span className="ngontinh-qa-subtitle">Từ bộ sưu tập</span>
+          </div>
+        </button>
+
+        {/* Action: Xem kho ảnh chụp của truyện này */}
+        <button
+          className="ngontinh-quick-action-card"
+          onClick={() => navigate(`/truyenh/screenshots?slug=${manga.slug}`)}
+          title="Xem ảnh chụp của truyện này"
+        >
+          <Camera size={19} className="ngontinh-qa-icon" />
+          <div className="ngontinh-qa-text">
+            <span className="ngontinh-qa-title">Kho ảnh</span>
+            <span className="ngontinh-qa-subtitle">Ảnh đã lưu</span>
+          </div>
+        </button>
+
         {canDelete && (
           <button
             className="ngontinh-quick-action-card"
@@ -714,6 +742,18 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
           </div>
         )}
       </section>
+
+      {/* Modal Upload ảnh từ bộ sưu tập máy */}
+      {manga && (
+        <UploadMangaScreenshotModal
+          isOpen={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          defaultSlug={manga.slug}
+          onUploaded={() => {
+            showToast('🎉 Đã tải ảnh lên kho ảnh của truyện này thành công!');
+          }}
+        />
+      )}
     </div>
   );
 };

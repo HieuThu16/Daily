@@ -299,8 +299,8 @@ export function CollectionPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: 20,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
+            gap: 16,
             paddingBottom: 40,
           }}
         >

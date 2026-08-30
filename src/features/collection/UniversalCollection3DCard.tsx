@@ -174,7 +174,8 @@ export function UniversalCollection3DCard({
       style={{
         perspective: 1200,
         width: '100%',
-        minHeight: 330,
+        height: '100%',
+        minHeight: 410,
         userSelect: 'none',
       }}
     >
@@ -191,7 +192,7 @@ export function UniversalCollection3DCard({
           position: 'relative',
           width: '100%',
           height: '100%',
-          minHeight: 330,
+          minHeight: 410,
           borderRadius: 20,
           cursor: 'pointer',
           transformStyle: 'preserve-3d',
@@ -229,7 +230,7 @@ export function UniversalCollection3DCard({
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            padding: 16,
+            padding: '14px 12px',
             zIndex: isFlipped ? 1 : 2,
           }}
         >
@@ -246,23 +247,23 @@ export function UniversalCollection3DCard({
           />
 
           {/* Header Mặt trước */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, zIndex: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, zIndex: 4 }}>
             <div
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
-                padding: '4px 10px',
+                padding: '3px 8px',
                 borderRadius: 99,
                 background: theme.badgeBg,
                 color: '#fff',
-                fontSize: '0.68rem',
+                fontSize: '0.64rem',
                 fontWeight: 800,
                 letterSpacing: '0.4px',
                 boxShadow: `0 2px 8px ${theme.glowColor}`,
               }}
             >
-              <Icon size={12} />
+              <Icon size={11} />
               <span>{theme.label}</span>
             </div>
 
@@ -276,8 +277,8 @@ export function UniversalCollection3DCard({
                 background: item.is_favorite ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.08)',
                 border: 'none',
                 borderRadius: '50%',
-                width: 28,
-                height: 28,
+                width: 26,
+                height: 26,
                 display: 'grid',
                 placeItems: 'center',
                 color: item.is_favorite ? '#f59e0b' : '#a1a1aa',
@@ -285,22 +286,23 @@ export function UniversalCollection3DCard({
                 transition: 'all 0.15s',
               }}
             >
-              <Star size={14} fill={item.is_favorite ? '#f59e0b' : 'none'} />
+              <Star size={13} fill={item.is_favorite ? '#f59e0b' : 'none'} />
             </button>
           </div>
 
-          {/* Thumbnail / Ảnh bìa */}
+          {/* Thumbnail / Ảnh bìa dọc dáng dài */}
           <div
             style={{
               position: 'relative',
               width: '100%',
-              height: 135,
+              height: 200,
               borderRadius: 12,
               overflow: 'hidden',
               marginBottom: 10,
               background: '#000',
               zIndex: 4,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              flexShrink: 0,
             }}
           >
             {item.image_url ? (
@@ -322,19 +324,19 @@ export function UniversalCollection3DCard({
                   color: theme.accent,
                 }}
               >
-                <Icon size={38} opacity={0.7} />
+                <Icon size={42} opacity={0.7} />
               </div>
             )}
           </div>
 
           {/* Tiêu đề & Subtitle */}
-          <div style={{ flex: 1, minWidth: 0, zIndex: 4 }}>
+          <div style={{ flex: 1, minWidth: 0, zIndex: 4, display: 'flex', flexDirection: 'column' }}>
             <h3
               style={{
-                fontSize: '0.88rem',
+                fontSize: '0.84rem',
                 fontWeight: 800,
                 color: '#f8fafc',
-                margin: '0 0 4px',
+                margin: '0 0 3px',
                 lineHeight: 1.35,
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
@@ -348,7 +350,7 @@ export function UniversalCollection3DCard({
             {item.subtitle && (
               <div
                 style={{
-                  fontSize: '0.74rem',
+                  fontSize: '0.7rem',
                   color: '#94a3b8',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -366,16 +368,16 @@ export function UniversalCollection3DCard({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginTop: 10,
+              marginTop: 6,
               paddingTop: 8,
               borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              fontSize: '0.72rem',
+              fontSize: '0.68rem',
               color: '#94a3b8',
               zIndex: 4,
             }}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <RotateCw size={11} style={{ opacity: 0.7 }} /> Lật thẻ
+              <RotateCw size={10} style={{ opacity: 0.7 }} /> Lật thẻ
             </span>
 
             <button
@@ -386,8 +388,8 @@ export function UniversalCollection3DCard({
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
-                padding: '4px 10px',
-                fontSize: '0.72rem',
+                padding: '4px 8px',
+                fontSize: '0.68rem',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'inline-flex',
@@ -396,7 +398,7 @@ export function UniversalCollection3DCard({
                 boxShadow: `0 2px 6px ${theme.glowColor}`,
               }}
             >
-              <Play size={10} fill="#fff" /> Mở xem
+              <Play size={9} fill="#fff" /> Mở xem
             </button>
           </div>
         </div>
