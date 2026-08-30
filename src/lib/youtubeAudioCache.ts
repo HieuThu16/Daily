@@ -61,7 +61,13 @@ async function getAudiosDir(): Promise<FileSystemDirectoryHandle | null> {
   }
 }
 
-/** Tải thông tin audio URL từ backend API */
+const CLIENT_PIPED_INSTANCES = [
+  'https://pipedapi.kavin.rocks',
+  'https://api.piped.privacydev.net',
+  'https://pipedapi.tokhmi.xyz',
+]
+
+/** Tải thông tin audio URL từ backend API kèm Fallback trực tiếp phía Client */
 export async function fetchYoutubeAudioInfo(videoId: string): Promise<{
   audioUrl: string
   proxyUrl: string
@@ -70,16 +76,63 @@ export async function fetchYoutubeAudioInfo(videoId: string): Promise<{
   duration?: number
   mimeType?: string
 }> {
-  const res = await fetch(`/api/youtube-audio?videoId=${encodeURIComponent(videoId)}`)
-  if (!res.ok) {
-    const errData = await res.json().catch(() => null)
-    throw new Error(errData?.error || `Không lấy được audio từ YouTube (Mã ${res.status})`)
+  // 1. Thử gọi API Serverless
+  try {
+    const res = await fetch(`/api/youtube-audio?videoId=${encodeURIComponent(videoId)}`)
+    if (res.ok) {
+      const data = await res.json()
+      if (data.success && data.audioUrl) {
+        return data
+      }
+    }
+  } catch {}
+
+  // 2. Client-side fallback: Gọi trực tiếp Piped API từ trình duyệt
+  for (const piped of CLIENT_PIPED_INSTANCES) {
+    try {
+      const res = await fetch(`${piped}/streams/${encodeURIComponent(videoId)}`)
+      if (res.ok) {
+        const data = await res.json()
+        const audioStreams = (data.audioStreams || []).sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))
+        const best = audioStreams.find((s: any) => s.mimeType?.includes('audio/mp4') || s.format === 'M4A') || audioStreams[0]
+        if (best?.url) {
+          return {
+            audioUrl: best.url,
+            proxyUrl: best.url,
+            title: data.title,
+            uploader: data.uploader,
+            duration: data.duration,
+            mimeType: best.mimeType || 'audio/mp4',
+          }
+        }
+      }
+    } catch {}
   }
-  const data = await res.json()
-  if (!data.success || !data.audioUrl) {
-    throw new Error(data.error || 'Không tìm thấy đường link audio')
-  }
-  return data
+
+  // 3. Client-side fallback: Cobalt API
+  try {
+    const cobaltRes = await fetch('https://co.wuk.sh/api/json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        downloadMode: 'audio',
+        audioFormat: 'mp3',
+      }),
+    })
+    if (cobaltRes.ok) {
+      const cData = await cobaltRes.json()
+      if (cData?.url) {
+        return {
+          audioUrl: cData.url,
+          proxyUrl: cData.url,
+          mimeType: 'audio/mpeg',
+        }
+      }
+    }
+  } catch {}
+
+  throw new Error('Không thể lấy audio từ video này. Hãy thử video khác hoặc kiểm tra kết nối mạng.')
 }
 
 /**
@@ -96,8 +149,11 @@ export async function downloadAndSaveYoutubeAudio(
 
   // Tải stream audio về dạng blob
   const downloadUrl = info.proxyUrl || info.audioUrl
-  const audioRes = await fetch(downloadUrl)
-  if (!audioRes.ok) throw new Error('Không thể tải file audio từ server')
+  const audioRes = await fetch(downloadUrl).catch(async () => {
+    // Nếu proxyUrl bị chặn CORS, thử tải trực tiếp audioUrl
+    return await fetch(info.audioUrl)
+  })
+  if (!audioRes || !audioRes.ok) throw new Error('Không thể tải file audio từ server')
 
   const total = Number(audioRes.headers.get('content-length')) || 0
   let blob: Blob

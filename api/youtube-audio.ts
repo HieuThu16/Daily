@@ -3,12 +3,14 @@ export const config = {
 }
 
 const INVIDIOUS_INSTANCES = [
-  'https://invidious.privacydev.net',
-  'https://vid.puffyan.us',
+  'https://yewtu.be',
   'https://invidious.nerdvpn.de',
-  'https://inv.riverside.rocks',
+  'https://invidious.privacydev.net',
   'https://invidious.flokinet.to',
+  'https://vid.puffyan.us',
+  'https://inv.riverside.rocks',
   'https://invidious.projectsegfau.lt',
+  'https://invidious.asir.dev',
 ]
 
 const PIPED_INSTANCES = [
@@ -16,6 +18,15 @@ const PIPED_INSTANCES = [
   'https://api.piped.privacydev.net',
   'https://pipedapi.tokhmi.xyz',
   'https://pipedapi.leptons.xyz',
+  'https://api.piped.private.coffee',
+  'https://piped-api.lunar.icu',
+]
+
+const COBALT_INSTANCES = [
+  'https://api.cobalt.tools',
+  'https://cobalt.api.kwiatekm.me',
+  'https://co.wuk.sh',
+  'https://cobalt-backend.canine.tools',
 ]
 
 export default async function handler(req: any, res: any) {
@@ -40,11 +51,99 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // 1. Thử Piped API trước (Rất nhanh và trả về stream audio chất lượng cao m4a/opus)
-    for (const piped of PIPED_INSTANCES) {
+    // 1. THỬ YOUTUBE INNERTUBE API (Nhanh nhất, trực tiếp từ máy chủ YouTube với Android/iOS/TV context)
+    const clients = [
+      {
+        clientName: 'ANDROID',
+        clientVersion: '19.09.37',
+        androidSdkVersion: 30,
+        hl: 'vi',
+        gl: 'VN',
+      },
+      {
+        clientName: 'IOS',
+        clientVersion: '19.29.1',
+        deviceModel: 'iPhone16,2',
+        hl: 'vi',
+        gl: 'VN',
+      },
+      {
+        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+        clientVersion: '2.0',
+        hl: 'vi',
+        gl: 'VN',
+      },
+    ]
+
+    for (const client of clients) {
       try {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 6000)
+        const ytRes = await fetch('https://www.youtube.com/youtubei/v1/player', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent':
+              client.clientName === 'ANDROID'
+                ? 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip'
+                : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+          },
+          body: JSON.stringify({
+            videoId: cleanVideoId,
+            context: {
+              client,
+              thirdParty: { embedUrl: 'https://www.youtube.com' },
+            },
+          }),
+        })
+        clearTimeout(timeout)
+
+        if (ytRes.ok) {
+          const ytData: any = await ytRes.json()
+          const streamingData = ytData.streamingData
+          const formats = [
+            ...(streamingData?.adaptiveFormats || []),
+            ...(streamingData?.formats || []),
+          ]
+
+          // Lọc audio stream có sẵn url (không cần giải mã cipher)
+          const audioFormats = formats.filter(
+            (f: any) =>
+              (f.mimeType?.startsWith('audio/') || f.itag === 140 || f.itag === 251 || f.itag === 249 || f.itag === 250) &&
+              Boolean(f.url)
+          )
+
+          if (audioFormats.length > 0) {
+            audioFormats.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))
+            const best = audioFormats.find((f: any) => f.mimeType?.includes('audio/mp4') || f.itag === 140) || audioFormats[0]
+
+            if (best?.url) {
+              if (streamMode) {
+                return proxyStream(best.url, res, best.mimeType || 'audio/mp4')
+              }
+              return res.status(200).json({
+                success: true,
+                audioUrl: best.url,
+                proxyUrl: `/api/youtube-audio?videoId=${cleanVideoId}&stream=true`,
+                mimeType: best.mimeType || 'audio/mp4',
+                bitrate: best.bitrate,
+                title: ytData.videoDetails?.title,
+                uploader: ytData.videoDetails?.author,
+                duration: Number(ytData.videoDetails?.lengthSeconds) || undefined,
+                source: 'innertube',
+              })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 2. THỬ PIPED INSTANCES
+    for (const piped of PIPED_INSTANCES) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 5000)
         const response = await fetch(`${piped}/streams/${cleanVideoId}`, {
           signal: controller.signal,
           headers: {
@@ -79,11 +178,11 @@ export default async function handler(req: any, res: any) {
       } catch {}
     }
 
-    // 2. Thử Invidious API
+    // 3. THỬ INVIDIOUS INSTANCES
     for (const invidious of INVIDIOUS_INSTANCES) {
       try {
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 6000)
+        const timeout = setTimeout(() => controller.abort(), 5000)
         const response = await fetch(`${invidious}/api/v1/videos/${cleanVideoId}`, {
           signal: controller.signal,
           headers: {
@@ -95,7 +194,7 @@ export default async function handler(req: any, res: any) {
         if (response.ok) {
           const data: any = await response.json()
           const adaptiveFormats = data.adaptiveFormats || []
-          const audioFormats = adaptiveFormats.filter((f: any) => f.type?.startsWith('audio/'))
+          const audioFormats = adaptiveFormats.filter((f: any) => f.type?.startsWith('audio/') && Boolean(f.url))
           audioFormats.sort((a: any, b: any) => (parseInt(b.bitrate, 10) || 0) - (parseInt(a.bitrate, 10) || 0))
           const best = audioFormats.find((f: any) => f.type?.includes('audio/mp4') || f.container === 'm4a') || audioFormats[0]
 
@@ -119,33 +218,59 @@ export default async function handler(req: any, res: any) {
       } catch {}
     }
 
-    // 3. Fallback Cobalt API
-    try {
-      const cobaltRes = await fetch('https://co.wuk.sh/api/json', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          url: `https://www.youtube.com/watch?v=${cleanVideoId}`,
-          downloadMode: 'audio',
-          audioFormat: 'mp3',
-        }),
-      })
+    // 4. THỬ COBALT INSTANCES
+    for (const cobalt of COBALT_INSTANCES) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 6000)
+        const cobaltRes = await fetch(`${cobalt}/api/json`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            url: `https://www.youtube.com/watch?v=${cleanVideoId}`,
+            downloadMode: 'audio',
+            audioFormat: 'mp3',
+          }),
+        })
+        clearTimeout(timeout)
 
-      if (cobaltRes.ok) {
-        const cData: any = await cobaltRes.json()
-        if (cData?.url) {
-          if (streamMode) {
-            return proxyStream(cData.url, res, 'audio/mpeg')
+        if (cobaltRes.ok) {
+          const cData: any = await cobaltRes.json()
+          if (cData?.url) {
+            if (streamMode) {
+              return proxyStream(cData.url, res, 'audio/mpeg')
+            }
+            return res.status(200).json({
+              success: true,
+              audioUrl: cData.url,
+              proxyUrl: `/api/youtube-audio?videoId=${cleanVideoId}&stream=true`,
+              mimeType: 'audio/mpeg',
+              source: 'cobalt',
+            })
           }
+        }
+      } catch {}
+    }
+
+    // 5. FALLBACK SAVETUBE / Y2MATE PUBLIC CONVERTER STREAM
+    try {
+      const saveRes = await fetch(`https://api.vevioz.com/api/button/mp3/${cleanVideoId}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      })
+      if (saveRes.ok) {
+        const html = await saveRes.text()
+        const match = html.match(/href="([^"]+download[^"]+)"/) || html.match(/href="([^"]+\.mp3[^"]*)"/)
+        if (match && match[1]) {
           return res.status(200).json({
             success: true,
-            audioUrl: cData.url,
-            proxyUrl: `/api/youtube-audio?videoId=${cleanVideoId}&stream=true`,
+            audioUrl: match[1],
+            proxyUrl: match[1],
             mimeType: 'audio/mpeg',
-            source: 'cobalt',
+            source: 'vevioz',
           })
         }
       }
@@ -153,7 +278,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(404).json({
       success: false,
-      error: 'Không tìm thấy stream audio cho video này',
+      error: 'Không tìm thấy stream audio cho video này (YouTube đang chặn IP hoặc video giới hạn)',
     })
   } catch (err: any) {
     return res.status(500).json({
@@ -167,7 +292,9 @@ async function proxyStream(url: string, res: any, contentType: string) {
   try {
     const audioRes = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Range: 'bytes=0-',
       },
     })
 
