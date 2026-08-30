@@ -35,6 +35,7 @@ export const NgontinhMangaPage: React.FC = () => {
       scrollKey: 'ngontinh-list',
       recentTitle: 'Truyện Ngôn Tình đã cào gần đây',
       accentColor: '#e11d48',
+      mangaCategory: 'ngontinh',
 
       loadList: fetchNgontinhList,
       loadHot: fetchNgontinhHotData,

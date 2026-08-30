@@ -348,6 +348,7 @@ export const HMangaPage: React.FC = () => {
       scrollKey: 'truyenh-list',
       recentTitle: 'Truyện H đã cào gần đây',
       accentColor: '#a855f7',
+      mangaCategory: 'h',
 
       loadList: fetchHMangaList,
       getFavorites: getHMangaFavorites,

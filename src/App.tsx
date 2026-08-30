@@ -22,6 +22,7 @@ import { CommandPalette, openCommandPalette } from './features/CommandPalette'
 import { ToastProvider, useToast } from './features/ToastContext'
 import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaUpdateNotification'
 import { PushNudgeBanner } from './features/PushNudgeBanner'
+import { GlobalCrawlerWatcher } from './features/manga/CrawlChaptersModal'
 
 
 import { getRemoteAppSetting, saveAppSetting } from './lib/userAppSettings'
@@ -643,6 +644,8 @@ function Protected({ user }: { user: unknown }) {
             </Suspense>
             <GlobalMiniPlayer />
             <VideoMiniPlayer />
+            {/* Thanh tiến độ cào chapter nền & Báo cáo kết quả sau 5 phút */}
+            <GlobalCrawlerWatcher />
             {/* Toast cập nhật: hiện toàn cục khi có bản cập nhật mới chưa xem */}
             <UpdateToast />
             {/* PWA Service Worker Update Notification Banner */}

@@ -26,6 +26,7 @@ export const BLMangaPage: React.FC = () => {
       scrollKey: 'bl-list',
       recentTitle: 'Truyện Boylove đã cào gần đây',
       accentColor: '#3b82f6',
+      mangaCategory: 'bl',
 
       loadList: fetchBLMangaList,
       loadHot: fetchHotMangaData,

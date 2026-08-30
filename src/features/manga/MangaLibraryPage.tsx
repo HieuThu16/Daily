@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import type { HotMangaData } from '../../types/manga'
 import { RecentCrawledModal } from './RecentCrawledModal'
+import { CrawlChaptersModal } from './CrawlChaptersModal'
 import { useScrollRestore } from '../shared'
 
 /** Ba loại truyện (BL, Ngôn tình, Truyện H) dùng chung trang này. */
@@ -80,6 +81,9 @@ export type MangaLibraryConfig<T extends MangaLike> = {
 
   /** Danh sách "vừa cào gần đây"; không truyền thì giấu nút. */
   recentCrawled?: (list: T[]) => T[]
+
+  /** Phân loại truyện để hỗ trợ tính năng Cào thêm chapter ('h' | 'bl' | 'ngontinh') */
+  mangaCategory?: 'h' | 'bl' | 'ngontinh'
 
   /** Bấm Đọc: BL/Ngôn tình mở modal, Truyện H chuyển trang. */
   onRead: (manga: T, chapterNum: number, ctx: MangaLibraryCtx<T>) => void | Promise<void>
@@ -253,6 +257,7 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
   const [history, setHistory] = useState<Record<string, any>>({})
   const [readingState, setReadingState] = useState<ReadingTarget<T> | null>(null)
   const [showRecentModal, setShowRecentModal] = useState(false)
+  const [showCrawlChaptersModal, setShowCrawlChaptersModal] = useState(false)
 
   // Số thẻ đã mở giữ theo phiên: quay lại từ trang chi tiết không phải cuộn lại từ đầu.
   const countKey = `daily_count_${config.scrollKey}`
@@ -449,6 +454,15 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
         />
       )}
 
+      {config.mangaCategory && (
+        <CrawlChaptersModal
+          isOpen={showCrawlChaptersModal}
+          onClose={() => setShowCrawlChaptersModal(false)}
+          category={config.mangaCategory}
+          totalItemsCount={mangaList.length}
+        />
+      )}
+
       {config.extras?.(ctx)}
 
       {continueReading && (
@@ -526,6 +540,26 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
               {recentCrawledStories.length > 0 && (
                 <span className={`${p}-count-pill`}>{recentCrawledStories.length}</span>
               )}
+            </button>
+          )}
+
+          {config.mangaCategory && (
+            <button
+              type="button"
+              className={`${p}-nav-tab-btn`}
+              onClick={() => setShowCrawlChaptersModal(true)}
+              style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15))',
+                color: '#3b82f6',
+                border: '1px solid rgba(59, 130, 246, 0.35)',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+              title="Cào thêm chapter cho các bộ truyện đã có"
+            >
+              <Sparkles size={15} /> Cào thêm chapter
             </button>
           )}
 
