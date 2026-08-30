@@ -2437,6 +2437,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         <QuickAddCategoryModal
           customCategories={customCategories}
           categoryTagMap={categoryTagMap}
+          categoryStats={categoryTabStats}
           onAddCustomCategory={async (name, icon) => {
             const created = await handleAddCustomCategory(name, icon)
             if (created) {
@@ -3172,6 +3173,7 @@ function ChannelCategoryModal({
 function QuickAddCategoryModal({
   customCategories = [],
   categoryTagMap = {},
+  categoryStats = {},
   onAddCustomCategory,
   onUpdateCustomCategory,
   onDeleteCustomCategory,
@@ -3182,6 +3184,7 @@ function QuickAddCategoryModal({
 }: {
   customCategories?: CustomCategoryItem[]
   categoryTagMap?: CategoryTagMap
+  categoryStats?: Record<string, { channels: number; videos: number }>
   onAddCustomCategory: (label: string, icon?: string) => Promise<void>
   onUpdateCustomCategory?: (catId: string, newLabel: string, icon?: string) => Promise<string | undefined>
   onDeleteCustomCategory?: (id: string) => Promise<void>
@@ -3361,6 +3364,8 @@ function QuickAddCategoryModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
               {customCategories.map((cat) => {
                 const tags = categoryTagMap[cat.label] || []
+                const stat = categoryStats[cat.label]
+                const videoCount = stat?.videos ?? 0
                 return (
                   <div
                     key={cat.id}
@@ -3377,15 +3382,18 @@ function QuickAddCategoryModal({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)', minWidth: 0 }}>
                       <span>{cat.icon}</span>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.label}</span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>({tags.length} tags)</span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        ({videoCount} video)
+                      </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                       <button
                         type="button"
                         onClick={() => setManagingTagsForCat(cat.label)}
+                        title={`Quản lý Tags con (${tags.length})`}
                         style={{
-                          padding: '4px 8px',
+                          padding: '5px 8px',
                           borderRadius: 6,
                           border: '1px solid rgba(59, 130, 246, 0.3)',
                           background: 'rgba(59, 130, 246, 0.1)',
@@ -3398,7 +3406,8 @@ function QuickAddCategoryModal({
                           gap: 3,
                         }}
                       >
-                        <Tag size={11} /> Tags ({tags.length})
+                        <Tag size={12} />
+                        <span>({tags.length})</span>
                       </button>
 
                       <button
@@ -3406,20 +3415,18 @@ function QuickAddCategoryModal({
                         onClick={() => startEdit(cat)}
                         title="Sửa thể loại này"
                         style={{
-                          padding: '4px 8px',
+                          padding: '5px 7px',
                           borderRadius: 6,
                           border: '1px solid var(--card-border)',
                           background: 'var(--bg-main)',
                           color: 'var(--text-main)',
-                          fontSize: '0.74rem',
-                          fontWeight: 600,
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 3,
+                          justifyContent: 'center',
                         }}
                       >
-                        <Edit3 size={11} /> Sửa
+                        <Edit3 size={13} />
                       </button>
 
                       {onDeleteCustomCategory && (
@@ -3431,20 +3438,18 @@ function QuickAddCategoryModal({
                           }}
                           title="Xoá thể loại này"
                           style={{
-                            padding: '4px 8px',
+                            padding: '5px 7px',
                             borderRadius: 6,
                             border: '1px solid rgba(244, 63, 94, 0.3)',
                             background: 'rgba(244, 63, 94, 0.1)',
                             color: 'var(--rose, #f43f5e)',
-                            fontSize: '0.74rem',
-                            fontWeight: 600,
                             cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 3,
+                            justifyContent: 'center',
                           }}
                         >
-                          <Trash2 size={11} />
+                          <Trash2 size={13} />
                         </button>
                       )}
                     </div>
