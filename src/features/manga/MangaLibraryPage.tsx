@@ -274,6 +274,11 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
   const startXRef = useRef(0)
   const scrollLeftRef = useRef(0)
 
+  const filterBarRef = useRef<HTMLDivElement | null>(null)
+  const isFilterDraggingRef = useRef(false)
+  const filterStartXRef = useRef(0)
+  const filterScrollLeftRef = useRef(0)
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!tabsRef.current) return
     isDraggingRef.current = true
@@ -296,6 +301,31 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
     if (!tabsRef.current) return
     if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
       tabsRef.current.scrollLeft += e.deltaY * 0.8
+    }
+  }
+
+  const handleFilterPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!filterBarRef.current) return
+    isFilterDraggingRef.current = true
+    filterStartXRef.current = e.pageX - filterBarRef.current.offsetLeft
+    filterScrollLeftRef.current = filterBarRef.current.scrollLeft
+  }
+
+  const handleFilterPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isFilterDraggingRef.current || !filterBarRef.current) return
+    const x = e.pageX - filterBarRef.current.offsetLeft
+    const walk = (x - filterStartXRef.current) * 1.2
+    filterBarRef.current.scrollLeft = filterScrollLeftRef.current - walk
+  }
+
+  const handleFilterPointerUp = () => {
+    isFilterDraggingRef.current = false
+  }
+
+  const handleFilterWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!filterBarRef.current) return
+    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
+      filterBarRef.current.scrollLeft += e.deltaY * 0.8
     }
   }
 
@@ -621,27 +651,49 @@ export function MangaLibraryPage<T extends MangaLike>({ config }: { config: Mang
       </div>
 
       {filterOptions.length > 0 && (
-        <div className={`${p}-source-filter-bar`} role="group" aria-label={config.filterLabel ?? 'Lọc'}>
+        <div
+          ref={filterBarRef}
+          className={`${p}-source-filter-bar`}
+          role="group"
+          aria-label={config.filterLabel ?? 'Lọc'}
+          onPointerDown={handleFilterPointerDown}
+          onPointerMove={handleFilterPointerMove}
+          onPointerUp={handleFilterPointerUp}
+          onPointerLeave={handleFilterPointerUp}
+          onWheel={handleFilterWheel}
+        >
           {config.filterLabel && (
-            <span className={`${p}-source-filter-label`}>
-              <Layers size={14} /> {config.filterLabel}:
-            </span>
+            <div className={`${p}-source-filter-label`}>
+              <Layers size={13} />
+              <span>{config.filterLabel}:</span>
+            </div>
           )}
           <button
+            type="button"
             className={`${p}-source-pill ${extraFilter === '' ? 'active' : ''}`}
             onClick={() => setExtraFilter('')}
           >
-            Tất cả ({mangaList.length})
+            <span>Tất cả</span>
+            <span className={`${p}-source-pill-count`}>{mangaList.length}</span>
           </button>
-          {filterOptions.map((option) => (
-            <button
-              key={option.value}
-              className={`${p}-source-pill ${extraFilter === option.value ? 'active' : ''}`}
-              onClick={() => setExtraFilter(extraFilter === option.value ? '' : option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
+          {filterOptions.map((option) => {
+            const match = option.label.match(/^(.*?)\s*\((\d+)\)$/)
+            const name = match ? match[1] : option.label
+            const count = match ? match[2] : null
+            const isActive = extraFilter === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`${p}-source-pill ${isActive ? 'active' : ''}`}
+                onClick={() => setExtraFilter(isActive ? '' : option.value)}
+                title={option.label}
+              >
+                <span>{name}</span>
+                {count !== null && <span className={`${p}-source-pill-count`}>{count}</span>}
+              </button>
+            )
+          })}
         </div>
       )}
 
