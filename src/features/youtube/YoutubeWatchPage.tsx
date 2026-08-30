@@ -157,6 +157,8 @@ export function YoutubeWatchPage() {
     setVisibleSiblingCount(12)
   }, [videoId])
 
+  const initialStartRef = useRef<Record<string, number>>({})
+  const allChannelVideos = useMemo(() => (video ? [video, ...siblings] : []), [video, siblings])
   const audioPlayer = useOptionalAudioPlayer()
   const { isSaved: isAudioSaved, sizeLabel: audioSizeLabel } = useOfflineAudioState(videoId)
   const [audioLoading, setAudioLoading] = useState(false)
@@ -316,7 +318,6 @@ export function YoutubeWatchPage() {
   const watched = watchedSet.has(videoId) || progress?.status === 'COMPLETED'
 
   // Chỉ lấy start time 1 lần khi bắt đầu tải video (không phụ thuộc vào tiến độ thay đổi liên tục)
-  const initialStartRef = useRef<Record<string, number>>({})
   if (video?.video_id && initialStartRef.current[video.video_id] === undefined) {
     initialStartRef.current[video.video_id] = Math.floor(progressMap[video.video_id]?.seconds ?? 0)
   }
@@ -378,8 +379,6 @@ export function YoutubeWatchPage() {
       </div>
     )
   }
-
-  const allChannelVideos = useMemo(() => (video ? [video, ...siblings] : []), [video, siblings])
 
   return (
     <div className="yt-watch">

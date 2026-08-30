@@ -27,20 +27,14 @@ describe('phân biệt link kênh và link video', () => {
 })
 
 describe('isShortVideo logic', () => {
-  it('nhận diện chính xác video dưới 5 phút (< 300s)', async () => {
+  it('nhận diện chính xác Shorts theo hashtag, url hoặc video ngắn', async () => {
     const { isShortVideo } = await import('./YoutubeView')
-    expect(isShortVideo({ duration: 59 })).toBe(true)
-    expect(isShortVideo({ duration: 299 })).toBe(true)
-    expect(isShortVideo({ duration: 300 })).toBe(false)
-    expect(isShortVideo({ duration: 600 })).toBe(false)
-    expect(isShortVideo({ duration: null })).toBe(false)
-    expect(isShortVideo({ duration: undefined })).toBe(false)
-    expect(isShortVideo({ duration: 0 })).toBe(false)
-    // Test theo progressMap
-    expect(isShortVideo({ video_id: 'vid1', duration: null }, { vid1: { durationSeconds: 120 } })).toBe(true)
-    expect(isShortVideo({ video_id: 'vid2', duration: null }, { vid2: { durationSeconds: 400 } })).toBe(false)
-    // Test theo hashtag / url
     expect(isShortVideo({ title: 'Hướng dẫn code #shorts' })).toBe(true)
     expect(isShortVideo({ canonical_url: 'https://www.youtube.com/shorts/abc123' })).toBe(true)
+    expect(isShortVideo({ title: 'Video hay #reels' })).toBe(true)
+    expect(isShortVideo({ title: 'Video clip #tiktok' })).toBe(true)
+    expect(isShortVideo({ title: 'Clip ngắn [short]', duration: 45 })).toBe(true)
+    expect(isShortVideo({ title: 'Bài giảng Lập trình Web', duration: 180 })).toBe(false)
+    expect(isShortVideo({ title: 'Phim Hài Tết Full', duration: 3600 })).toBe(false)
   })
 })

@@ -170,16 +170,10 @@ export const isShortVideo = (
   v: { duration?: number | null; title?: string | null; canonical_url?: string | null; video_id?: string | null },
   progressMap?: Record<string, { durationSeconds?: number | null }>
 ): boolean => {
-  const dur = typeof v.duration === 'number' && v.duration > 0
-    ? v.duration
-    : (v.video_id && progressMap?.[v.video_id]?.durationSeconds ? progressMap[v.video_id]?.durationSeconds : undefined)
-
-  if (typeof dur === 'number' && dur > 0) {
-    return dur < 300
-  }
-
-  const title = (v.title || '').toLowerCase()
   const url = (v.canonical_url || '').toLowerCase()
+  const title = (v.title || '').toLowerCase()
+
+  // 1. Nhận diện trực tiếp theo URL hoặc hashtag chính thức của Shorts
   if (
     url.includes('/shorts/') ||
     title.includes('#shorts') ||
@@ -191,6 +185,16 @@ export const isShortVideo = (
   ) {
     return true
   }
+
+  // 2. Video ngắn chuẩn YouTube Shorts (thời lượng dưới 60s và có từ khóa short)
+  const dur = typeof v.duration === 'number' && v.duration > 0
+    ? v.duration
+    : (v.video_id && progressMap?.[v.video_id]?.durationSeconds ? progressMap[v.video_id]?.durationSeconds : undefined)
+
+  if (typeof dur === 'number' && dur > 0 && dur <= 60 && (title.includes('short') || url.includes('short'))) {
+    return true
+  }
+
   return false
 }
 
@@ -664,8 +668,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
       // 2. Video tải theo trang từ cả 2 bảng
       const [tvVideosRes, revVideosRes, tvWatchedRes, revWatchedRes] = await Promise.all([
-        supabase?.from('tvshow_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(3000),
-        supabase?.from('review_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(3000),
+        supabase?.from('tvshow_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(10000),
+        supabase?.from('review_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(10000),
         supabase?.from('tvshow_watched').select('video_id'),
         supabase?.from('review_watched').select('video_id'),
       ])
