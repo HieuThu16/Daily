@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   X, Search, Play, CheckCircle2,
   ListVideo, Layers, ArrowLeft,
@@ -149,6 +149,10 @@ export function YoutubeChannelModal({
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistGroup | null>(null)
   const [visibleVideoCount, setVisibleVideoCount] = useState(16)
 
+  useEffect(() => {
+    setVisibleVideoCount(16)
+  }, [search])
+
   // Danh sách video sắp xếp mới nhất
   const sortedLatestVideos = useMemo(() => {
     return [...videos].sort((a, b) => {
@@ -161,7 +165,6 @@ export function YoutubeChannelModal({
   // Lọc tìm kiếm trong danh sách video
   const filteredVideos = useMemo(() => {
     const q = search.trim().toLowerCase()
-    setVisibleVideoCount(16)
     if (!q) return sortedLatestVideos
     return sortedLatestVideos.filter((v) => v.title.toLowerCase().includes(q))
   }, [sortedLatestVideos, search])

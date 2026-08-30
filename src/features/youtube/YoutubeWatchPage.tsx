@@ -201,8 +201,15 @@ export function YoutubeWatchPage() {
         showToast('🎧 Đang phát Audio (có thể tắt màn hình/chuyển tab vẫn nghe mượt mà)')
       }
     } catch (err: any) {
-      console.error('Lỗi phát audio:', err)
-      showToast(`❌ Lỗi tải audio: ${err?.message || err}`, 'delete')
+      console.warn('Lỗi tải file audio offline, chuyển sang phát nền âm thanh:', err)
+      showToast('🎧 Đang phát chế độ Audio chạy nền (hỗ trợ tắt màn hình)...', 'info')
+      playInMini({
+        videoId: video.video_id,
+        title: video.title,
+        channelName: video.creator_name,
+        thumbnail: video.thumbnail,
+        startSeconds: progress?.seconds,
+      })
     } finally {
       setAudioLoading(false)
       setAudioPercent(0)

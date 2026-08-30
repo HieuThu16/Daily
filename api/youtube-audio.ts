@@ -51,8 +51,21 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // 1. THỬ YOUTUBE INNERTUBE API (Nhanh nhất, trực tiếp từ máy chủ YouTube với Android/iOS/TV context)
+    // 1. THỬ YOUTUBE INNERTUBE API (ANDROID_TESTSUITE & ANDROID & IOS & WEB_REMIX)
     const clients = [
+      {
+        clientName: 'ANDROID_TESTSUITE',
+        clientVersion: '1.9',
+        androidSdkVersion: 30,
+        hl: 'vi',
+        gl: 'VN',
+      },
+      {
+        clientName: 'WEB_REMIX',
+        clientVersion: '1.20240901.01.00',
+        hl: 'vi',
+        gl: 'VN',
+      },
       {
         clientName: 'ANDROID',
         clientVersion: '19.09.37',
@@ -79,13 +92,15 @@ export default async function handler(req: any, res: any) {
       try {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 6000)
-        const ytRes = await fetch('https://www.youtube.com/youtubei/v1/player', {
+        const ytRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
           method: 'POST',
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
+            'X-YouTube-Client-Name': client.clientName === 'ANDROID_TESTSUITE' ? '89' : '3',
+            'X-YouTube-Client-Version': client.clientVersion,
             'User-Agent':
-              client.clientName === 'ANDROID'
+              client.clientName.includes('ANDROID')
                 ? 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip'
                 : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
           },
@@ -107,7 +122,7 @@ export default async function handler(req: any, res: any) {
             ...(streamingData?.formats || []),
           ]
 
-          // Lọc audio stream có sẵn url (không cần giải mã cipher)
+          // Lọc audio format có URL trực tiếp
           const audioFormats = formats.filter(
             (f: any) =>
               (f.mimeType?.startsWith('audio/') || f.itag === 140 || f.itag === 251 || f.itag === 249 || f.itag === 250) &&
@@ -256,7 +271,7 @@ export default async function handler(req: any, res: any) {
       } catch {}
     }
 
-    // 5. FALLBACK SAVETUBE / Y2MATE PUBLIC CONVERTER STREAM
+    // 5. FALLBACK SAVETUBE / VEVIOZ MP3 CONVERTER STREAM
     try {
       const saveRes = await fetch(`https://api.vevioz.com/api/button/mp3/${cleanVideoId}`, {
         headers: { 'User-Agent': 'Mozilla/5.0' },

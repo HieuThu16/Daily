@@ -3495,7 +3495,9 @@ function YoutubeVideoCard({
         showToast('🎧 Đang phát Audio trên toàn hệ thống!')
       }
     } catch (err: any) {
-      showToast(`❌ Lỗi audio: ${err?.message || err}`, 'delete')
+      console.warn('Chuyển sang phát audio nền:', err)
+      showToast('🎧 Đang phát chế độ Audio chạy nền...', 'info')
+      onPlayMini()
     } finally {
       setAudioLoading(false)
     }
