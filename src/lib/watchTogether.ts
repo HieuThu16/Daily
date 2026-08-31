@@ -184,7 +184,7 @@ export async function updateMyShareProgress(
   percent: number,
   progressText?: string,
 ): Promise<void> {
-  if (!supabase || !sharedRefs().has(`${kind}:${refId}`)) return
+  if (!supabase) return
   try {
     const { data } = await supabase.auth.getUser()
     const user = data?.user
@@ -192,7 +192,7 @@ export async function updateMyShareProgress(
     const clampedPercent = Math.max(0, Math.min(100, Math.round(percent)))
     const pText = progressText ?? (clampedPercent >= 90 ? 'Đã xem xong' : `Đang xem ${clampedPercent}%`)
 
-    // 1. Cập nhật các dòng mình là SENDER (gửi đi)
+    // 1. Cập nhật các dòng mình là SENDER (mình gửi cho đối phương)
     await supabase
       .from('watch_shares')
       .update({
@@ -204,38 +204,38 @@ export async function updateMyShareProgress(
       .eq('kind', kind)
       .eq('ref_id', refId)
 
-    // 2. Cập nhật/tạo dòng phản hồi nếu mình là RECIPIENT (người nhận mục này)
-    const tableQuery = supabase.from('watch_shares')
-    if (typeof tableQuery.select === 'function') {
-      const { data: incoming } = await tableQuery
-        .select('sender_id, sender_email, title, subtitle, thumbnail, url')
-        .eq('recipient_id', user.id)
-        .eq('kind', kind)
-        .eq('ref_id', refId)
+    // 2. Cập nhật / tạo dòng phản hồi nếu mình là RECIPIENT (đối phương gửi cho mình)
+    const { data: incoming } = await supabase
+      .from('watch_shares')
+      .select('sender_id, sender_email, title, subtitle, thumbnail, url')
+      .eq('recipient_id', user.id)
+      .eq('kind', kind)
+      .eq('ref_id', refId)
 
-      if (incoming && incoming.length > 0) {
-        const reciprocalRows = incoming.map((inc: any) => ({
-          sender_id: user.id,
-          sender_email: user.email ?? null,
-          recipient_id: inc.sender_id,
-          recipient_email: inc.sender_email,
-          kind,
-          ref_id: refId,
-          title: inc.title,
-          subtitle: inc.subtitle ?? null,
-          thumbnail: inc.thumbnail ?? null,
-          url: inc.url ?? null,
-          percent: clampedPercent,
-          progress_text: pText,
-          updated_at: new Date().toISOString(),
-        }))
-        await supabase
-          .from('watch_shares')
-          .upsert(reciprocalRows, { onConflict: 'sender_id,recipient_id,kind,ref_id' })
-      }
+    if (incoming && incoming.length > 0) {
+      const reciprocalRows = incoming.map((inc: any) => ({
+        sender_id: user.id,
+        sender_email: user.email ?? null,
+        recipient_id: inc.sender_id,
+        recipient_email: inc.sender_email,
+        kind,
+        ref_id: refId,
+        title: inc.title,
+        subtitle: inc.subtitle ?? null,
+        thumbnail: inc.thumbnail ?? null,
+        url: inc.url ?? null,
+        percent: clampedPercent,
+        progress_text: pText,
+        updated_at: new Date().toISOString(),
+      }))
+      await supabase
+        .from('watch_shares')
+        .upsert(reciprocalRows, { onConflict: 'sender_id,recipient_id,kind,ref_id' })
     }
+
+    rememberRef(`${kind}:${refId}`)
   } catch (err) {
-    console.warn('[watchTogether] không cập nhật được tiến độ:', err)
+    console.warn('[watchTogether] không cập nhật được tiến độ lên Supabase:', err)
   }
 }
 

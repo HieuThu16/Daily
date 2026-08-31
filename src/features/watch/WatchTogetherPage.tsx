@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ExternalLink,
@@ -19,12 +19,14 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
 import { Avatar, RenameContactModal } from './WatchTogetherButton'
 import {
   emailLabel,
   rememberRef,
   unshare,
+  updateMyShareProgress,
   useMyUserId,
   usePeople,
   useWatchFeed,
@@ -318,6 +320,20 @@ export function WatchTogetherPage() {
   // Danh sách hiển thị theo Hộp thư và Bộ lọc
   const activePairs = box === 'INBOX' ? dualInboxPairs : dualSentPairs
 
+  // Tự động đẩy tiến độ thực tế lên Supabase watch_shares để đối phương nhìn thấy ngay
+  useEffect(() => {
+    if (!supabase || !myId) return
+    activePairs.forEach((pair) => {
+      const kind = pair.share.kind
+      const refId = pair.share.ref_id
+      const myLocalPercent = pair.myProgress.percent
+      const myLocalText = pair.myProgress.text
+      if (myLocalPercent > 0) {
+        void updateMyShareProgress(kind, refId, myLocalPercent, myLocalText)
+      }
+    })
+  }, [activePairs, myId])
+
   // Thống kê nhanh
   const stats = useMemo(() => {
     let bothWatching = 0
@@ -412,12 +428,12 @@ export function WatchTogetherPage() {
         <div className="watch-hero-header">
           <div className="watch-hero-title-group">
             <div className="watch-hero-icon-wrap">
-              <Users size={22} className="watch-hero-sparkle" />
+              <Users size={17} className="watch-hero-sparkle" />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <h1 className="watch-hero-title">Xem Chung Cùng Nhau</h1>
               <p className="watch-hero-subtitle">
-                Đồng bộ tiến độ video & truyện tranh theo thời gian thực giữa hai người
+                Đồng bộ tiến độ video & truyện theo thời gian thực giữa hai người
               </p>
             </div>
           </div>
@@ -428,7 +444,7 @@ export function WatchTogetherPage() {
             onClick={() => void handleRefresh()}
             title="Làm mới tiến độ"
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={13} />
             <span>Làm mới</span>
           </button>
         </div>
@@ -451,14 +467,14 @@ export function WatchTogetherPage() {
             onClick={() => setFilterState(filterState === 'BOTH_DONE' ? 'ALL' : 'BOTH_DONE')}
           >
             <span className="watch-stat-number highlight-check">🎉 {stats.bothDone}</span>
-            <span className="watch-stat-label">Hoàn thành cả 2</span>
+            <span className="watch-stat-label">Xong cả 2</span>
           </div>
           <div
             className={`watch-stat-box ${filterState === 'WAITING' ? 'active' : ''}`}
             onClick={() => setFilterState(filterState === 'WAITING' ? 'ALL' : 'WAITING')}
           >
             <span className="watch-stat-number highlight-wait">⏳ {stats.waiting}</span>
-            <span className="watch-stat-label">Đang đợi nhau</span>
+            <span className="watch-stat-label">Đang đợi</span>
           </div>
         </div>
       </div>
