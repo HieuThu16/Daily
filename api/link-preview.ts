@@ -80,6 +80,15 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ title: '', image: '', description: '', siteName: '', error: 'Không phải trang web' })
     }
 
+    const isRaw = req.query?.raw === '1' || req.query?.format === 'html' || req.body?.format === 'html'
+
+    if (isRaw) {
+      const fullText = await upstream.text()
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      return res.status(upstream.status).send(fullText)
+    }
+
     // Đọc từng mẩu và dừng sớm: trang phim hay nặng vài MB, mình chỉ cần <head>.
     let html = ''
     const reader = upstream.body?.getReader()

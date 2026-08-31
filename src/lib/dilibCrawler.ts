@@ -1,5 +1,6 @@
 import { saveAudiobook } from './audiobookRepository'
 import { supabase } from './supabase'
+import { apiFetch } from './apiFetch'
 import type { Audiobook, DilibCategory } from '../types/audiobook'
 
 export type UnifiedBookCategory = {
@@ -432,17 +433,17 @@ export type CrawlReport = {
 }
 
 /**
- * Tải HTML an toàn qua proxy `/api/proxy-html` để vượt qua rào cản CORS trên trình duyệt,
+ * Tải HTML an toàn qua proxy `/api/link-preview?raw=1` để vượt qua rào cản CORS trên trình duyệt,
  * kèm fallback tự động sang direct fetch hoặc public CORS proxies.
  */
 export async function fetchHtml(url: string): Promise<string> {
   const trimmed = url.trim()
   if (!trimmed) return ''
 
-  // 1. Thử qua backend proxy nội bộ (/api/proxy-html)
+  // 1. Thử qua backend proxy nội bộ (/api/link-preview?raw=1)
   try {
-    const proxyUrl = `/api/proxy-html?url=${encodeURIComponent(trimmed)}`
-    const res = await fetch(proxyUrl)
+    const proxyUrl = `/api/link-preview?url=${encodeURIComponent(trimmed)}&raw=1`
+    const res = await apiFetch(proxyUrl)
     if (res.ok) {
       const text = await res.text()
       if (text && text.length > 50) return text
