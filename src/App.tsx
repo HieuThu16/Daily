@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Music, NotebookPen, Pin, PinOff, Plus, Radio, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Video, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Moon, Music, NotebookPen, Pin, PinOff, Plus, Radio, Search, Settings, BarChart3, Sparkles, UserRound, UtensilsCrossed, Video, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -49,6 +49,7 @@ const TasksPage = lazy(() => import('./features/TasksPage').then((m) => ({ defau
 const LibraryPage = lazy(() => import('./features/LibraryPage').then((m) => ({ default: m.LibraryPage })))
 const TikTokPage = lazy(() => import('./features/tiktok/TikTokPage').then((m) => ({ default: m.TikTokPage })))
 const NutritionPage = lazy(() => import('./features/NutritionPage').then((m) => ({ default: m.NutritionPage })))
+const SleepPage = lazy(() => import('./features/SleepPage').then((m) => ({ default: m.SleepPage })))
 const UsageStatsPage = lazy(() => import('./features/UsageStatsPage').then((m) => ({ default: m.UsageStatsPage })))
 const PeoplePage = lazy(() => import('./features/people/PeoplePage').then((m) => ({ default: m.PeoplePage })))
 const WatchTogetherPage = lazy(() => import('./features/watch/WatchTogetherPage').then((m) => ({ default: m.WatchTogetherPage })))
@@ -95,7 +96,8 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
   { id: 'people', label: 'Người', icon: UserRound, colorClass: 'icon-box-cyan' },
   { id: 'watch', label: 'Xem chung', icon: MonitorPlay, colorClass: 'icon-box-purple' },
-  { id: 'nutrition', label: 'Dưỡng', icon: Salad, colorClass: 'icon-box-emerald' },
+  { id: 'nutrition', label: 'Ăn uống', icon: UtensilsCrossed, colorClass: 'icon-box-emerald' },
+  { id: 'sleep', label: 'Ngủ', icon: Moon, colorClass: 'icon-box-indigo' },
   { id: 'usage', label: 'Thống kê', icon: BarChart3, colorClass: 'icon-box-cyan' },
   { id: 'settings', label: 'Cài đặt', icon: Settings, colorClass: 'icon-box-slate' },
 ]
@@ -286,7 +288,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     { title: 'Nhịp ngày & Sưu tập', ids: ['habit', 'daily', 'tasks', 'collection'] as Tab[] },
     { title: 'Giải trí & Video', ids: ['youtube', 'youtubeshorts', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
-    { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition'] as Tab[] },
+    { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition', 'sleep'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people', 'watch'] as Tab[] },
     { title: 'Hệ thống', ids: ['usage', 'settings'] as Tab[] },
   ], [])
@@ -628,6 +630,8 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/watch" element={<WatchTogetherPage />} />
                       <Route path="/library" element={<Navigate to="/books" replace />} />
                       <Route path="/nutrition" element={<NutritionPage />} />
+                      <Route path="/food" element={<NutritionPage />} />
+                      <Route path="/sleep" element={<SleepPage />} />
                       <Route path="/money" element={<MoneyPage />} />
                       <Route path="/calendar" element={<CalendarPage />} />
                       <Route path="/usage" element={<UsageStatsPage />} />

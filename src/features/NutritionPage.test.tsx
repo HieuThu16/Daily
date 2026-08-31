@@ -6,14 +6,11 @@ import { NutritionPage } from './NutritionPage'
 const foodRows = [
   { id: 'f1', meal_slot: 'LUNCH', food_name: 'Cơm trưa', price: 50_000, log_date: '2026-08-12', log_time: '12:00', created_at: '2026-08-12T12:00:00Z' },
 ]
-const sleepRows = [
-  { id: 's1', sleep_start: '22:00', sleep_end: '06:00', duration_minutes: 480, log_date: '2026-08-12', created_at: '2026-08-12T06:00:00Z' },
-]
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
-    from: (table: string) => {
-      const result = { data: table === 'nutrition_logs' ? foodRows : sleepRows, error: null }
+    from: (_table?: string) => {
+      const result = { data: foodRows, error: null }
       const query: Record<string, unknown> = {}
       for (const method of ['select', 'eq', 'is', 'order', 'range', 'gte', 'lte', 'update', 'insert', 'single']) {
         query[method] = vi.fn(() => query)
@@ -28,17 +25,18 @@ vi.mock('./ToastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
 
 afterEach(cleanup)
 
-describe('NutritionPage period navigation', () => {
-  it('keeps only food and sleep tabs and preserves daily add controls', async () => {
+describe('NutritionPage (Ăn uống)', () => {
+  it('hiển thị giao diện theo dõi ăn uống với 4 bữa ăn', async () => {
     render(<NutritionPage />)
 
-    expect(screen.getByRole('button', { name: 'Ăn uống' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ngủ' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Thống kê' })).not.toBeInTheDocument()
+    expect(screen.getByText('Theo dõi ăn uống')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Sáng' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Trưa' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Chiều' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Tối' })).toBeInTheDocument()
   })
 
-  it('shows meal filters and period food history in week mode', async () => {
+  it('chuyển sang xem theo tuần và lọc theo bữa', async () => {
     const user = userEvent.setup()
     render(<NutritionPage />)
 
@@ -48,18 +46,7 @@ describe('NutritionPage period navigation', () => {
     await waitFor(() => expect(screen.getByText('Cơm trưa')).toBeInTheDocument())
   })
 
-  it('shows sleep history in sleep week mode', async () => {
-    const user = userEvent.setup()
-    render(<NutritionPage />)
-
-    await user.click(screen.getByRole('button', { name: 'Ngủ' }))
-    await user.click(screen.getByRole('button', { name: 'Tuần' }))
-
-    await waitFor(() => expect(screen.getByText('22:00 → 06:00')).toBeInTheDocument())
-    expect(screen.getByText('Đêm đủ giấc')).toBeInTheDocument()
-  })
-
-  it('shows food suggestions combobox and autofills price when selected', async () => {
+  it('gợi ý món ăn và tự điền giá khi chọn món', async () => {
     const user = userEvent.setup()
     render(<NutritionPage />)
 
