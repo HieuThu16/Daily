@@ -698,48 +698,92 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     setEditingChannelCategory(null)
   }
 
-  // Tải danh sách Kênh & Toàn bộ video từ CẢ 2 NGUỒN (TV Show & Review Phim)
+  // Tải danh sách Kênh & Toàn bộ video từ CẢ 2 NGUỒN (TV Show & Review Phim) với phân trang đầy đủ không bị giới hạn 1000 dòng
   useEffect(() => {
     let alive = true
     setLoading(true)
 
     void (async () => {
-      // 1. Tải creators từ cả tvshow_creators và review_creators
-      const [tvCreatorsRes, revCreatorsRes, catMapRemote, tagMapRemote] = await Promise.all([
-        supabase?.from('tvshow_creators').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-        supabase?.from('review_creators').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+      // Helper phân trang lấy toàn bộ dữ liệu từ Supabase (tránh bị PostgREST giới hạn 1000 dòng)
+      async function fetchAllTableRows<T>(
+        tableName: 'tvshow_videos' | 'review_videos' | 'tvshow_creators' | 'review_creators' | 'tvshow_watched' | 'review_watched',
+        selectColumns = '*',
+        filterUnavailable = false
+      ): Promise<T[]> {
+        if (!supabase) return []
+        const all: T[] = []
+        const PAGE_SIZE = 1000
+        let page = 0
+
+        while (true) {
+          let q = supabase.from(tableName).select(selectColumns)
+          if (filterUnavailable) {
+            q = q.is('unavailable_at', null)
+          }
+          if (tableName.includes('creators')) {
+            q = q.is('deleted_at', null)
+          }
+          const from = page * PAGE_SIZE
+          const to = from + PAGE_SIZE - 1
+          const { data, error } = await q.range(from, to)
+          if (error || !data || data.length === 0) break
+          all.push(...(data as T[]))
+          if (data.length < PAGE_SIZE) break
+          page++
+        }
+        return all
+      }
+
+      // 1. Tải creators & videos từ cả tvshow_videos và review_videos
+      const [
+        tvVideosRaw,
+        revVideosRaw,
+        tvCreatorsRaw,
+        revCreatorsRaw,
+        tvWatchedRaw,
+        revWatchedRaw,
+        catMapRemote,
+        tagMapRemote,
+      ] = await Promise.all([
+        fetchAllTableRows<VideoRow>('tvshow_videos', 'id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration', true),
+        fetchAllTableRows<VideoRow>('review_videos', 'id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration', true),
+        fetchAllTableRows<any>('tvshow_creators', '*'),
+        fetchAllTableRows<any>('review_creators', '*'),
+        fetchAllTableRows<{ video_id: string }>('tvshow_watched', 'video_id'),
+        fetchAllTableRows<{ video_id: string }>('review_watched', 'video_id'),
         getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}),
         getRemoteAppSetting<ChannelTagMap>('youtube_channel_tags', {}),
       ])
 
-      const tvCreators = (tvCreatorsRes?.data ?? []) as any[]
-      const revCreators = (revCreatorsRes?.data ?? []) as any[]
+      const tvCreators = tvCreatorsRaw ?? []
+      const revCreators = revCreatorsRaw ?? []
       const catMap = catMapRemote || channelCategoryMap
       const tagMap = tagMapRemote || channelTagMap
 
-      // 2. Video tải theo trang từ cả 2 bảng
-      const [tvVideosRes, revVideosRes, tvWatchedRes, revWatchedRes] = await Promise.all([
-        supabase?.from('tvshow_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(10000),
-        supabase?.from('review_videos').select('id,video_id,series_key,creator_id,creator_name,title,canonical_url,embed_url,thumbnail,part_number,published_at,unavailable_at,duration').is('unavailable_at', null).order('published_at', { ascending: false }).limit(10000),
-        supabase?.from('tvshow_watched').select('video_id'),
-        supabase?.from('review_watched').select('video_id'),
-      ])
+      const tvVideos = tvVideosRaw.map((v) => ({ ...v, sourceType: 'tvshow' as const }))
+      const revVideos = revVideosRaw.map((v) => ({ ...v, sourceType: 'review' as const }))
 
-      const tvVideos = ((tvVideosRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType: 'tvshow' as const }))
-      const revVideos = ((revVideosRes?.data ?? []) as VideoRow[]).map(v => ({ ...v, sourceType: 'review' as const }))
-
-      const rawCombinedVideos = [...tvVideos, ...revVideos].map((v) => ({
-        ...v,
-        duration: typeof v.duration === 'number' && v.duration > 0 ? v.duration : (progressMap[v.video_id]?.durationSeconds ?? v.duration),
-      }))
+      // Loại bỏ trùng lặp video_id giữa các bảng
+      const seenVideoIds = new Set<string>()
+      const rawCombinedVideos: VideoRow[] = []
+      for (const v of [...tvVideos, ...revVideos]) {
+        const vid = v.video_id || v.id
+        if (vid && !seenVideoIds.has(vid)) {
+          seenVideoIds.add(vid)
+          rawCombinedVideos.push({
+            ...v,
+            duration: typeof v.duration === 'number' && v.duration > 0 ? v.duration : (progressMap[v.video_id]?.durationSeconds ?? v.duration),
+          })
+        }
+      }
 
       const combinedVideos = isShorts
         ? rawCombinedVideos.filter((v) => isShortVideo(v, progressMap))
         : rawCombinedVideos.filter((v) => !isShortVideo(v, progressMap))
 
       const combinedWatchedIds = new Set([
-        ...(((tvWatchedRes?.data ?? []) as { video_id: string }[]).map(w => w.video_id)),
-        ...(((revWatchedRes?.data ?? []) as { video_id: string }[]).map(w => w.video_id)),
+        ...tvWatchedRaw.map((w) => w.video_id),
+        ...revWatchedRaw.map((w) => w.video_id),
       ])
 
       const statusSets = getVideoStatusSets('tvshow', combinedWatchedIds)
@@ -823,22 +867,37 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       for (const c of tvCreators) registerCreator(c, 'tvshow')
       for (const c of revCreators) registerCreator(c, 'review')
 
+      // Tự động bổ sung các Channel từ danh sách Video nếu chưa có trong creators table
+      for (const v of combinedVideos) {
+        const cName = v.creator_name || v.creator_id
+        if (cName) {
+          const norm = normalizeChannelKey(cName)
+          if (!channelCardsMap.has(cName) && (!norm || !channelCardsMap.has(norm))) {
+            registerCreator({
+              id: `auto_${v.creator_id || v.id}`,
+              platform: 'youtube',
+              creator_url: v.canonical_url ? v.canonical_url.split('/watch')[0] : '',
+              creator_name: v.creator_name || 'Kênh YouTube',
+              creator_id: v.creator_id || null,
+              category: catMap[cName] || catMap[norm || ''] || guessChannelCategory(v.creator_name || '', v.sourceType || 'tvshow'),
+              tag: tagMap[cName] || tagMap[norm || ''] || undefined,
+            }, v.sourceType || 'tvshow')
+          }
+        }
+      }
+
       // Deduplicate: vì cùng 1 ChannelItem có thể được đăng ký dưới nhiều key
       const channelListRaw = Array.from(new Set(channelCardsMap.values()))
 
       // ─── BUILD COMPREHENSIVE REVERSE INDEX: video key → ChannelItem ───────────
-      // Mỗi kênh được đăng ký dưới NHIỀU KEY VARIANT để đảm bảo video nào cũng match được
       const videoKeyToChannel = new Map<string, ChannelItem>()
 
       const registerChannelKeys = (ch: ChannelItem) => {
         const tryRegister = (k: string | null | undefined) => {
           if (!k) return
-          // raw key
           if (!videoKeyToChannel.has(k)) videoKeyToChannel.set(k, ch)
-          // lowercase
           const lower = k.toLowerCase()
           if (!videoKeyToChannel.has(lower)) videoKeyToChannel.set(lower, ch)
-          // fully normalized (strip diacritics + non-alphanumeric)
           const norm = normalizeChannelKey(k)
           if (norm && !videoKeyToChannel.has(norm)) videoKeyToChannel.set(norm, ch)
         }
@@ -846,19 +905,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         tryRegister(ch.creator_id)
         tryRegister(ch.creator_name)
 
-        // Extract handle from creator_url: e.g. youtube.com/@web5ngay → "@web5ngay" & "web5ngay"
         if (ch.creator_url) {
           const parts = ch.creator_url.replace(/\/$/, '').split('/')
           const lastPart = parts[parts.length - 1]
           if (lastPart) {
             tryRegister(lastPart)
-            // strip leading "@"
             if (lastPart.startsWith('@')) tryRegister(lastPart.slice(1))
           }
-          // Also try "channel/UCxxx" style → extract the ID
           const chIdx = parts.indexOf('channel')
           if (chIdx !== -1 && parts[chIdx + 1]) tryRegister(parts[chIdx + 1])
-          // "user/xxx" style
           const uIdx = parts.indexOf('user')
           if (uIdx !== -1 && parts[uIdx + 1]) tryRegister(parts[uIdx + 1])
         }
@@ -884,7 +939,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           tryKeys(v.creator_id) ||
           tryKeys(v.creator_name) ||
           tryKeys(v.series_key) ||
-          // series_key may be a playlist ID or "UCxxx" style channel ID
           (v.series_key ? tryKeys(v.series_key.replace(/^PL/i, '').split('_')[0]) : undefined) ||
           undefined
         )
@@ -905,7 +959,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       }
 
       // ─── GẮN channel_category & channel_tag vào từng Video ────────────────────
-      // Ưu tiên: 1) category kênh đã match, 2) catMap trực tiếp từ creator video, 3) guessChannelCategory
       const taggedVideos = combinedVideos.map((v) => {
         const ch = getChannelForVideo(v)
 
@@ -1083,32 +1136,42 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     }
   }
 
-  // Tính số lượng video / kênh cho từng tab thể loại
+  // Tính số lượng video & kênh cho từng tab thể loại (Đo đạc 100% chuẩn xác theo dữ liệu thực tế)
   const categoryTabStats = useMemo(() => {
     const counts: Record<string, { channels: number; videos: number }> = {}
-    
+
+    // 1. Khởi tạo theo customCategories
     customCategories.forEach((cat) => {
       counts[cat.label] = { channels: 0, videos: 0 }
     })
 
+    // 2. Đếm số kênh thuộc từng thể loại
     channels.forEach((c) => {
       const cat = c.category || 'Khác'
       if (!counts[cat]) counts[cat] = { channels: 0, videos: 0 }
       counts[cat].channels += 1
-      counts[cat].videos += c.videoCount
+    })
+
+    // 3. Đếm số video TRỰC TIẾP từ allVideos (Khớp 100% với danh sách hiển thị khi chọn tab)
+    allVideos.forEach((v) => {
+      const cat = v.channel_category || 'Khác'
+      if (!counts[cat]) counts[cat] = { channels: 0, videos: 0 }
+      counts[cat].videos += 1
     })
 
     return counts
-  }, [channels, customCategories])
+  }, [channels, allVideos, customCategories])
 
   // Danh sách các tab hiển thị trên thanh cuộn ngang
   const dynamicCategoryTabs = useMemo(() => {
+    const isChannelView = viewMode === 'channel'
+
     const tabs = [
       {
         id: 'ALL',
         label: 'Tất cả',
         icon: '🎬',
-        count: allVideos.length,
+        count: isChannelView ? channels.length : allVideos.length,
       },
     ]
 
@@ -1118,7 +1181,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         id: c.label,
         label: c.label,
         icon: c.icon || '🏷️',
-        count: stat.videos || stat.channels,
+        count: isChannelView ? stat.channels : stat.videos,
       })
     })
 
@@ -1128,17 +1191,20 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         !customCategories.some((c) => c.label === catName) &&
         catName !== 'ALL'
       ) {
-        tabs.push({
-          id: catName,
-          label: catName,
-          icon: '🏷️',
-          count: categoryTabStats[catName].videos || categoryTabStats[catName].channels,
-        })
+        const stat = categoryTabStats[catName]
+        if (stat.videos > 0 || stat.channels > 0) {
+          tabs.push({
+            id: catName,
+            label: catName,
+            icon: '🏷️',
+            count: isChannelView ? stat.channels : stat.videos,
+          })
+        }
       }
     })
 
     return tabs
-  }, [allVideos.length, categoryTabStats, customCategories])
+  }, [allVideos.length, channels.length, categoryTabStats, customCategories, viewMode])
 
   // Tính số lượng video cho từng Tag trong Thể loại hiện tại
   const tagCounts = useMemo(() => {
