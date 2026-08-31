@@ -431,14 +431,69 @@ export type CrawlReport = {
   }>
 }
 
-/** 1. TÌM KIẾM DILIB.VN (HỖ TRỢ PHÂN TRANG & ROBUST REGEX) */
+/**
+ * Tải HTML an toàn qua proxy `/api/proxy-html` để vượt qua rào cản CORS trên trình duyệt,
+ * kèm fallback tự động sang direct fetch hoặc public CORS proxies.
+ */
+export async function fetchHtml(url: string): Promise<string> {
+  const trimmed = url.trim()
+  if (!trimmed) return ''
+
+  // 1. Thử qua backend proxy nội bộ (/api/proxy-html)
+  try {
+    const proxyUrl = `/api/proxy-html?url=${encodeURIComponent(trimmed)}`
+    const res = await fetch(proxyUrl)
+    if (res.ok) {
+      const text = await res.text()
+      if (text && text.length > 50) return text
+    }
+  } catch {}
+
+  // 2. Thử fetch trực tiếp (chạy tốt nếu trong Node hoặc môi trường không chặn CORS)
+  try {
+    const res = await fetch(trimmed, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/json,*/*',
+      },
+    })
+    if (res.ok) {
+      const text = await res.text()
+      if (text && text.length > 50) return text
+    }
+  } catch {}
+
+  // 3. Fallback qua các Public CORS Proxies
+  const publicProxies = [
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+  ]
+
+  for (const getProxyUrl of publicProxies) {
+    try {
+      const pUrl = getProxyUrl(trimmed)
+      const res = await fetch(pUrl)
+      if (res.ok) {
+        const text = await res.text()
+        if (text && text.length > 50) return text
+      }
+    } catch {}
+  }
+
+  return ''
+}
+
+/** 1. TÌM KIẾM DILIB.VN (HỖ TRỢ PHÂN TRANG & ROBUST REGEX & CORS PROXY) */
 export async function searchDilib(keyword: string, page: number = 1): Promise<UnifiedSearchResult[]> {
   const q = keyword.trim()
   if (!q) return []
   try {
     const pageParam = page > 1 ? `&page=${page}` : ''
-    const res = await fetch(`https://dilib.vn/search/ajax-search.php?keyword=${encodeURIComponent(q)}${pageParam}`)
-    const html = await res.text()
+    const html = await fetchHtml(`https://dilib.vn/search/ajax-search.php?keyword=${encodeURIComponent(q)}${pageParam}`)
+    if (!html) return []
+
     const items: UnifiedSearchResult[] = []
     const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+-\d+\.html)"[^>]*>([\s\S]*?)<\/a>/gi)]
     const seen = new Set<string>()
@@ -494,17 +549,16 @@ export async function searchDilib(keyword: string, page: number = 1): Promise<Un
   }
 }
 
-/** 2. TÌM KIẾM DTV-EBOOK.COM.VN (HỖ TRỢ PHÂN TRANG) */
+/** 2. TÌM KIẾM DTV-EBOOK.COM.VN (HỖ TRỢ PHÂN TRANG & CORS PROXY) */
 export async function searchDtvEbook(keyword: string, page: number = 1): Promise<UnifiedSearchResult[]> {
   const q = keyword.trim()
   if (!q) return []
   try {
     const pageParam = page > 1 ? `&page=${page}` : ''
     const url = `https://dtv-ebook.com.vn/tim-kiem.html?keyword=${encodeURIComponent(q)}${pageParam}`
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-    })
-    const html = await res.text()
+    const html = await fetchHtml(url)
+    if (!html) return []
+
     const items: UnifiedSearchResult[] = []
     const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+_\d+\.html)"[^>]*>([\s\S]*?)<\/a>/gi)]
     const seen = new Set<string>()
@@ -587,8 +641,8 @@ export async function searchMultiSource(
 /** BÓC TÁCH DANH MỤC THỂ LOẠI TỪ DILIB */
 export async function fetchCategoryUrlsDilib(categoryUrl: string): Promise<string[]> {
   try {
-    const res = await fetch(categoryUrl)
-    const html = await res.text()
+    const html = await fetchHtml(categoryUrl)
+    if (!html) return []
     const urls: string[] = []
     const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+-\d+\.html)"[^>]*>/gi)]
     const seen = new Set<string>()
@@ -633,11 +687,9 @@ export async function fetchCategoryUrlsDtv(categoryUrl: string, maxPages: number
         }
       }
 
-      const res = await fetch(fetchUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      })
-      if (!res.ok) break
-      const html = await res.text()
+      const html = await fetchHtml(fetchUrl)
+      if (!html) break
+
       const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+_\d+\.html)"[^>]*>/gi)]
 
       let pageAdded = 0
@@ -670,8 +722,8 @@ export function getSuggestedAuthors(input: string): string[] {
 /** 4. BÓC TÁCH CHI TIẾT SÁCH DILIB.VN */
 export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail | null> {
   try {
-    const res = await fetch(url)
-    const html = await res.text()
+    const html = await fetchHtml(url)
+    if (!html) return null
 
     // Title
     const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
@@ -774,10 +826,8 @@ export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail |
 /** 5. BÓC TÁCH CHI TIẾT SÁCH DTV-EBOOK.COM.VN */
 export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | null> {
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-    })
-    const html = await res.text()
+    const html = await fetchHtml(url)
+    if (!html) return null
 
     // Title, Author, Genre from Title Tag
     const rawTitle = html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() || ''
