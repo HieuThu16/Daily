@@ -3,11 +3,18 @@ import {
   Clock, Radio, Check, CheckCircle2,
   Search, PauseCircle,
   Video, Tag, Layers, CheckSquare, Square,
+  Zap, History, ShieldCheck
 } from 'lucide-react'
 import {
   youtubeChannelCrawler,
+  fetchRemoteYoutubeChannelCrawlHistory,
+  getLocalYoutubeChannelCrawlHistory,
+  formatCrawlTimeAgo,
+  isChannelInCooldown,
+  type YoutubeChannelCrawlHistoryMap,
   type YoutubeCrawlerState,
   type YoutubeCrawlChannelTarget,
+  YOUTUBE_CRAWL_HISTORY_UPDATED_EVENT,
 } from './youtubeChannelCrawler'
 import { type ChannelItem } from './YoutubeView'
 import { Modal } from '../shared'
@@ -27,6 +34,16 @@ const DURATION_PRESETS = [
   { value: 0, label: 'Không giới hạn' },
 ]
 
+const COOLDOWN_PRESETS = [
+  { value: 15, label: '15 phút' },
+  { value: 30, label: '30 phút' },
+  { value: 60, label: '1 giờ (Khuyên dùng)', isDefault: true },
+  { value: 120, label: '2 giờ' },
+  { value: 360, label: '6 giờ' },
+  { value: 720, label: '12 giờ' },
+  { value: 1440, label: '24 giờ' },
+]
+
 export function YoutubeCrawlModal({
   isOpen,
   onClose,
@@ -40,9 +57,30 @@ export function YoutubeCrawlModal({
   const [isCustomDuration, setIsCustomDuration] = useState<boolean>(false)
   const [customInputMinutes, setCustomInputMinutes] = useState<string>('20')
   const [searchChannel, setSearchChannel] = useState<string>('')
+
+  // Cooldown & Bỏ qua kênh vừa cào
+  const [skipRecentlyCrawled, setSkipRecentlyCrawled] = useState<boolean>(true)
+  const [cooldownMinutes, setCooldownMinutes] = useState<number>(60)
+  const [crawlHistoryMap, setCrawlHistoryMap] = useState<YoutubeChannelCrawlHistoryMap>(() => getLocalYoutubeChannelCrawlHistory())
+
   const [selectedChannelUrls, setSelectedChannelUrls] = useState<Set<string>>(() => {
     return new Set(channels.map((c) => c.creator_url).filter(Boolean))
   })
+
+  // Tải lịch sử cào từ Supabase
+  useEffect(() => {
+    void fetchRemoteYoutubeChannelCrawlHistory().then((map) => {
+      if (map && typeof map === 'object') {
+        setCrawlHistoryMap(map)
+      }
+    })
+
+    const handleUpdate = () => {
+      setCrawlHistoryMap(getLocalYoutubeChannelCrawlHistory())
+    }
+    window.addEventListener(YOUTUBE_CRAWL_HISTORY_UPDATED_EVENT, handleUpdate)
+    return () => window.removeEventListener(YOUTUBE_CRAWL_HISTORY_UPDATED_EVENT, handleUpdate)
+  }, [])
 
   // Cập nhật mặc định chọn tất cả khi danh sách kênh thay đổi
   useEffect(() => {
@@ -62,6 +100,14 @@ export function YoutubeCrawlModal({
     )
   }, [channels, searchChannel])
 
+  // Số lượng kênh hiện đang trong thời gian cooldown
+  const inCooldownCount = useMemo(() => {
+    return channels.filter((c) => {
+      const check = isChannelInCooldown(c.creator_url, cooldownMinutes, crawlHistoryMap)
+      return check.inCooldown
+    }).length
+  }, [channels, cooldownMinutes, crawlHistoryMap])
+
   const toggleChannel = (url: string) => {
     setSelectedChannelUrls((prev) => {
       const next = new Set(prev)
@@ -73,6 +119,17 @@ export function YoutubeCrawlModal({
 
   const handleSelectAll = () => {
     setSelectedChannelUrls(new Set(channels.map((c) => c.creator_url).filter(Boolean)))
+  }
+
+  const handleSelectUncrawledOnly = () => {
+    const uncrawledUrls = channels
+      .filter((c) => {
+        const check = isChannelInCooldown(c.creator_url, cooldownMinutes, crawlHistoryMap)
+        return !check.inCooldown
+      })
+      .map((c) => c.creator_url)
+      .filter(Boolean)
+    setSelectedChannelUrls(new Set(uncrawledUrls))
   }
 
   const handleDeselectAll = () => {
@@ -105,6 +162,8 @@ export function YoutubeCrawlModal({
     onClose()
     void youtubeChannelCrawler.startCrawl(targets, {
       durationMinutes: effectiveDuration,
+      skipRecentlyCrawled,
+      cooldownMinutes,
     })
   }
 
@@ -140,7 +199,7 @@ export function YoutubeCrawlModal({
           </div>
           <div>
             <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              Cập nhật video mới tự động
+              Cập nhật video mới tự động & Thông minh
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
               Các video mới cào sẽ tự động đưa đúng vào <strong>Thể loại</strong> và <strong>Tag</strong> của kênh đó.
@@ -148,7 +207,95 @@ export function YoutubeCrawlModal({
           </div>
         </div>
 
-        {/* 1. Chọn thời gian cào */}
+        {/* 1. Thiết lập Không cào lại kênh vừa cào (Cooldown Protection) */}
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 12,
+            background: skipRecentlyCrawled ? 'rgba(16, 185, 129, 0.06)' : 'var(--bg-subtle, rgba(0,0,0,0.03))',
+            border: `1.5px solid ${skipRecentlyCrawled ? 'rgba(16, 185, 129, 0.3)' : 'var(--card-border)'}`,
+            marginBottom: 16,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: '0.86rem',
+                fontWeight: 800,
+                color: skipRecentlyCrawled ? '#10b981' : 'var(--text-main)',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={skipRecentlyCrawled}
+                onChange={(e) => setSkipRecentlyCrawled(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#10b981', cursor: 'pointer' }}
+              />
+              <ShieldCheck size={18} color={skipRecentlyCrawled ? '#10b981' : 'var(--text-muted)'} />
+              <span>⚡ Không cào lại các kênh vừa cào xong</span>
+            </label>
+
+            {skipRecentlyCrawled && inCooldownCount > 0 && (
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(16, 185, 129, 0.18)',
+                  color: '#10b981',
+                }}
+              >
+                {inCooldownCount} kênh vừa cào
+              </span>
+            )}
+          </div>
+
+          <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 6, paddingLeft: 24 }}>
+            Tự động bỏ qua các kênh đã cào gần đây để tiết kiệm thời gian và tài nguyên API.
+          </div>
+
+          {skipRecentlyCrawled && (
+            <div style={{ marginTop: 10, paddingLeft: 24 }}>
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 6 }}>
+                Bỏ qua kênh đã cào trong vòng:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {COOLDOWN_PRESETS.map((preset) => {
+                  const isSelected = cooldownMinutes === preset.value
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setCooldownMinutes(preset.value)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        fontSize: '0.74rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        border: isSelected ? '1.5px solid #10b981' : '1px solid var(--card-border)',
+                        background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'var(--card-bg)',
+                        color: isSelected ? '#10b981' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Chọn thời gian cào */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-main)' }}>
             <Clock size={15} color="#ef4444" />
@@ -229,15 +376,35 @@ export function YoutubeCrawlModal({
           )}
         </div>
 
-        {/* 2. Chọn kênh (Có thể chọn tất cả) */}
+        {/* 3. Chọn kênh (Có hỗ trợ chọn nhanh kênh chưa cào) */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
               <Video size={15} color="#3b82f6" />
               <span>Chọn kênh để cào (Đã chọn {selectedChannelUrls.size}/{channels.length}):</span>
             </div>
 
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleSelectUncrawledOnly}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  color: '#10b981',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+                title="Chỉ chọn những kênh chưa cào trong khoảng thời gian đã chọn"
+              >
+                <Zap size={13} /> Chỉ chọn kênh cần cào
+              </button>
               <button
                 type="button"
                 onClick={handleSelectAll}
@@ -302,7 +469,7 @@ export function YoutubeCrawlModal({
           {/* Danh sách kênh */}
           <div
             style={{
-              maxHeight: 200,
+              maxHeight: 220,
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
@@ -312,6 +479,9 @@ export function YoutubeCrawlModal({
           >
             {filteredChannels.map((ch) => {
               const isChecked = selectedChannelUrls.has(ch.creator_url)
+              const cooldownCheck = isChannelInCooldown(ch.creator_url, cooldownMinutes, crawlHistoryMap)
+              const lastLog = cooldownCheck.lastLog
+
               return (
                 <div
                   key={ch.id || ch.creator_url}
@@ -370,9 +540,61 @@ export function YoutubeCrawlModal({
                     )}
 
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {ch.creator_name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {ch.creator_name}
+                        </span>
+
+                        {/* Huy hiệu thời gian cào gần nhất */}
+                        {cooldownCheck.inCooldown ? (
+                          <span
+                            style={{
+                              fontSize: '0.66rem',
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                            title={`Kênh này vừa được cào ${cooldownCheck.minutesAgo} phút trước`}
+                          >
+                            <Clock size={10} /> Đã cào {cooldownCheck.minutesAgo}p trước
+                          </span>
+                        ) : lastLog?.lastCrawledAt ? (
+                          <span
+                            style={{
+                              fontSize: '0.66rem',
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              background: 'var(--bg-subtle, rgba(255, 255, 255, 0.06))',
+                              color: 'var(--text-muted)',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <History size={10} /> {formatCrawlTimeAgo(lastLog.lastCrawledAt)}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: '0.66rem',
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              background: 'rgba(239, 68, 68, 0.08)',
+                              color: '#ef4444',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Chưa cào
+                          </span>
+                        )}
                       </div>
+
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
                         {ch.category && (
                           <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: 4, background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontWeight: 600 }}>
@@ -399,7 +621,7 @@ export function YoutubeCrawlModal({
           </div>
         </div>
 
-        {/* 3. Cơ chế tự động */}
+        {/* 4. Cơ chế tự động */}
         <div
           style={{
             padding: '10px 12px',
@@ -413,10 +635,10 @@ export function YoutubeCrawlModal({
           }}
         >
           <div>
-            💾 <strong>Lưu tức thì:</strong> Cào tới đâu lưu tới đó, dừng lúc nào lưu lúc đó không mất dữ liệu.
+            ⚡ <strong>Bảo vệ Cooldown:</strong> Kênh nào vừa cào trong thời gian thiết lập sẽ được tự động bỏ qua, tiết kiệm thời gian chờ.
           </div>
           <div style={{ marginTop: 3 }}>
-            🏷️ <strong>Tự động phân loại:</strong> Video mới cào sẽ tự động xuất hiện đúng mục Thể loại & Tag của kênh.
+            💾 <strong>Lưu tức thì & Supabase:</strong> Cào tới đâu lưu tới đó, lịch sử cào của các kênh được đồng bộ lên Supabase Database.
           </div>
         </div>
 
@@ -450,7 +672,8 @@ export function YoutubeCrawlModal({
               opacity: selectedChannelUrls.size === 0 ? 0.5 : 1,
             }}
           >
-            <Check size={16} /> Bắt đầu cào ({selectedChannelUrls.size} kênh • {effectiveDuration > 0 ? `${effectiveDuration} phút` : 'Không giới hạn'})
+            <Radio size={16} />
+            Bắt đầu cào ({selectedChannelUrls.size} kênh)
           </button>
         </div>
       </div>
@@ -524,6 +747,11 @@ export function GlobalYoutubeCrawlerWatcher({ onFinished }: { onFinished?: () =>
               {crawlerState.newVideosFound > 0 && (
                 <span style={{ color: '#10b981', fontWeight: 800 }}>+{crawlerState.newVideosFound} video mới</span>
               )}
+              {crawlerState.skippedChannelsCount > 0 && (
+                <span style={{ color: '#8b5cf6', fontWeight: 700, fontSize: '0.72rem' }}>
+                  ({crawlerState.skippedChannelsCount} bỏ qua)
+                </span>
+              )}
             </div>
             <div
               style={{
@@ -586,7 +814,7 @@ export function GlobalYoutubeCrawlerWatcher({ onFinished }: { onFinished?: () =>
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
                 gap: 10,
                 marginBottom: 16,
               }}
@@ -615,9 +843,25 @@ export function GlobalYoutubeCrawlerWatcher({ onFinished }: { onFinished?: () =>
               >
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Kênh đã quét</div>
                 <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ef4444', marginTop: 2 }}>
-                  {report.totalChannelsScanned} / {report.totalChannelsTargeted} kênh
+                  {report.totalChannelsScanned} / {report.totalChannelsTargeted}
                 </div>
               </div>
+
+              {report.totalChannelsSkipped > 0 && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    background: 'rgba(139, 92, 246, 0.08)',
+                    border: '1px solid rgba(139, 92, 246, 0.2)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.72rem', color: '#8b5cf6', fontWeight: 600 }}>Bỏ qua (vừa cào)</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#8b5cf6', marginTop: 2 }}>
+                    {report.totalChannelsSkipped} kênh
+                  </div>
+                </div>
+              )}
 
               <div
                 style={{
@@ -709,7 +953,11 @@ export function GlobalYoutubeCrawlerWatcher({ onFinished }: { onFinished?: () =>
                   </div>
 
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    {ch.newVideosCount > 0 ? (
+                    {ch.status === 'skipped_cooldown' ? (
+                      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.12)', padding: '2px 8px', borderRadius: 6 }}>
+                        ⏭️ Bỏ qua (vừa cào)
+                      </div>
+                    ) : ch.newVideosCount > 0 ? (
                       <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#10b981' }}>
                         +{ch.newVideosCount} video
                       </div>

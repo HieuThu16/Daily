@@ -13,6 +13,98 @@ export type YoutubeCrawlChannelTarget = {
   sourceTable?: 'tvshow' | 'review'
 }
 
+export interface YoutubeChannelCrawlLogItem {
+  creator_url: string
+  creator_name: string
+  lastCrawledAt: string // ISO string
+  newVideosCount: number
+  scannedPages?: number
+  status: 'completed' | 'skipped_cooldown' | 'timeout' | 'stopped' | 'error'
+  errorMessage?: string
+}
+
+export type YoutubeChannelCrawlHistoryMap = Record<string, YoutubeChannelCrawlLogItem>
+
+export const YOUTUBE_CHANNEL_CRAWL_HISTORY_KEY = 'youtube_channel_crawl_history'
+export const YOUTUBE_CRAWL_HISTORY_UPDATED_EVENT = 'youtube_channel_crawl_history_updated'
+
+export function getLocalYoutubeChannelCrawlHistory(): YoutubeChannelCrawlHistoryMap {
+  try {
+    const raw = localStorage.getItem(YOUTUBE_CHANNEL_CRAWL_HISTORY_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return typeof parsed === 'object' && parsed !== null ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+export async function fetchRemoteYoutubeChannelCrawlHistory(): Promise<YoutubeChannelCrawlHistoryMap> {
+  try {
+    const remote = await getRemoteAppSetting<YoutubeChannelCrawlHistoryMap>(YOUTUBE_CHANNEL_CRAWL_HISTORY_KEY, {})
+    if (remote && typeof remote === 'object') {
+      const merged = { ...getLocalYoutubeChannelCrawlHistory(), ...remote }
+      localStorage.setItem(YOUTUBE_CHANNEL_CRAWL_HISTORY_KEY, JSON.stringify(merged))
+      return merged
+    }
+  } catch (err) {
+    console.warn('Lỗi tải lịch sử cào kênh YouTube từ Supabase:', err)
+  }
+  return getLocalYoutubeChannelCrawlHistory()
+}
+
+export async function recordYoutubeChannelCrawlLog(item: YoutubeChannelCrawlLogItem): Promise<void> {
+  try {
+    const current = getLocalYoutubeChannelCrawlHistory()
+    current[item.creator_url] = item
+    localStorage.setItem(YOUTUBE_CHANNEL_CRAWL_HISTORY_KEY, JSON.stringify(current))
+    window.dispatchEvent(new CustomEvent(YOUTUBE_CRAWL_HISTORY_UPDATED_EVENT, { detail: item }))
+    void saveAppSetting(YOUTUBE_CHANNEL_CRAWL_HISTORY_KEY, current)
+  } catch (err) {
+    console.error('Lỗi lưu lịch sử cào kênh YouTube:', err)
+  }
+}
+
+export function formatCrawlTimeAgo(isoString?: string): string {
+  if (!isoString) return 'Chưa từng cào'
+  try {
+    const date = new Date(isoString)
+    const diffMs = Date.now() - date.getTime()
+    if (diffMs < 0 || isNaN(diffMs)) return 'Vừa xong'
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) return 'Vừa xong'
+    const diffMin = Math.floor(diffSec / 60)
+    if (diffMin < 60) return `${diffMin} phút trước`
+    const diffHours = Math.floor(diffMin / 60)
+    if (diffHours < 24) return `${diffHours} giờ trước`
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays < 30) return `${diffDays} ngày trước`
+    return date.toLocaleDateString('vi-VN')
+  } catch {
+    return 'Chưa từng cào'
+  }
+}
+
+export function isChannelInCooldown(
+  creatorUrl: string,
+  cooldownMinutes: number,
+  historyMap?: YoutubeChannelCrawlHistoryMap
+): { inCooldown: boolean; minutesAgo: number; lastLog?: YoutubeChannelCrawlLogItem } {
+  if (!creatorUrl || cooldownMinutes <= 0) return { inCooldown: false, minutesAgo: Infinity }
+  const map = historyMap || getLocalYoutubeChannelCrawlHistory()
+  const log = map[creatorUrl]
+  if (!log || !log.lastCrawledAt) return { inCooldown: false, minutesAgo: Infinity }
+
+  const diffMs = Date.now() - new Date(log.lastCrawledAt).getTime()
+  if (isNaN(diffMs) || diffMs < 0) return { inCooldown: false, minutesAgo: Infinity, lastLog: log }
+  const minutesAgo = Math.floor(diffMs / (60 * 1000))
+  return {
+    inCooldown: minutesAgo < cooldownMinutes,
+    minutesAgo,
+    lastLog: log,
+  }
+}
+
 export type YoutubeCrawlChannelResult = {
   channelId?: string | null
   channelName: string
@@ -22,13 +114,14 @@ export type YoutubeCrawlChannelResult = {
   cover?: string | null
   newVideosCount: number
   scannedPages: number
-  status: 'completed' | 'timeout' | 'stopped' | 'error'
+  status: 'completed' | 'skipped_cooldown' | 'timeout' | 'stopped' | 'error'
   errorMessage?: string
 }
 
 export type YoutubeCrawlReport = {
   totalNewVideos: number
   totalChannelsScanned: number
+  totalChannelsSkipped: number
   totalChannelsTargeted: number
   durationSeconds: number
   targetDurationMinutes: number
@@ -41,6 +134,9 @@ export type YoutubeCrawlReport = {
 
 export type YoutubeCrawlOptions = {
   durationMinutes?: number
+  skipRecentlyCrawled?: boolean
+  cooldownMinutes?: number
+  forceCrawl?: boolean
 }
 
 export type YoutubeCrawlerState = {
@@ -49,6 +145,7 @@ export type YoutubeCrawlerState = {
   currentChannelIndex: number
   totalChannels: number
   newVideosFound: number
+  skippedChannelsCount: number
   startedAt: number
   elapsedSeconds: number
   targetDurationMinutes: number
@@ -65,6 +162,7 @@ class YoutubeChannelCrawlerManager {
     currentChannelIndex: 0,
     totalChannels: 0,
     newVideosFound: 0,
+    skippedChannelsCount: 0,
     startedAt: 0,
     elapsedSeconds: 0,
     targetDurationMinutes: 15,
@@ -124,6 +222,10 @@ class YoutubeChannelCrawlerManager {
     }
 
     const durationMinutes = options?.durationMinutes ?? 15
+    const skipRecentlyCrawled = options?.skipRecentlyCrawled ?? true
+    const cooldownMinutes = options?.cooldownMinutes ?? 60
+    const forceCrawl = options?.forceCrawl ?? false
+
     this.isUserAborted = false
     this.abortController = new AbortController()
     const signal = this.abortController.signal
@@ -138,6 +240,7 @@ class YoutubeChannelCrawlerManager {
       currentChannelIndex: 0,
       totalChannels: channels.length,
       newVideosFound: 0,
+      skippedChannelsCount: 0,
       startedAt: startTime,
       elapsedSeconds: 0,
       targetDurationMinutes: durationMinutes,
@@ -157,11 +260,14 @@ class YoutubeChannelCrawlerManager {
 
     const channelResults: YoutubeCrawlChannelResult[] = []
     let totalNewVideos = 0
+    let skippedChannelsCount = 0
     let isTimedOut = false
 
     // Load category and tag maps to update them incrementally
     const currentCatMap = await getRemoteAppSetting<Record<string, string>>('youtube_channel_categories', {}).catch(() => ({}))
     const currentTagMap = await getRemoteAppSetting<Record<string, string>>('youtube_channel_tags', {}).catch(() => ({}))
+    const historyMap = await fetchRemoteYoutubeChannelCrawlHistory().catch(() => getLocalYoutubeChannelCrawlHistory())
+
     const updatedCatMap = { ...currentCatMap }
     const updatedTagMap = { ...currentTagMap }
 
@@ -178,10 +284,33 @@ class YoutubeChannelCrawlerManager {
         this.state.currentChannelName = ch.creator_name
         this.notify()
 
+        // ── Kiểm tra thời gian cào gần nhất (Cơ chế bỏ qua kênh vừa cào) ──
+        const cooldownCheck = isChannelInCooldown(ch.creator_url, cooldownMinutes, historyMap)
+        if (skipRecentlyCrawled && !forceCrawl && cooldownCheck.inCooldown) {
+          skippedChannelsCount++
+          this.state.skippedChannelsCount = skippedChannelsCount
+          this.state.currentChannelName = `[Bỏ qua] ${ch.creator_name} (vừa cào ${cooldownCheck.minutesAgo}p trước)`
+          this.notify()
+
+          channelResults.push({
+            channelId: ch.creator_id,
+            channelName: ch.creator_name,
+            creatorUrl: ch.creator_url,
+            category: ch.category,
+            tag: ch.tag,
+            cover: ch.cover,
+            newVideosCount: 0,
+            scannedPages: 0,
+            status: 'skipped_cooldown',
+            errorMessage: `Vừa cào cách đây ${cooldownCheck.minutesAgo} phút (Bỏ qua)`,
+          })
+          continue
+        }
+
         const apiEndpoint = ch.sourceTable === 'review' ? '/api/sync-review' : '/api/sync-tvshow'
         let newCountForChannel = 0
         let pagesCount = 0
-        let channelStatus: 'completed' | 'timeout' | 'stopped' | 'error' = 'completed'
+        let channelStatus: 'completed' | 'skipped_cooldown' | 'timeout' | 'stopped' | 'error' = 'completed'
         let errorMsg: string | undefined
 
         try {
@@ -308,6 +437,28 @@ class YoutubeChannelCrawlerManager {
           errorMessage: errorMsg,
         })
 
+        // Ghi nhận lịch sử cào của kênh vào Supabase
+        if (channelStatus !== 'stopped') {
+          void recordYoutubeChannelCrawlLog({
+            creator_url: ch.creator_url,
+            creator_name: ch.creator_name,
+            lastCrawledAt: new Date().toISOString(),
+            newVideosCount: newCountForChannel,
+            scannedPages: pagesCount,
+            status: channelStatus,
+            errorMessage: errorMsg,
+          })
+          historyMap[ch.creator_url] = {
+            creator_url: ch.creator_url,
+            creator_name: ch.creator_name,
+            lastCrawledAt: new Date().toISOString(),
+            newVideosCount: newCountForChannel,
+            scannedPages: pagesCount,
+            status: channelStatus,
+            errorMessage: errorMsg,
+          }
+        }
+
         // Tự động lưu cấu hình thể loại & tag kênh sau mỗi kênh hoàn tất
         try {
           await saveAppSetting('youtube_channel_categories', updatedCatMap)
@@ -333,7 +484,8 @@ class YoutubeChannelCrawlerManager {
       const totalDuration = Math.round((Date.now() - startTime) / 1000)
       const report: YoutubeCrawlReport = {
         totalNewVideos,
-        totalChannelsScanned: channelResults.length,
+        totalChannelsScanned: channelResults.filter((r) => r.status !== 'skipped_cooldown').length,
+        totalChannelsSkipped: skippedChannelsCount,
         totalChannelsTargeted: channels.length,
         durationSeconds: totalDuration,
         targetDurationMinutes: durationMinutes,
@@ -350,6 +502,7 @@ class YoutubeChannelCrawlerManager {
         currentChannelIndex: channelResults.length,
         totalChannels: channels.length,
         newVideosFound: totalNewVideos,
+        skippedChannelsCount,
         startedAt: 0,
         elapsedSeconds: totalDuration,
         targetDurationMinutes: durationMinutes,
