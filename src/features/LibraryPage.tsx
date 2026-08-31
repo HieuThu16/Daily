@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -29,6 +29,7 @@ import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
 import { ContinueReadingHero } from './library/ContinueReadingHero'
 import { SkeletonGrid } from './Skeleton'
+import { DilibCrawlerModal } from './audiobook/DilibCrawlerModal'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -192,6 +193,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const nav = useNavigate()
   const [importOpen, setImportOpen] = useState(false)
   const [bookStatsOpen, setBookStatsOpen] = useState(false)
+  const [showDilibCrawler, setShowDilibCrawler] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
 
@@ -1303,15 +1305,29 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       </div>
 
       {selectedType === 'BOOK' && (
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            className="library-import-btn"
+            onClick={() => setShowDilibCrawler(true)}
+            title="Cào sách & sách nói từ Dilib.vn"
+            style={{
+              flex: 1,
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15))',
+              color: 'var(--primary, #8b5cf6)',
+              borderColor: 'rgba(139, 92, 246, 0.35)',
+              fontWeight: 700,
+            }}
+          >
+            <Sparkles size={13} /> Cào Dilib.vn
+          </button>
           <button className="library-import-btn" onClick={() => setImportOpen(true)} title="Nhập sách từ file PDF hoặc EPUB" style={{ flex: 1 }}>
-            <FileUp size={13} /> Nhập sách từ PDF / EPUB
+            <FileUp size={13} /> Nhập PDF/EPUB
           </button>
           <button className="library-import-btn" onClick={() => setBookStatsOpen(true)} title="Thống kê số trang đã đọc" style={{ flex: 1 }}>
-            <BarChart3 size={13} /> Thống kê sách
+            <BarChart3 size={13} /> Thống kê
           </button>
           <button className="library-import-btn" onClick={() => nav('/quotes')} title="Xem trích dẫn của tất cả sách" style={{ flex: 1 }}>
-            <BookMarked size={13} /> Xem trích dẫn
+            <BookMarked size={13} /> Trích dẫn
           </button>
         </div>
       )}
@@ -2442,6 +2458,19 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               coverFailed ? '📚 Đã nhập sách nhưng chưa lưu được ảnh bìa' : '📚 Đã nhập sách vào thư viện!',
             )
             nav(`/read/${mediaItemId}`)
+          }}
+        />
+      )}
+
+      {showDilibCrawler && (
+        <DilibCrawlerModal
+          isOpen={showDilibCrawler}
+          onClose={() => setShowDilibCrawler(false)}
+          onFinished={() => {
+            void supabase
+              ?.from('media_items')
+              .select('*')
+              .then(({ data }) => data && setItems(data as any))
           }}
         />
       )}

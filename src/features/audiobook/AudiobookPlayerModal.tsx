@@ -1,0 +1,385 @@
+import { useState, useRef, useEffect } from 'react'
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  RotateCw,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  Clock,
+  ListMusic,
+  ChevronDown,
+  X,
+} from 'lucide-react'
+import type { Audiobook, AudiobookTrack } from '../../types/audiobook'
+import { updateAudiobookProgress, getAudiobookProgress } from '../../lib/audiobookProgress'
+import { WatchTogetherButton } from '../watch/WatchTogetherButton'
+import { useToast } from '../ToastContext'
+
+export function formatTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) return '00:00'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+export function AudiobookPlayerModal({
+  audiobook,
+  initialTrackIndex = 0,
+  isOpen,
+  onClose,
+}: {
+  audiobook: Audiobook | null
+  initialTrackIndex?: number
+  isOpen: boolean
+  onClose: () => void
+}) {
+  const { showToast } = useToast()
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(initialTrackIndex)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null)
+  const [showPlaylist, setShowPlaylist] = useState(false)
+
+  // Khôi phục tiến độ đã nghe từ trước
+  useEffect(() => {
+    if (!audiobook) return
+    const saved = getAudiobookProgress(audiobook.id)
+    if (saved) {
+      if (saved.trackIndex >= 0 && saved.trackIndex < audiobook.tracks.length) {
+        setCurrentTrackIndex(saved.trackIndex)
+      }
+      if (saved.currentSeconds > 0) {
+        setCurrentTime(saved.currentSeconds)
+      }
+    } else {
+      setCurrentTrackIndex(initialTrackIndex)
+    }
+  }, [audiobook, initialTrackIndex])
+
+  const currentTrack: AudiobookTrack | undefined = audiobook?.tracks[currentTrackIndex]
+
+  // Đổi track và nạp audio
+  useEffect(() => {
+    if (!audioRef.current || !currentTrack) return
+    audioRef.current.src = currentTrack.url
+    audioRef.current.load()
+    if (isPlaying) {
+      void audioRef.current.play().catch(() => setIsPlaying(false))
+    }
+  }, [currentTrack])
+
+  // Play / Pause
+  const togglePlay = () => {
+    if (!audioRef.current) return
+    if (isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => {
+          console.warn('Lỗi phát audio:', err)
+          showToast('Không phát được audio này. Đang thử lại...', 'info')
+        })
+    }
+  }
+
+  // Cập nhật tiến độ liên tục và lưu Supabase
+  const handleTimeUpdate = () => {
+    if (!audioRef.current || !audiobook) return
+    const cur = audioRef.current.currentTime
+    const dur = audioRef.current.duration || 0
+    setCurrentTime(cur)
+    if (dur > 0) setDuration(dur)
+
+    // Lưu tiến độ định kỳ mỗi 5s hoặc khi kết thúc
+    if (Math.floor(cur) % 5 === 0 && dur > 0) {
+      void updateAudiobookProgress(audiobook.id, {
+        trackIndex: currentTrackIndex,
+        trackTitle: currentTrack?.title,
+        currentSeconds: cur,
+        durationSeconds: dur,
+        bookTitle: audiobook.title,
+        author: audiobook.author,
+        coverUrl: audiobook.cover,
+      })
+    }
+  }
+
+  // Kết thúc track -> tự chuyển bài tiếp
+  const handleEnded = () => {
+    if (!audiobook) return
+    // Đánh dấu hoàn thành track này
+    void updateAudiobookProgress(audiobook.id, {
+      trackIndex: currentTrackIndex,
+      trackTitle: currentTrack?.title,
+      currentSeconds: duration || 1,
+      durationSeconds: duration || 1,
+      bookTitle: audiobook.title,
+      author: audiobook.author,
+      coverUrl: audiobook.cover,
+    })
+
+    if (currentTrackIndex < audiobook.tracks.length - 1) {
+      setCurrentTrackIndex((prev) => prev + 1)
+      setIsPlaying(true)
+    } else {
+      setIsPlaying(false)
+      showToast('🎉 Đã nghe xong toàn bộ sách nói này!')
+    }
+  }
+
+  // Tua tới / lui 15 giây
+  const skip = (seconds: number) => {
+    if (!audioRef.current) return
+    audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds))
+  }
+
+  // Đổi tốc độ phát
+  const changePlaybackRate = (rate: number) => {
+    setPlaybackRate(rate)
+    if (audioRef.current) audioRef.current.playbackRate = rate
+  }
+
+  // Hẹn giờ tắt (Sleep Timer)
+  useEffect(() => {
+    if (!sleepTimerMinutes) {
+      setSleepTimerRemaining(null)
+      return
+    }
+
+    let remaining = sleepTimerMinutes * 60
+    setSleepTimerRemaining(remaining)
+
+    const interval = setInterval(() => {
+      remaining -= 1
+      setSleepTimerRemaining(remaining)
+      if (remaining <= 0) {
+        clearInterval(interval)
+        audioRef.current?.pause()
+        setIsPlaying(false)
+        setSleepTimerMinutes(null)
+        showToast('💤 Đã đến giờ tắt nhạc hẹn trước.')
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [sleepTimerMinutes])
+
+  if (!isOpen || !audiobook) return null
+
+  return (
+    <div className="audiobook-player-overlay" onClick={onClose}>
+      <div className="audiobook-player-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Hidden HTML5 Audio Element */}
+        <audio
+          ref={audioRef}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={() => {
+            if (audioRef.current) {
+              setDuration(audioRef.current.duration || 0)
+              audioRef.current.playbackRate = playbackRate
+            }
+          }}
+          onEnded={handleEnded}
+        />
+
+        {/* Header Bar */}
+        <div className="audiobook-player-topbar">
+          <button type="button" className="audiobook-player-btn-icon" onClick={onClose} title="Thu nhỏ">
+            <ChevronDown size={22} />
+          </button>
+          <div className="audiobook-player-top-title">
+            <span>Đang phát sách nói</span>
+            <strong>{audiobook.title}</strong>
+          </div>
+          <WatchTogetherButton
+            item={{
+              kind: 'OTHER',
+              refId: audiobook.id,
+              title: audiobook.title,
+              subtitle: audiobook.author,
+              thumbnail: audiobook.cover,
+              url: `/audiobooks`,
+            }}
+            className="audiobook-player-btn-icon"
+            label={null}
+            size={18}
+            title="Xem chung cùng người thân"
+          />
+        </div>
+
+        {/* Cover Art Visualizer */}
+        <div className="audiobook-disc-container">
+          <div className={`audiobook-disc ${isPlaying ? 'spinning' : ''}`}>
+            {audiobook.cover ? (
+              <img src={audiobook.cover} alt={audiobook.title} className="audiobook-disc-img" />
+            ) : (
+              <div className="audiobook-disc-placeholder">
+                <Volume2 size={48} />
+              </div>
+            )}
+            <div className="audiobook-disc-center" />
+          </div>
+        </div>
+
+        {/* Title & Author */}
+        <div className="audiobook-track-info">
+          <h2 className="audiobook-track-name">{currentTrack?.title || audiobook.title}</h2>
+          <p className="audiobook-track-author">{audiobook.author}</p>
+          <span className="audiobook-part-badge">
+            Phần {currentTrackIndex + 1} / {audiobook.tracks.length}
+          </span>
+        </div>
+
+        {/* Interactive Seek Bar */}
+        <div className="audiobook-seeker-area">
+          <div className="audiobook-slider-wrap">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onChange={(e) => {
+                const target = Number(e.target.value)
+                setCurrentTime(target)
+                if (audioRef.current) audioRef.current.currentTime = target
+              }}
+              className="audiobook-progress-slider"
+            />
+          </div>
+          <div className="audiobook-time-row">
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* Main Controls */}
+        <div className="audiobook-controls-row">
+          <button
+            type="button"
+            className="audiobook-ctrl-btn sec"
+            onClick={() => setCurrentTrackIndex((prev) => Math.max(0, prev - 1))}
+            disabled={currentTrackIndex === 0}
+            title="Phần trước"
+          >
+            <SkipBack size={20} />
+          </button>
+
+          <button type="button" className="audiobook-ctrl-btn sec" onClick={() => skip(-15)} title="Lùi 15 giây">
+            <RotateCcw size={20} />
+            <span className="audiobook-btn-mini-label">15s</span>
+          </button>
+
+          <button type="button" className="audiobook-ctrl-btn play-main" onClick={togglePlay} title={isPlaying ? 'Tạm dừng' : 'Phát'}>
+            {isPlaying ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: 3 }} />}
+          </button>
+
+          <button type="button" className="audiobook-ctrl-btn sec" onClick={() => skip(15)} title="Tua tới 15 giây">
+            <RotateCw size={20} />
+            <span className="audiobook-btn-mini-label">15s</span>
+          </button>
+
+          <button
+            type="button"
+            className="audiobook-ctrl-btn sec"
+            onClick={() => setCurrentTrackIndex((prev) => Math.min(audiobook.tracks.length - 1, prev + 1))}
+            disabled={currentTrackIndex >= audiobook.tracks.length - 1}
+            title="Phần tiếp theo"
+          >
+            <SkipForward size={20} />
+          </button>
+        </div>
+
+        {/* Bottom Utility Bar (Speed, Sleep Timer, Playlist) */}
+        <div className="audiobook-utility-bar">
+          {/* Tốc độ phát */}
+          <div className="audiobook-speed-picker">
+            {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+              <button
+                key={rate}
+                type="button"
+                className={`audiobook-speed-chip ${playbackRate === rate ? 'active' : ''}`}
+                onClick={() => changePlaybackRate(rate)}
+              >
+                {rate}x
+              </button>
+            ))}
+          </div>
+
+          {/* Hẹn giờ ngủ */}
+          <div className="audiobook-sleep-toggle">
+            <button
+              type="button"
+              className={`audiobook-util-chip ${sleepTimerMinutes ? 'active' : ''}`}
+              onClick={() => {
+                if (!sleepTimerMinutes) setSleepTimerMinutes(15)
+                else if (sleepTimerMinutes === 15) setSleepTimerMinutes(30)
+                else if (sleepTimerMinutes === 30) setSleepTimerMinutes(45)
+                else if (sleepTimerMinutes === 45) setSleepTimerMinutes(60)
+                else setSleepTimerMinutes(null)
+              }}
+              title="Hẹn giờ tắt audio"
+            >
+              <Clock size={14} />
+              <span>{sleepTimerRemaining ? `${Math.ceil(sleepTimerRemaining / 60)}p` : 'Hẹn giờ'}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`audiobook-util-chip ${showPlaylist ? 'active' : ''}`}
+              onClick={() => setShowPlaylist((v) => !v)}
+              title="Danh sách các phần"
+            >
+              <ListMusic size={14} />
+              <span>{audiobook.tracks.length} phần</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Playlist Drawer */}
+        {showPlaylist && (
+          <div className="audiobook-playlist-drawer">
+            <div className="audiobook-playlist-header">
+              <h3>Danh sách các phần ({audiobook.tracks.length})</h3>
+              <button type="button" onClick={() => setShowPlaylist(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="audiobook-playlist-items">
+              {audiobook.tracks.map((t, idx) => {
+                const isCurrent = idx === currentTrackIndex
+                return (
+                  <div
+                    key={t.id || idx}
+                    className={`audiobook-playlist-row ${isCurrent ? 'playing' : ''}`}
+                    onClick={() => {
+                      setCurrentTrackIndex(idx)
+                      setIsPlaying(true)
+                    }}
+                  >
+                    <span className="audiobook-playlist-num">{idx + 1}</span>
+                    <span className="audiobook-playlist-title">{t.title}</span>
+                    {isCurrent && isPlaying && <Volume2 size={15} className="audiobook-playing-icon" />}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Moon, Music, NotebookPen, Pin, PinOff, Plus, Radio, Search, Settings, BarChart3, Sparkles, UserRound, UtensilsCrossed, Video, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Headphones, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Moon, Music, NotebookPen, Pin, PinOff, Plus, Radio, Search, Settings, BarChart3, Sparkles, UserRound, UtensilsCrossed, Video, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -54,6 +54,7 @@ const UsageStatsPage = lazy(() => import('./features/UsageStatsPage').then((m) =
 const PeoplePage = lazy(() => import('./features/people/PeoplePage').then((m) => ({ default: m.PeoplePage })))
 const WatchTogetherPage = lazy(() => import('./features/watch/WatchTogetherPage').then((m) => ({ default: m.WatchTogetherPage })))
 const BookReaderPage = lazy(() => import('./features/library/BookReaderPage').then((m) => ({ default: m.BookReaderPage })))
+const AudiobooksPage = lazy(() => import('./features/audiobook/AudiobooksPage').then((m) => ({ default: m.AudiobooksPage })))
 const QuotesPage = lazy(() => import('./features/library/QuotesPage').then((m) => ({ default: m.QuotesPage })))
 const MoneyPage = lazy(() => import('./features/MoneyPage').then((m) => ({ default: m.MoneyPage })))
 const CalendarPage = lazy(() => import('./features/CalendarPage').then((m) => ({ default: m.CalendarPage })))
@@ -87,6 +88,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'music', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan' },
   { id: 'movies', label: 'Phim', icon: Film, colorClass: 'icon-box-rose' },
   { id: 'books', label: 'Sách', icon: BookOpen, colorClass: 'icon-box-purple' },
+  { id: 'audiobooks', label: 'Sách nói', icon: Headphones, colorClass: 'icon-box-amber' },
   { id: 'bl', label: 'Truyện BL', icon: Heart, colorClass: 'icon-box-rose' },
   { id: 'ngontinh', label: 'Ngôn Tình', icon: HeartHandshake, colorClass: 'icon-box-rose' },
   { id: 'manga', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald' },
@@ -613,6 +615,8 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/reviews" element={<Navigate to="/youtube" replace />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
+                      <Route path="/audiobooks" element={<AudiobooksPage />} />
+                      <Route path="/sach-noi" element={<Navigate to="/audiobooks" replace />} />
                       <Route path="/movies" element={<LibraryPage defaultType="MOVIE" />} />
                       <Route path="/manga" element={<LibraryPage defaultType="MANGA" />} />
                       <Route path="/bl" element={<BLMangaPage />} />

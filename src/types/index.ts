@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'collection' | 'youtube' | 'youtubeshorts' | 'music' | 'tvshow' | 'books' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'truyenh' | 'english' | 'knowledge' | 'reviews' | 'tiktok' | 'money' | 'calendar' | 'people' | 'watch' | 'nutrition' | 'sleep' | 'usage' | 'settings'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'collection' | 'youtube' | 'youtubeshorts' | 'music' | 'tvshow' | 'books' | 'audiobooks' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'truyenh' | 'english' | 'knowledge' | 'reviews' | 'tiktok' | 'money' | 'calendar' | 'people' | 'watch' | 'nutrition' | 'sleep' | 'usage' | 'settings'
 
 /** Một thẻ kiến thức: câu hỏi, câu trả lời và thể loại. */
 export type KnowledgeItem = {
