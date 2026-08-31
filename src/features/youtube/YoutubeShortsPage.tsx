@@ -67,6 +67,7 @@ export function YoutubeShortsPage() {
   const [rawChannels, setRawChannels] = useState<any[]>([])
 
   // Lịch sử xem Shorts (lưu danh sách video đã xem, không lặp lại trong luồng xem)
+  // Lịch sử xem Shorts (lưu danh sách video đã xem, không lặp lại trong luồng xem)
   const [watchHistory, setWatchHistory] = useState<ShortWatchHistoryItem[]>(() => {
     try {
       const s = localStorage.getItem('yts_watch_history')
@@ -76,7 +77,19 @@ export function YoutubeShortsPage() {
     }
   })
 
-  const watchedIds = useMemo(() => new Set(watchHistory.map((w) => w.video_id)), [watchHistory])
+  // Token để làm mới feed khi đổi tab, đổi thể loại hoặc nhấn nút Làm mới
+  const [feedSessionKey, setFeedSessionKey] = useState(0)
+
+  // Danh sách ID bị loại trừ được cố định cho phiên xem hiện tại (tránh việc video đang xem bị xóa khỏi mảng gây giật và tự động nhảy sang video kế tiếp)
+  const sessionExcludedWatchedIds = useMemo(() => {
+    try {
+      const s = localStorage.getItem('yts_watch_history')
+      const hist: ShortWatchHistoryItem[] = s ? JSON.parse(s) : []
+      return new Set(hist.map((w) => w.video_id))
+    } catch {
+      return new Set<string>()
+    }
+  }, [activeTab, selectedCategory, feedSessionKey])
 
   // Local storage sets for likes, subscriptions, and bookmarks
   const [likedIds, setLikedIds] = useState<Set<string>>(() => {
@@ -197,18 +210,18 @@ export function YoutubeShortsPage() {
     void loadShortsData()
   }, [loadShortsData])
 
-  // Lọc theo Tab, Thể loại, Tìm kiếm và Lịch sử xem (không lặp lại video đã xem)
+  // Lọc theo Tab, Thể loại, Tìm kiếm và Lịch sử xem (không làm mất video trong phiên đang xem)
   const displayedShorts = useMemo(() => {
     let list = shorts
 
     if (activeTab === 'foryou') {
-      // Ẩn các video đã xem để không hiển thị lại trong luồng xem
-      list = list.filter((s) => !watchedIds.has(s.video_id))
+      // Ẩn các video đã xem từ các phiên trước
+      list = list.filter((s) => !sessionExcludedWatchedIds.has(s.video_id))
     } else if (activeTab === 'following') {
       list = list.filter(
         (s) =>
           subscribedCreators.has(s.creator_id || s.creator_name || '') &&
-          !watchedIds.has(s.video_id),
+          !sessionExcludedWatchedIds.has(s.video_id),
       )
     } else if (activeTab === 'saved') {
       list = list.filter((s) => savedVideoIds.has(s.video_id))
@@ -236,9 +249,9 @@ export function YoutubeShortsPage() {
     }
 
     return list
-  }, [shorts, activeTab, selectedCategory, searchQuery, subscribedCreators, savedVideoIds, watchedIds, watchHistory])
+  }, [shorts, activeTab, selectedCategory, searchQuery, subscribedCreators, savedVideoIds, sessionExcludedWatchedIds, watchHistory])
 
-  // Ghi nhận video đã xem vào Lịch sử khi người dùng xem >= 1.2 giây
+  // Ghi nhận video đã xem vào Lịch sử khi người dùng xem >= 3 giây (lưu vào localStorage mà không làm giật/xoá video đang xem)
   useEffect(() => {
     const cur = displayedShorts[activeIndex]
     if (!cur || activeTab === 'history') return
@@ -252,7 +265,7 @@ export function YoutubeShortsPage() {
         } catch {}
         return updated
       })
-    }, 1200)
+    }, 3000)
 
     return () => clearTimeout(timer)
   }, [activeIndex, displayedShorts, activeTab])
@@ -263,6 +276,7 @@ export function YoutubeShortsPage() {
     try {
       localStorage.removeItem('yts_watch_history')
     } catch {}
+    setFeedSessionKey((k) => k + 1)
     showToast('🗑️ Đã làm mới lịch sử xem Shorts', 'info')
   }
 
@@ -624,6 +638,19 @@ export function YoutubeShortsPage() {
               title={muted ? 'Bật tiếng (M)' : 'Tắt tiếng (M)'}
             >
               {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+
+            {/* Nút làm mới nguồn video */}
+            <button
+              className="yts-icon-btn"
+              onClick={() => {
+                setFeedSessionKey((k) => k + 1)
+                scrollToIndex(0)
+                showToast('🔄 Đã làm mới nguồn Shorts', 'info')
+              }}
+              title="Làm mới nguồn video"
+            >
+              <RefreshCw size={18} />
             </button>
 
             {/* Nút tìm kiếm */}
