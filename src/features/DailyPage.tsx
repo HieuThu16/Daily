@@ -19,16 +19,7 @@ import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 import { compressForUpload } from '../lib/photo'
 import { Memory3DCard } from './daily/Memory3DCard'
 
-export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = [
-  { id: 'cam-xuc', label: 'Cảm xúc', icon: '❤️', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.15)' },
-  { id: 'dieu-buon', label: 'Điều buồn', icon: '🌧️', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' },
-  { id: 'cong-viec', label: 'Công việc', icon: '💼', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' },
-  { id: 'hoc-tap', label: 'Học tập', icon: '📚', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' },
-  { id: 'tinh-cam', label: 'Tình cảm', icon: '💖', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)' },
-  { id: 'gia-dinh', label: 'Gia đình', icon: '🏡', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
-  { id: 'suc-khoe', label: 'Sức khoẻ', icon: '🥗', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)' },
-  { id: 'y-tuong', label: 'Ý tưởng', icon: '💡', color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)' },
-]
+export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = []
 
 export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]): DailyCategoryItem | null {
   const catLabel = entry.category || (entry.tags && entry.tags.length > 0 ? entry.tags[0] : null)
@@ -36,12 +27,6 @@ export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]
     const found = allCategories.find((c) => c.label === catLabel || c.id === catLabel)
     if (found) return found
     return { id: catLabel, label: catLabel, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
-  }
-  if (entry.entry_type === 'FEELING') {
-    return allCategories.find((c) => c.id === 'cam-xuc') || { id: 'cam-xuc', label: 'Cảm xúc', icon: '❤️', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.15)' }
-  }
-  if (entry.entry_type === 'SAD_THING') {
-    return allCategories.find((c) => c.id === 'dieu-buon') || { id: 'dieu-buon', label: 'Điều buồn', icon: '🌧️', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' }
   }
   return null
 }
@@ -174,9 +159,9 @@ export function DailyPage() {
   const [pageTab, setPageTab] = useState<PageTab>('write')
   const clock = useClock()
 
-  // Thể loại tuỳ chỉnh
+  // Thể loại tuỳ chỉnh 100% người dùng tự định nghĩa & lưu Supabase
   const [dailyCategories, setDailyCategories] = useState<DailyCategoryItem[]>(() => {
-    return loadLocal<DailyCategoryItem[]>('daily_custom_categories', DEFAULT_DAILY_CATEGORIES)
+    return loadLocal<DailyCategoryItem[]>('daily_custom_categories', [])
   })
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [editCategory, setEditCategory] = useState<string | null>(null)
@@ -189,12 +174,13 @@ export function DailyPage() {
   const [newCatColor, setNewCatColor] = useState('#8b5cf6')
   const [newCatBg, setNewCatBg] = useState('rgba(139, 92, 246, 0.15)')
 
-  // Tải thể loại từ Supabase
+  // Tải thể loại từ Supabase Database
   useEffect(() => {
-    getRemoteAppSetting<DailyCategoryItem[]>('daily_custom_categories', DEFAULT_DAILY_CATEGORIES)
+    getRemoteAppSetting<DailyCategoryItem[]>('daily_custom_categories', [])
       .then((cats) => {
-        if (Array.isArray(cats) && cats.length > 0) {
+        if (Array.isArray(cats)) {
           setDailyCategories(cats)
+          saveLocal('daily_custom_categories', cats)
         }
       })
       .catch(() => {})
@@ -946,6 +932,30 @@ export function DailyPage() {
                   </button>
                 )
               })}
+
+              {dailyCategories.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryConfigModal(true)}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 12,
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    border: '1px dashed var(--purple)',
+                    background: 'var(--purple-bg)',
+                    color: 'var(--purple)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Plus size={13} /> Thêm thể loại mới
+                </button>
+              )}
             </div>
           </div>
 
@@ -2409,47 +2419,53 @@ export function DailyPage() {
               <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)' }}>
                 Danh sách thể loại ({dailyCategories.length}):
               </span>
-              <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
-                {dailyCategories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '8px 12px',
-                      borderRadius: 10,
-                      background: 'var(--card-bg)',
-                      border: '1px solid var(--card-border)',
-                    }}
-                  >
-                    <span style={{ fontSize: '1.1rem' }}>{cat.icon}</span>
-                    <span style={{ flex: 1, fontSize: '0.84rem', fontWeight: 700, color: cat.color }}>{cat.label}</span>
-                    <button
-                      type="button"
-                      className="icon small"
-                      onClick={() => {
-                        setEditingCat(cat)
-                        setNewCatLabel(cat.label)
-                        setNewCatIcon(cat.icon || '🏷️')
-                        setNewCatColor(cat.color || '#8b5cf6')
-                        setNewCatBg(cat.bg || 'rgba(139, 92, 246, 0.15)')
+              {dailyCategories.length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', background: 'var(--bg-main)', borderRadius: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Chưa có thể loại nào được tạo. Hãy nhập tên và chọn biểu tượng ở trên để thêm thể loại đầu tiên của bạn nhé!
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                  {dailyCategories.map((cat) => (
+                    <div
+                      key={cat.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
                       }}
-                      title="Sửa thể loại"
                     >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon small danger"
-                      onClick={() => handleDeleteCategory(cat.id, cat.label)}
-                      title="Xoá thể loại"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <span style={{ fontSize: '1.1rem' }}>{cat.icon}</span>
+                      <span style={{ flex: 1, fontSize: '0.84rem', fontWeight: 700, color: cat.color }}>{cat.label}</span>
+                      <button
+                        type="button"
+                        className="icon small"
+                        onClick={() => {
+                          setEditingCat(cat)
+                          setNewCatLabel(cat.label)
+                          setNewCatIcon(cat.icon || '🏷️')
+                          setNewCatColor(cat.color || '#8b5cf6')
+                          setNewCatBg(cat.bg || 'rgba(139, 92, 246, 0.15)')
+                        }}
+                        title="Sửa thể loại"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon small danger"
+                        onClick={() => handleDeleteCategory(cat.id, cat.label)}
+                        title="Xoá thể loại"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </Modal>
