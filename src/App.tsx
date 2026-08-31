@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Music, NotebookPen, Pin, PinOff, Plus, Radio, RefreshCw, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Video, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Music, NotebookPen, Pin, PinOff, Plus, Radio, Salad, Search, Settings, BarChart3, Sparkles, UserRound, Video, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -20,7 +20,7 @@ import { SettingsPage, UpdateToast } from './features/ProfilePage'
 import { NotificationCenter } from './features/NotificationCenter'
 import { CommandPalette, openCommandPalette } from './features/CommandPalette'
 import { ToastProvider, useToast } from './features/ToastContext'
-import { PwaUpdateNotification, forceReloadLatestVersion } from './features/PwaUpdateNotification'
+import { PwaUpdateNotification } from './features/PwaUpdateNotification'
 import { PushNudgeBanner } from './features/PushNudgeBanner'
 import { GlobalCrawlerWatcher } from './features/manga/CrawlChaptersModal'
 
@@ -452,16 +452,6 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
           <div className="header-actions">
             <button className="header-action" aria-label="Tìm kiếm (Ctrl+K)" title="Tìm kiếm (Ctrl+K)" onClick={openCommandPalette}>
               <Search size={20} />
-            </button>
-            <button
-              className="header-action"
-              aria-label="Tải lại bản mới nhất (F5)"
-              title="Tải lại bản mới nhất (Xóa cache PWA)"
-              onClick={() => {
-                void forceReloadLatestVersion()
-              }}
-            >
-              <RefreshCw size={18} />
             </button>
             <NotificationCenter />
             {headerActions.map((a) => (
