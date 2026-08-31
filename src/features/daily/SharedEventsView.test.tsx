@@ -102,7 +102,27 @@ describe('SharedEventsView - xu ly nhieu anh', () => {
 
     await waitFor(() => expect(state.toasts.length).toBeGreaterThan(0), { timeout: 4000 })
     expect(state.uploaded).toHaveLength(3)
-    expect(state.toasts.at(-1)).toContain('3 ảnh')
+    expect(state.toasts.at(-1)).toContain('3 ảnh/video')
+  })
+
+  it('ho tro chon va tai len nhieu video kem anh', async () => {
+    const user = userEvent.setup()
+    render(<SharedEventsView personId="p1" personName="Kim Y" />)
+    await user.click(await screen.findByRole('button', { name: /Thêm kỷ niệm|Thêm sự kiện|Thêm/i }))
+    await user.type(await screen.findByLabelText(/Thông tin sự kiện/i), 'Di choi quay clip')
+
+    const videoInput = document.querySelector('input[type="file"][accept="video/*"]') as HTMLInputElement
+    const vidFiles = [
+      new File([new Uint8Array(16)], 'clip1.mp4', { type: 'video/mp4' }),
+      new File([new Uint8Array(16)], 'clip2.webm', { type: 'video/webm' }),
+    ]
+    await user.upload(videoInput, vidFiles)
+
+    await user.click(screen.getByRole('button', { name: /Lưu sự kiện/i }))
+
+    await waitFor(() => expect(state.toasts.length).toBeGreaterThan(0), { timeout: 4000 })
+    expect(state.uploaded).toHaveLength(2)
+    expect(state.toasts.at(-1)).toContain('2 ảnh/video')
   })
 
   it('ghi database that bai thi bao chua luu, khong bao thanh cong', async () => {

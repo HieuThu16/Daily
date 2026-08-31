@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus, Loader2 } from 'lucide-react'
+import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus, Video, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { anniversariesOn, yearsAgoLabel } from '../../lib/anniversary'
@@ -11,12 +11,27 @@ import { compressForUpload } from '../../lib/photo'
 
 const PHOTO_BUCKET = 'daily-photos'
 
-/** Ảnh đang ở bước nào; `done`/`total` để vẽ thanh tiến trình. */
+/** Nhận biết URL có phải là video hay không */
+export function isMediaVideo(url?: string | null): boolean {
+  if (!url) return false
+  if (url.startsWith('data:video/')) return true
+  const clean = url.split('?')[0].toLowerCase()
+  return /\.(mp4|webm|mov|m4v|mkv|avi|3gp|ogv)$/.test(clean)
+}
+
+/** Nhận biết File có phải là video hay không */
+export function isVideoFile(file: File): boolean {
+  if (file.type.startsWith('video/')) return true
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  return ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi', '3gp', 'ogv'].includes(ext || '')
+}
+
+/** Ảnh/video đang ở bước nào; `done`/`total` để vẽ thanh tiến trình. */
 type PhotoProgress = { phase: 'compress' | 'upload' | 'save'; done: number; total: number }
 
 const PHASE_LABEL: Record<PhotoProgress['phase'], string> = {
-  compress: 'Đang nén ảnh',
-  upload: 'Đang tải ảnh lên',
+  compress: 'Đang xử lý ảnh/video',
+  upload: 'Đang tải lên máy chủ',
   save: 'Đang lưu kỷ niệm',
 }
 
@@ -68,7 +83,8 @@ export function SharedEventsView({
   /** "Thông tin thêm" mặc định đóng: giờ và vị trí chỉ hiện khi cần điền. */
   const [showExtra, setShowExtra] = useState(false)
   const [busy, setBusy] = useState(false)
-  const fileInput = useRef<HTMLInputElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLDivElement>(null)
 
   const [partnerEmail, setPartnerEmail] = useState('')
@@ -206,7 +222,7 @@ export function SharedEventsView({
       reader.readAsDataURL(file)
     })
 
-  const uploadMultipleImages = async (
+  const uploadMultipleMedia = async (
     folder: string,
     files: File[],
     onProgress?: (p: PhotoProgress) => void,
@@ -214,20 +230,31 @@ export function SharedEventsView({
     if (!files.length) return { urls: [] as string[], paths: [] as string[], fellBack: 0 }
     const urls: string[] = []
     const paths: string[] = []
-    /** Số ảnh không đẩy lên storage được, phải nhúng thẳng vào bản ghi. */
+    /** Số ảnh/video không đẩy lên storage được, phải nhúng thẳng vào bản ghi. */
     let fellBack = 0
 
     for (const [index, file] of files.entries()) {
       try {
-        onProgress?.({ phase: 'compress', done: index, total: files.length })
-        // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
-        const { blob, ext } = await compressForUpload(file)
+        const isVid = isVideoFile(file)
+        onProgress?.({ phase: isVid ? 'upload' : 'compress', done: index, total: files.length })
+
+        let blobToUpload: Blob = file
+        let ext = file.name.split('.').pop()?.toLowerCase() || (isVid ? 'mp4' : 'jpg')
+
+        if (!isVid) {
+          // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
+          const compressed = await compressForUpload(file)
+          blobToUpload = compressed.blob
+          ext = compressed.ext
+        }
+
         onProgress?.({ phase: 'upload', done: index, total: files.length })
         const path = `${folder}/${crypto.randomUUID()}.${ext}`
         let uploadedUrl = ''
 
         if (supabase) {
-          const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { upsert: true })
+          const contentType = file.type || (isVid ? 'video/mp4' : 'image/jpeg')
+          const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blobToUpload, { upsert: true, contentType })
           if (!upErr) {
             const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
             if (pub?.publicUrl) {
@@ -240,7 +267,7 @@ export function SharedEventsView({
 
         if (!uploadedUrl) {
           // Nhúng thẳng vào bản ghi: nặng nhưng còn hơn mất ảnh. Có đếm để báo lại.
-          uploadedUrl = await fileToDataUrl(blob)
+          uploadedUrl = await fileToDataUrl(blobToUpload)
           if (uploadedUrl) fellBack += 1
         }
 
@@ -249,7 +276,7 @@ export function SharedEventsView({
           paths.push(path)
         }
       } catch (err) {
-        console.error('Lỗi tải ảnh:', err)
+        console.error('Lỗi tải media:', err)
         const dataUrl = await fileToDataUrl(file)
         if (dataUrl) {
           urls.push(dataUrl)
@@ -270,7 +297,7 @@ export function SharedEventsView({
     let paths: string[] = []
     let fellBack = 0
     if (pendingFiles.length > 0) {
-      const res = await uploadMultipleImages(eventDate, pendingFiles, setProgress)
+      const res = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
       urls = res.urls
       paths = res.paths
       fellBack = res.fellBack
@@ -324,15 +351,14 @@ export function SharedEventsView({
     const savedRemotely = created !== null
 
     /*
-     * Ảnh đã nằm trên storage trước khi insert. Insert hỏng mà cứ để đó thì mỗi
-     * lần bấm thêm lại là một bộ ảnh mới nằm lại vĩnh viễn — đúng cách 12 tấm ảnh
-     * đã phình thành 204 tệp / 790MB. Hỏng thì dọn ngay.
+     * Ảnh/video đã nằm trên storage trước khi insert. Insert hỏng mà cứ để đó thì mỗi
+     * lần bấm thêm lại là một bộ media mới nằm lại vĩnh viễn — dọn ngay.
      */
     if (!savedRemotely && supabase) {
       const uploaded = paths.filter(Boolean)
       if (uploaded.length) {
         const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove(uploaded)
-        if (rmErr) console.warn('Không dọn được ảnh của lần thêm hỏng:', rmErr)
+        if (rmErr) console.warn('Không dọn được media của lần thêm hỏng:', rmErr)
       }
     }
 
@@ -355,12 +381,12 @@ export function SharedEventsView({
 
     if (savedRemotely) {
       void notifyPartner('Có kỷ niệm mới được chia sẻ', created.title, '/daily', `share-${created.id}`)
-      // Nói rõ đã lưu được bao nhiêu ảnh — đó là bằng chứng việc xử lý đã xong.
+      // Nói rõ đã lưu được bao nhiêu ảnh/video
       const savedCount = urls.length
       const missing = pendingFiles.length - savedCount
-      let message = savedCount > 0 ? `✅ Đã lưu kỷ niệm cùng ${savedCount} ảnh` : '✅ Đã lưu kỷ niệm'
-      if (missing > 0) message += ` · ${missing} ảnh không đọc được`
-      if (fellBack > 0) message += ` · ${fellBack} ảnh lưu kèm bản ghi (nặng hơn)`
+      let message = savedCount > 0 ? `✅ Đã lưu kỷ niệm cùng ${savedCount} ảnh/video` : '✅ Đã lưu kỷ niệm'
+      if (missing > 0) message += ` · ${missing} tệp không đọc được`
+      if (fellBack > 0) message += ` · ${fellBack} tệp lưu kèm bản ghi (nặng hơn)`
       showToast(message)
     } else {
       showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
@@ -378,7 +404,7 @@ export function SharedEventsView({
     let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
     if (pendingFiles.length > 0) {
-      const { urls, paths } = await uploadMultipleImages(eventDate, pendingFiles, setProgress)
+      const { urls, paths } = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
       currentImages = [...currentImages, ...urls]
       currentPaths = [...currentPaths, ...paths]
       setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
@@ -423,7 +449,7 @@ export function SharedEventsView({
     events.setItems((prev) => prev.map((e) => (e.id === editing.id ? finalEvent : e)))
     if (savedRemotely) {
       const added = pendingFiles.length
-      showToast(added > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${added} ảnh` : '✏️ Đã cập nhật kỷ niệm')
+      showToast(added > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${added} ảnh/video` : '✏️ Đã cập nhật kỷ niệm')
     } else {
       showToast('⚠️ Chưa lưu được thay đổi lên máy chủ — kiểm tra kết nối rồi thử lại.', 'delete')
     }
@@ -560,13 +586,13 @@ export function SharedEventsView({
         </label>
       )}
 
-      {/* Chọn nhiều ảnh từ bộ sưu tập */}
+      {/* Chọn nhiều ảnh & video từ bộ sưu tập */}
       <div style={{ marginTop: 8 }}>
         <label style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 6, display: 'block' }}>
-          Ảnh kỷ niệm (chọn nhiều ảnh)
+          Ảnh & Video kỷ niệm (chọn nhiều file)
         </label>
         <input
-          ref={fileInput}
+          ref={photoInputRef}
           type="file"
           accept="image/*"
           multiple
@@ -577,15 +603,62 @@ export function SharedEventsView({
             e.target.value = ''
           }}
         />
-        <button
-          type="button"
-          onClick={() => fileInput.current?.click()}
-          style={{ width: '100%', padding: '8px 12px', fontSize: '0.82rem', border: '1px dashed var(--primary)', borderRadius: 10, background: 'var(--primary-light)', color: 'var(--primary)', fontWeight: 600 }}
-        >
-          <ImagePlus size={15} /> Chọn ảnh từ bộ sưu tập (nhiều ảnh)
-        </button>
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          multiple
+          hidden
+          aria-label="Chọn nhiều video từ bộ sưu tập"
+          onChange={(e) => {
+            handlePendingFileSelection(e.target.files)
+            e.target.value = ''
+          }}
+        />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            style={{
+              padding: '10px 8px',
+              fontSize: '0.82rem',
+              border: '1px dashed var(--primary)',
+              borderRadius: 10,
+              background: 'var(--primary-light)',
+              color: 'var(--primary)',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
+          >
+            <ImagePlus size={16} /> Chọn ảnh (nhiều ảnh)
+          </button>
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            style={{
+              padding: '10px 8px',
+              fontSize: '0.82rem',
+              border: '1px dashed #8b5cf6',
+              borderRadius: 10,
+              background: 'rgba(139, 92, 246, 0.08)',
+              color: '#8b5cf6',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
+          >
+            <Video size={16} /> Chọn video (nhiều video)
+          </button>
+        </div>
 
-        {/* Tiến trình xử lý ảnh: nén -> tải lên -> lưu */}
+        {/* Tiến trình xử lý media: nén/tải lên -> lưu */}
         {progress && (
           <div className="photo-progress" role="status" aria-live="polite">
             <div className="photo-progress-top">
@@ -598,25 +671,75 @@ export function SharedEventsView({
             <div className="photo-progress-bar">
               <i style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 100}%` }} />
             </div>
-            <span className="photo-progress-hint">Đừng đóng cửa sổ, ảnh đang được xử lý.</span>
+            <span className="photo-progress-hint">Đừng đóng cửa sổ, tệp đang được tải lên.</span>
           </div>
         )}
 
-        {/* Xem trước ảnh mới chọn chuẩn bị lưu */}
+        {/* Xem trước ảnh & video mới chọn chuẩn bị lưu */}
         {pendingFiles.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {pendingFiles.map((file, idx) => (
-              <div key={idx} style={{ position: 'relative', width: 56, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <button
-                  type="button"
-                  onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}
-                  style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', display: 'grid', placeItems: 'center' }}
+            {pendingFiles.map((file, idx) => {
+              const isVid = isVideoFile(file)
+              const blobUrl = URL.createObjectURL(file)
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    position: 'relative',
+                    width: 58,
+                    height: 58,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    border: '1px solid var(--border)',
+                    background: '#000',
+                  }}
                 >
-                  <Trash2 size={10} />
-                </button>
-              </div>
-            ))}
+                  {isVid ? (
+                    <>
+                      <video src={blobUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 2,
+                          left: 2,
+                          background: 'rgba(0,0,0,0.7)',
+                          color: '#fff',
+                          borderRadius: 3,
+                          padding: '1px 3px',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Video size={10} />
+                      </div>
+                    </>
+                  ) : (
+                    <img src={blobUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      right: 2,
+                      width: 18,
+                      height: 18,
+                      padding: 0,
+                      borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)',
+                      color: '#fff',
+                      border: 'none',
+                      display: 'grid',
+                      placeItems: 'center',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -757,7 +880,16 @@ export function SharedEventsView({
                 </time>
                 {allImages.length > 0 && (
                   <div className="memory-thumb">
-                    <img src={allImages[0]} alt="" />
+                    {isMediaVideo(allImages[0]) ? (
+                      <>
+                        <video src={allImages[0]} preload="metadata" muted playsInline />
+                        <div className="memory-thumb-badge">
+                          <Video size={10} />
+                        </div>
+                      </>
+                    ) : (
+                      <img src={allImages[0]} alt="" />
+                    )}
                     {allImages.length > 1 && (
                       <span>
                         +{allImages.length - 1}
@@ -836,11 +968,23 @@ export function SharedEventsView({
                         if (idx !== selectedImageIdx) setSelectedImageIdx(idx)
                       }}
                     >
-                      {allImages.map((imgUrl, idx) => (
-                        <div className="mem-gallery-slide" key={idx}>
-                          <img src={imgUrl} alt={`${viewingEvent.title} — ảnh ${idx + 1}`} loading="lazy" />
-                        </div>
-                      ))}
+                      {allImages.map((mediaUrl, idx) => {
+                        const isVid = isMediaVideo(mediaUrl)
+                        return (
+                          <div className="mem-gallery-slide" key={idx}>
+                            {isVid ? (
+                              <video
+                                src={mediaUrl}
+                                controls
+                                playsInline
+                                preload="metadata"
+                              />
+                            ) : (
+                              <img src={mediaUrl} alt={`${viewingEvent.title} — ${idx + 1}`} loading="lazy" />
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
 
                     {allImages.length > 1 && (
@@ -854,20 +998,31 @@ export function SharedEventsView({
                           ))}
                         </div>
                         <div className="mem-gallery-thumbs">
-                          {allImages.map((imgUrl, idx) => (
-                            <img
-                              key={idx}
-                              src={imgUrl}
-                              alt=""
-                              loading="lazy"
-                              className={idx === selectedImageIdx ? 'on' : undefined}
-                              onClick={() => {
-                                setSelectedImageIdx(idx)
-                                const track = galleryRef.current
-                                track?.scrollTo({ left: idx * track.clientWidth, behavior: 'smooth' })
-                              }}
-                            />
-                          ))}
+                          {allImages.map((mediaUrl, idx) => {
+                            const isVid = isMediaVideo(mediaUrl)
+                            return (
+                              <div
+                                key={idx}
+                                className={`mem-gallery-thumb-item ${idx === selectedImageIdx ? 'on' : ''}`}
+                                onClick={() => {
+                                  setSelectedImageIdx(idx)
+                                  const track = galleryRef.current
+                                  track?.scrollTo({ left: idx * track.clientWidth, behavior: 'smooth' })
+                                }}
+                              >
+                                {isVid ? (
+                                  <>
+                                    <video src={mediaUrl} preload="metadata" muted playsInline />
+                                    <span className="mem-gallery-thumb-badge">
+                                      <Video size={8} />
+                                    </span>
+                                  </>
+                                ) : (
+                                  <img src={mediaUrl} alt="" loading="lazy" />
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       </>
                     )}
@@ -967,27 +1122,39 @@ export function SharedEventsView({
         <Modal title="Sửa sự kiện" onClose={() => setEditing(null)}>
           {eventForm}
 
-          {/* Danh sách ảnh hiện tại của sự kiện */}
+          {/* Danh sách ảnh & video hiện tại của sự kiện */}
           {(() => {
             const currentImages = editing.images && editing.images.length ? editing.images : (editing.image_url ? [editing.image_url] : [])
             if (!currentImages.length) return null
             return (
               <div style={{ marginTop: 10 }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Ảnh đã lưu ({currentImages.length}):</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Ảnh & Video đã lưu ({currentImages.length}):</span>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                  {currentImages.map((url, idx) => (
-                    <div key={idx} style={{ position: 'relative', width: 64, height: 64, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                      <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <button
-                        type="button"
-                        onClick={() => removeExistingImage(idx)}
-                        title="Xoá ảnh này"
-                        style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, padding: 0, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.85)', color: '#fff', border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
+                  {currentImages.map((url, idx) => {
+                    const isVid = isMediaVideo(url)
+                    return (
+                      <div key={idx} style={{ position: 'relative', width: 64, height: 64, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', background: '#000' }}>
+                        {isVid ? (
+                          <>
+                            <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                            <div style={{ position: 'absolute', bottom: 2, left: 2, background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 3, padding: '1px 3px', display: 'flex', alignItems: 'center' }}>
+                              <Video size={10} />
+                            </div>
+                          </>
+                        ) : (
+                          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeExistingImage(idx)}
+                          title="Xoá file này"
+                          style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, padding: 0, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.85)', color: '#fff', border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
