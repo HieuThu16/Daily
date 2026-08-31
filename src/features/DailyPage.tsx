@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3, Clock, History, ImagePlus,
-  Link as Loader2, NotebookPen, Pencil, Plus, Save,
-  Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag
+  Loader2, NotebookPen, Pencil, Plus, Save,
+  Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag, Play
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
@@ -210,6 +210,78 @@ export function DailyPage() {
   const [uploading, setUploading] = useState(false)
   const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, []))
   const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
+
+  // Media đính kèm cho bài viết mới
+  const [attachedMedia, setAttachedMedia] = useState<{
+    url: string
+    path: string
+    type: 'image' | 'video'
+    name: string
+  } | null>(null)
+  const [mediaUploading, setMediaUploading] = useState(false)
+  const formFileInputRef = useRef<HTMLInputElement>(null)
+  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
+
+  const handleUploadFormMedia = async (file: File) => {
+    if (!supabase) {
+      showToast('⚠️ Cần kết nối Supabase để lưu ảnh/video', 'local')
+      return
+    }
+    setMediaUploading(true)
+    try {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
+      let uploadBlob: Blob | File = file
+      let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
+
+      if (!isVideo) {
+        const compressed = await compressForUpload(file)
+        uploadBlob = compressed.blob
+        ext = compressed.ext
+      }
+
+      const path = `${date}/${crypto.randomUUID()}.${ext}`
+      const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+
+      const { error: uploadErr } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(path, uploadBlob, { contentType, upsert: true })
+
+      if (uploadErr) {
+        showToast('❌ Tải file lên thất bại: ' + uploadErr.message, 'delete')
+        setMediaUploading(false)
+        return
+      }
+
+      const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+      const publicUrl = pubData.publicUrl
+
+      if (attachedMedia?.path) {
+        await supabase.storage.from(PHOTO_BUCKET).remove([attachedMedia.path]).catch(() => {})
+      }
+
+      setAttachedMedia({
+        url: publicUrl,
+        path,
+        type: isVideo ? 'video' : 'image',
+        name: file.name,
+      })
+
+      showToast(`✅ Đã tải ${isVideo ? 'video' : 'ảnh'} lên Supabase Storage!`, 'success')
+    } catch (err: any) {
+      showToast('❌ Lỗi upload: ' + (err?.message || ''), 'delete')
+    } finally {
+      setMediaUploading(false)
+    }
+  }
+
+  const handleRemoveFormMedia = async () => {
+    if (!attachedMedia) return
+    if (supabase && attachedMedia.path) {
+      await supabase.storage.from(PHOTO_BUCKET).remove([attachedMedia.path]).catch(() => {})
+    }
+    setAttachedMedia(null)
+    showToast('🗑️ Đã gỡ file đính kèm', 'delete')
+  }
   
   // Lưu danh sách hành động chọn nhanh riêng cho từng người lên Supabase
   const saveUserQuickPhrases = async (phrases: string[]) => {
@@ -453,6 +525,15 @@ export function DailyPage() {
     showToast(`🗑️ Đã xoá thể loại "${catLabel}"`, 'delete')
   }
 
+  const setQuickTime = (fromVal: string, toVal: string) => {
+    setTimeFrom(fromVal)
+    setTimeTo(toVal)
+    const formatted = fromVal && toVal ? `${fromVal} - ${toVal}` : fromVal
+    setTimeOverride(formatted)
+    const newPrefix = computeTimePrefix(fromVal, toVal)
+    setContent((prev) => applyTimePrefixToContent(prev, newPrefix))
+  }
+
   const saveEntries = async () => {
     const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
     if (!lines.length) return
@@ -460,8 +541,8 @@ export function DailyPage() {
     setSaveSuccess('')
     const currentTimeString = timeOverride || clock
 
-    // Tạo payload chuẩn xác với is_first_time, is_special và category
-    const payload = lines.map((lineText) => ({
+    // Tạo payload chuẩn xác với is_first_time, is_special, category và ảnh/video đính kèm
+    const payload = lines.map((lineText, idx) => ({
       content: lineText,
       entry_date: date,
       entry_type: selectedCategory ? (selectedCategory as DailyType) : 'FEELING',
@@ -469,6 +550,8 @@ export function DailyPage() {
       is_first_time: Boolean(isFirstTime),
       is_special: Boolean(isSpecial),
       tags: selectedCategory ? [selectedCategory] : [],
+      image_url: idx === 0 ? attachedMedia?.url ?? null : null,
+      image_path: idx === 0 ? attachedMedia?.path ?? null : null,
     }))
 
     let savedToSupabase = false
@@ -498,10 +581,12 @@ export function DailyPage() {
         } else if (error) {
           console.warn('Lỗi Supabase, thử lại phương án dự phòng:', error)
           // Thử lại nếu DB từ chối cột mới
-          const simplePayload = lines.map((lineText) => ({
+          const simplePayload = lines.map((lineText, idx) => ({
             content: lineText,
             entry_date: date,
             entry_time: currentTimeString,
+            image_url: idx === 0 ? attachedMedia?.url ?? null : null,
+            image_path: idx === 0 ? attachedMedia?.path ?? null : null,
           }))
           const { data: retryData, error: retryErr } = await supabase
             .from('daily_entries')
@@ -528,6 +613,7 @@ export function DailyPage() {
       setContent('')
       setIsFirstTime(false)
       setIsSpecial(false)
+      setAttachedMedia(null)
       showToast(`☁️ Đã lưu ${lines.length} bài nhật ký lên Supabase!`, 'success')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung lên Supabase ✨`)
       setTimeout(() => setSaveSuccess(''), 3500)
@@ -543,6 +629,7 @@ export function DailyPage() {
       setContent('')
       setIsFirstTime(false)
       setIsSpecial(false)
+      setAttachedMedia(null)
       showToast(`💾 Đã lưu ${lines.length} bài vào Local (Hàng đợi đồng bộ)`, 'local')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung vào Local 💾`)
       setTimeout(() => setSaveSuccess(''), 3500)
@@ -636,43 +723,58 @@ export function DailyPage() {
     setEditTime(from && to ? `${from} - ${to}` : from || entry.entry_time || '')
   }
 
-  /** Đính ảnh vào dòng nhật ký đang mở; ảnh cũ bị thay và xoá khỏi storage. */
-  const uploadEntryImage = async (file: File) => {
+  /** Đính ảnh/video vào dòng nhật ký đang mở; file cũ bị thay và xoá khỏi storage. */
+  const uploadEntryMedia = async (file: File) => {
     if (!editing || !supabase) return
     setUploading(true)
-    // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
-    const { blob, ext } = await compressForUpload(file)
-    const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blob)
-    if (uploadError) {
-      showToast('❌ Tải ảnh lên thất bại', 'delete')
+    try {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
+      let uploadBlob: Blob | File = file
+      let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
+
+      if (!isVideo) {
+        const compressed = await compressForUpload(file)
+        uploadBlob = compressed.blob
+        ext = compressed.ext
+      }
+
+      const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
+      const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+
+      const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, uploadBlob, { contentType, upsert: true })
+      if (uploadError) {
+        showToast('❌ Tải file lên thất bại: ' + uploadError.message, 'delete')
+        setUploading(false)
+        return
+      }
+      const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
+      const previousPath = editing.image_path
+      const { error } = await supabase.from('daily_entries').update({ image_url: url, image_path: path }).eq('id', editing.id)
+      if (error) {
+        await supabase.storage.from(PHOTO_BUCKET).remove([path])
+        showToast('❌ Chưa lưu được file. Vui lòng thử lại.', 'delete')
+        setUploading(false)
+        return
+      }
+      if (previousPath) await supabase.storage.from(PHOTO_BUCKET).remove([previousPath]).catch(() => {})
+      setEditing((current) => (current ? { ...current, image_url: url, image_path: path } : current))
+      setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: url, image_path: path } : i)))
+      showToast(isVideo ? '🎬 Đã thêm video' : '🖼️ Đã thêm ảnh')
+    } catch (err: any) {
+      showToast('❌ Lỗi upload: ' + (err?.message || ''), 'delete')
+    } finally {
       setUploading(false)
-      return
     }
-    const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
-    const previousPath = editing.image_path
-    const { error } = await supabase.from('daily_entries').update({ image_url: url, image_path: path }).eq('id', editing.id)
-    if (error) {
-      await supabase.storage.from(PHOTO_BUCKET).remove([path])
-      showToast('❌ Chưa lưu được ảnh. Chạy migration daily_entry_image chưa?', 'delete')
-      setUploading(false)
-      return
-    }
-    if (previousPath) await supabase.storage.from(PHOTO_BUCKET).remove([previousPath])
-    setEditing((current) => (current ? { ...current, image_url: url, image_path: path } : current))
-    setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: url, image_path: path } : i)))
-    showToast('🖼️ Đã thêm ảnh')
-    setUploading(false)
   }
 
-  const removeEntryImage = async () => {
+  const removeEntryMedia = async () => {
     if (!editing || !supabase) return
     const path = editing.image_path
     await supabase.from('daily_entries').update({ image_url: null, image_path: null }).eq('id', editing.id)
-    if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path])
+    if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]).catch(() => {})
     setEditing((current) => (current ? { ...current, image_url: null, image_path: null } : current))
     setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: null, image_path: null } : i)))
-    showToast('🗑️ Đã gỡ ảnh', 'delete')
+    showToast('🗑️ Đã gỡ file đính kèm', 'delete')
   }
 
   const toggleFavorite = async (entry: Entry) => {
@@ -788,46 +890,75 @@ export function DailyPage() {
     <section className="page-shell">
 
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
         <button
           onClick={() => setPageTab('write')}
           style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
-            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
+            flex: 1,
+            padding: '9px 0',
+            borderRadius: 14,
+            fontSize: '0.8rem',
+            fontWeight: 800,
+            border: '1.5px solid',
+            cursor: 'pointer',
+            transition: 'all 0.18s ease',
             borderColor: pageTab === 'write' ? 'var(--primary)' : 'var(--card-border)',
-            background: pageTab === 'write' ? 'var(--primary)' : 'var(--card-bg)',
+            background: pageTab === 'write' ? 'linear-gradient(135deg, var(--primary), #6366f1)' : 'var(--card-bg)',
             color: pageTab === 'write' ? 'white' : 'var(--text-main)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            boxShadow: pageTab === 'write' ? '0 3px 12px rgba(99, 102, 241, 0.3)' : 'none',
           }}
         >
-          <NotebookPen size={13} /> Viết nhật ký
+          <NotebookPen size={14} /> Viết nhật ký
         </button>
         <button
           onClick={() => setPageTab('collection')}
           style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
-            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
-            borderColor: pageTab === 'collection' ? '#8b5cf6' : 'var(--card-border)',
+            flex: 1,
+            padding: '9px 0',
+            borderRadius: 14,
+            fontSize: '0.8rem',
+            fontWeight: 800,
+            border: '1.5px solid',
+            cursor: 'pointer',
+            transition: 'all 0.18s ease',
+            borderColor: pageTab === 'collection' ? '#ec4899' : 'var(--card-border)',
             background: pageTab === 'collection' ? 'linear-gradient(135deg, #ec4899, #8b5cf6)' : 'var(--card-bg)',
             color: pageTab === 'collection' ? 'white' : 'var(--text-main)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-            boxShadow: pageTab === 'collection' ? '0 3px 12px rgba(139, 92, 246, 0.35)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            boxShadow: pageTab === 'collection' ? '0 3px 12px rgba(236, 72, 153, 0.3)' : 'none',
           }}
         >
-          <Sparkles size={13} /> Sưu tập ({collectionEntries.length})
+          <Sparkles size={14} /> Sưu tập ({collectionEntries.length})
         </button>
         <button
           onClick={() => setPageTab('stats')}
           style={{
-            flex: 1, padding: '7px 0', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
-            border: '1.5px solid', cursor: 'pointer', transition: 'all 0.18s',
+            flex: 1,
+            padding: '9px 0',
+            borderRadius: 14,
+            fontSize: '0.8rem',
+            fontWeight: 800,
+            border: '1.5px solid',
+            cursor: 'pointer',
+            transition: 'all 0.18s ease',
             borderColor: pageTab === 'stats' ? 'var(--emerald)' : 'var(--card-border)',
-            background: pageTab === 'stats' ? 'var(--emerald)' : 'var(--card-bg)',
+            background: pageTab === 'stats' ? 'linear-gradient(135deg, #10b981, #059669)' : 'var(--card-bg)',
             color: pageTab === 'stats' ? 'white' : 'var(--text-main)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            boxShadow: pageTab === 'stats' ? '0 3px 12px rgba(16, 185, 129, 0.3)' : 'none',
           }}
         >
-          <BarChart3 size={13} /> Thống kê
+          <BarChart3 size={14} /> Thống kê
         </button>
       </div>
 
@@ -835,7 +966,7 @@ export function DailyPage() {
       {pageTab === 'write' && (
         <>
           {/* Thanh chọn Thể loại nhật ký & Quản lý */}
-          <div style={{ marginBottom: 10 }}>
+          <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
               <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 5 }}>
                 <Tag size={13} color="var(--purple)" /> Thể loại nhật ký:
@@ -850,7 +981,7 @@ export function DailyPage() {
                 style={{
                   fontSize: '0.72rem',
                   fontWeight: 700,
-                  padding: '3px 9px',
+                  padding: '3px 10px',
                   borderRadius: 8,
                   border: '1px solid var(--card-border)',
                   background: 'var(--card-bg)',
@@ -887,7 +1018,7 @@ export function DailyPage() {
                   fontSize: '0.76rem',
                   fontWeight: 700,
                   border: selectedCategory === null ? '1.5px solid var(--primary)' : '1px solid var(--card-border)',
-                  background: selectedCategory === null ? 'var(--primary-light)' : 'var(--card-bg)',
+                  background: selectedCategory === null ? 'rgba(99, 102, 241, 0.12)' : 'var(--card-bg)',
                   color: selectedCategory === null ? 'var(--primary)' : 'var(--text-muted)',
                   cursor: 'pointer',
                   display: 'inline-flex',
@@ -933,60 +1064,64 @@ export function DailyPage() {
                 )
               })}
 
-              {dailyCategories.length === 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryConfigModal(true)}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: 12,
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                    border: '1px dashed var(--purple)',
-                    background: 'var(--purple-bg)',
-                    color: 'var(--purple)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    flexShrink: 0,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <Plus size={13} /> Thêm thể loại mới
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowCategoryConfigModal(true)}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 12,
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  border: '1px dashed var(--purple)',
+                  background: 'var(--purple-bg)',
+                  color: 'var(--purple)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Plus size={13} /> Thêm thể loại
+              </button>
             </div>
           </div>
 
           {/* Write card */}
-          <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.68rem' }}>
+          <div className="card" style={{ padding: 14, marginBottom: 14, borderRadius: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span className="eyebrow" style={{ margin: 0, padding: '3px 9px', fontSize: '0.7rem', fontWeight: 800 }}>
                 {longDate(new Date(date + 'T12:00:00'))}
               </span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid var(--card-border)', borderRadius: 8, padding: '2px 6px', fontSize: '0.78rem' }} aria-label="Ngày của nhật ký" />
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                style={{ border: '1px solid var(--card-border)', borderRadius: 10, padding: '3px 8px', fontSize: '0.8rem', background: 'var(--bg-main)', color: 'var(--text-main)' }}
+                aria-label="Ngày của nhật ký"
+              />
             </div>
 
             {/* Khung chọn 2 nút Giờ: Giờ từ ➔ Giờ đến */}
-            <div style={{ padding: '8px 12px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)', marginBottom: 10 }}>
+            <div style={{ padding: '10px 12px', background: 'var(--bg-main)', borderRadius: 14, border: '1px solid var(--card-border)', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Clock size={13} color="var(--amber)" /> Khung giờ nhật ký:
                 </span>
                 {(timeFrom || timeTo || timeOverride) && (
                   <button
                     type="button"
                     onClick={clearTimeRange}
-                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--rose)', cursor: 'pointer', fontWeight: 700 }}
                   >
-                    Xóa giờ
+                    ✕ Xóa giờ
                   </button>
                 )}
               </div>
 
               {/* 2 nút chọn giờ: Giờ từ & Giờ đến */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
                   <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
                   <input
@@ -1018,58 +1153,65 @@ export function DailyPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Quick time preset chips */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)' }}>Mẫu nhanh:</span>
+                <button type="button" onClick={() => setQuickTime('07:00', '08:00')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  🌅 Sáng
+                </button>
+                <button type="button" onClick={() => setQuickTime('11:30', '12:30')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  ☀️ Trưa
+                </button>
+                <button type="button" onClick={() => setQuickTime('17:00', '18:00')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  🌇 Chiều
+                </button>
+                <button type="button" onClick={() => setQuickTime('20:00', '21:30')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  🌙 Tối
+                </button>
+                <button type="button" onClick={() => setQuickTime(clock, '')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--amber)', cursor: 'pointer' }}>
+                  ⏱️ Hiện tại ({clock})
+                </button>
+              </div>
             </div>
 
-            {/* Thanh chọn Hành động & Nút liên kết YouTube / TV Show */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              {/* Nút chính: Mở Modal Combobox Chọn Hành Động */}
+            {/* 3 Nút Hành động & Tiện ích: Hành động nhanh | Gắn YouTube | Tải Ảnh/Video */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+              {/* 1. Nút Hành động */}
               <button
                 type="button"
                 onClick={() => setShowActionModal(true)}
                 style={{
-                  padding: '7px 8px',
+                  padding: '8px 6px',
                   borderRadius: 12,
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
+                  fontSize: '0.76rem',
+                  fontWeight: 800,
                   border: '1.5px solid var(--amber)',
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.25))',
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.22))',
                   color: 'var(--amber)',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 5,
-                  boxShadow: '0 2px 6px rgba(245, 158, 11, 0.15)',
-                  transition: 'all 0.15s ease',
+                  boxShadow: '0 2px 6px rgba(245, 158, 11, 0.12)',
+                  transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  width: '100%',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.background = 'var(--amber)'
-                  e.currentTarget.style.color = '#fff'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.25))'
-                  e.currentTarget.style.color = 'var(--amber)'
                 }}
               >
                 <Zap size={14} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Hành động (Chọn nhanh)</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Hành động</span>
               </button>
 
-              {/* Nút Gắn YouTube / TV Show */}
+              {/* 2. Nút Gắn YouTube / TV Show */}
               <button
                 type="button"
                 onClick={() => setShowVideoModal(true)}
                 style={{
-                  padding: '7px 8px',
+                  padding: '8px 6px',
                   borderRadius: 12,
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
+                  fontSize: '0.76rem',
+                  fontWeight: 800,
                   border: '1.5px solid #ef4444',
                   background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))',
                   color: '#ef4444',
@@ -1078,28 +1220,133 @@ export function DailyPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 5,
-                  boxShadow: '0 2px 6px rgba(239, 68, 68, 0.15)',
-                  transition: 'all 0.15s ease',
+                  boxShadow: '0 2px 6px rgba(239, 68, 68, 0.12)',
+                  transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  width: '100%',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.background = '#ef4444'
-                  e.currentTarget.style.color = '#fff'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))'
-                  e.currentTarget.style.color = '#ef4444'
                 }}
               >
                 <Youtube size={14} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Gắn YouTube / TV Show</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>YouTube / TV</span>
               </button>
+
+              {/* 3. Nút Upload Ảnh / Video (Có lưu Database) */}
+              <button
+                type="button"
+                onClick={() => formFileInputRef.current?.click()}
+                disabled={mediaUploading || !supabase}
+                style={{
+                  padding: '8px 6px',
+                  borderRadius: 12,
+                  fontSize: '0.76rem',
+                  fontWeight: 800,
+                  border: attachedMedia ? '1.5px solid #10b981' : '1.5px solid #06b6d4',
+                  background: attachedMedia
+                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25))'
+                    : 'linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(99, 102, 241, 0.18))',
+                  color: attachedMedia ? '#10b981' : '#06b6d4',
+                  cursor: mediaUploading ? 'wait' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  boxShadow: attachedMedia ? '0 2px 8px rgba(16, 185, 129, 0.2)' : '0 2px 6px rgba(6, 182, 212, 0.12)',
+                  transition: 'all 0.18s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Tải ảnh hoặc video đính kèm bài viết này"
+              >
+                {mediaUploading ? (
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <ImagePlus size={14} style={{ flexShrink: 0 }} />
+                )}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {mediaUploading ? 'Đang tải...' : attachedMedia ? 'Đã có file ✓' : 'Ảnh / Video'}
+                </span>
+              </button>
+              <input
+                ref={formFileInputRef}
+                type="file"
+                accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) void handleUploadFormMedia(file)
+                  e.target.value = ''
+                }}
+              />
             </div>
+
+            {/* Media Preview Box nếu đã chọn file */}
+            {attachedMedia && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1.5px solid rgba(16, 185, 129, 0.35)',
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 10,
+                    overflow: 'hidden',
+                    background: '#000',
+                    flexShrink: 0,
+                    display: 'grid',
+                    placeItems: 'center',
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
+                  onClick={() => setPreviewMediaUrl(attachedMedia.url)}
+                  title="Nhấn để xem trước toàn màn hình"
+                >
+                  {attachedMedia.type === 'video' ? (
+                    <>
+                      <video src={attachedMedia.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'grid', placeItems: 'center', color: '#fff' }}>
+                        <Play size={16} />
+                      </div>
+                    </>
+                  ) : (
+                    <img src={attachedMedia.url} alt="Đính kèm" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {attachedMedia.name}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ✓ Đã lưu Supabase Storage ({attachedMedia.type === 'video' ? 'Video' : 'Ảnh'})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveFormMedia()}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 10,
+                    border: '1px solid var(--card-border)',
+                    background: 'var(--card-bg)',
+                    color: 'var(--rose)',
+                    cursor: 'pointer',
+                    display: 'grid',
+                    placeItems: 'center',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Gỡ file đính kèm này"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
 
             <textarea
               value={content}
@@ -1113,8 +1360,9 @@ export function DailyPage() {
                 {mentionPeople.map((person) => <button key={person.id} type="button" className="eyebrow" onClick={() => setContent((value) => value.replace(/@[^\s@]*$/, `@${person.name} `))}>@{person.name}</button>)}
               </div>
             )}
+
             {/* 2 NÚT ĐÁNH DẤU: LẦN ĐẦU & ĐẶC BIỆT (XUẤT HIỆN Ở TAB SƯU TẬP THẺ 3D) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10, padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12, padding: '4px 0' }}>
               <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)' }}>Đánh dấu thẻ:</span>
               <button
                 type="button"
@@ -1170,13 +1418,28 @@ export function DailyPage() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-              <button className="primary" onClick={saveEntries} disabled={busy} style={{ padding: '6px 16px', fontSize: '0.84rem' }}>
+              <button
+                className="primary"
+                onClick={saveEntries}
+                disabled={busy}
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.86rem',
+                  fontWeight: 800,
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                  boxShadow: '0 3px 12px rgba(37, 99, 235, 0.35)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
                 <Save size={15} />
-                {busy ? 'Lưu…' : 'Lưu nhật ký'}
+                {busy ? 'Đang lưu…' : 'Lưu nhật ký'}
               </button>
             </div>
             {saveSuccess && (
-              <div style={{ marginTop: 6, padding: '6px 10px', background: 'var(--emerald-bg)', color: 'var(--emerald)', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+              <div style={{ marginTop: 8, padding: '7px 12px', background: 'var(--emerald-bg)', color: 'var(--emerald)', borderRadius: 10, fontSize: '0.82rem', fontWeight: 700, textAlign: 'center' }}>
                 {saveSuccess}
               </div>
             )}
@@ -1184,8 +1447,8 @@ export function DailyPage() {
 
           {/* Ngày này năm trước — chỉ hiện khi thật sự có ký ức cùng ngày-tháng */}
           {!keyword && onThisDay.length > 0 && (
-            <div className="card" style={{ padding: 12, marginBottom: 12 }}>
-              <h2 style={{ margin: '0 0 8px', fontSize: '0.88rem', color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="card" style={{ padding: 12, marginBottom: 12, borderRadius: 14 }}>
+              <h2 style={{ margin: '0 0 8px', fontSize: '0.88rem', color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800 }}>
                 <History size={15} /> Ngày này năm trước ({onThisDay.length})
               </h2>
               <div style={{ display: 'grid', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
@@ -1194,13 +1457,13 @@ export function DailyPage() {
                     key={entry.id}
                     type="button"
                     onClick={() => openEntry(entry)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 7, padding: '5px 8px', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left', border: 0, background: 'var(--bg-main)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}
                   >
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--amber)', flexShrink: 0 }}>{entry.entry_date.slice(0, 4)}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--amber)', flexShrink: 0 }}>{entry.entry_date.slice(0, 4)}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {entry.content}
                     </span>
-                    {entry.image_url && <img src={entry.image_url} alt="" loading="lazy" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover' }} />}
+                    {entry.image_url && <img src={entry.image_url} alt="" loading="lazy" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'cover' }} />}
                   </button>
                 ))}
               </div>
@@ -1208,9 +1471,9 @@ export function DailyPage() {
           )}
 
           {/* Today's entries list */}
-          <div className="card" style={{ padding: 12, margin: 0 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <h2 style={{ margin: 0, fontSize: '0.88rem', color: 'var(--primary)' }}>
+          <div className="card" style={{ padding: 14, margin: 0, borderRadius: 16 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <h2 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>
                 <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký hôm nay (${todayEntries.length})`}
               </h2>
               <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)', overflowX: 'auto', maxWidth: '100%' }}>
@@ -1262,70 +1525,96 @@ export function DailyPage() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm trong toàn bộ nhật ký…"
               aria-label="Tìm trong nhật ký"
-              style={{ width: '100%', marginBottom: 8, fontSize: '0.82rem' }}
+              style={{ width: '100%', marginBottom: 10, fontSize: '0.82rem', borderRadius: 10 }}
             />
 
             {loading ? (
               <SkeletonList rows={3} height={72} />
             ) : todayEntries.length ? (
-              <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gap: 8, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
                 {todayEntries.map((entry) => {
                   const catInfo = getCategoryInfo(entry, dailyCategories)
+                  const isVideo = entry.image_url && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entry.image_url)
                   return (
-                    <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-main)', borderRadius: 7 }}>
-                    <button
-                      type="button"
-                      aria-label={`Xem chi tiết: ${entry.content}`}
-                      onClick={() => openEntry(entry)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', borderRadius: 7, padding: '4px 7px', cursor: 'pointer' }}
-                    >
-                      {catInfo ? (
-                        <div className="icon-box icon-box-sm" style={{ background: catInfo.bg, color: catInfo.color, width: 20, height: 20, flexShrink: 0, fontSize: '0.75rem' }} title={catInfo.label}>
-                          {catInfo.icon}
-                        </div>
-                      ) : (
-                        <div className="icon-box icon-box-sm" style={{ background: 'var(--card-bg)', color: 'var(--text-muted)', width: 20, height: 20, flexShrink: 0, fontSize: '0.7rem' }}>
-                          📝
-                        </div>
-                      )}
-                      {keyword && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', flexShrink: 0 }}>{entry.entry_date.slice(8)}/{entry.entry_date.slice(5, 7)}</span>
-                      )}
-                      {entry.entry_time && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: catInfo?.color || 'var(--amber)', flexShrink: 0 }}>{entry.entry_time}</span>
-                      )}
-                      {entry.is_first_time && (
-                        <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#06b6d4', background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
-                          ✨ Lần đầu
+                    <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-main)', borderRadius: 12, padding: '4px 6px', border: '1px solid var(--card-border)' }}>
+                      <button
+                        type="button"
+                        aria-label={`Xem chi tiết: ${entry.content}`}
+                        onClick={() => openEntry(entry)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', borderRadius: 8, padding: '4px 6px', cursor: 'pointer' }}
+                      >
+                        {catInfo ? (
+                          <div className="icon-box icon-box-sm" style={{ background: catInfo.bg, color: catInfo.color, width: 22, height: 22, flexShrink: 0, fontSize: '0.75rem', borderRadius: 7 }} title={catInfo.label}>
+                            {catInfo.icon}
+                          </div>
+                        ) : (
+                          <div className="icon-box icon-box-sm" style={{ background: 'var(--card-bg)', color: 'var(--text-muted)', width: 22, height: 22, flexShrink: 0, fontSize: '0.7rem', borderRadius: 7 }}>
+                            📝
+                          </div>
+                        )}
+                        {keyword && (
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', flexShrink: 0 }}>{entry.entry_date.slice(8)}/{entry.entry_date.slice(5, 7)}</span>
+                        )}
+                        {entry.entry_time && (
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: catInfo?.color || 'var(--amber)', flexShrink: 0 }}>{entry.entry_time}</span>
+                        )}
+                        {entry.is_first_time && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#06b6d4', background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
+                            ✨ Lần đầu
+                          </span>
+                        )}
+                        {entry.is_special && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
+                            🌟 Đặc biệt
+                          </span>
+                        )}
+                        <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {entry.content}
                         </span>
+                      </button>
+
+                      {/* Thumbnail ảnh hoặc Video badge */}
+                      {entry.image_url && (
+                        <div
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            background: '#000',
+                            flexShrink: 0,
+                            cursor: 'pointer',
+                            display: 'grid',
+                            placeItems: 'center',
+                          }}
+                          onClick={() => setPreviewMediaUrl(entry.image_url!)}
+                          title="Bấm để xem ảnh / video"
+                        >
+                          {isVideo ? (
+                            <span style={{ fontSize: '0.7rem' }}>🎬</span>
+                          ) : (
+                            <img src={entry.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                        </div>
                       )}
-                      {entry.is_special && (
-                        <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
-                          🌟 Đặc biệt
-                        </span>
-                      )}
-                      <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {entry.content}
-                      </span>
-                      {entry.image_url && <img src={entry.image_url} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} />}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`${entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}: ${entry.content}`}
-                      aria-pressed={!!entry.is_favorite}
-                      onClick={() => toggleFavorite(entry)}
-                      style={{ border: 0, background: 'transparent', padding: '4px 7px', cursor: 'pointer', color: entry.is_favorite ? 'var(--amber)' : 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                    >
-                      <Star size={13} fill={entry.is_favorite ? 'currentColor' : 'none'} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Sửa: ${entry.content}`}
-                      onClick={() => openEntry(entry)}
-                      style={{ border: 0, background: 'transparent', padding: '4px 7px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                    >
-                      <Pencil size={13} />
-                    </button>
+
+                      <button
+                        type="button"
+                        aria-label={`${entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}: ${entry.content}`}
+                        aria-pressed={!!entry.is_favorite}
+                        onClick={() => toggleFavorite(entry)}
+                        style={{ border: 0, background: 'transparent', padding: '4px 6px', cursor: 'pointer', color: entry.is_favorite ? 'var(--amber)' : 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <Star size={14} fill={entry.is_favorite ? 'currentColor' : 'none'} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Sửa: ${entry.content}`}
+                        onClick={() => openEntry(entry)}
+                        style={{ border: 0, background: 'transparent', padding: '4px 6px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <Pencil size={14} />
+                      </button>
                     </div>
                   )
                 })}
@@ -1339,6 +1628,29 @@ export function DailyPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Modal phóng to xem ảnh / video toàn màn hình */}
+      {previewMediaUrl && (
+        <Modal title="Xem ảnh / video đính kèm" onClose={() => setPreviewMediaUrl(null)}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            {/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(previewMediaUrl) ? (
+              <video src={previewMediaUrl} controls autoPlay style={{ width: '100%', maxHeight: '75vh', borderRadius: 12, background: '#000' }} />
+            ) : (
+              <img src={previewMediaUrl} alt="Phóng to" style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: 12 }} />
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: 4 }}>
+              <a
+                href={previewMediaUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: '0.78rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: 700 }}
+              >
+                Mở ở tab mới ↗
+              </a>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ════════════════ COLLECTION TAB (SƯU TẬP THẺ 3D) ════════════════ */}
@@ -1865,31 +2177,36 @@ export function DailyPage() {
 
           <div style={{ display: 'grid', gap: 8 }}>
             {editing.image_url && (
-              <img src={editing.image_url} alt="Ảnh nhật ký" style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 12, background: 'var(--bg-main)' }} />
+              /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(editing.image_url) ? (
+                <video src={editing.image_url} controls style={{ width: '100%', maxHeight: 300, borderRadius: 12, background: '#000' }} />
+              ) : (
+                <img src={editing.image_url} alt="Ảnh nhật ký" style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 12, background: 'var(--bg-main)' }} />
+              )
             )}
             <input
               ref={entryFileInput}
               type="file"
-              accept="image/*"
+              accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
               hidden
-              aria-label="Chọn ảnh cho nhật ký"
+              aria-label="Chọn ảnh hoặc video cho nhật ký"
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 e.target.value = ''
-                if (file) uploadEntryImage(file)
+                if (file) void uploadEntryMedia(file)
               }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" onClick={() => entryFileInput.current?.click()} disabled={!supabase || uploading}>
-                <ImagePlus size={14} /> {uploading ? 'Đang tải…' : editing.image_url ? 'Đổi ảnh' : 'Thêm ảnh'}
+                {uploading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <ImagePlus size={14} />}
+                {uploading ? 'Đang tải…' : editing.image_url ? 'Đổi Ảnh / Video' : 'Thêm Ảnh / Video'}
               </button>
               {editing.image_url && (
-                <button type="button" className="text-danger" onClick={removeEntryImage}>
-                  <Trash2 size={14} /> Gỡ ảnh
+                <button type="button" className="text-danger" onClick={() => void removeEntryMedia()}>
+                  <Trash2 size={14} /> Gỡ file
                 </button>
               )}
             </div>
-            {!supabase && <small className="muted">Chưa cấu hình Supabase nên chưa lưu được ảnh.</small>}
+            {!supabase && <small className="muted">Chưa cấu hình Supabase nên chưa lưu được ảnh/video.</small>}
           </div>
 
           {/* Đánh dấu thẻ Sưu tập: Lần đầu / Đặc biệt trong Modal sửa */}
