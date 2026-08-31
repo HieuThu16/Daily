@@ -53,7 +53,7 @@ function sharedRefs(): Set<string> {
   }
 }
 
-function rememberRef(key: string) {
+export function rememberRef(key: string) {
   const set = sharedRefs()
   set.add(key)
   try {
@@ -176,7 +176,7 @@ export async function unshare(shareId: string): Promise<void> {
 
 /**
  * Cập nhật tiến độ của chính mình cho MỌI người mình đã gửi mục này —
- * họ thấy chạy realtime.
+ * và phản hồi tiến độ cho người đã gửi mục này cho mình (chạy realtime 2 chiều).
  */
 export async function updateMyShareProgress(
   kind: WatchKind,
@@ -187,17 +187,53 @@ export async function updateMyShareProgress(
   if (!supabase || !sharedRefs().has(`${kind}:${refId}`)) return
   try {
     const { data } = await supabase.auth.getUser()
-    if (!data?.user) return
+    const user = data?.user
+    if (!user) return
+    const clampedPercent = Math.max(0, Math.min(100, Math.round(percent)))
+    const pText = progressText ?? (clampedPercent >= 90 ? 'Đã xem xong' : `Đang xem ${clampedPercent}%`)
+
+    // 1. Cập nhật các dòng mình là SENDER (gửi đi)
     await supabase
       .from('watch_shares')
       .update({
-        percent: Math.max(0, Math.min(100, Math.round(percent))),
-        progress_text: progressText ?? null,
+        percent: clampedPercent,
+        progress_text: pText,
         updated_at: new Date().toISOString(),
       })
-      .eq('sender_id', data.user.id)
+      .eq('sender_id', user.id)
       .eq('kind', kind)
       .eq('ref_id', refId)
+
+    // 2. Cập nhật/tạo dòng phản hồi nếu mình là RECIPIENT (người nhận mục này)
+    const tableQuery = supabase.from('watch_shares')
+    if (typeof tableQuery.select === 'function') {
+      const { data: incoming } = await tableQuery
+        .select('sender_id, sender_email, title, subtitle, thumbnail, url')
+        .eq('recipient_id', user.id)
+        .eq('kind', kind)
+        .eq('ref_id', refId)
+
+      if (incoming && incoming.length > 0) {
+        const reciprocalRows = incoming.map((inc: any) => ({
+          sender_id: user.id,
+          sender_email: user.email ?? null,
+          recipient_id: inc.sender_id,
+          recipient_email: inc.sender_email,
+          kind,
+          ref_id: refId,
+          title: inc.title,
+          subtitle: inc.subtitle ?? null,
+          thumbnail: inc.thumbnail ?? null,
+          url: inc.url ?? null,
+          percent: clampedPercent,
+          progress_text: pText,
+          updated_at: new Date().toISOString(),
+        }))
+        await supabase
+          .from('watch_shares')
+          .upsert(reciprocalRows, { onConflict: 'sender_id,recipient_id,kind,ref_id' })
+      }
+    }
   } catch (err) {
     console.warn('[watchTogether] không cập nhật được tiến độ:', err)
   }
