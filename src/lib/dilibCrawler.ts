@@ -376,6 +376,8 @@ export const DILIB_POPULAR_AUTHORS: string[] = [
 ]
 
 export type CrawlerSource = 'ALL' | 'DILIB' | 'DTV'
+export type CrawlerBookFormat = 'ALL' | 'AUDIO' | 'READ'
+export type CrawlerScope = 'ALL_LIBRARY' | 'CATEGORY' | 'AUTHOR' | 'SEARCH'
 
 export type UnifiedSearchResult = {
   url: string
@@ -408,12 +410,15 @@ export type DilibBookDetail = UnifiedBookDetail
 
 export type CrawlReport = {
   totalScanned: number
+  targetCount?: number
+  matchedCount: number
   audiobooksAdded: number
   booksPdfAdded: number
   totalAudioFiles: number
   durationSeconds: number
   dilibCount: number
   dtvCount: number
+  bookFormat?: CrawlerBookFormat
   items: Array<{
     title: string
     author: string
@@ -422,32 +427,64 @@ export type CrawlReport = {
     hasPdf: boolean
     audioCount: number
     readbookUrl?: string | null
+    cover?: string
   }>
 }
 
-/** 1. TÌM KIẾM DILIB.VN */
-export async function searchDilib(keyword: string): Promise<UnifiedSearchResult[]> {
+/** 1. TÌM KIẾM DILIB.VN (HỖ TRỢ PHÂN TRANG & ROBUST REGEX) */
+export async function searchDilib(keyword: string, page: number = 1): Promise<UnifiedSearchResult[]> {
   const q = keyword.trim()
   if (!q) return []
   try {
-    const res = await fetch(`https://dilib.vn/search/ajax-search.php?keyword=${encodeURIComponent(q)}`)
+    const pageParam = page > 1 ? `&page=${page}` : ''
+    const res = await fetch(`https://dilib.vn/search/ajax-search.php?keyword=${encodeURIComponent(q)}${pageParam}`)
     const html = await res.text()
     const items: UnifiedSearchResult[] = []
-    const regex = /<a[^>]+href="([^"]+)"[^>]*title="([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?<\/a>/gi
-    let m: RegExpExecArray | null
+    const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+-\d+\.html)"[^>]*>([\s\S]*?)<\/a>/gi)]
+    const seen = new Set<string>()
 
-    while ((m = regex.exec(html)) !== null) {
+    for (const m of linkMatches) {
       let url = m[1]
-      const title = m[2].trim()
-      let thumbnail = m[3]
+      const outerTag = m[0]
+      const innerHtml = m[2]
+
+      let title =
+        outerTag.match(/title="([^"]+)"/i)?.[1] ||
+        innerHtml.match(/<b>([\s\S]*?)<\/b>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() ||
+        innerHtml.replace(/<[^>]+>/g, '').trim()
+
+      let thumbnail =
+        innerHtml.match(/src="([^"]+)"/i)?.[1] ||
+        outerTag.match(/src="([^"]+)"/i)?.[1] ||
+        ''
+
+      if (!url.startsWith('http')) {
+        url = 'https://dilib.vn' + (url.startsWith('/') ? '' : '/') + url
+      }
       if (thumbnail && !thumbnail.startsWith('http')) {
         thumbnail = 'https://dilib.vn' + (thumbnail.startsWith('/') ? '' : '/') + thumbnail
       }
-      if (url && !url.startsWith('http')) {
-        url = 'https://dilib.vn' + (url.startsWith('/') ? '' : '/') + url
+
+      if (
+        url.includes('thu-vien-sach') ||
+        url.includes('ban-quyen') ||
+        url.includes('ung-ho-donate') ||
+        url.includes('gioi-thieu') ||
+        url.includes('chinh-sach') ||
+        !title ||
+        title.length < 2
+      ) {
+        continue
       }
-      if (url && title && !items.some((i) => i.url === url)) {
-        items.push({ url, title, thumbnail, source: 'Dilib' })
+
+      if (!seen.has(url)) {
+        seen.add(url)
+        items.push({
+          url,
+          title,
+          thumbnail,
+          source: 'Dilib',
+        })
       }
     }
     return items
@@ -457,12 +494,13 @@ export async function searchDilib(keyword: string): Promise<UnifiedSearchResult[
   }
 }
 
-/** 2. TÌM KIẾM DTV-EBOOK.COM.VN */
-export async function searchDtvEbook(keyword: string): Promise<UnifiedSearchResult[]> {
+/** 2. TÌM KIẾM DTV-EBOOK.COM.VN (HỖ TRỢ PHÂN TRANG) */
+export async function searchDtvEbook(keyword: string, page: number = 1): Promise<UnifiedSearchResult[]> {
   const q = keyword.trim()
   if (!q) return []
   try {
-    const url = `https://dtv-ebook.com.vn/tim-kiem.html?keyword=${encodeURIComponent(q)}`
+    const pageParam = page > 1 ? `&page=${page}` : ''
+    const url = `https://dtv-ebook.com.vn/tim-kiem.html?keyword=${encodeURIComponent(q)}${pageParam}`
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     })
@@ -485,6 +523,7 @@ export async function searchDtvEbook(keyword: string): Promise<UnifiedSearchResu
         rawHref.includes('ung-ho') ||
         rawHref.includes('huong-dan') ||
         rawHref.includes('phan-mem') ||
+        rawHref.includes('lien-he') ||
         !title ||
         title.length < 3 ||
         title.toLowerCase().includes('mua máy')
@@ -510,16 +549,20 @@ export async function searchDtvEbook(keyword: string): Promise<UnifiedSearchResu
 }
 
 /** 3. TÌM KIẾM HỢP NHẤT SONG SONG CẢ 2 NGUỒN */
-export async function searchMultiSource(keyword: string, source: CrawlerSource = 'ALL'): Promise<UnifiedSearchResult[]> {
+export async function searchMultiSource(
+  keyword: string,
+  source: CrawlerSource = 'ALL',
+  page: number = 1
+): Promise<UnifiedSearchResult[]> {
   const q = keyword.trim()
   if (!q) return []
 
   const promises: Promise<UnifiedSearchResult[]>[] = []
   if (source === 'ALL' || source === 'DILIB') {
-    promises.push(searchDilib(q))
+    promises.push(searchDilib(q, page))
   }
   if (source === 'ALL' || source === 'DTV') {
-    promises.push(searchDtvEbook(q))
+    promises.push(searchDtvEbook(q, page))
   }
 
   const results = await Promise.allSettled(promises)
@@ -541,10 +584,86 @@ export async function searchMultiSource(keyword: string, source: CrawlerSource =
   return Array.from(uniqueMap.values())
 }
 
+/** BÓC TÁCH DANH MỤC THỂ LOẠI TỪ DILIB */
+export async function fetchCategoryUrlsDilib(categoryUrl: string): Promise<string[]> {
+  try {
+    const res = await fetch(categoryUrl)
+    const html = await res.text()
+    const urls: string[] = []
+    const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+-\d+\.html)"[^>]*>/gi)]
+    const seen = new Set<string>()
+
+    for (const m of linkMatches) {
+      let u = m[1]
+      if (
+        u.includes('thu-vien-sach') ||
+        u.includes('ban-quyen') ||
+        u.includes('ung-ho-donate') ||
+        u.includes('gioi-thieu') ||
+        u.includes('chinh-sach')
+      ) {
+        continue
+      }
+      if (!u.startsWith('http')) u = 'https://dilib.vn' + (u.startsWith('/') ? '' : '/') + u
+      if (!seen.has(u)) {
+        seen.add(u)
+        urls.push(u)
+      }
+    }
+    return urls
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi fetch category Dilib:', err)
+    return []
+  }
+}
+
+/** BÓC TÁCH DANH MỤC THỂ LOẠI TỪ DTV EBOOK */
+export async function fetchCategoryUrlsDtv(categoryUrl: string, maxPages: number = 2): Promise<string[]> {
+  const urls: string[] = []
+  const seen = new Set<string>()
+
+  for (let p = 1; p <= maxPages; p++) {
+    try {
+      let fetchUrl = categoryUrl
+      if (p > 1) {
+        if (categoryUrl.endsWith('.html')) {
+          fetchUrl = categoryUrl.replace('.html', `-trang-${p}.html`)
+        } else {
+          fetchUrl = `${categoryUrl}?page=${p}`
+        }
+      }
+
+      const res = await fetch(fetchUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      })
+      if (!res.ok) break
+      const html = await res.text()
+      const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+_\d+\.html)"[^>]*>/gi)]
+
+      let pageAdded = 0
+      for (const m of linkMatches) {
+        let u = m[1]
+        if (u.includes('ung-ho') || u.includes('huong-dan') || u.includes('phan-mem')) continue
+        if (!u.startsWith('http')) u = 'https://dtv-ebook.com.vn/' + u.replace(/^\//, '')
+        if (!seen.has(u)) {
+          seen.add(u)
+          urls.push(u)
+          pageAdded++
+        }
+      }
+      if (pageAdded === 0) break
+    } catch {
+      break
+    }
+  }
+
+  return urls
+}
+
 /** Gợi ý danh sách tác giả phù hợp khi gõ */
 export function getSuggestedAuthors(input: string): string[] {
   const q = input.trim().toLowerCase()
-  if (!q) return DILIB_POPULAR_AUTHORS.slice(0, 16)
+  if (!q) return DILIB_POPULAR_AUTHORS.slice(0, 18)
   return DILIB_POPULAR_AUTHORS.filter((a) => a.toLowerCase().includes(q))
 }
 
@@ -713,7 +832,9 @@ export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | n
 
     const pdfUrl = downloadBtns.find((b) => b.text.includes('PDF') && b.href.includes('google'))?.href || null
     const epubUrl = downloadBtns.find((b) => b.text.includes('EPUB') && b.href.includes('google'))?.href || null
-    const mobiUrl = downloadBtns.find((b) => (b.text.includes('MOBI') || b.text.includes('AZW3')) && b.href.includes('google'))?.href || null
+    const mobiUrl =
+      downloadBtns.find((b) => (b.text.includes('MOBI') || b.text.includes('AZW3')) && b.href.includes('google'))
+        ?.href || null
 
     // Audio tracks
     const audioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
@@ -766,14 +887,17 @@ export async function fetchUnifiedDetail(url: string): Promise<UnifiedBookDetail
 export const fetchDilibDetailAuto = fetchUnifiedDetail
 
 /** 7. LƯU SÁCH VÀO SUPABASE & LOCAL STORAGE */
-export async function saveDilibBook(detail: UnifiedBookDetail): Promise<{ addedAudio: boolean; addedPdf: boolean }> {
+export async function saveDilibBook(
+  detail: UnifiedBookDetail,
+  bookFormat: CrawlerBookFormat = 'ALL'
+): Promise<{ addedAudio: boolean; addedPdf: boolean }> {
   let addedAudio = false
   let addedPdf = false
 
   const idSlug = detail.url.split('/').pop()?.replace('.html', '') || `${Date.now()}`
 
-  // 1. Lưu Sách Nói (Audiobook)
-  if (detail.hasAudio) {
+  // 1. Lưu Sách Nói (Audiobook) nếu sách có Audio và yêu cầu cho phép
+  if (detail.hasAudio && (bookFormat === 'ALL' || bookFormat === 'AUDIO')) {
     const audiobook: Audiobook = {
       id: `ab-${idSlug}`,
       title: detail.title,
@@ -793,8 +917,8 @@ export async function saveDilibBook(detail: UnifiedBookDetail): Promise<{ addedA
     addedAudio = true
   }
 
-  // 2. Lưu Sách Đọc (PDF / EPUB / Reader) vào media_items
-  if (detail.hasPdf && supabase) {
+  // 2. Lưu Sách Đọc (PDF / EPUB / Reader) vào media_items nếu có tài liệu đọc và yêu cầu cho phép
+  if (detail.hasPdf && (bookFormat === 'ALL' || bookFormat === 'READ') && supabase) {
     try {
       const pdfRecord = {
         title: detail.title,
@@ -827,37 +951,49 @@ export async function saveDilibBook(detail: UnifiedBookDetail): Promise<{ addedA
   return { addedAudio, addedPdf }
 }
 
-/** 8. BỘ ĐIỀU KHIỂN CÀO TỰ ĐỘNG ĐA NGUỒN (HỖ TRỢ HẸN GIỜ) */
+export type CrawlProgressInfo = {
+  scanned: number
+  matched: number
+  targetCount: number
+  addedAudio: number
+  addedPdf: number
+  currentBook?: string
+  statusMessage: string
+  elapsedSeconds: number
+  remainingSeconds: number
+}
+
+/** 8. BỘ ĐIỀU KHIỂN CÀO TỰ ĐỘNG ĐA NGUỒN (HỖ TRỢ CÀO ĐỦ SỐ LƯỢNG CUỐN & HẸN GIỜ) */
 export async function crawlUnified({
+  targetCount = 0,
+  bookFormat = 'ALL',
   category,
   author,
   searchQuery,
+  scope = 'ALL_LIBRARY',
   source = 'ALL',
-  maxMinutes = 3,
+  maxMinutes = 0,
   signal,
   onProgress,
 }: {
+  targetCount?: number
+  bookFormat?: CrawlerBookFormat
   category?: UnifiedBookCategory
   author?: string
   searchQuery?: string
+  scope?: CrawlerScope
   source?: CrawlerSource
   maxMinutes?: number
   signal?: AbortSignal
-  onProgress?: (progress: {
-    scanned: number
-    addedAudio: number
-    addedPdf: number
-    currentBook?: string
-    statusMessage: string
-    elapsedSeconds: number
-    remainingSeconds: number
-  }) => void
+  onProgress?: (progress: CrawlProgressInfo) => void
 }): Promise<CrawlReport> {
   const startTime = Date.now()
-  const maxDurationMs = (maxMinutes || 3) * 60 * 1000
-  const isUnlimited = maxMinutes <= 0
+  const maxDurationMs = maxMinutes > 0 ? maxMinutes * 60 * 1000 : 0
+  const isTimeLimited = maxDurationMs > 0
+  const hasTargetLimit = targetCount > 0
 
   let scanned = 0
+  let matched = 0
   let addedAudio = 0
   let addedPdf = 0
   let totalAudioFiles = 0
@@ -867,9 +1003,14 @@ export async function crawlUnified({
 
   const updateStatus = (currentBook: string, msg: string) => {
     const elapsed = Math.floor((Date.now() - startTime) / 1000)
-    const remaining = isUnlimited ? 9999 : Math.max(0, Math.floor((maxDurationMs - (Date.now() - startTime)) / 1000))
+    let remaining = 9999
+    if (isTimeLimited) {
+      remaining = Math.max(0, Math.floor((maxDurationMs - (Date.now() - startTime)) / 1000))
+    }
     onProgress?.({
       scanned,
+      matched,
+      targetCount,
       addedAudio,
       addedPdf,
       currentBook,
@@ -879,96 +1020,136 @@ export async function crawlUnified({
     })
   }
 
-  // 1. Thu thập danh sách URLs cần quét
+  // 1. TẬP HỢP TẤT CẢ URLS TIỀM NĂNG
   const urlsToVisit = new Set<string>()
+  const visitedUrls = new Set<string>()
 
-  if (author) {
-    updateStatus('', `Đang tìm tất cả sách của tác giả "${author}" từ cả 2 nguồn...`)
-    const results = await searchMultiSource(author, source)
-    results.forEach((r) => urlsToVisit.add(r.url))
-  } else if (searchQuery) {
-    updateStatus('', `Đang tìm kiếm sách với từ khóa "${searchQuery}" từ cả 2 nguồn...`)
-    const results = await searchMultiSource(searchQuery, source)
-    results.forEach((r) => urlsToVisit.add(r.url))
-  } else if (category) {
-    updateStatus('', `Đang nạp danh mục "${category.name}" từ cả 2 nguồn...`)
-
-    // A. Quét Dilib category
-    if ((source === 'ALL' || source === 'DILIB') && category.dilibUrl) {
-      try {
-        const catRes = await fetch(category.dilibUrl)
-        const catHtml = await catRes.text()
-        const regex = /<a[^>]+href="([^"]+-\d+\.html)"[^>]*title="([^"]+)"/gi
-        let m: RegExpExecArray | null
-        while ((m = regex.exec(catHtml)) !== null) {
-          let u = m[1]
-          if (!u.startsWith('http')) u = 'https://dilib.vn' + (u.startsWith('/') ? '' : '/') + u
-          urlsToVisit.add(u)
-        }
-      } catch (e) {
-        console.warn('Lỗi đọc category Dilib:', e)
-      }
-    }
-
-    // B. Quét DTV eBook category
-    if ((source === 'ALL' || source === 'DTV') && category.dtvUrl) {
-      try {
-        const dtvRes = await fetch(category.dtvUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        })
-        const dtvHtml = await dtvRes.text()
-        const linkMatches = [...dtvHtml.matchAll(/<a[^>]+href="([^"]+_\d+\.html)"[^>]*>/gi)]
-        for (const m of linkMatches) {
-          let u = m[1]
-          if (!u.startsWith('http')) u = 'https://dtv-ebook.com.vn/' + u.replace(/^\//, '')
-          if (!u.includes('ung-ho') && !u.includes('huong-dan')) {
-            urlsToVisit.add(u)
-          }
-        }
-      } catch (e) {
-        console.warn('Lỗi đọc category DTV:', e)
-      }
-    }
-
-    // C. Quét thêm theo từ khóa của danh mục
-    for (const kw of category.keywords.slice(0, 3)) {
-      if (signal?.aborted || (!isUnlimited && Date.now() - startTime >= maxDurationMs)) break
-      updateStatus('', `Đang quét từ khóa "${kw}"...`)
-      const kwResults = await searchMultiSource(kw, source)
-      kwResults.forEach((r) => urlsToVisit.add(r.url))
+  // Helper nạp thêm URLs từ tìm kiếm đa nguồn có phân trang
+  const expandFromSearch = async (kw: string, maxPages: number = 3) => {
+    for (let p = 1; p <= maxPages; p++) {
+      if (signal?.aborted) break
+      if (hasTargetLimit && matched >= targetCount) break
+      const res = await searchMultiSource(kw, source, p)
+      if (res.length === 0) break
+      res.forEach((r) => {
+        if (!visitedUrls.has(r.url)) urlsToVisit.add(r.url)
+      })
     }
   }
 
-  updateStatus('', `Đã phát hiện ${urlsToVisit.size} đầu sách từ 2 nguồn. Đang tiến hành bóc tách...`)
+  // A. Nếu cào theo Tác giả
+  if (author || scope === 'AUTHOR') {
+    const authorName = author || 'Dale Carnegie'
+    updateStatus('', `Đang quét sách của tác giả "${authorName}" từ cả 2 nguồn...`)
+    await expandFromSearch(authorName, 4)
+  }
+  // B. Nếu cào theo Từ khóa
+  else if (searchQuery || scope === 'SEARCH') {
+    const query = searchQuery || 'Sách hay'
+    updateStatus('', `Đang tìm kiếm sách theo từ khóa "${query}" từ cả 2 nguồn...`)
+    await expandFromSearch(query, 4)
+  }
+  // C. Nếu cào theo Thể loại cụ thể
+  else if (category || scope === 'CATEGORY') {
+    const cat = category || UNIFIED_CATEGORIES[0]
+    updateStatus('', `Đang nạp danh mục "${cat.name}" từ cả 2 nguồn...`)
 
-  // 2. Duyệt từng sách và kiểm tra Audio / PDF
-  for (const bookUrl of Array.from(urlsToVisit)) {
+    if ((source === 'ALL' || source === 'DILIB') && cat.dilibUrl) {
+      const dUrls = await fetchCategoryUrlsDilib(cat.dilibUrl)
+      dUrls.forEach((u) => urlsToVisit.add(u))
+    }
+    if ((source === 'ALL' || source === 'DTV') && cat.dtvUrl) {
+      const dtvUrls = await fetchCategoryUrlsDtv(cat.dtvUrl, 3)
+      dtvUrls.forEach((u) => urlsToVisit.add(u))
+    }
+    for (const kw of cat.keywords.slice(0, 3)) {
+      if (hasTargetLimit && urlsToVisit.size >= targetCount * 3) break
+      await expandFromSearch(kw, 2)
+    }
+  }
+  // D. Nếu cào TOÀN BỘ THƯ VIỆN (ALL_LIBRARY)
+  else {
+    updateStatus('', 'Đang nạp kho sách đa thể loại từ Dilib.vn và DTV eBook...')
+    // Ưu tiên nạp các danh mục tinh hoa, kinh điển, trinh thám, sách nói
+    const topCategories = UNIFIED_CATEGORIES.slice(0, 6)
+    for (const cat of topCategories) {
+      if (signal?.aborted) break
+      if ((source === 'ALL' || source === 'DILIB') && cat.dilibUrl) {
+        const dUrls = await fetchCategoryUrlsDilib(cat.dilibUrl)
+        dUrls.forEach((u) => urlsToVisit.add(u))
+      }
+      if ((source === 'ALL' || source === 'DTV') && cat.dtvUrl) {
+        const dtvUrls = await fetchCategoryUrlsDtv(cat.dtvUrl, 2)
+        dtvUrls.forEach((u) => urlsToVisit.add(u))
+      }
+    }
+    // Nạp thêm từ các từ khóa phổ biến nếu cần nhiều cuốn
+    if (urlsToVisit.size < (targetCount || 10) * 2) {
+      for (const kw of ['kinh điển', 'trinh thám', 'kỹ năng', 'tiểu thuyết', 'thành công']) {
+        if (urlsToVisit.size >= (targetCount || 10) * 3) break
+        await expandFromSearch(kw, 2)
+      }
+    }
+  }
+
+  const formatText =
+    bookFormat === 'AUDIO' ? 'Sách nói' : bookFormat === 'READ' ? 'Sách đọc (PDF/EPUB)' : 'Mọi định dạng'
+  updateStatus(
+    '',
+    `Đã phát hiện ${urlsToVisit.size} đầu sách. Đang tiến hành bóc tách và lọc định dạng [${formatText}]...`
+  )
+
+  // 2. DUYỆT TỪNG SÁCH ĐẾN KHI ĐỦ SỐ LƯỢNG HOẶC HẾT NGUỒN
+  const candidateList = Array.from(urlsToVisit)
+
+  for (let i = 0; i < candidateList.length; i++) {
     if (signal?.aborted) break
-    if (!isUnlimited && Date.now() - startTime >= maxDurationMs) {
-      updateStatus('', `Đã hết thời gian hẹn giờ ${maxMinutes} phút. Hoàn tất cào!`)
+    if (isTimeLimited && Date.now() - startTime >= maxDurationMs) {
+      updateStatus('', `Đã hết thời gian giới hạn ${maxMinutes} phút. Hoàn tất cào!`)
+      break
+    }
+    if (hasTargetLimit && matched >= targetCount) {
+      updateStatus('', `🎉 Đã cào đủ đúng ${targetCount} cuốn theo yêu cầu! Hoàn tất.`)
       break
     }
 
+    const bookUrl = candidateList[i]
+    visitedUrls.add(bookUrl)
     scanned++
-    updateStatus(bookUrl, `Đang kiểm tra: ${bookUrl}...`)
+
+    updateStatus(bookUrl, `[${scanned}/${candidateList.length}] Đang kiểm tra: ${bookUrl}...`)
 
     const detail = await fetchUnifiedDetail(bookUrl)
     if (!detail) continue
 
+    // Kiểm tra tính tương thích định dạng
+    let isMatchFormat = false
+    if (bookFormat === 'AUDIO') {
+      isMatchFormat = detail.hasAudio
+    } else if (bookFormat === 'READ') {
+      isMatchFormat = detail.hasPdf
+    } else {
+      isMatchFormat = detail.hasAudio || detail.hasPdf
+    }
+
+    if (!isMatchFormat) {
+      // Sách không khớp định dạng yêu cầu -> bỏ qua không tính vào target
+      continue
+    }
+
     if (detail.source === 'Dilib') dilibCount++
     else dtvCount++
 
-    updateStatus(
-      detail.title,
-      `[${detail.source}] Đang xử lý: ${detail.title} (Audio: ${detail.hasAudio ? 'Có' : 'Không'}, PDF/EPUB: ${detail.hasPdf ? 'Có' : 'Không'})`
-    )
-
-    const result = await saveDilibBook(detail)
-    if (result.addedAudio) {
+    const saveResult = await saveDilibBook(detail, bookFormat)
+    if (saveResult.addedAudio) {
       addedAudio++
       totalAudioFiles += detail.audioTracks.length
     }
-    if (result.addedPdf) addedPdf++
+    if (saveResult.addedPdf) {
+      addedPdf++
+    }
+
+    matched++
 
     itemsReport.push({
       title: detail.title,
@@ -978,21 +1159,35 @@ export async function crawlUnified({
       hasPdf: detail.hasPdf,
       audioCount: detail.audioTracks.length,
       readbookUrl: detail.readbookUrl,
+      cover: detail.cover,
     })
 
-    await new Promise((r) => setTimeout(r, 70))
+    const targetProgressText = hasTargetLimit ? ` (Mục tiêu: ${matched}/${targetCount} cuốn)` : ''
+    updateStatus(
+      detail.title,
+      `[${detail.source}] Đã lưu: "${detail.title}"${targetProgressText} (Audio: ${detail.hasAudio ? 'Có' : 'Không'}, PDF: ${detail.hasPdf ? 'Có' : 'Không'})`
+    )
+
+    if (hasTargetLimit && matched >= targetCount) {
+      break
+    }
+
+    await new Promise((r) => setTimeout(r, 60))
   }
 
   const durationSec = Math.floor((Date.now() - startTime) / 1000)
 
   return {
     totalScanned: scanned,
+    targetCount: hasTargetLimit ? targetCount : undefined,
+    matchedCount: matched,
     audiobooksAdded: addedAudio,
     booksPdfAdded: addedPdf,
     totalAudioFiles,
     durationSeconds: durationSec,
     dilibCount,
     dtvCount,
+    bookFormat,
     items: itemsReport,
   }
 }
