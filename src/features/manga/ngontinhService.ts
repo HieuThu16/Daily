@@ -4,6 +4,37 @@ import { ngontinhShardPath } from './ngontinhShards';
 
 const FAVORITES_KEY = 'daily_ngontinh_favorites';
 const HISTORY_KEY = 'daily_ngontinh_history';
+const CUSTOM_NGONTINH_MANGA_KEY = 'daily_custom_ngontinh_manga';
+
+export function getCustomNgontinhList(): NgontinhManga[] {
+  try {
+    const saved = localStorage.getItem(CUSTOM_NGONTINH_MANGA_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomNgontinh(manga: NgontinhManga): void {
+  const cleanManga: NgontinhManga = {
+    ...manga,
+    updatedAt: manga.updatedAt || new Date().toISOString(),
+  };
+  const current = getCustomNgontinhList();
+  const idx = current.findIndex((m) => m.slug === cleanManga.slug);
+  let updated: NgontinhManga[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = cleanManga;
+  } else {
+    updated = [cleanManga, ...current];
+  }
+  try {
+    localStorage.setItem(CUSTOM_NGONTINH_MANGA_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to save custom ngontinh manga to localStorage', e);
+  }
+}
 
 /**
  * Danh sách truyện cho lưới bìa — chỉ tải file chỉ mục (~7MB).
@@ -17,12 +48,21 @@ const HISTORY_KEY = 'daily_ngontinh_history';
  * truyện. Chạy `npm run build:ngontinh` để sinh lại chỉ mục.
  */
 export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
+  const customList = getCustomNgontinhList();
+  const map = new Map<string, NgontinhManga>();
+  for (const m of customList) if (m?.slug) map.set(m.slug, m);
+
   try {
     const res = await fetch('/data/ngontinh_index.json');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        return data.map((m: any) => ({ ...m, chapters: m.chapters ?? [] }));
+        for (const item of data) {
+          if (item?.slug && !map.has(item.slug)) {
+            map.set(item.slug, { ...item, chapters: item.chapters ?? [] });
+          }
+        }
+        return [...map.values()];
       }
     }
   } catch (err) {
@@ -30,7 +70,13 @@ export async function fetchNgontinhList(): Promise<NgontinhManga[]> {
   }
 
   // Chưa chạy build:ngontinh thì quay về cách cũ để app vẫn có dữ liệu.
-  return fetchNgontinhListLegacy();
+  const legacy = await fetchNgontinhListLegacy();
+  for (const item of legacy) {
+    if (item?.slug && !map.has(item.slug)) {
+      map.set(item.slug, item);
+    }
+  }
+  return [...map.values()];
 }
 
 /** Đường cũ: tải các file gốc. Nặng, chỉ dùng khi chưa có chỉ mục. */
@@ -85,8 +131,9 @@ export async function fetchNgontinhBySlug(slug: string): Promise<NgontinhManga |
   const [list, chapters] = await Promise.all([fetchNgontinhList(), fetchNgontinhChapters(slug)]);
   const found = list.find((m) => m.slug === slug);
   if (!found) return null;
-  // Đường cũ đã kèm sẵn chương thì giữ nguyên, khỏi ghi đè bằng mảng rỗng.
-  return chapters.length > 0 ? { ...found, chapters } : found;
+  const existingChaps = Array.isArray(found.chapters) ? found.chapters : [];
+  const mergedChaps = existingChaps.length >= chapters.length ? existingChaps : chapters;
+  return mergedChaps.length > 0 ? { ...found, chapters: mergedChaps } : found;
 }
 
 // Các bộ crawl thêm (romance, shoujo, slice of life, shounen ai, đam mỹ) đã gộp và

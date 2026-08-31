@@ -41,7 +41,10 @@ export function getCustomHMangaList(): HManga[] {
 }
 
 export function saveCustomHManga(manga: HManga): void {
-  const cleanManga = sanitizeHManga(manga);
+  const cleanManga = sanitizeHManga({
+    ...manga,
+    updatedAt: manga.updatedAt || new Date().toISOString(),
+  });
   const current = getCustomHMangaList();
   const idx = current.findIndex(m => m.slug === cleanManga.slug);
   let updated: HManga[];
@@ -329,6 +332,7 @@ export async function syncHMangaChapters(
     cover: cleanCover,
     title: freshManga.title || manga.title,
     author: (freshManga.author && freshManga.author !== 'Đang cập nhật') ? freshManga.author : manga.author,
+    updatedAt: new Date().toISOString(),
   };
   const oldCount = Array.isArray(manga.chapters) ? manga.chapters.length : 0;
   const newCount = Array.isArray(mergedManga.chapters) ? mergedManga.chapters.length : 0;

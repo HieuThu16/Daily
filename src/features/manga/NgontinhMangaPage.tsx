@@ -3,7 +3,7 @@ import type { NgontinhManga } from '../../types/manga'
 import {
   fetchNgontinhList, fetchNgontinhHotData,
   getNgontinhFavorites, toggleNgontinhFavorite,
-  getNgontinhHistory,
+  getNgontinhHistory, getCustomNgontinhList,
 } from './ngontinhService'
 import { hydrateMangadexManga } from './mangadexService'
 import { NgontinhReaderModal } from './NgontinhReaderModal'
@@ -51,7 +51,12 @@ export const NgontinhMangaPage: React.FC = () => {
       filterOptions: (list) => topGenres(list),
       matchFilter: (manga, value) => (manga.genres ?? []).includes(value),
 
-      recentCrawled: (list) => list,
+      recentCrawled: (list) => {
+        const map = new Map<string, NgontinhManga>()
+        for (const m of getCustomNgontinhList()) map.set(m.slug, m)
+        for (const m of list) if (m.updatedAt && !map.has(m.slug)) map.set(m.slug, m)
+        return [...map.values()]
+      },
 
       onRead: async (manga, chapterNum, ctx) => {
         // Truyện MangaDex chưa có chương trong file dữ liệu, lấy khi bấm đọc.

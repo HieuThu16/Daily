@@ -40,6 +40,7 @@ import {
 } from '../../lib/videoProgress'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { AddYoutubeModal } from './AddYoutubeModal'
+import { YoutubeCrawlModal, GlobalYoutubeCrawlerWatcher } from './YoutubeCrawlModal'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
 import '../tvshow/tvShow.css'
 
@@ -289,6 +290,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [customCategories, setCustomCategories] = useState<CustomCategoryItem[]>([])
   // Modal thêm nhanh Tag cho thể loại đang chọn
   const [quickAddTagCategory, setQuickAddTagCategory] = useState<string | null>(null)
+  // Modal cào video mới theo kênh và số phút
+  const [crawlChannelsModalOpen, setCrawlChannelsModalOpen] = useState(false)
 
   // TÌM KIẾM YOUTUBE API (Tìm video đã có VÀ chưa có trong app)
   const [searchScope, setSearchScope] = useState<'all' | 'saved' | 'youtube'>('all')
@@ -305,7 +308,6 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
   const [sharedUrl] = useState(() => new URLSearchParams(window.location.search).get('youtube') ?? '')
   const [addOpen, setAddOpen] = useState(Boolean(sharedUrl))
-  const [syncingAll, setSyncingAll] = useState(false)
   const [editingChannelCategory, setEditingChannelCategory] = useState<ChannelItem | null>(null)
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -405,42 +407,10 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     isDraggingRef.current = false
   }
 
-  /** Cào video chưa có ở TẤT CẢ kênh đã thêm, rồi đưa video mới sang Xem chung. */
-  const handleSyncAllChannels = async () => {
-    if (syncingAll) return
-    setSyncingAll(true)
-    showToast('Đang cào video mới ở tất cả kênh…', 'info')
-    try {
-      const { data } = await supabase!.auth.getSession()
-      const token = data.session?.access_token
-      if (!token) throw new Error('Cần đăng nhập')
-      // Cào cả chục kênh mất hơn chục giây; 3G/4G chập chờn là fetch ném
-      // "Failed to fetch" trống trơn. Đặt hạn rõ ràng và dịch ra tiếng người.
-      let res: Response
-      try {
-        res = await fetch('/api/cron-sync?scope=youtube', {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(120_000),
-        })
-      } catch {
-        throw new Error('Mất kết nối giữa chừng — kiểm tra mạng rồi thử lại')
-      }
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
-      const saved = (json.report ?? []).reduce((sum: number, r: any) => sum + (Number(r.saved) || 0), 0)
-      showToast(saved > 0 ? `Đã thêm ${saved} video mới` : 'Không có video mới', saved > 0 ? 'success' : 'info')
-      setReloadKey((k) => k + 1)
-    } catch (err: any) {
-      showToast(`Cào thất bại: ${err?.message ?? err}`, 'error')
-    } finally {
-      setSyncingAll(false)
-    }
-  }
-
-  // 1 nút thêm (tự phân biệt kênh / video lẻ) + 1 nút cào toàn bộ kênh
+  // 1 nút thêm (tự phân biệt kênh / video lẻ) + 1 nút cào kênh theo thời gian & chọn kênh
   useHeaderActions([
     { label: 'Thêm kênh / video', icon: 'plus', onClick: () => setAddOpen(true) },
-    { label: syncingAll ? 'Đang cào…' : 'Cào video mới tất cả kênh', icon: 'radio', onClick: () => void handleSyncAllChannels() },
+    { label: 'Cào video mới các kênh', icon: 'radio', onClick: () => setCrawlChannelsModalOpen(true) },
   ])
 
   useVideoStatusListener(() => {
@@ -2409,6 +2379,18 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           onAddTagToCategory={handleAddTagToCategory}
         />
       )}
+
+      {/* MODAL CÀO KÊNH THEO THỜI GIAN & CHỌN KÊNH */}
+      {crawlChannelsModalOpen && (
+        <YoutubeCrawlModal
+          isOpen={crawlChannelsModalOpen}
+          onClose={() => setCrawlChannelsModalOpen(false)}
+          channels={channels}
+        />
+      )}
+
+      {/* TIẾN TRÌNH NỀN VÀ BÁO CÁO CÀO YOUTUBE */}
+      <GlobalYoutubeCrawlerWatcher onFinished={() => setReloadKey((k) => k + 1)} />
 
       {/* MODAL ĐỔI THỂ LOẠI & TAG CHO KÊNH */}
       {editingChannelCategory && (

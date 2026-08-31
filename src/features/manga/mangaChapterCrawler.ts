@@ -1,7 +1,11 @@
 import { BLManga } from '../../types/manga'
-import { syncBLMangaChapters, getCustomBLMangaList, fetchBLMangaList } from './mangaService'
+import { syncBLMangaChapters, getCustomBLMangaList, fetchBLMangaList, saveCustomBLManga } from './mangaService'
 import { syncHMangaChapters, getCustomHMangaList, fetchHMangaList, type HManga } from './hMangaService'
-import { fetchNgontinhList, fetchNgontinhChapters } from './ngontinhService'
+import { fetchNgontinhList, fetchNgontinhChapters, saveCustomNgontinh } from './ngontinhService'
+import {
+  recordMangaCrawlLog,
+  sortAndFilterStoriesForCrawl,
+} from './mangaCrawlHistory'
 
 export type MangaCategory = 'h' | 'bl' | 'ngontinh'
 
@@ -20,10 +24,17 @@ export type CrawlReport = {
   updatedItems: CrawlUpdateItem[]
   totalNewChapters: number
   durationSeconds: number
+  targetDurationMinutes: number
   startedAt: string
   finishedAt: string
   isTimedOut: boolean
   isStoppedByUser: boolean
+  skippedRecentCount: number
+}
+
+export type CrawlOptions = {
+  durationMinutes?: number
+  skipHours?: number
 }
 
 export type CrawlerState = {
@@ -35,6 +46,9 @@ export type CrawlerState = {
   newChaptersFound: number
   startedAt: number
   elapsedSeconds: number
+  targetDurationMinutes: number
+  targetDurationSeconds: number
+  skipHours: number
   lastReport: CrawlReport | null
 }
 
@@ -50,6 +64,9 @@ class MangaChapterCrawlerManager {
     newChaptersFound: 0,
     startedAt: 0,
     elapsedSeconds: 0,
+    targetDurationMinutes: 15,
+    targetDurationSeconds: 15 * 60,
+    skipHours: 6,
     lastReport: null,
   }
 
@@ -96,27 +113,34 @@ class MangaChapterCrawlerManager {
     }
   }
 
-  public async startCrawl(category: MangaCategory): Promise<void> {
+  public async startCrawl(category: MangaCategory, options?: CrawlOptions): Promise<void> {
     if (this.state.isRunning) {
       return
     }
+
+    const durationMinutes = options?.durationMinutes ?? 15
+    const skipHours = options?.skipHours ?? 6
 
     this.isUserAborted = false
     this.abortController = new AbortController()
     const signal = this.abortController.signal
 
     const startTime = Date.now()
-    const maxDurationMs = 15 * 60 * 1000 // 15 phút
+    const maxDurationMs = durationMinutes > 0 ? durationMinutes * 60 * 1000 : Infinity
+    const targetDurationSeconds = durationMinutes > 0 ? durationMinutes * 60 : 0
 
     this.state = {
       isRunning: true,
       category,
-      currentTitle: 'Đang tải danh sách truyện...',
+      currentTitle: 'Đang chuẩn bị danh sách truyện...',
       scannedCount: 0,
       totalCount: 0,
       newChaptersFound: 0,
       startedAt: startTime,
       elapsedSeconds: 0,
+      targetDurationMinutes: durationMinutes,
+      targetDurationSeconds,
+      skipHours,
       lastReport: null,
     }
     this.notify()
@@ -134,6 +158,7 @@ class MangaChapterCrawlerManager {
     const updatedItems: CrawlUpdateItem[] = []
     let totalScanned = 0
     let isTimedOut = false
+    let skippedRecentCount = 0
 
     try {
       if (category === 'h') {
@@ -146,11 +171,17 @@ class MangaChapterCrawlerManager {
         for (const m of customList) if (m?.slug) map.set(m.slug, m)
         for (const m of fullList) if (m?.slug && !map.has(m.slug)) map.set(m.slug, m)
 
-        const stories = [...map.values()]
-        this.state.totalCount = stories.length
+        const rawStories = [...map.values()]
+        const { priorityQueue, skippedRecentCount: skipped } = sortAndFilterStoriesForCrawl(
+          rawStories,
+          'h',
+          { skipHours },
+        )
+        skippedRecentCount = skipped
+        this.state.totalCount = priorityQueue.length
         this.notify()
 
-        for (const story of stories) {
+        for (const story of priorityQueue) {
           if (signal.aborted) break
           if (Date.now() - startTime >= maxDurationMs) {
             isTimedOut = true
@@ -166,8 +197,8 @@ class MangaChapterCrawlerManager {
             totalScanned++
             this.state.scannedCount = totalScanned
 
+            const newCount = Array.isArray(res.manga.chapters) ? res.manga.chapters.length : oldCount + res.addedCount
             if (res.updated && res.addedCount > 0) {
-              const newCount = Array.isArray(res.manga.chapters) ? res.manga.chapters.length : oldCount + res.addedCount
               this.state.newChaptersFound += res.addedCount
               updatedItems.push({
                 slug: story.slug,
@@ -177,15 +208,41 @@ class MangaChapterCrawlerManager {
                 oldCount,
                 newCount,
               })
+              recordMangaCrawlLog({
+                slug: story.slug,
+                title: story.title || story.slug,
+                category: 'h',
+                lastCrawledAt: new Date().toISOString(),
+                addedCount: res.addedCount,
+                totalChapters: newCount,
+                status: 'updated',
+              })
+            } else {
+              recordMangaCrawlLog({
+                slug: story.slug,
+                title: story.title || story.slug,
+                category: 'h',
+                lastCrawledAt: new Date().toISOString(),
+                addedCount: 0,
+                totalChapters: oldCount,
+                status: 'no_change',
+              })
             }
           } catch (e) {
             console.warn(`Lỗi khi cào truyện H ${story.slug}:`, e)
             totalScanned++
             this.state.scannedCount = totalScanned
+            recordMangaCrawlLog({
+              slug: story.slug,
+              title: story.title || story.slug,
+              category: 'h',
+              lastCrawledAt: new Date().toISOString(),
+              addedCount: 0,
+              status: 'error',
+            })
           }
 
           this.notify()
-          // Trì hoãn nhẹ 400ms giữa các request để tránh nghẽn
           await new Promise((r) => setTimeout(r, 400))
         }
       } else if (category === 'bl') {
@@ -198,11 +255,17 @@ class MangaChapterCrawlerManager {
         for (const m of customList) if (m?.slug) map.set(m.slug, m)
         for (const m of fullList) if (m?.slug && !map.has(m.slug)) map.set(m.slug, m)
 
-        const stories = [...map.values()]
-        this.state.totalCount = stories.length
+        const rawStories = [...map.values()]
+        const { priorityQueue, skippedRecentCount: skipped } = sortAndFilterStoriesForCrawl(
+          rawStories,
+          'bl',
+          { skipHours },
+        )
+        skippedRecentCount = skipped
+        this.state.totalCount = priorityQueue.length
         this.notify()
 
-        for (const story of stories) {
+        for (const story of priorityQueue) {
           if (signal.aborted) break
           if (Date.now() - startTime >= maxDurationMs) {
             isTimedOut = true
@@ -224,7 +287,6 @@ class MangaChapterCrawlerManager {
                 resNewCount = Array.isArray(res.manga.chapters) ? res.manga.chapters.length : oldCount + resAdded
               }
             } else if (story.source === 'otruyen' || !story.source) {
-              // Thử kiểm tra OTruyen API
               const otRes = await fetch(`https://otruyenapi.com/v1/api/truyen-tranh/${story.slug}`).catch(() => null)
               if (otRes && otRes.ok) {
                 const otData = await otRes.json().catch(() => null)
@@ -232,6 +294,15 @@ class MangaChapterCrawlerManager {
                 if (serverData.length > oldCount) {
                   resAdded = serverData.length - oldCount
                   resNewCount = serverData.length
+                  saveCustomBLManga({
+                    ...story,
+                    totalChapters: resNewCount,
+                    chapters: serverData.map((c: any) => ({
+                      number: parseFloat(c.chapter_name),
+                      chapterName: c.chapter_name,
+                    })),
+                    updatedAt: new Date().toISOString(),
+                  })
                 }
               }
             }
@@ -249,11 +320,38 @@ class MangaChapterCrawlerManager {
                 oldCount,
                 newCount: resNewCount,
               })
+              recordMangaCrawlLog({
+                slug: story.slug,
+                title: story.title || story.slug,
+                category: 'bl',
+                lastCrawledAt: new Date().toISOString(),
+                addedCount: resAdded,
+                totalChapters: resNewCount,
+                status: 'updated',
+              })
+            } else {
+              recordMangaCrawlLog({
+                slug: story.slug,
+                title: story.title || story.slug,
+                category: 'bl',
+                lastCrawledAt: new Date().toISOString(),
+                addedCount: 0,
+                totalChapters: oldCount,
+                status: 'no_change',
+              })
             }
           } catch (e) {
             console.warn(`Lỗi khi cào truyện BL ${story.slug}:`, e)
             totalScanned++
             this.state.scannedCount = totalScanned
+            recordMangaCrawlLog({
+              slug: story.slug,
+              title: story.title || story.slug,
+              category: 'bl',
+              lastCrawledAt: new Date().toISOString(),
+              addedCount: 0,
+              status: 'error',
+            })
           }
 
           this.notify()
@@ -262,11 +360,17 @@ class MangaChapterCrawlerManager {
       } else if (category === 'ngontinh') {
         // Lấy danh sách truyện Ngôn Tình
         const fullList = await fetchNgontinhList().catch(() => [])
-        const stories = fullList.filter((m) => Boolean(m?.slug))
-        this.state.totalCount = stories.length
+        const rawStories = fullList.filter((m) => Boolean(m?.slug))
+        const { priorityQueue, skippedRecentCount: skipped } = sortAndFilterStoriesForCrawl(
+          rawStories,
+          'ngontinh',
+          { skipHours },
+        )
+        skippedRecentCount = skipped
+        this.state.totalCount = priorityQueue.length
         this.notify()
 
-        for (const story of stories) {
+        for (const story of priorityQueue) {
           if (signal.aborted) break
           if (Date.now() - startTime >= maxDurationMs) {
             isTimedOut = true
@@ -278,8 +382,8 @@ class MangaChapterCrawlerManager {
 
           try {
             const existingChaps = await fetchNgontinhChapters(story.slug).catch(() => [])
-            const oldCount = Array.isArray(existingChaps) && existingChaps.length > 0 
-              ? existingChaps.length 
+            const oldCount = Array.isArray(existingChaps) && existingChaps.length > 0
+              ? existingChaps.length
               : (Array.isArray(story.chapters) ? story.chapters.length : 0)
 
             let resAdded = 0
@@ -293,6 +397,15 @@ class MangaChapterCrawlerManager {
               if (serverData.length > oldCount) {
                 resAdded = serverData.length - oldCount
                 resNewCount = serverData.length
+                saveCustomNgontinh({
+                  ...story,
+                  totalChapters: resNewCount,
+                  chapters: serverData.map((c: any) => ({
+                    number: parseFloat(c.chapter_name),
+                    chapterName: c.chapter_name,
+                  })),
+                  updatedAt: new Date().toISOString(),
+                })
               }
             }
 
@@ -309,11 +422,38 @@ class MangaChapterCrawlerManager {
                 oldCount,
                 newCount: resNewCount,
               })
+              recordMangaCrawlLog({
+                slug: story.slug,
+                title: story.title || story.slug,
+                category: 'ngontinh',
+                lastCrawledAt: new Date().toISOString(),
+                addedCount: resAdded,
+                totalChapters: resNewCount,
+                status: 'updated',
+              })
+            } else {
+              recordMangaCrawlLog({
+                slug: story.slug,
+                title: story.title || story.slug,
+                category: 'ngontinh',
+                lastCrawledAt: new Date().toISOString(),
+                addedCount: 0,
+                totalChapters: oldCount,
+                status: 'no_change',
+              })
             }
           } catch (e) {
             console.warn(`Lỗi khi kiểm tra ngôn tình ${story.slug}:`, e)
             totalScanned++
             this.state.scannedCount = totalScanned
+            recordMangaCrawlLog({
+              slug: story.slug,
+              title: story.title || story.slug,
+              category: 'ngontinh',
+              lastCrawledAt: new Date().toISOString(),
+              addedCount: 0,
+              status: 'error',
+            })
           }
 
           this.notify()
@@ -333,10 +473,12 @@ class MangaChapterCrawlerManager {
         updatedItems,
         totalNewChapters: updatedItems.reduce((sum, item) => sum + item.addedCount, 0),
         durationSeconds: totalDuration,
+        targetDurationMinutes: durationMinutes,
         startedAt: new Date(startTime).toLocaleTimeString('vi-VN'),
         finishedAt: new Date().toLocaleTimeString('vi-VN'),
         isTimedOut,
         isStoppedByUser: this.isUserAborted,
+        skippedRecentCount,
       }
 
       this.state = {
@@ -348,6 +490,9 @@ class MangaChapterCrawlerManager {
         newChaptersFound: report.totalNewChapters,
         startedAt: 0,
         elapsedSeconds: totalDuration,
+        targetDurationMinutes: durationMinutes,
+        targetDurationSeconds,
+        skipHours,
         lastReport: report,
       }
       this.notify()

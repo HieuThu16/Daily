@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   Sparkles, CheckCircle2,
-  BookOpen, PauseCircle, Check
+  BookOpen, PauseCircle, Check,
+  Clock, ShieldCheck, History,
 } from 'lucide-react'
 import {
   mangaChapterCrawler,
   type CrawlerState,
   type MangaCategory,
 } from './mangaChapterCrawler'
+import { getCrawlStats } from './mangaCrawlHistory'
 import { Modal } from '../shared'
 import { useNavigate } from 'react-router-dom'
 
@@ -43,6 +45,22 @@ export function categoryRoute(cat: MangaCategory, slug: string): string {
   }
 }
 
+const DURATION_PRESETS = [
+  { value: 5, label: '5 phút' },
+  { value: 10, label: '10 phút' },
+  { value: 15, label: '15 phút', isDefault: true },
+  { value: 30, label: '30 phút' },
+  { value: 60, label: '60 phút' },
+  { value: 0, label: 'Không giới hạn' },
+]
+
+const SKIP_PRESETS = [
+  { value: 1, label: '1 giờ qua' },
+  { value: 6, label: '6 giờ qua', isDefault: true },
+  { value: 24, label: '24 giờ qua' },
+  { value: 0, label: 'Không né (Cào từ cũ nhất)' },
+]
+
 export function CrawlChaptersModal({
   isOpen,
   onClose,
@@ -54,19 +72,36 @@ export function CrawlChaptersModal({
   category: MangaCategory
   totalItemsCount?: number
 }) {
-  const [starting, setStarting] = useState(false)
+  const [durationMinutes, setDurationMinutes] = useState<number>(15)
+  const [isCustomDuration, setIsCustomDuration] = useState<boolean>(false)
+  const [customInputMinutes, setCustomInputMinutes] = useState<string>('20')
+  const [skipHours, setSkipHours] = useState<number>(6)
+  const [starting, setStarting] = useState<boolean>(false)
+
+  const effectiveDuration = isCustomDuration
+    ? Math.max(1, parseInt(customInputMinutes, 10) || 15)
+    : durationMinutes
+
+  const stats = useMemo(
+    () => getCrawlStats(category, totalItemsCount, skipHours),
+    [category, totalItemsCount, skipHours],
+  )
 
   if (!isOpen) return null
 
   const handleStart = () => {
     setStarting(true)
     onClose()
-    void mangaChapterCrawler.startCrawl(category)
+    void mangaChapterCrawler.startCrawl(category, {
+      durationMinutes: effectiveDuration,
+      skipHours,
+    })
   }
 
   return (
     <Modal title="⚡ Cào thêm chapter cho truyện đã có" onClose={onClose}>
       <div style={{ padding: '4px 0 8px', color: 'var(--text-main)' }}>
+        {/* Banner giới thiệu */}
         <div
           style={{
             display: 'flex',
@@ -95,24 +130,176 @@ export function CrawlChaptersModal({
           </div>
           <div>
             <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              Cập nhật chapter mới tự động
+              Cập nhật chapter mới tự động cho {categoryDisplayName(category)}
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
-              Hệ thống sẽ kiểm tra từng bộ truyện trong kho {categoryDisplayName(category)} ({totalItemsCount > 0 ? `${totalItemsCount} bộ` : 'toàn bộ'}).
+              Hệ thống tự động chạy nền, ưu tiên quét truyện cào lâu nhất và lưu vào <strong>"Vừa cào gần đây"</strong>.
             </div>
           </div>
         </div>
 
-        <div style={{ fontSize: '0.84rem', lineHeight: 1.6, color: 'var(--text-main)', marginBottom: 20 }}>
-          <p style={{ margin: '0 0 10px' }}>
-            Sau khi nhấn <strong>OK</strong>, tiến trình cào sẽ <strong>tự động chạy nền</strong> trong tối đa <strong>15 phút</strong>.
-          </p>
-          <ul style={{ margin: '0 0 10px', paddingLeft: 20, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            <li>Bạn có thể tiếp tục đọc truyện hoặc chuyển trang bình thường.</li>
-            <li>Hết 15 phút (hoặc khi hoàn tất), hệ thống sẽ hiển thị <strong>bảng báo cáo</strong> các chapter mới cào được ngay trên màn hình.</li>
-          </ul>
+        {/* 1. Chọn thời gian cào */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-main)' }}>
+            <Clock size={15} color="#3b82f6" />
+            <span>Bạn muốn cào trong bao lâu?</span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {DURATION_PRESETS.map((preset) => {
+              const isSelected = !isCustomDuration && durationMinutes === preset.value
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => {
+                    setIsCustomDuration(false)
+                    setDurationMinutes(preset.value)
+                  }}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 10,
+                    fontSize: '0.8rem',
+                    fontWeight: isSelected ? 700 : 500,
+                    border: '1px solid',
+                    borderColor: isSelected ? 'rgba(59, 130, 246, 0.5)' : 'var(--card-border, rgba(255,255,255,0.1))',
+                    background: isSelected ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2))' : 'var(--card-bg, #18181b)',
+                    color: isSelected ? '#3b82f6' : 'var(--text-main)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {preset.label} {preset.isDefault ? '(Mặc định)' : ''}
+                </button>
+              )
+            })}
+
+            <button
+              type="button"
+              onClick={() => setIsCustomDuration(true)}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 10,
+                fontSize: '0.8rem',
+                fontWeight: isCustomDuration ? 700 : 500,
+                border: '1px solid',
+                borderColor: isCustomDuration ? 'rgba(59, 130, 246, 0.5)' : 'var(--card-border, rgba(255,255,255,0.1))',
+                background: isCustomDuration ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2))' : 'var(--card-bg, #18181b)',
+                color: isCustomDuration ? '#3b82f6' : 'var(--text-main)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Tùy chỉnh phút
+            </button>
+          </div>
+
+          {isCustomDuration && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '8px 12px', background: 'var(--bg-subtle, rgba(0,0,0,0.03))', borderRadius: 8 }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Nhập số phút chạy:</span>
+              <input
+                type="number"
+                min="1"
+                max="240"
+                value={customInputMinutes}
+                onChange={(e) => setCustomInputMinutes(e.target.value)}
+                style={{
+                  width: 80,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                }}
+              />
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>phút</span>
+            </div>
+          )}
         </div>
 
+        {/* 2. Bộ lọc né truyện đã cào gần đây */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.84rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-main)' }}>
+            <ShieldCheck size={15} color="#10b981" />
+            <span>Né các truyện đã cào gần nhất:</span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {SKIP_PRESETS.map((preset) => {
+              const isSelected = skipHours === preset.value
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setSkipHours(preset.value)}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: 10,
+                    fontSize: '0.78rem',
+                    fontWeight: isSelected ? 700 : 500,
+                    border: '1px solid',
+                    borderColor: isSelected ? 'rgba(16, 185, 129, 0.5)' : 'var(--card-border, rgba(255,255,255,0.1))',
+                    background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'var(--card-bg, #18181b)',
+                    color: isSelected ? '#10b981' : 'var(--text-main)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {preset.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 3. Thẻ thông tin cơ chế thông minh & thống kê */}
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 12,
+            background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
+            border: '1px solid var(--card-border)',
+            marginBottom: 20,
+            fontSize: '0.78rem',
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: 'var(--text-main)', marginBottom: 6 }}>
+            <History size={14} color="#8b5cf6" />
+            <span>Chiến lược quét tối ưu:</span>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-muted)' }}>
+            <li>
+              <strong>Ưu tiên cao nhất:</strong> Quét trước các bộ truyện <strong>chưa từng cào</strong> hoặc <strong>lần cào cuối cách đây lâu nhất</strong>.
+            </li>
+            <li>
+              <strong>Tránh quét trùng:</strong> {skipHours > 0 ? `Đã né ${stats.crawledRecently} bộ truyện vừa cào trong ${skipHours}h qua.` : 'Quét toàn bộ theo thứ tự cũ nhất.'}
+            </li>
+            <li>
+              <strong>Lưu tự động:</strong> Mọi truyện quét xong và có chapter mới sẽ được lưu ngay vào mục <strong>"Vừa cào gần đây"</strong>.
+            </li>
+          </ul>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              marginTop: 10,
+              paddingTop: 8,
+              borderTop: '1px solid var(--card-border)',
+              fontSize: '0.76rem',
+              color: 'var(--text-main)',
+            }}
+          >
+            <span>Tổng kho: <strong>{stats.total} bộ</strong></span>
+            {skipHours > 0 && <span style={{ color: '#f59e0b' }}>Né qua: <strong>{stats.crawledRecently} bộ</strong></span>}
+            <span style={{ color: '#10b981' }}>Ưu tiên lượt này: <strong>{stats.priorityCount} bộ</strong></span>
+          </div>
+        </div>
+
+        {/* Nút hành động */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -140,7 +327,7 @@ export function CrawlChaptersModal({
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
             }}
           >
-            <Check size={16} /> OK (Bắt đầu chạy nền)
+            <Check size={16} /> Bắt đầu cào {effectiveDuration > 0 ? `(${effectiveDuration} phút)` : '(Không giới hạn)'}
           </button>
         </div>
       </div>
@@ -149,7 +336,7 @@ export function CrawlChaptersModal({
 }
 
 /**
- * Hiển thị thanh tiến độ nền nổi (Floating progress) & Bảng báo cáo sau 15 phút
+ * Hiển thị thanh tiến độ nền nổi (Floating progress) & Bảng báo cáo sau khi hoàn tất
  */
 export function GlobalCrawlerWatcher() {
   const [crawlerState, setCrawlerState] = useState<CrawlerState>(mangaChapterCrawler.getState())
@@ -162,6 +349,9 @@ export function GlobalCrawlerWatcher() {
   }, [])
 
   const report = crawlerState.lastReport
+  const targetLabel = crawlerState.targetDurationMinutes > 0
+    ? `${crawlerState.targetDurationMinutes}:00`
+    : '∞'
 
   return (
     <>
@@ -173,11 +363,11 @@ export function GlobalCrawlerWatcher() {
             left: 20,
             bottom: 24,
             zIndex: 9000,
-            background: 'var(--card-bg)',
-            border: '1px solid var(--card-border)',
+            background: 'var(--card-bg, #18181b)',
+            border: '1px solid var(--card-border, rgba(255,255,255,0.15))',
             borderRadius: 16,
             padding: '10px 16px',
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.35)',
             display: 'flex',
             alignItems: 'center',
             gap: 12,
@@ -203,7 +393,7 @@ export function GlobalCrawlerWatcher() {
 
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)' }}>
-              <span>Đang cào nền ({formatTime(crawlerState.elapsedSeconds)} / 15:00)</span>
+              <span>Đang cào nền ({formatTime(crawlerState.elapsedSeconds)} / {targetLabel})</span>
               {crawlerState.newChaptersFound > 0 && (
                 <span style={{ color: '#10b981', fontWeight: 800 }}>+{crawlerState.newChaptersFound} chap mới</span>
               )}
@@ -248,21 +438,21 @@ export function GlobalCrawlerWatcher() {
         </div>
       )}
 
-      {/* Modal Báo cáo kết quả cào sau 15 phút / khi dừng giữa chừng / khi hoàn tất */}
+      {/* Modal Báo cáo kết quả cào */}
       {report && (
         <Modal
           title={
             report.isStoppedByUser
               ? '⏱️ Báo cáo cào chapter (Đã dừng giữa chừng)'
               : report.isTimedOut
-                ? '⏱️ Báo cáo cào chapter (Hết 15 phút)'
+                ? `⏱️ Báo cáo cào chapter (Hết ${report.targetDurationMinutes} phút)`
                 : '🎉 Báo cáo cào chapter hoàn tất'
           }
           onClose={() => mangaChapterCrawler.clearReport()}
         >
           <div style={{ padding: '4px 0 10px', color: 'var(--text-main)' }}>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-              Dữ liệu cào đến đâu đã được hệ thống <strong>tự động lưu ngay đến đó</strong>. Bạn có thể mở đọc ngay các chapter mới bên dưới:
+              Dữ liệu cào đến đâu đã được hệ thống <strong>tự động lưu vào lịch sử "Vừa cào gần đây"</strong>. Bạn có thể mở đọc ngay các chapter mới bên dưới:
             </div>
             {/* Header Thống kê */}
             <div
@@ -296,7 +486,7 @@ export function GlobalCrawlerWatcher() {
                 }}
               >
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Truyện đã quét</div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary)', marginTop: 2 }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary, #3b82f6)', marginTop: 2 }}>
                   {report.totalScanned} bộ
                 </div>
               </div>
@@ -341,8 +531,8 @@ export function GlobalCrawlerWatcher() {
                         justifyContent: 'space-between',
                         padding: '10px 12px',
                         borderRadius: 10,
-                        background: 'var(--card-bg)',
-                        border: '1px solid var(--card-border)',
+                        background: 'var(--card-bg, #18181b)',
+                        border: '1px solid var(--card-border, rgba(255,255,255,0.1))',
                         gap: 10,
                       }}
                     >
@@ -365,7 +555,7 @@ export function GlobalCrawlerWatcher() {
                           padding: '5px 10px',
                           borderRadius: 8,
                           background: 'rgba(59, 130, 246, 0.1)',
-                          color: 'var(--primary)',
+                          color: 'var(--primary, #3b82f6)',
                           border: 'none',
                           fontSize: '0.74rem',
                           fontWeight: 700,

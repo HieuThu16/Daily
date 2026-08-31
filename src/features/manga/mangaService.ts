@@ -17,14 +17,18 @@ export function getCustomBLMangaList(): BLManga[] {
 }
 
 export function saveCustomBLManga(manga: BLManga): void {
+  const cleanManga: BLManga = {
+    ...manga,
+    updatedAt: manga.updatedAt || new Date().toISOString(),
+  };
   const current = getCustomBLMangaList();
-  const idx = current.findIndex(m => m.slug === manga.slug);
+  const idx = current.findIndex(m => m.slug === cleanManga.slug);
   let updated: BLManga[];
   if (idx >= 0) {
     updated = [...current];
-    updated[idx] = manga;
+    updated[idx] = cleanManga;
   } else {
-    updated = [manga, ...current];
+    updated = [cleanManga, ...current];
   }
   try {
     localStorage.setItem(CUSTOM_BL_MANGA_KEY, JSON.stringify(updated));
@@ -41,12 +45,12 @@ export function saveCustomBLManga(manga: BLManga): void {
         const payload = {
           user_id: user.id,
           type: 'BL',
-          name: manga.title,
-          author: manga.author || null,
-          genre: manga.genres?.join(', ') || null,
-          cover_url: manga.cover || null,
-          channel: manga.slug,
-          description: JSON.stringify(manga),
+          name: cleanManga.title,
+          author: cleanManga.author || null,
+          genre: cleanManga.genres?.join(', ') || null,
+          cover_url: cleanManga.cover || null,
+          channel: cleanManga.slug,
+          description: JSON.stringify(cleanManga),
           is_public: true,
         };
 
@@ -54,7 +58,7 @@ export function saveCustomBLManga(manga: BLManga): void {
           .from('media_items')
           .select('id')
           .eq('user_id', user.id)
-          .eq('channel', manga.slug)
+          .eq('channel', cleanManga.slug)
           .eq('type', 'BL')
           .limit(1);
 
@@ -87,7 +91,10 @@ export async function syncBLMangaChapters(
     throw new Error(data?.error || 'Không nhận được dữ liệu truyện từ server');
   }
 
-  const freshManga: BLManga = data.manga;
+  const freshManga: BLManga = {
+    ...data.manga,
+    updatedAt: new Date().toISOString(),
+  };
   const oldCount = Array.isArray(manga.chapters) ? manga.chapters.length : 0;
   const newCount = Array.isArray(freshManga.chapters) ? freshManga.chapters.length : 0;
 
