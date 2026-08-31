@@ -250,6 +250,30 @@ export type Entry = {
   is_special?: boolean
   tags?: string[] | null
 }
+
+export function isEntryFirstTime(entry: Partial<Entry> | null | undefined): boolean {
+  if (!entry) return false
+  return Boolean(
+    entry.is_first_time ||
+    entry.tags?.includes('FIRST_TIME') ||
+    entry.tags?.includes('is_first_time') ||
+    entry.tags?.includes('Lần đầu') ||
+    entry.tags?.includes('lan_dau') ||
+    entry.entry_type === 'FIRST_TIME'
+  )
+}
+
+export function isEntrySpecial(entry: Partial<Entry> | null | undefined): boolean {
+  if (!entry) return false
+  return Boolean(
+    entry.is_special ||
+    entry.tags?.includes('SPECIAL') ||
+    entry.tags?.includes('is_special') ||
+    entry.tags?.includes('Đặc biệt') ||
+    entry.tags?.includes('dac_biet') ||
+    entry.entry_type === 'SPECIAL'
+  )
+}
 /** Người được mời xem sự kiện chung, định danh bằng email đăng nhập. */
 export type SharedPartner = { id: string; partner_email: string; created_at?: string }
 

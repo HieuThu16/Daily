@@ -14,7 +14,7 @@ import {
 import { UniversalCollection3DCard } from './UniversalCollection3DCard'
 import { Memory3DCard } from '../daily/Memory3DCard'
 import { useQuery } from '../shared'
-import type { Entry } from '../../types'
+import { isEntryFirstTime, isEntrySpecial, type Entry } from '../../types'
 import { useToast } from '../ToastContext'
 
 type FilterTab = 'ALL' | 'DIARY' | 'BOOK' | 'TRUYEN_H' | 'MANGA' | 'YOUTUBE' | 'MUSIC' | 'FAV'
@@ -30,7 +30,7 @@ export function CollectionPage() {
   const diaryQuery = useQuery<Entry>('daily_entries')
   const diaryCards = useMemo(() => {
     return diaryQuery.items
-      .filter((i) => Boolean(i.is_first_time) || Boolean(i.is_special))
+      .filter((i) => isEntryFirstTime(i) || isEntrySpecial(i))
       .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
   }, [diaryQuery.items])
 

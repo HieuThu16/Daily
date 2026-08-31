@@ -8,7 +8,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'
-import type { DailyCategoryItem, DailyType, Entry, Person } from '../types'
+import { isEntryFirstTime, isEntrySpecial, type DailyCategoryItem, type DailyType, type Entry, type Person } from '../types'
 import { loadLocal, saveLocal } from '../lib/persistence'
 import { getRemoteAppSetting, saveAppSetting } from '../lib/userAppSettings'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
@@ -541,15 +541,20 @@ export function DailyPage() {
     setSaveSuccess('')
     const currentTimeString = timeOverride || clock
 
-    // Tạo payload chuẩn xác với is_first_time, is_special, category và ảnh/video đính kèm
+    const tagsList: string[] = []
+    if (selectedCategory) tagsList.push(selectedCategory)
+    if (isFirstTime) tagsList.push('FIRST_TIME', 'Lần đầu', 'lan_dau')
+    if (isSpecial) tagsList.push('SPECIAL', 'Đặc biệt', 'dac_biet')
+
+    // Tạo payload chuẩn xác với is_first_time, is_special, category, tags và ảnh/video đính kèm
     const payload = lines.map((lineText, idx) => ({
       content: lineText,
       entry_date: date,
-      entry_type: selectedCategory ? (selectedCategory as DailyType) : 'FEELING',
+      entry_type: (selectedCategory as DailyType) || (isFirstTime ? 'FIRST_TIME' : isSpecial ? 'SPECIAL' : 'FEELING'),
       entry_time: currentTimeString,
       is_first_time: Boolean(isFirstTime),
       is_special: Boolean(isSpecial),
-      tags: selectedCategory ? [selectedCategory] : [],
+      tags: tagsList,
       image_url: idx === 0 ? attachedMedia?.url ?? null : null,
       image_path: idx === 0 ? attachedMedia?.path ?? null : null,
     }))
@@ -562,7 +567,12 @@ export function DailyPage() {
         const { data, error } = await supabase.from('daily_entries').insert(payload).select()
         if (!error && data && data.length > 0) {
           savedToSupabase = true
-          savedItems = data as Entry[]
+          savedItems = (data as any[]).map((row) => ({
+            ...row,
+            is_first_time: Boolean(isFirstTime || row.is_first_time),
+            is_special: Boolean(isSpecial || row.is_special),
+            tags: row.tags && row.tags.length > 0 ? row.tags : tagsList,
+          })) as Entry[]
 
           // Lưu người được nhắc tên nếu có
           const mentioned = peopleQuery.items.filter((person) =>
@@ -579,12 +589,14 @@ export function DailyPage() {
             ).catch(() => {})
           }
         } else if (error) {
-          console.warn('Lỗi Supabase, thử lại phương án dự phòng:', error)
+          console.warn('Lỗi Supabase, thử lại phương án dự phòng bảo lưu tags:', error)
           // Thử lại nếu DB từ chối cột mới
           const simplePayload = lines.map((lineText, idx) => ({
             content: lineText,
             entry_date: date,
+            entry_type: (selectedCategory as DailyType) || (isFirstTime ? 'FIRST_TIME' : isSpecial ? 'SPECIAL' : 'FEELING'),
             entry_time: currentTimeString,
+            tags: tagsList,
             image_url: idx === 0 ? attachedMedia?.url ?? null : null,
             image_path: idx === 0 ? attachedMedia?.path ?? null : null,
           }))
@@ -599,7 +611,7 @@ export function DailyPage() {
               ...row,
               is_first_time: Boolean(isFirstTime),
               is_special: Boolean(isSpecial),
-              tags: selectedCategory ? [selectedCategory] : [],
+              tags: tagsList,
             })) as Entry[]
           }
         }
@@ -669,13 +681,19 @@ export function DailyPage() {
       }
     }
 
+    const editTagsList: string[] = []
+    if (editCategory) editTagsList.push(editCategory)
+    if (editIsFirstTime) editTagsList.push('FIRST_TIME', 'Lần đầu', 'lan_dau')
+    if (editIsSpecial) editTagsList.push('SPECIAL', 'Đặc biệt', 'dac_biet')
+
     const patch = {
       content: editText.trim(),
       entry_date: date,
+      entry_type: (editCategory as DailyType) || (editIsFirstTime ? 'FIRST_TIME' : editIsSpecial ? 'SPECIAL' : 'FEELING'),
       entry_time: finalTime || null,
       is_first_time: Boolean(editIsFirstTime),
       is_special: Boolean(editIsSpecial),
-      tags: editCategory ? [editCategory] : [],
+      tags: editTagsList,
     }
 
     let updatedOnline = false
@@ -689,7 +707,9 @@ export function DailyPage() {
           const simplePatch = {
             content: editText.trim(),
             entry_date: date,
+            entry_type: (editCategory as DailyType) || (editIsFirstTime ? 'FIRST_TIME' : editIsSpecial ? 'SPECIAL' : 'FEELING'),
             entry_time: finalTime || null,
+            tags: editTagsList,
           }
           const { error: err2 } = await supabase.from('daily_entries').update(simplePatch).eq('id', editing.id)
           if (!err2) updatedOnline = true
@@ -713,8 +733,8 @@ export function DailyPage() {
     setEditing(entry)
     setEditText(entry.content)
     setDate(entry.entry_date)
-    setEditIsFirstTime(Boolean(entry.is_first_time))
-    setEditIsSpecial(Boolean(entry.is_special))
+    setEditIsFirstTime(isEntryFirstTime(entry))
+    setEditIsSpecial(isEntrySpecial(entry))
     const catInfo = getCategoryInfo(entry, dailyCategories)
     setEditCategory(catInfo ? catInfo.label : null)
     const { from, to } = parseTimeRangeFromEntry(entry.entry_time, entry.content)
@@ -807,8 +827,8 @@ export function DailyPage() {
     .filter((i) => {
       if (filterType === 'ALL') return true
       if (filterType === 'FAV') return Boolean(i.is_favorite)
-      if (filterType === 'FIRST_TIME') return Boolean(i.is_first_time)
-      if (filterType === 'SPECIAL') return Boolean(i.is_special)
+      if (filterType === 'FIRST_TIME') return isEntryFirstTime(i)
+      if (filterType === 'SPECIAL') return isEntrySpecial(i)
       if (filterType === 'NONE') {
         const catInfo = getCategoryInfo(i, dailyCategories)
         return !catInfo
@@ -864,20 +884,20 @@ export function DailyPage() {
 
   const collectionEntries = useMemo(() => {
     return items
-      .filter((i) => Boolean(i.is_first_time) || Boolean(i.is_special))
+      .filter((i) => isEntryFirstTime(i) || isEntrySpecial(i))
       .sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.created_at.localeCompare(a.created_at))
   }, [items])
 
-  const firstTimeEntries = useMemo(() => collectionEntries.filter((i) => Boolean(i.is_first_time)), [collectionEntries])
-  const specialEntries = useMemo(() => collectionEntries.filter((i) => Boolean(i.is_special)), [collectionEntries])
+  const firstTimeEntries = useMemo(() => collectionEntries.filter((i) => isEntryFirstTime(i)), [collectionEntries])
+  const specialEntries = useMemo(() => collectionEntries.filter((i) => isEntrySpecial(i)), [collectionEntries])
   const favCollectionEntries = useMemo(() => collectionEntries.filter((i) => Boolean(i.is_favorite)), [collectionEntries])
 
   const filteredCollection = useMemo(() => {
     const q = collectionSearch.trim().toLowerCase()
     return collectionEntries
       .filter((i) => {
-        if (collectionFilter === 'FIRST_TIME') return Boolean(i.is_first_time)
-        if (collectionFilter === 'SPECIAL') return Boolean(i.is_special)
+        if (collectionFilter === 'FIRST_TIME') return isEntryFirstTime(i)
+        if (collectionFilter === 'SPECIAL') return isEntrySpecial(i)
         if (collectionFilter === 'FAV') return Boolean(i.is_favorite)
         return true
       })
