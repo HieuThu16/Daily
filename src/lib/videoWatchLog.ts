@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { getRemoteAppSetting, saveAppSetting } from './userAppSettings'
 
 export interface VideoWatchLog {
   id: string
@@ -15,6 +16,19 @@ export interface VideoWatchLog {
 
 const STORAGE_KEY = 'daily_video_watch_logs'
 const EVENT_NAME = 'daily_video_watch_updated'
+
+export async function fetchRemoteVideoWatchLogs(): Promise<VideoWatchLog[]> {
+  try {
+    const logs = await getRemoteAppSetting<VideoWatchLog[]>('daily_video_watch_logs', getVideoWatchLogs())
+    if (Array.isArray(logs) && logs.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(0, 500)))
+      return logs
+    }
+  } catch (err) {
+    console.warn('Lỗi tải video watch logs từ Supabase:', err)
+  }
+  return getVideoWatchLogs()
+}
 
 export function getVideoWatchLogs(): VideoWatchLog[] {
   try {
@@ -88,6 +102,7 @@ export function recordVideoWatchSession(params: {
   const trimmed = current.slice(0, 500)
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+    void saveAppSetting('daily_video_watch_logs', trimmed)
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: targetLog }))
   } catch (err) {
     console.error('Failed to save video watch log:', err)

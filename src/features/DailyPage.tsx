@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Clock, Frown, Heart, History, ImagePlus, Link as Loader2, NotebookPen, Pencil, Plus, Save, Sparkles, Star, Trash2, Youtube, Zap } from 'lucide-react'
+import {
+  BarChart3, Clock, History, ImagePlus,
+  Link as Loader2, NotebookPen, Pencil, Plus, Save,
+  Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag
+} from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
 import { localDate, longDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'
-import type { DailyType, Entry, Person } from '../types'
+import type { DailyCategoryItem, DailyType, Entry, Person } from '../types'
 import { loadLocal, saveLocal } from '../lib/persistence'
+import { getRemoteAppSetting, saveAppSetting } from '../lib/userAppSettings'
 import { DeleteButton, Empty, Modal, useQuery } from './shared'
 import { useToast } from './ToastContext'
 import { SkeletonList } from './Skeleton'
@@ -14,10 +19,32 @@ import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 import { compressForUpload } from '../lib/photo'
 import { Memory3DCard } from './daily/Memory3DCard'
 
-const categories: Array<{ type: DailyType; title: string; icon: any; color: string; bg: string }> = [
-  { type: 'FEELING',   title: 'Cảm xúc',  icon: Heart,    color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
-  { type: 'SAD_THING', title: 'Điều buồn', icon: Frown,    color: 'var(--blue)',    bg: 'var(--blue-bg)'    },
+export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = [
+  { id: 'cam-xuc', label: 'Cảm xúc', icon: '❤️', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.15)' },
+  { id: 'dieu-buon', label: 'Điều buồn', icon: '🌧️', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' },
+  { id: 'cong-viec', label: 'Công việc', icon: '💼', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' },
+  { id: 'hoc-tap', label: 'Học tập', icon: '📚', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' },
+  { id: 'tinh-cam', label: 'Tình cảm', icon: '💖', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)' },
+  { id: 'gia-dinh', label: 'Gia đình', icon: '🏡', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
+  { id: 'suc-khoe', label: 'Sức khoẻ', icon: '🥗', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)' },
+  { id: 'y-tuong', label: 'Ý tưởng', icon: '💡', color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)' },
 ]
+
+export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]): DailyCategoryItem | null {
+  const catLabel = entry.category || (entry.tags && entry.tags.length > 0 ? entry.tags[0] : null)
+  if (catLabel) {
+    const found = allCategories.find((c) => c.label === catLabel || c.id === catLabel)
+    if (found) return found
+    return { id: catLabel, label: catLabel, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+  }
+  if (entry.entry_type === 'FEELING') {
+    return allCategories.find((c) => c.id === 'cam-xuc') || { id: 'cam-xuc', label: 'Cảm xúc', icon: '❤️', color: '#ec4899', bg: 'rgba(236, 72, 153, 0.15)' }
+  }
+  if (entry.entry_type === 'SAD_THING') {
+    return allCategories.find((c) => c.id === 'dieu-buon') || { id: 'dieu-buon', label: 'Điều buồn', icon: '🌧️', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' }
+  }
+  return null
+}
 
 /** 'HH:MM' theo giờ máy, cập nhật mỗi 30 giây. */
 function useClock() {
@@ -147,10 +174,35 @@ export function DailyPage() {
   const [pageTab, setPageTab] = useState<PageTab>('write')
   const clock = useClock()
 
+  // Thể loại tuỳ chỉnh
+  const [dailyCategories, setDailyCategories] = useState<DailyCategoryItem[]>(() => {
+    return loadLocal<DailyCategoryItem[]>('daily_custom_categories', DEFAULT_DAILY_CATEGORIES)
+  })
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [editCategory, setEditCategory] = useState<string | null>(null)
+
+  // Modal quản lý thể loại
+  const [showCategoryConfigModal, setShowCategoryConfigModal] = useState(false)
+  const [editingCat, setEditingCat] = useState<DailyCategoryItem | null>(null)
+  const [newCatLabel, setNewCatLabel] = useState('')
+  const [newCatIcon, setNewCatIcon] = useState('🏷️')
+  const [newCatColor, setNewCatColor] = useState('#8b5cf6')
+  const [newCatBg, setNewCatBg] = useState('rgba(139, 92, 246, 0.15)')
+
+  // Tải thể loại từ Supabase
+  useEffect(() => {
+    getRemoteAppSetting<DailyCategoryItem[]>('daily_custom_categories', DEFAULT_DAILY_CATEGORIES)
+      .then((cats) => {
+        if (Array.isArray(cats) && cats.length > 0) {
+          setDailyCategories(cats)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Write tab state
-  const [selectedType, setSelectedType] = useState<DailyType>('FEELING')
   const [content, setContent] = useState('')
-  const [filterType, setFilterType] = useState<'ALL' | 'FAV' | DailyType>('ALL')
+  const [filterType, setFilterType] = useState<string>('ALL')
   const [search, setSearch] = useState('')
   const [date, setDate] = useState(localDate())
   const [timeOverride, setTimeOverride] = useState('') // rỗng = dùng giờ hiện tại
@@ -367,44 +419,146 @@ export function DailyPage() {
 
 
 
+  // Quản lý thể loại (Lưu & Xoá)
+  const handleSaveCategory = async () => {
+    const label = newCatLabel.trim()
+    if (!label) {
+      showToast('Vui lòng nhập tên thể loại', 'delete')
+      return
+    }
+
+    let updated: DailyCategoryItem[] = []
+    if (editingCat) {
+      updated = dailyCategories.map((c) =>
+        c.id === editingCat.id
+          ? { ...c, label, icon: newCatIcon || '🏷️', color: newCatColor || '#8b5cf6', bg: newCatBg || 'rgba(139, 92, 246, 0.15)' }
+          : c
+      )
+      showToast(`✏️ Đã cập nhật thể loại "${label}"`, 'success')
+    } else {
+      if (dailyCategories.some((c) => c.label.toLowerCase() === label.toLowerCase())) {
+        showToast('Thể loại này đã tồn tại', 'delete')
+        return
+      }
+      const newCat: DailyCategoryItem = {
+        id: `cat_${Date.now()}`,
+        label,
+        icon: newCatIcon || '🏷️',
+        color: newCatColor || '#8b5cf6',
+        bg: newCatBg || 'rgba(139, 92, 246, 0.15)',
+      }
+      updated = [...dailyCategories, newCat]
+      showToast(`➕ Đã thêm thể loại "${label}"`, 'success')
+    }
+
+    setDailyCategories(updated)
+    await saveAppSetting('daily_custom_categories', updated)
+    setEditingCat(null)
+    setNewCatLabel('')
+    setNewCatIcon('🏷️')
+  }
+
+  const handleDeleteCategory = async (catId: string, catLabel: string) => {
+    if (!confirm(`Xoá thể loại "${catLabel}"?`)) return
+    const updated = dailyCategories.filter((c) => c.id !== catId)
+    setDailyCategories(updated)
+    await saveAppSetting('daily_custom_categories', updated)
+    if (selectedCategory === catLabel) setSelectedCategory(null)
+    showToast(`🗑️ Đã xoá thể loại "${catLabel}"`, 'delete')
+  }
+
   const saveEntries = async () => {
     const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
     if (!lines.length) return
     setBusy(true)
     setSaveSuccess('')
     const currentTimeString = timeOverride || clock
+
+    // Tạo payload chuẩn xác với is_first_time, is_special và category
     const payload = lines.map((lineText) => ({
       content: lineText,
       entry_date: date,
-      entry_type: selectedType,
+      entry_type: selectedCategory ? (selectedCategory as DailyType) : 'FEELING',
       entry_time: currentTimeString,
-      is_first_time: isFirstTime,
-      is_special: isSpecial,
+      is_first_time: Boolean(isFirstTime),
+      is_special: Boolean(isSpecial),
+      tags: selectedCategory ? [selectedCategory] : [],
     }))
-    const { data, error } = await supabase!.from('daily_entries').insert(payload).select()
-    if (error && !navigator.onLine) {
-      // Mất mạng: giữ bài trong hàng đợi, có mạng lại tự đẩy lên.
-      const local = payload.map((row, i) => ({ ...row, id: `local-${Date.now()}-${i}`, created_at: new Date().toISOString() })) as Entry[]
+
+    let savedToSupabase = false
+    let savedItems: Entry[] = []
+
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.from('daily_entries').insert(payload).select()
+        if (!error && data && data.length > 0) {
+          savedToSupabase = true
+          savedItems = data as Entry[]
+
+          // Lưu người được nhắc tên nếu có
+          const mentioned = peopleQuery.items.filter((person) =>
+            lines.some((line) => line.includes(`@${person.name}`))
+          )
+          if (mentioned.length > 0 && supabase) {
+            await Promise.all(
+              mentioned.map((person) =>
+                supabase!.from('person_daily_logs').upsert(
+                  { person_id: person.id, log_date: date, content: lines.join('\n') },
+                  { onConflict: 'user_id,person_id,log_date' }
+                )
+              )
+            ).catch(() => {})
+          }
+        } else if (error) {
+          console.warn('Lỗi Supabase, thử lại phương án dự phòng:', error)
+          // Thử lại nếu DB từ chối cột mới
+          const simplePayload = lines.map((lineText) => ({
+            content: lineText,
+            entry_date: date,
+            entry_time: currentTimeString,
+          }))
+          const { data: retryData, error: retryErr } = await supabase
+            .from('daily_entries')
+            .insert(simplePayload)
+            .select()
+
+          if (!retryErr && retryData && retryData.length > 0) {
+            savedToSupabase = true
+            savedItems = (retryData as any[]).map((row) => ({
+              ...row,
+              is_first_time: Boolean(isFirstTime),
+              is_special: Boolean(isSpecial),
+              tags: selectedCategory ? [selectedCategory] : [],
+            })) as Entry[]
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Lỗi khi lưu Supabase:', err)
+    }
+
+    if (savedToSupabase && savedItems.length > 0) {
+      setItems((prev) => [...savedItems, ...prev])
+      setContent('')
+      setIsFirstTime(false)
+      setIsSpecial(false)
+      showToast(`☁️ Đã lưu ${lines.length} bài nhật ký lên Supabase!`, 'success')
+      setSaveSuccess(`Đã lưu ${lines.length} nội dung lên Supabase ✨`)
+      setTimeout(() => setSaveSuccess(''), 3500)
+    } else {
+      // Lưu vào Local Storage & Offline Queue
+      const local = payload.map((row, i) => ({
+        ...row,
+        id: `local-${Date.now()}-${i}`,
+        created_at: new Date().toISOString(),
+      })) as Entry[]
       payload.forEach((row) => queueWrite({ table: 'daily_entries', op: 'insert', payload: row }))
       setItems((prev) => [...local, ...prev])
       setContent('')
       setIsFirstTime(false)
       setIsSpecial(false)
-      showToast(`📴 Đã lưu ${lines.length} bài offline, sẽ tự đồng bộ khi có mạng.`, 'local')
-      setBusy(false)
-      return
-    }
-    if (!error && data) {
-      setItems((prev) => [...(data as Entry[]), ...prev])
-      if (supabase) {
-        const mentioned = peopleQuery.items.filter((person) => lines.some((line) => line.includes(`@${person.name}`)))
-        await Promise.all(mentioned.map((person) => supabase!.from('person_daily_logs').upsert({ person_id: person.id, log_date: date, content: lines.join('\n') }, { onConflict: 'user_id,person_id,log_date' })))
-      }
-      setContent('')
-      setIsFirstTime(false)
-      setIsSpecial(false)
-      showToast(`✅ Đã lưu ${lines.length} bài nhật ký mới!`)
-      setSaveSuccess(`Đã lưu ${lines.length} nội dung lúc ${currentTimeString} ✨`)
+      showToast(`💾 Đã lưu ${lines.length} bài vào Local (Hàng đợi đồng bộ)`, 'local')
+      setSaveSuccess(`Đã lưu ${lines.length} nội dung vào Local 💾`)
       setTimeout(() => setSaveSuccess(''), 3500)
     }
     setBusy(false)
@@ -446,12 +600,39 @@ export function DailyPage() {
       content: editText.trim(),
       entry_date: date,
       entry_time: finalTime || null,
-      is_first_time: editIsFirstTime,
-      is_special: editIsSpecial,
+      is_first_time: Boolean(editIsFirstTime),
+      is_special: Boolean(editIsSpecial),
+      tags: editCategory ? [editCategory] : [],
     }
-    await supabase!.from('daily_entries').update(patch).eq('id', editing.id)
+
+    let updatedOnline = false
+    try {
+      if (supabase) {
+        const { error } = await supabase.from('daily_entries').update(patch).eq('id', editing.id)
+        if (!error) {
+          updatedOnline = true
+        } else {
+          // Thử lại nếu DB chưa có cột mới
+          const simplePatch = {
+            content: editText.trim(),
+            entry_date: date,
+            entry_time: finalTime || null,
+          }
+          const { error: err2 } = await supabase.from('daily_entries').update(simplePatch).eq('id', editing.id)
+          if (!err2) updatedOnline = true
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi cập nhật nhật ký:', e)
+    }
+
     setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, ...patch } : i)))
-    showToast('✏️ Đã cập nhật bài viết!')
+    if (updatedOnline) {
+      showToast('☁️ Đã cập nhật bài viết lên Supabase!', 'success')
+    } else {
+      queueWrite({ table: 'daily_entries', op: 'update', payload: { id: editing.id, ...patch } })
+      showToast('💾 Đã cập nhật bài viết vào Local', 'local')
+    }
     setEditing(null)
   }
 
@@ -461,6 +642,8 @@ export function DailyPage() {
     setDate(entry.entry_date)
     setEditIsFirstTime(Boolean(entry.is_first_time))
     setEditIsSpecial(Boolean(entry.is_special))
+    const catInfo = getCategoryInfo(entry, dailyCategories)
+    setEditCategory(catInfo ? catInfo.label : null)
     const { from, to } = parseTimeRangeFromEntry(entry.entry_time, entry.content)
     setEditTimeFrom(from)
     setEditTimeTo(to)
@@ -533,7 +716,18 @@ export function DailyPage() {
   /** Không tìm kiếm: chỉ ngày đang chọn. Có tìm kiếm: quét toàn bộ nhật ký, mới nhất trước. */
   const todayEntries = items
     .filter((i) => (keyword ? i.content.toLowerCase().includes(keyword) : i.entry_date === date))
-    .filter((i) => filterType === 'ALL' || (filterType === 'FAV' ? i.is_favorite : i.entry_type === filterType))
+    .filter((i) => {
+      if (filterType === 'ALL') return true
+      if (filterType === 'FAV') return Boolean(i.is_favorite)
+      if (filterType === 'FIRST_TIME') return Boolean(i.is_first_time)
+      if (filterType === 'SPECIAL') return Boolean(i.is_special)
+      if (filterType === 'NONE') {
+        const catInfo = getCategoryInfo(i, dailyCategories)
+        return !catInfo
+      }
+      const catInfo = getCategoryInfo(i, dailyCategories)
+      return catInfo?.label === filterType || catInfo?.id === filterType || i.entry_type === filterType
+    })
     .sort((a, b) => (keyword ? b.entry_date.localeCompare(a.entry_date) : 0))
 
   /** Ngày này năm trước: cùng ngày-tháng, năm cũ hơn — để đọc lại ký ức. */
@@ -558,16 +752,24 @@ export function DailyPage() {
     }
     return items
       .filter((i) => i.entry_date >= cutoff)
-      .filter((i) => statsType === 'ALL' || i.entry_type === statsType)
+      .filter((i) => {
+        if (statsType === 'ALL') return true
+        const catInfo = getCategoryInfo(i, dailyCategories)
+        return catInfo?.label === statsType || catInfo?.id === statsType || i.entry_type === statsType
+      })
       .sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.created_at.localeCompare(a.created_at))
-  }, [items, statsPeriod, statsType])
+  }, [items, statsPeriod, statsType, dailyCategories])
 
   // Count by type for summary cards
   const countByType = useMemo(() => {
     const map: Record<string, number> = {}
-    statsEntries.forEach((e) => { map[e.entry_type] = (map[e.entry_type] ?? 0) + 1 })
+    statsEntries.forEach((e) => {
+      const catInfo = getCategoryInfo(e, dailyCategories)
+      const key = catInfo ? catInfo.label : 'Khác'
+      map[key] = (map[key] ?? 0) + 1
+    })
     return map
-  }, [statsEntries])
+  }, [statsEntries, dailyCategories])
 
   const groupedByDate = useMemo(() => groupByDate(statsEntries), [statsEntries])
   const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a))
@@ -646,25 +848,105 @@ export function DailyPage() {
       {/* ════════════════ WRITE TAB ════════════════════════════════════════ */}
       {pageTab === 'write' && (
         <>
-          {/* 4 category icon buttons */}
-          <div className="daily-4-icons" style={{ marginBottom: 8 }}>
-            {categories.map((cat) => {
-              const Icon = cat.icon
-              const isSelected = selectedType === cat.type
-              return (
-                <button
-                  key={cat.type}
-                  className={'daily-icon-btn ' + (isSelected ? 'active' : '')}
-                  onClick={() => setSelectedType(cat.type)}
-                  title={cat.title}
-                  style={{ padding: '6px 0', borderRadius: 12, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-                >
-                  <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 28, height: 28 }}>
-                    <Icon size={15} />
-                  </div>
-                </button>
-              )
-            })}
+          {/* Thanh chọn Thể loại nhật ký & Quản lý */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Tag size={13} color="var(--purple)" /> Thể loại nhật ký:
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: selectedCategory ? 'var(--purple)' : 'var(--text-muted)' }}>
+                  {selectedCategory ? `(Đang chọn: ${selectedCategory})` : '(Mặc định: Không có)'}
+                </span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setShowCategoryConfigModal(true)}
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: 8,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--purple)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  transition: 'all 0.15s ease',
+                }}
+                title="Cấu hình / Thêm / Sửa / Xoá thể loại"
+              >
+                <Settings2 size={12} /> Cấu hình thể loại
+              </button>
+            </div>
+
+            {/* Dải nút cuộn ngang chọn thể loại */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                overflowX: 'auto',
+                paddingBottom: 4,
+                scrollbarWidth: 'none',
+              }}
+            >
+              {/* Nút: Không phân loại (Mặc định) */}
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(null)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 12,
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  border: selectedCategory === null ? '1.5px solid var(--primary)' : '1px solid var(--card-border)',
+                  background: selectedCategory === null ? 'var(--primary-light)' : 'var(--card-bg)',
+                  color: selectedCategory === null ? 'var(--primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>🔘 Không phân loại</span>
+              </button>
+
+              {/* Các thể loại tùy chỉnh */}
+              {dailyCategories.map((cat) => {
+                const isSelected = selectedCategory === cat.label
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategory(isSelected ? null : cat.label)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 12,
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      border: isSelected ? `1.5px solid ${cat.color}` : '1px solid var(--card-border)',
+                      background: isSelected ? cat.bg : 'var(--card-bg)',
+                      color: isSelected ? cat.color : 'var(--text-main)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      flexShrink: 0,
+                      whiteSpace: 'nowrap',
+                      boxShadow: isSelected ? `0 2px 8px ${cat.color}33` : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Write card */}
@@ -809,12 +1091,10 @@ export function DailyPage() {
               </button>
             </div>
 
-
-
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={`Viết nhật ký ${categories.find((c) => c.type === selectedType)?.title.toLowerCase()} vào đây... (Ví dụ: Từ 4h -> 5h: Chơi LQ)`}
+              placeholder={selectedCategory ? `Viết nhật ký [${selectedCategory}] vào đây... (Ví dụ: Từ 4h -> 5h: Chơi thể thao)` : `Viết nhật ký hôm nay vào đây... (Ví dụ: Từ 4h -> 5h: Chơi LQ)`}
               rows={3}
               style={{ width: '100%', border: '1px solid var(--card-border)', borderRadius: 12, padding: 10, fontSize: '0.9rem', resize: 'vertical', outline: 'none', background: 'var(--card-bg)', color: 'var(--text-main)', lineHeight: 1.5, marginBottom: 8 }}
             />
@@ -923,27 +1203,45 @@ export function DailyPage() {
               <h2 style={{ margin: 0, fontSize: '0.88rem', color: 'var(--primary)' }}>
                 <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký hôm nay (${todayEntries.length})`}
               </h2>
-              <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)' }}>
+              <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)', overflowX: 'auto', maxWidth: '100%' }}>
                 <button
                   onClick={() => setFilterType('ALL')}
-                  style={{ border: 0, background: filterType === 'ALL' ? 'var(--card-bg)' : 'transparent', color: filterType === 'ALL' ? 'var(--primary)' : 'var(--text-muted)', fontWeight: filterType === 'ALL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer' }}
+                  style={{ border: 0, background: filterType === 'ALL' ? 'var(--card-bg)' : 'transparent', color: filterType === 'ALL' ? 'var(--primary)' : 'var(--text-muted)', fontWeight: filterType === 'ALL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
                 >
                   Tất cả
                 </button>
                 <button
                   onClick={() => setFilterType('FAV')}
                   aria-label="Lọc bài yêu thích"
-                  style={{ border: 0, background: filterType === 'FAV' ? 'var(--amber-bg)' : 'transparent', color: filterType === 'FAV' ? 'var(--amber)' : 'var(--text-muted)', fontWeight: filterType === 'FAV' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}
+                  style={{ border: 0, background: filterType === 'FAV' ? 'var(--amber-bg)' : 'transparent', color: filterType === 'FAV' ? 'var(--amber)' : 'var(--text-muted)', fontWeight: filterType === 'FAV' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
                 >
                   <Star size={11} /> Yêu thích
                 </button>
-                {categories.map((cat) => (
+                <button
+                  onClick={() => setFilterType('FIRST_TIME')}
+                  style={{ border: 0, background: filterType === 'FIRST_TIME' ? 'rgba(6, 182, 212, 0.18)' : 'transparent', color: filterType === 'FIRST_TIME' ? '#06b6d4' : 'var(--text-muted)', fontWeight: filterType === 'FIRST_TIME' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  ✨ Lần đầu
+                </button>
+                <button
+                  onClick={() => setFilterType('SPECIAL')}
+                  style={{ border: 0, background: filterType === 'SPECIAL' ? 'rgba(245, 158, 11, 0.18)' : 'transparent', color: filterType === 'SPECIAL' ? '#f59e0b' : 'var(--text-muted)', fontWeight: filterType === 'SPECIAL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  🌟 Đặc biệt
+                </button>
+                <button
+                  onClick={() => setFilterType('NONE')}
+                  style={{ border: 0, background: filterType === 'NONE' ? 'var(--card-bg)' : 'transparent', color: filterType === 'NONE' ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: filterType === 'NONE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  🔘 Không phân loại
+                </button>
+                {dailyCategories.map((cat) => (
                   <button
-                    key={cat.type}
-                    onClick={() => setFilterType(cat.type)}
-                    style={{ border: 0, background: filterType === cat.type ? cat.bg : 'transparent', color: filterType === cat.type ? cat.color : 'var(--text-muted)', fontWeight: filterType === cat.type ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer' }}
+                    key={cat.id}
+                    onClick={() => setFilterType(cat.label)}
+                    style={{ border: 0, background: filterType === cat.label ? cat.bg : 'transparent', color: filterType === cat.label ? cat.color : 'var(--text-muted)', fontWeight: filterType === cat.label ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
                   >
-                    {cat.title}
+                    {cat.icon} {cat.label}
                   </button>
                 ))}
               </div>
@@ -962,8 +1260,7 @@ export function DailyPage() {
             ) : todayEntries.length ? (
               <div style={{ display: 'grid', gap: 6, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
                 {todayEntries.map((entry) => {
-                  const cat = categories.find((c) => c.type === entry.entry_type) ?? categories[0]
-                  const Icon = cat.icon
+                  const catInfo = getCategoryInfo(entry, dailyCategories)
                   return (
                     <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-main)', borderRadius: 7 }}>
                     <button
@@ -972,14 +1269,30 @@ export function DailyPage() {
                       onClick={() => openEntry(entry)}
                       style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', borderRadius: 7, padding: '4px 7px', cursor: 'pointer' }}
                     >
-                      <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 18, height: 18, flexShrink: 0 }}>
-                        <Icon size={10} />
-                      </div>
+                      {catInfo ? (
+                        <div className="icon-box icon-box-sm" style={{ background: catInfo.bg, color: catInfo.color, width: 20, height: 20, flexShrink: 0, fontSize: '0.75rem' }} title={catInfo.label}>
+                          {catInfo.icon}
+                        </div>
+                      ) : (
+                        <div className="icon-box icon-box-sm" style={{ background: 'var(--card-bg)', color: 'var(--text-muted)', width: 20, height: 20, flexShrink: 0, fontSize: '0.7rem' }}>
+                          📝
+                        </div>
+                      )}
                       {keyword && (
                         <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', flexShrink: 0 }}>{entry.entry_date.slice(8)}/{entry.entry_date.slice(5, 7)}</span>
                       )}
                       {entry.entry_time && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: cat.color, flexShrink: 0 }}>{entry.entry_time}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: catInfo?.color || 'var(--amber)', flexShrink: 0 }}>{entry.entry_time}</span>
+                      )}
+                      {entry.is_first_time && (
+                        <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#06b6d4', background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
+                          ✨ Lần đầu
+                        </span>
+                      )}
+                      {entry.is_special && (
+                        <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
+                          🌟 Đặc biệt
+                        </span>
                       )}
                       <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {entry.content}
@@ -1011,7 +1324,7 @@ export function DailyPage() {
               <Empty icon={NotebookPen} colorClass="icon-box-emerald">
                 {keyword
                   ? `Không có bài nào chứa "${search.trim()}".`
-                  : filterType === 'ALL' ? 'Chưa có nhật ký nào cho hôm nay.' : `Chưa có mục nào cho "${categories.find((c) => c.type === filterType)?.title}".`}
+                  : filterType === 'ALL' ? 'Chưa có nhật ký nào cho hôm nay.' : `Chưa có mục nào cho "${filterType}".`}
               </Empty>
             )}
           </div>
@@ -1279,35 +1592,35 @@ export function DailyPage() {
             <select
               aria-label="Lọc theo loại nhật ký"
               value={statsType}
-              onChange={(e) => setStatsType(e.target.value as any)}
+              onChange={(e) => setStatsType(e.target.value)}
               style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)', fontWeight: 600 }}
             >
-              <option value="ALL">Tất cả loại</option>
-              {categories.map((c) => <option key={c.type} value={c.type}>{c.title}</option>)}
+              <option value="ALL">Tất cả thể loại</option>
+              {dailyCategories.map((c) => <option key={c.id} value={c.label}>{c.icon} {c.label}</option>)}
             </select>
           </div>
 
           {/* Summary count cards */}
-          <div className="form-row-2" style={{ gap: 6, marginBottom: 10 }}>
-            {categories.map((cat) => {
-              const Icon = cat.icon
-              const count = countByType[cat.type] ?? 0
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 6, marginBottom: 10 }}>
+            {dailyCategories.map((cat) => {
+              const count = countByType[cat.label] ?? 0
+              const isCur = statsType === cat.label
               return (
                 <button
-                  key={cat.type}
-                  onClick={() => setStatsType(statsType === cat.type ? 'ALL' : cat.type)}
+                  key={cat.id}
+                  onClick={() => setStatsType(isCur ? 'ALL' : cat.label)}
                   style={{
                     padding: '8px 6px', borderRadius: 12, textAlign: 'center', cursor: 'pointer',
                     border: '1.5px solid', transition: 'all 0.15s',
-                    borderColor: statsType === cat.type ? cat.color : 'var(--card-border)',
-                    background: statsType === cat.type ? cat.bg : 'var(--card-bg)',
+                    borderColor: isCur ? cat.color : 'var(--card-border)',
+                    background: isCur ? cat.bg : 'var(--card-bg)',
                   }}
                 >
-                  <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 24, height: 24, margin: '0 auto 4px' }}>
-                    <Icon size={12} />
+                  <div style={{ fontSize: '1.1rem', marginBottom: 2 }}>
+                    {cat.icon}
                   </div>
-                  <div style={{ fontSize: '1rem', fontWeight: 800, color: cat.color }}>{count}</div>
-                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.2 }}>{cat.title}</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: cat.color }}>{count}</div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.label}</div>
                 </button>
               )
             })}
@@ -1353,21 +1666,28 @@ export function DailyPage() {
                     {/* Entries for this day */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8, borderLeft: '2px solid var(--card-border)' }}>
                       {dayEntries.map((entry) => {
-                        const cat = categories.find((c) => c.type === entry.entry_type) ?? categories[0]
-                        const Icon = cat.icon
+                        const catInfo = getCategoryInfo(entry, dailyCategories)
                         return (
                           <div key={entry.id} style={{
                             display: 'flex', alignItems: 'flex-start', gap: 8,
                             padding: '6px 10px', borderRadius: 10,
                             background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                           }}>
-                            <div className="icon-box icon-box-sm" style={{ background: cat.bg, color: cat.color, width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>
-                              <Icon size={11} />
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: cat.color, marginBottom: 1 }}>
-                                {cat.title}
+                            {catInfo ? (
+                              <div className="icon-box icon-box-sm" style={{ background: catInfo.bg, color: catInfo.color, width: 20, height: 20, flexShrink: 0, marginTop: 1, fontSize: '0.75rem' }}>
+                                {catInfo.icon}
                               </div>
+                            ) : (
+                              <div className="icon-box icon-box-sm" style={{ background: 'var(--card-bg)', color: 'var(--text-muted)', width: 20, height: 20, flexShrink: 0, marginTop: 1, fontSize: '0.7rem' }}>
+                                📝
+                              </div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {catInfo && (
+                                <div style={{ fontSize: '0.62rem', fontWeight: 700, color: catInfo.color, marginBottom: 1 }}>
+                                  {catInfo.label}
+                                </div>
+                              )}
                               <div style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: 1.4, wordBreak: 'break-word' }}>
                                 {entry.content}
                               </div>
@@ -1478,6 +1798,56 @@ export function DailyPage() {
               </div>
             </div>
           </div>
+
+          {/* Chọn thể loại trong modal sửa */}
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+              Thể loại nhật ký:
+            </span>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+              <button
+                type="button"
+                onClick={() => setEditCategory(null)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 10,
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  border: editCategory === null ? '1.5px solid var(--primary)' : '1px solid var(--card-border)',
+                  background: editCategory === null ? 'var(--primary-light)' : 'var(--bg-main)',
+                  color: editCategory === null ? 'var(--primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                🔘 Không phân loại
+              </button>
+              {dailyCategories.map((cat) => {
+                const isSelected = editCategory === cat.label
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setEditCategory(isSelected ? null : cat.label)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 10,
+                      fontSize: '0.74rem',
+                      fontWeight: 700,
+                      border: isSelected ? `1.5px solid ${cat.color}` : '1px solid var(--card-border)',
+                      background: isSelected ? cat.bg : 'var(--bg-main)',
+                      color: isSelected ? cat.color : 'var(--text-main)',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {cat.icon} {cat.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <label>
             Nội dung
             <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={5} />
@@ -1900,6 +2270,186 @@ export function DailyPage() {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL: QUẢN LÝ THỂ LOẠI NHẬT KÝ ── */}
+      {showCategoryConfigModal && (
+        <Modal
+          title="⚙️ Quản lý Thể loại Nhật ký"
+          onClose={() => {
+            setShowCategoryConfigModal(false)
+            setEditingCat(null)
+            setNewCatLabel('')
+            setNewCatIcon('🏷️')
+            setNewCatColor('#8b5cf6')
+            setNewCatBg('rgba(139, 92, 246, 0.15)')
+          }}
+        >
+          <div style={{ display: 'grid', gap: 14 }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              Bạn có thể thêm mới, đổi tên, đổi biểu tượng hoặc xoá các thể loại nhật ký theo nhu cầu cá nhân.
+            </p>
+
+            {/* Form Thêm / Sửa thể loại */}
+            <div style={{ padding: '12px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)', display: 'grid', gap: 10 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.84rem', color: 'var(--text-main)' }}>
+                {editingCat ? `✏️ Đang sửa: ${editingCat.label}` : '➕ Thêm thể loại mới:'}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Tên thể loại (vd: Du lịch, Thú cưng...)"
+                  value={newCatLabel}
+                  onChange={(e) => setNewCatLabel(e.target.value)}
+                  style={{ flex: '1 1 180px', padding: '7px 10px', fontSize: '0.84rem', borderRadius: 8, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-main)' }}
+                />
+
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)' }}>Icon:</span>
+                  <input
+                    type="text"
+                    value={newCatIcon}
+                    onChange={(e) => setNewCatIcon(e.target.value)}
+                    style={{ width: 44, textAlign: 'center', fontSize: '1.1rem', padding: '4px', borderRadius: 8, border: '1px solid var(--card-border)', background: 'var(--card-bg)' }}
+                  />
+                </div>
+              </div>
+
+              {/* Emoji nhanh */}
+              <div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Chọn nhanh biểu tượng:</span>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {['❤️', '🌧️', '💼', '📚', '💖', '🏡', '🥗', '💡', '✈️', '🎮', '🎵', '🍔', '⭐', '🎯', '🚀', '🐱', '🌸', '☕', '💪', '🎬'].map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      onClick={() => setNewCatIcon(em)}
+                      style={{
+                        padding: '4px 6px',
+                        borderRadius: 6,
+                        border: newCatIcon === em ? '1.5px solid var(--purple)' : '1px solid var(--card-border)',
+                        background: newCatIcon === em ? 'var(--purple-bg)' : 'var(--card-bg)',
+                        cursor: 'pointer',
+                        fontSize: '0.95rem',
+                      }}
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chọn màu sắc */}
+              <div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Màu sắc thể loại:</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {[
+                    { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' },
+                    { color: '#ec4899', bg: 'rgba(236, 72, 153, 0.15)' },
+                    { color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)' },
+                    { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
+                    { color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)' },
+                    { color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' },
+                    { color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)' },
+                    { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' },
+                    { color: '#64748b', bg: 'rgba(100, 116, 139, 0.15)' },
+                  ].map((c) => (
+                    <button
+                      key={c.color}
+                      type="button"
+                      onClick={() => { setNewCatColor(c.color); setNewCatBg(c.bg) }}
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        background: c.color,
+                        border: newCatColor === c.color ? '2.5px solid #fff' : 'none',
+                        boxShadow: newCatColor === c.color ? `0 0 0 2px ${c.color}` : 'none',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Nút hành động Lưu/Thêm/Huỷ */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 4 }}>
+                {editingCat && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCat(null)
+                      setNewCatLabel('')
+                      setNewCatIcon('🏷️')
+                      setNewCatColor('#8b5cf6')
+                      setNewCatBg('rgba(139, 92, 246, 0.15)')
+                    }}
+                    style={{ padding: '6px 12px', fontSize: '0.78rem', borderRadius: 8 }}
+                  >
+                    Huỷ sửa
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={handleSaveCategory}
+                  style={{ padding: '6px 16px', fontSize: '0.78rem', fontWeight: 700 }}
+                >
+                  {editingCat ? 'Cập nhật thể loại' : '➕ Thêm thể loại'}
+                </button>
+              </div>
+            </div>
+
+            {/* Danh sách các thể loại hiện có */}
+            <div style={{ display: 'grid', gap: 6 }}>
+              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                Danh sách thể loại ({dailyCategories.length}):
+              </span>
+              <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                {dailyCategories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      background: 'var(--card-bg)',
+                      border: '1px solid var(--card-border)',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.1rem' }}>{cat.icon}</span>
+                    <span style={{ flex: 1, fontSize: '0.84rem', fontWeight: 700, color: cat.color }}>{cat.label}</span>
+                    <button
+                      type="button"
+                      className="icon small"
+                      onClick={() => {
+                        setEditingCat(cat)
+                        setNewCatLabel(cat.label)
+                        setNewCatIcon(cat.icon || '🏷️')
+                        setNewCatColor(cat.color || '#8b5cf6')
+                        setNewCatBg(cat.bg || 'rgba(139, 92, 246, 0.15)')
+                      }}
+                      title="Sửa thể loại"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon small danger"
+                      onClick={() => handleDeleteCategory(cat.id, cat.label)}
+                      title="Xoá thể loại"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </Modal>

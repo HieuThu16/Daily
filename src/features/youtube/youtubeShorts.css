@@ -227,7 +227,10 @@
   scroll-snap-type: y mandatory;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   scrollbar-width: none;
+  contain: strict;
+  transform: translateZ(0);
 }
 
 .yts-feed::-webkit-scrollbar {
@@ -245,6 +248,9 @@
   position: relative;
   padding: 0;
   box-sizing: border-box;
+  will-change: transform;
+  transform: translateZ(0);
+  contain: layout paint style;
 }
 
 @media (min-width: 768px) {

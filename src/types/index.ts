@@ -220,13 +220,24 @@ export type YouTubeChannel = { id: string; name: string }
 export type MusicArtist = { id: string; name: string }
 export type MusicGenre = { id: string; name: string }
 
-export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN'
+export type DailyType = 'FEELING' | 'NEW_THING' | 'SAD_THING' | 'SMALL_WIN' | string
+
+export type DailyCategoryItem = {
+  id: string
+  label: string
+  icon: string
+  color: string
+  bg: string
+}
+
 export type Entry = {
   id: string
   content: string
   entry_date: string
   created_at: string
-  entry_type: DailyType
+  entry_type?: DailyType | null
+  /** Thể loại tuỳ chỉnh (null hoặc rỗng = không phân loại) */
+  category?: string | null
   /** Giờ viết 'HH:MM'; null với bài cũ trước migration daily_entry_time. */
   entry_time?: string | null
   is_favorite?: boolean

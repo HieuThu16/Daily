@@ -12,13 +12,16 @@ import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
 import { setVideoStatus, getVideoStatusSets } from '../../lib/videoStatus'
 import { isShortVideo, type VideoRow, type CustomCategoryItem, INITIAL_YOUTUBE_CATEGORIES } from './YoutubeView'
-import { getRemoteAppSetting } from '../../lib/userAppSettings'
+import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
+import { recordVideoWatchSession } from '../../lib/videoWatchLog'
 import { YoutubeCrawlModal, GlobalYoutubeCrawlerWatcher } from './YoutubeCrawlModal'
 import './youtubeShorts.css'
 
 export type ShortWatchHistoryItem = {
   video_id: string
   watched_at: string
+  title?: string
+  channelName?: string
 }
 
 export type ShortItem = VideoRow & {
@@ -66,8 +69,7 @@ export function YoutubeShortsPage() {
   const [crawlModalOpen, setCrawlModalOpen] = useState(false)
   const [rawChannels, setRawChannels] = useState<any[]>([])
 
-  // Lịch sử xem Shorts (lưu danh sách video đã xem, không lặp lại trong luồng xem)
-  // Lịch sử xem Shorts (lưu danh sách video đã xem, không lặp lại trong luồng xem)
+  // 100% Lịch sử xem Shorts lưu trên Supabase (đồng bộ đa thiết bị)
   const [watchHistory, setWatchHistory] = useState<ShortWatchHistoryItem[]>(() => {
     try {
       const s = localStorage.getItem('yts_watch_history')
@@ -80,18 +82,12 @@ export function YoutubeShortsPage() {
   // Token để làm mới feed khi đổi tab, đổi thể loại hoặc nhấn nút Làm mới
   const [feedSessionKey, setFeedSessionKey] = useState(0)
 
-  // Danh sách ID bị loại trừ được cố định cho phiên xem hiện tại (tránh việc video đang xem bị xóa khỏi mảng gây giật và tự động nhảy sang video kế tiếp)
+  // Danh sách ID đã xem được cố định cho phiên xem hiện tại (tránh việc video đang xem bị xóa khỏi mảng gây giật/tự nhảy sang video tiếp)
   const sessionExcludedWatchedIds = useMemo(() => {
-    try {
-      const s = localStorage.getItem('yts_watch_history')
-      const hist: ShortWatchHistoryItem[] = s ? JSON.parse(s) : []
-      return new Set(hist.map((w) => w.video_id))
-    } catch {
-      return new Set<string>()
-    }
-  }, [activeTab, selectedCategory, feedSessionKey])
+    return new Set(watchHistory.map((w) => w.video_id))
+  }, [activeTab, selectedCategory, feedSessionKey, watchHistory.length])
 
-  // Local storage sets for likes, subscriptions, and bookmarks
+  // Lịch sử Like trên Supabase
   const [likedIds, setLikedIds] = useState<Set<string>>(() => {
     try {
       const s = localStorage.getItem('yts_liked_ids')
@@ -101,6 +97,7 @@ export function YoutubeShortsPage() {
     }
   })
 
+  // Đăng ký Creator trên Supabase
   const [subscribedCreators, setSubscribedCreators] = useState<Set<string>>(() => {
     try {
       const s = localStorage.getItem('yts_subscribed_creators')
@@ -126,11 +123,44 @@ export function YoutubeShortsPage() {
   const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 })
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({})
 
-  // Tải danh sách thể loại từ Supabase
+  // Tải cấu hình, Lịch sử xem, Like và Kênh theo dõi trực tiếp từ SUPABASE
   useEffect(() => {
-    getRemoteAppSetting<CustomCategoryItem[]>('youtube_custom_categories', INITIAL_YOUTUBE_CATEGORIES)
+    void getRemoteAppSetting<CustomCategoryItem[]>('youtube_custom_categories', INITIAL_YOUTUBE_CATEGORIES)
       .then((res) => {
         if (Array.isArray(res) && res.length > 0) setCustomCategories(res)
+      })
+      .catch(() => {})
+
+    void getRemoteAppSetting<ShortWatchHistoryItem[]>('yts_watch_history', [])
+      .then((hist) => {
+        if (Array.isArray(hist) && hist.length > 0) {
+          setWatchHistory(hist)
+          try {
+            localStorage.setItem('yts_watch_history', JSON.stringify(hist.slice(0, 1000)))
+          } catch {}
+        }
+      })
+      .catch(() => {})
+
+    void getRemoteAppSetting<string[]>('yts_liked_ids', [])
+      .then((likes) => {
+        if (Array.isArray(likes) && likes.length > 0) {
+          setLikedIds(new Set(likes))
+          try {
+            localStorage.setItem('yts_liked_ids', JSON.stringify(likes))
+          } catch {}
+        }
+      })
+      .catch(() => {})
+
+    void getRemoteAppSetting<string[]>('yts_subscribed_creators', [])
+      .then((subs) => {
+        if (Array.isArray(subs) && subs.length > 0) {
+          setSubscribedCreators(new Set(subs))
+          try {
+            localStorage.setItem('yts_subscribed_creators', JSON.stringify(subs))
+          } catch {}
+        }
       })
       .catch(() => {})
   }, [])
@@ -251,62 +281,100 @@ export function YoutubeShortsPage() {
     return list
   }, [shorts, activeTab, selectedCategory, searchQuery, subscribedCreators, savedVideoIds, sessionExcludedWatchedIds, watchHistory])
 
-  // Ghi nhận video đã xem vào Lịch sử khi người dùng xem >= 3 giây (lưu vào localStorage mà không làm giật/xoá video đang xem)
+  // Preload video thumbnails cho 8 video kế tiếp trong feed để lướt siêu mượt
+  useEffect(() => {
+    if (!displayedShorts.length) return
+    const upcoming = displayedShorts.slice(activeIndex, activeIndex + 8)
+    upcoming.forEach((item) => {
+      if (item.thumbnail) {
+        const img = new Image()
+        img.src = item.thumbnail
+      }
+    })
+  }, [activeIndex, displayedShorts])
+
+  // 100% LƯU LỊCH SỬ XEM SHORTS LÊN SUPABASE khi người dùng xem >= 2 giây
   useEffect(() => {
     const cur = displayedShorts[activeIndex]
     if (!cur || activeTab === 'history') return
 
     const timer = setTimeout(() => {
+      const nowIso = new Date().toISOString()
       setWatchHistory((prev) => {
         const withoutCur = prev.filter((item) => item.video_id !== cur.video_id)
-        const updated = [{ video_id: cur.video_id, watched_at: new Date().toISOString() }, ...withoutCur]
-        try {
-          localStorage.setItem('yts_watch_history', JSON.stringify(updated.slice(0, 1000)))
-        } catch {}
-        return updated
+        const updated: ShortWatchHistoryItem[] = [
+          { video_id: cur.video_id, watched_at: nowIso, title: cur.title, channelName: cur.creator_name || undefined },
+          ...withoutCur
+        ]
+        const trimmed = updated.slice(0, 1000)
+        // Lưu trực tiếp lên máy chủ Supabase và localStorage ngầm
+        void saveAppSetting('yts_watch_history', trimmed)
+        return trimmed
       })
-    }, 3000)
+
+      // Ghi nhận nhật ký xem video lên Supabase
+      recordVideoWatchSession({
+        videoId: cur.video_id,
+        title: cur.title,
+        channelName: cur.creator_name || undefined,
+        type: 'youtube',
+        durationMinutes: 1,
+      })
+    }, 2000)
 
     return () => clearTimeout(timer)
   }, [activeIndex, displayedShorts, activeTab])
 
-  // Xóa toàn bộ lịch sử xem Shorts để xem lại từ đầu
+  // Xóa toàn bộ lịch sử xem Shorts trên Supabase
   const handleClearHistory = () => {
     setWatchHistory([])
+    void saveAppSetting('yts_watch_history', [])
     try {
       localStorage.removeItem('yts_watch_history')
     } catch {}
     setFeedSessionKey((k) => k + 1)
-    showToast('🗑️ Đã làm mới lịch sử xem Shorts', 'info')
+    showToast('☁️ Đã xoá toàn bộ lịch sử xem Shorts trên Supabase', 'info')
   }
 
-  // Đồng bộ lệnh Play/Pause vào iframe YouTube
+  // Điều khiển Play/Pause/Mute tức thì cho Active Video & Pause các video buffer khác
   useEffect(() => {
     const cur = displayedShorts[activeIndex]
-    if (cur && iframeRefs.current[cur.video_id]?.contentWindow) {
-      const cmd = isPlaying ? 'playVideo' : 'pauseVideo'
-      try {
-        iframeRefs.current[cur.video_id]?.contentWindow?.postMessage(
-          JSON.stringify({ event: 'command', func: cmd, args: '' }),
-          '*'
-        )
-      } catch {}
-    }
-  }, [isPlaying, activeIndex, displayedShorts])
+    if (!cur) return
 
-  // Đồng bộ lệnh Mute/Unmute vào iframe YouTube
-  useEffect(() => {
-    const cur = displayedShorts[activeIndex]
-    if (cur && iframeRefs.current[cur.video_id]?.contentWindow) {
-      const cmd = muted ? 'mute' : 'unMute'
+    // 1. Kích hoạt video hiện tại
+    const activeIframe = iframeRefs.current[cur.video_id]
+    if (activeIframe?.contentWindow) {
       try {
-        iframeRefs.current[cur.video_id]?.contentWindow?.postMessage(
-          JSON.stringify({ event: 'command', func: cmd, args: '' }),
+        activeIframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: isPlaying ? 'playVideo' : 'pauseVideo', args: '' }),
+          '*'
+        )
+        activeIframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: muted ? 'mute' : 'unMute', args: '' }),
           '*'
         )
       } catch {}
     }
-  }, [muted, activeIndex, displayedShorts])
+
+    // 2. Tạm dừng và tắt tiếng các iframe buffer khác để không phát đè âm thanh
+    displayedShorts.forEach((item, idx) => {
+      if (idx !== activeIndex) {
+        const otherIframe = iframeRefs.current[item.video_id]
+        if (otherIframe?.contentWindow) {
+          try {
+            otherIframe.contentWindow.postMessage(
+              JSON.stringify({ event: 'command', func: 'pauseVideo', args: '' }),
+              '*'
+            )
+            otherIframe.contentWindow.postMessage(
+              JSON.stringify({ event: 'command', func: 'mute', args: '' }),
+              '*'
+            )
+          } catch {}
+        }
+      }
+    })
+  }, [isPlaying, muted, activeIndex, displayedShorts])
 
   // Cuộn đến slide
   const scrollToIndex = useCallback((index: number) => {
@@ -408,7 +476,7 @@ export function YoutubeShortsPage() {
     }
   }
 
-  // Toggle Like
+  // Toggle Like (Lưu lên Supabase)
   const handleToggleLike = (videoId: string) => {
     setLikedIds((prev) => {
       const next = new Set(prev)
@@ -418,12 +486,16 @@ export function YoutubeShortsPage() {
         next.add(videoId)
         showToast('❤️ Đã thích video', 'success')
       }
-      localStorage.setItem('yts_liked_ids', JSON.stringify(Array.from(next)))
+      const arr = Array.from(next)
+      void saveAppSetting('yts_liked_ids', arr)
+      try {
+        localStorage.setItem('yts_liked_ids', JSON.stringify(arr))
+      } catch {}
       return next
     })
   }
 
-  // Toggle Subscribe Kênh
+  // Toggle Subscribe Kênh (Lưu lên Supabase)
   const handleToggleSubscribe = (creator: string) => {
     if (!creator) return
     setSubscribedCreators((prev) => {
@@ -435,7 +507,11 @@ export function YoutubeShortsPage() {
         next.add(creator)
         showToast(`🎉 Đã đăng ký theo dõi @${creator}`, 'success')
       }
-      localStorage.setItem('yts_subscribed_creators', JSON.stringify(Array.from(next)))
+      const arr = Array.from(next)
+      void saveAppSetting('yts_subscribed_creators', arr)
+      try {
+        localStorage.setItem('yts_subscribed_creators', JSON.stringify(arr))
+      } catch {}
       return next
     })
   }
@@ -798,40 +874,68 @@ export function YoutubeShortsPage() {
           ) : (
             displayedShorts.map((short, idx) => {
               const isActive = idx === activeIndex
-              const isNear = Math.abs(idx - activeIndex) <= 1
+              // Buffer trước 2 video kế tiếp và giữ 1 video trước đó trong RAM để lướt tức thì
+              const isMounted = idx >= activeIndex - 1 && idx <= activeIndex + 2
               const isLiked = likedIds.has(short.video_id)
               const isSubscribed = subscribedCreators.has(short.creator_id || short.creator_name || '')
               const isSaved = savedVideoIds.has(short.video_id)
 
-              // Tạo URL nhúng chuẩn YouTube Shorts
-              const embedUrl = `https://www.youtube.com/embed/${short.video_id}?autoplay=${isActive ? 1 : 0}&mute=${muted ? 1 : 0}&loop=1&playlist=${short.video_id}&enablejsapi=1&playsinline=1&rel=0`
+              // URL nhúng cố định (không thay đổi src giữa active/buffer để browser không bị reload iframe lại từ đầu)
+              const staticEmbedUrl = `https://www.youtube-nocookie.com/embed/${short.video_id}?enablejsapi=1&playsinline=1&rel=0&loop=1&playlist=${short.video_id}&controls=0&modestbranding=1&iv_load_policy=3&disablekb=1`
 
               return (
                 <section className="yts-slide" key={`${short.video_id}_${idx}`}>
                   <div className="yts-stage">
                     <div className="yts-player-wrap">
-                      {/* Ảnh poster nền */}
+                      {/* Ảnh poster nền sắc nét hiển thị tức thì */}
                       {short.thumbnail && (
                         <div className="yts-poster-wrap">
                           <img
                             src={short.thumbnail}
                             alt=""
-                            className={isNear ? 'yts-poster-blur' : 'yts-poster-img'}
+                            className={isActive ? 'yts-poster-blur' : 'yts-poster-img'}
+                            loading={idx <= activeIndex + 3 ? 'eager' : 'lazy'}
                           />
                         </div>
                       )}
 
-                      {/* Video Player */}
-                      {isNear && (
+                      {/* Video Player nhúng tải trước */}
+                      {isMounted && (
                         <iframe
                           ref={(el) => {
                             iframeRefs.current[short.video_id] = el
                           }}
                           className="yts-iframe"
-                          src={embedUrl}
+                          src={staticEmbedUrl}
                           title={short.title}
                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                           allowFullScreen
+                          loading={isActive || idx === activeIndex + 1 ? 'eager' : 'lazy'}
+                          onLoad={() => {
+                            if (idx === activeIndex && isPlaying) {
+                              try {
+                                iframeRefs.current[short.video_id]?.contentWindow?.postMessage(
+                                  JSON.stringify({ event: 'command', func: 'playVideo', args: '' }),
+                                  '*'
+                                )
+                                iframeRefs.current[short.video_id]?.contentWindow?.postMessage(
+                                  JSON.stringify({ event: 'command', func: muted ? 'mute' : 'unMute', args: '' }),
+                                  '*'
+                                )
+                              } catch {}
+                            } else {
+                              try {
+                                iframeRefs.current[short.video_id]?.contentWindow?.postMessage(
+                                  JSON.stringify({ event: 'command', func: 'pauseVideo', args: '' }),
+                                  '*'
+                                )
+                                iframeRefs.current[short.video_id]?.contentWindow?.postMessage(
+                                  JSON.stringify({ event: 'command', func: 'mute', args: '' }),
+                                  '*'
+                                )
+                              } catch {}
+                            }
+                          }}
                         />
                       )}
 
