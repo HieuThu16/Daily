@@ -93,6 +93,7 @@ export function YoutubeShortsPage() {
   const feedRef = useRef<HTMLDivElement>(null)
   const isScrollingRef = useRef(false)
   const lastTapRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 })
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({})
 
   // Tải danh sách thể loại từ Supabase
   useEffect(() => {
@@ -205,6 +206,34 @@ export function YoutubeShortsPage() {
 
     return list
   }, [shorts, activeTab, selectedCategory, searchQuery, subscribedCreators, savedVideoIds])
+
+  // Đồng bộ lệnh Play/Pause vào iframe YouTube
+  useEffect(() => {
+    const cur = displayedShorts[activeIndex]
+    if (cur && iframeRefs.current[cur.video_id]?.contentWindow) {
+      const cmd = isPlaying ? 'playVideo' : 'pauseVideo'
+      try {
+        iframeRefs.current[cur.video_id]?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: cmd, args: '' }),
+          '*'
+        )
+      } catch {}
+    }
+  }, [isPlaying, activeIndex, displayedShorts])
+
+  // Đồng bộ lệnh Mute/Unmute vào iframe YouTube
+  useEffect(() => {
+    const cur = displayedShorts[activeIndex]
+    if (cur && iframeRefs.current[cur.video_id]?.contentWindow) {
+      const cmd = muted ? 'mute' : 'unMute'
+      try {
+        iframeRefs.current[cur.video_id]?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: cmd, args: '' }),
+          '*'
+        )
+      } catch {}
+    }
+  }, [muted, activeIndex, displayedShorts])
 
   // Cuộn đến slide
   const scrollToIndex = useCallback((index: number) => {
@@ -567,33 +596,36 @@ export function YoutubeShortsPage() {
               const isSubscribed = subscribedCreators.has(short.creator_id || short.creator_name || '')
               const isSaved = savedVideoIds.has(short.video_id)
 
-              // Tạo URL nhúng chuẩn YouTube Shorts không quảng cáo
-              const embedUrl = `https://www.youtube-nocookie.com/embed/${short.video_id}?autoplay=${isActive && isPlaying ? 1 : 0}&mute=${muted ? 1 : 0}&loop=1&playlist=${short.video_id}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1`
+              // Tạo URL nhúng chuẩn YouTube Shorts
+              const embedUrl = `https://www.youtube.com/embed/${short.video_id}?autoplay=${isActive ? 1 : 0}&mute=${muted ? 1 : 0}&loop=1&playlist=${short.video_id}&enablejsapi=1&playsinline=1&rel=0`
 
               return (
                 <section className="yts-slide" key={`${short.video_id}_${idx}`}>
                   <div className="yts-stage">
                     <div className="yts-player-wrap">
-                      {/* Ảnh nền mờ thẩm mỹ */}
+                      {/* Ảnh poster nền */}
                       {short.thumbnail && (
                         <div className="yts-poster-wrap">
-                          <img src={short.thumbnail} alt="" className="yts-poster-blur" />
+                          <img
+                            src={short.thumbnail}
+                            alt=""
+                            className={isNear ? 'yts-poster-blur' : 'yts-poster-img'}
+                          />
                         </div>
                       )}
 
                       {/* Video Player */}
-                      {isNear ? (
+                      {isNear && (
                         <iframe
+                          ref={(el) => {
+                            iframeRefs.current[short.video_id] = el
+                          }}
                           className="yts-iframe"
                           src={embedUrl}
                           title={short.title}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                           allowFullScreen
                         />
-                      ) : (
-                        <div className="yts-poster-wrap">
-                          {short.thumbnail && <img src={short.thumbnail} alt="" className="yts-poster-img" />}
-                        </div>
                       )}
 
                       {/* Overlay bắt click / double click */}
