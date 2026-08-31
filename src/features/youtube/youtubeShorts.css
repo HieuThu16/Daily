@@ -1,0 +1,661 @@
+/* ─── YOUTUBE SHORTS APP LAYOUT ─────────────────────────────────────────── */
+
+.yts-app {
+  position: fixed;
+  inset: 0;
+  background-color: #0f0f0f;
+  color: #fff;
+  display: flex;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+  z-index: 1000;
+}
+
+/* ─── SIDEBAR TRÁI (DESKTOP) ────────────────────────────────────────────── */
+.yts-sidebar {
+  display: none;
+  width: 240px;
+  background: #0f0f0f;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 12px;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+@media (min-width: 1024px) {
+  .yts-sidebar {
+    display: flex;
+  }
+}
+
+.yts-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.yts-logo-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ff0000, #cc0000);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(255, 0, 0, 0.4);
+}
+
+.yts-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.yts-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: transparent;
+  color: #aaa;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.yts-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.yts-nav-item.active {
+  background: rgba(255, 0, 0, 0.15);
+  color: #ff4e45;
+  font-weight: 700;
+}
+
+.yts-sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.yts-nav-item.small {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+/* ─── MAIN FEED CONTAINER ────────────────────────────────────────────────── */
+.yts-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+/* ─── TOPBAR ĐIỀU HƯỚNG ──────────────────────────────────────────────────── */
+.yts-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 100%);
+  z-index: 30;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.yts-topbar > * {
+  pointer-events: auto;
+}
+
+.yts-top-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.yts-back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.yts-back-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.yts-top-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  padding: 4px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.yts-top-tab-btn {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.yts-top-tab-btn.active {
+  background: #fff;
+  color: #000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.yts-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.yts-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.yts-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+/* ─── VERTICAL SCROLL FEED (SNAP) ────────────────────────────────────────── */
+.yts-feed {
+  flex: 1;
+  height: 100dvh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.yts-feed::-webkit-scrollbar {
+  display: none;
+}
+
+.yts-slide {
+  height: 100dvh;
+  width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .yts-slide {
+    padding: 16px 0;
+  }
+}
+
+/* ─── STAGE & PLAYER WRAPPER ─────────────────────────────────────────────── */
+.yts-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 480px;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+}
+
+@media (min-width: 768px) {
+  .yts-stage {
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    height: calc(100dvh - 32px);
+    aspect-ratio: 9 / 16;
+  }
+}
+
+.yts-player-wrap {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+.yts-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  object-fit: cover;
+  pointer-events: auto;
+}
+
+/* Click overlay để toggle Play/Pause/Mute mà không bị chặn bởi iframe */
+.yts-click-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.yts-poster-wrap {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.yts-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.yts-poster-blur {
+  position: absolute;
+  inset: 0;
+  filter: blur(20px);
+  opacity: 0.4;
+  transform: scale(1.1);
+}
+
+/* Biểu tượng Play/Pause Ripple ở giữa màn hình khi bấm */
+.yts-center-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  z-index: 25;
+  pointer-events: none;
+  animation: ytsPop 0.4s ease forwards;
+}
+
+@keyframes ytsPop {
+  0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+}
+
+/* Tim bay khi Double Tap */
+.yts-heart-pop {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  pointer-events: none;
+  animation: heartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes heartPop {
+  0% { transform: translate(-50%, -50%) scale(0) rotate(-15deg); opacity: 0; }
+  40% { transform: translate(-50%, -50%) scale(1.4) rotate(0deg); opacity: 1; }
+  70% { transform: translate(-50%, -50%) scale(1.2) rotate(5deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.6) translateY(-40px); opacity: 0; }
+}
+
+/* ─── BOTTOM OVERLAY: KÊNH, TIÊU ĐỀ, ÂM THANH ────────────────────────────── */
+.yts-bottom-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 76px;
+  padding: 16px 14px 20px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 60%, rgba(0, 0, 0, 0) 100%);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.yts-bottom-overlay > * {
+  pointer-events: auto;
+}
+
+.yts-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.yts-channel-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  object-fit: cover;
+}
+
+.yts-channel-name {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.yts-sub-btn {
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  border: none;
+  background: #ff0000;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(255, 0, 0, 0.4);
+}
+
+.yts-sub-btn.subscribed {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  box-shadow: none;
+}
+
+.yts-caption-box {
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  max-height: 2.8em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.yts-caption-box.expanded {
+  max-height: none;
+  -webkit-line-clamp: unset;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px;
+  border-radius: 8px;
+  backdrop-filter: blur(6px);
+}
+
+.yts-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.yts-tag-pill {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.yts-audio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 2px;
+}
+
+.yts-audio-marquee {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+/* ─── RIGHT ACTION RAIL (NÚT TƯƠNG TÁC) ───────────────────────────────────── */
+.yts-rail {
+  position: absolute;
+  right: 12px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  z-index: 20;
+}
+
+.yts-rail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  padding: 0;
+}
+
+.yts-rail-item:hover {
+  transform: scale(1.1);
+}
+
+.yts-rail-item:active {
+  transform: scale(0.92);
+}
+
+.yts-rail-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition: all 0.15s ease;
+}
+
+.yts-rail-item.active .yts-rail-btn {
+  background: rgba(255, 0, 0, 0.25);
+  color: #ff3b30;
+  border-color: rgba(255, 59, 48, 0.4);
+}
+
+.yts-rail-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+/* Đĩa than xoay */
+.yts-vinyl-disc {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #222;
+  background: #111;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  animation: spinRecord 4s linear infinite;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.yts-vinyl-disc img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+@keyframes spinRecord {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ─── DESKTOP UP/DOWN NAVIGATION BUTTONS ─────────────────────────────────── */
+.yts-desktop-nav {
+  position: absolute;
+  right: -60px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 25;
+}
+
+@media (min-width: 1200px) {
+  .yts-desktop-nav {
+    display: flex;
+  }
+}
+
+.yts-nav-arrow {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.yts-nav-arrow:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
+/* ─── BOTTOM PROGRESS TIMELINE BAR ───────────────────────────────────────── */
+.yts-timeline {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  z-index: 30;
+  transition: height 0.15s ease;
+}
+
+.yts-timeline:hover {
+  height: 6px;
+}
+
+.yts-timeline-fill {
+  height: 100%;
+  background: #ff0000;
+  width: 0%;
+  box-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
+}
+
+/* ─── UNMUTE PROMPT PILL ─────────────────────────────────────────────────── */
+.yts-unmute-pill {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 16px;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 25;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  animation: fadeInDown 0.3s ease;
+}
+
+@keyframes fadeInDown {
+  from { transform: translate(-50%, -10px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ─── EMPTY & LOADING STATES ─────────────────────────────────────────────── */
+.yts-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted, #888);
+}

@@ -69,6 +69,7 @@ const EnglishPage = lazy(() => import('./features/english/EnglishPage').then((m)
 const KnowledgePage = lazy(() => import('./features/knowledge/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
 const YoutubeView = lazy(() => import('./features/youtube/YoutubeView').then((m) => ({ default: m.YoutubeView })))
 const YoutubeWatchPage = lazy(() => import('./features/youtube/YoutubeWatchPage').then((m) => ({ default: m.YoutubeWatchPage })))
+const YoutubeShortsPage = lazy(() => import('./features/youtube/YoutubeShortsPage').then((m) => ({ default: m.YoutubeShortsPage })))
 const ShareTarget = lazy(() => import('./features/ShareTarget').then((m) => ({ default: m.ShareTarget })))
 const CollectionPage = lazy(() => import('./features/collection/CollectionPage').then((m) => ({ default: m.CollectionPage })))
 
@@ -584,8 +585,10 @@ function Protected({ user }: { user: unknown }) {
             <Routes>
               {/* Màn hình đọc chiếm trọn màn hình nên nằm ngoài Shell, không bị header và bottom nav che. */}
               <Route path="/read/:mediaItemId" element={<BookReaderPage />} />
-              {/* TikTok chạy toàn màn hình như app thật nên cũng nằm ngoài Shell. */}
+              {/* TikTok & YouTube Shorts chạy toàn màn hình như app thật nên cũng nằm ngoài Shell. */}
               <Route path="/tiktok" element={<TikTokPage />} />
+              <Route path="/youtubeshorts" element={<YoutubeShortsPage />} />
+              <Route path="/youtubeshorts/:videoId" element={<YoutubeShortsPage />} />
               <Route path="/quotes/:mediaItemId" element={<QuotesPage />} />
               <Route path="/quotes" element={<QuotesPage />} />
               <Route
@@ -601,8 +604,9 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/share" element={<ShareTarget />} />
                       <Route path="/youtube" element={<YoutubeView />} />
                       <Route path="/youtube/watch/:videoId" element={<YoutubeWatchPage />} />
-                      <Route path="/youtubeshorts" element={<YoutubeView isShorts />} />
-                      <Route path="/youtubeshorts/watch/:videoId" element={<YoutubeWatchPage />} />
+                      <Route path="/youtubeshorts" element={<YoutubeShortsPage />} />
+                      <Route path="/youtubeshorts/:videoId" element={<YoutubeShortsPage />} />
+                      <Route path="/youtubeshorts/watch/:videoId" element={<YoutubeShortsPage />} />
                       <Route path="/tvshow" element={<Navigate to="/youtube" replace />} />
                       <Route path="/reviews" element={<Navigate to="/youtube" replace />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />

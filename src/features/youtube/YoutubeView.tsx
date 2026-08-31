@@ -242,12 +242,12 @@ export const isShortVideo = (
     return true
   }
 
-  // 2. Video ngắn chuẩn YouTube Shorts (thời lượng dưới 60s và có từ khóa short)
+  // 2. Video ngắn chuẩn YouTube Shorts (thời lượng <= 90s)
   const dur = typeof v.duration === 'number' && v.duration > 0
     ? v.duration
     : (v.video_id && progressMap?.[v.video_id]?.durationSeconds ? progressMap[v.video_id]?.durationSeconds : undefined)
 
-  if (typeof dur === 'number' && dur > 0 && dur <= 60 && (title.includes('short') || url.includes('short'))) {
+  if (typeof dur === 'number' && dur > 0 && dur <= 90) {
     return true
   }
 
