@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CalendarHeart, Filter, Heart, ImagePlus, Mail, MapPin, MoreVertical, Pencil, Plus, RotateCcw, Star, Trash2, UserPlus, Video, Loader2 } from 'lucide-react'
+import {
+  CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
+  Filter, Heart, ImagePlus, Mail, MapPin, Maximize2,
+  MoreVertical, Pencil, Plus, RotateCcw, Trash2,
+  UserPlus, Video, Loader2, X
+} from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { anniversariesOn, yearsAgoLabel } from '../../lib/anniversary'
@@ -39,10 +44,6 @@ function viDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-/**
- * Nhật ký chung: sự kiện của hai người. Ai thêm email mình vào danh sách
- * "người chung" thì mình thấy sự kiện của họ (xem được, không sửa được).
- */
 /**
  * Bảng shared_events thiếu cột mảng `images` (migration
  * 20260920000004_shared_events_multiple_images.sql chưa chạy) nên chỉ giữ được
@@ -86,6 +87,7 @@ export function SharedEventsView({
   const photoInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLDivElement>(null)
+  const lightboxTrackRef = useRef<HTMLDivElement>(null)
 
   const [partnerEmail, setPartnerEmail] = useState('')
   const [managePartners, setManagePartners] = useState(false)
@@ -94,13 +96,37 @@ export function SharedEventsView({
   const [filterMonth, setFilterMonth] = useState<string>('ALL')
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  /*
-   * Tiến trình xử lý ảnh. 12 tấm ảnh máy ảnh phải nén rồi tải lên lần lượt, mất
-   * cả phút — không hiện gì thì người dùng tưởng app treo và bấm lại, mà bấm lại
-   * là tải trùng cả bộ.
-   */
   const [progress, setProgress] = useState<PhotoProgress | null>(null)
   const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
+  const [fullscreenIdx, setFullscreenIdx] = useState<number | null>(null)
+
+  // Điều khiển phím mũi tên & Esc khi xem toàn màn hình
+  useEffect(() => {
+    if (fullscreenIdx === null) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFullscreenIdx(null)
+      } else if (e.key === 'ArrowLeft') {
+        const curEvent = viewing || editing
+        const all = curEvent?.images && curEvent.images.length ? curEvent.images : (curEvent?.image_url ? [curEvent.image_url] : [])
+        if (all.length > 0) {
+          const prev = Math.max(0, fullscreenIdx - 1)
+          setFullscreenIdx(prev)
+          lightboxTrackRef.current?.scrollTo({ left: prev * window.innerWidth, behavior: 'smooth' })
+        }
+      } else if (e.key === 'ArrowRight') {
+        const curEvent = viewing || editing
+        const all = curEvent?.images && curEvent.images.length ? curEvent.images : (curEvent?.image_url ? [curEvent.image_url] : [])
+        if (all.length > 0) {
+          const next = Math.min(all.length - 1, fullscreenIdx + 1)
+          setFullscreenIdx(next)
+          lightboxTrackRef.current?.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' })
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [fullscreenIdx, viewing, editing])
 
   useEffect(() => {
     supabase?.auth?.getUser().then(({ data }) => setMyId(data?.user?.id ?? null)).catch(() => null)
@@ -955,9 +981,57 @@ export function SharedEventsView({
               : (viewingEvent.image_url ? [viewingEvent.image_url] : [])
 
             return (
-              <div style={{ display: 'grid', gap: 12 }}>
+              <div style={{ display: 'grid', gap: 12, minWidth: 0 }}>
                 {allImages.length > 0 && (
                   <div className="mem-gallery">
+                    {/* Nút phóng to toàn màn hình */}
+                    <button
+                      type="button"
+                      className="mem-gallery-fullscreen-btn"
+                      onClick={() => setFullscreenIdx(selectedImageIdx)}
+                      title="Xem toàn màn hình"
+                    >
+                      <Maximize2 size={13} /> Toàn màn hình
+                    </button>
+
+                    {/* Nút mũi tên chuyển ảnh trái / phải */}
+                    {allImages.length > 1 && (
+                      <>
+                        {selectedImageIdx > 0 && (
+                          <button
+                            type="button"
+                            className="mem-gallery-nav-btn prev"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const nextIdx = selectedImageIdx - 1
+                              setSelectedImageIdx(nextIdx)
+                              const track = galleryRef.current
+                              track?.scrollTo({ left: nextIdx * track.clientWidth, behavior: 'smooth' })
+                            }}
+                            title="Ảnh trước"
+                          >
+                            <ChevronLeft size={20} />
+                          </button>
+                        )}
+                        {selectedImageIdx < allImages.length - 1 && (
+                          <button
+                            type="button"
+                            className="mem-gallery-nav-btn next"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const nextIdx = selectedImageIdx + 1
+                              setSelectedImageIdx(nextIdx)
+                              const track = galleryRef.current
+                              track?.scrollTo({ left: nextIdx * track.clientWidth, behavior: 'smooth' })
+                            }}
+                            title="Ảnh tiếp theo"
+                          >
+                            <ChevronRight size={20} />
+                          </button>
+                        )}
+                      </>
+                    )}
+
                     {/* Vuốt ngang để đổi ảnh; mỗi ảnh chiếm trọn bề ngang khung. */}
                     <div
                       className="mem-gallery-track"
@@ -971,13 +1045,19 @@ export function SharedEventsView({
                       {allImages.map((mediaUrl, idx) => {
                         const isVid = isMediaVideo(mediaUrl)
                         return (
-                          <div className="mem-gallery-slide" key={idx}>
+                          <div
+                            className="mem-gallery-slide"
+                            key={idx}
+                            onClick={() => setFullscreenIdx(idx)}
+                            title="Nhấn để xem toàn màn hình"
+                          >
                             {isVid ? (
                               <video
                                 src={mediaUrl}
                                 controls
                                 playsInline
                                 preload="metadata"
+                                onClick={(e) => e.stopPropagation()}
                               />
                             ) : (
                               <img src={mediaUrl} alt={`${viewingEvent.title} — ${idx + 1}`} loading="lazy" />
@@ -1030,9 +1110,9 @@ export function SharedEventsView({
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>{viewingEvent.title}</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', flex: 1, minWidth: 0, wordBreak: 'break-word' }}>{viewingEvent.title}</h3>
                   {viewingEvent.owner_id !== myId && (
-                    <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700 }}>
+                    <span className="eyebrow" style={{ margin: 0, padding: '2px 8px', fontSize: '0.65rem', background: 'var(--purple-bg)', color: 'var(--purple)', borderRadius: 6, fontWeight: 700, flexShrink: 0 }}>
                       {partnerDisplayName}
                     </span>
                   )}
@@ -1040,14 +1120,14 @@ export function SharedEventsView({
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <CalendarDays size={16} style={{ color: 'var(--purple)' }} />
+                    <CalendarDays size={16} style={{ color: 'var(--purple)', flexShrink: 0 }} />
                     <strong style={{ color: 'var(--text-main)' }}>{viDate(viewingEvent.event_date)}</strong>
                     {viewingEvent.event_time && <span>· {viewingEvent.event_time}</span>}
                   </div>
 
                   {viewingEvent.location && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <MapPin size={16} style={{ color: 'var(--rose)' }} />
+                      <MapPin size={16} style={{ color: 'var(--rose)', flexShrink: 0 }} />
                       <span>{viewingEvent.location}</span>
                     </div>
                   )}
@@ -1064,24 +1144,36 @@ export function SharedEventsView({
                       whiteSpace: 'pre-wrap',
                       color: 'var(--text-main)',
                       borderLeft: '3px solid var(--purple)',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {viewingEvent.note}
                   </div>
                 )}
 
-                <div className="modal-actions" style={{ marginTop: 8 }}>
+                <div className="mem-action-bar">
                   <button
                     type="button"
+                    className={`mem-action-btn fav ${viewingEvent.is_favorite ? 'active' : ''}`}
                     onClick={() => toggleFavorite(viewingEvent)}
-                    style={{ color: viewingEvent.is_favorite ? 'var(--amber)' : 'inherit' }}
                   >
-                    <Star size={16} fill={viewingEvent.is_favorite ? 'currentColor' : 'none'} />
-                    {viewingEvent.is_favorite ? 'Bỏ thích' : 'Yêu thích'}
+                    <Heart size={15} fill={viewingEvent.is_favorite ? 'currentColor' : 'none'} />
+                    {viewingEvent.is_favorite ? 'Đã yêu thích' : 'Yêu thích'}
                   </button>
+
+                  {allImages.length > 0 && (
+                    <button
+                      type="button"
+                      className="mem-action-btn fullscreen"
+                      onClick={() => setFullscreenIdx(selectedImageIdx)}
+                    >
+                      <Maximize2 size={15} /> Toàn màn hình
+                    </button>
+                  )}
 
                   <button
                     type="button"
+                    className="mem-action-btn edit"
                     onClick={() => {
                       const evToEdit = viewingEvent
                       setViewing(null)
@@ -1090,12 +1182,18 @@ export function SharedEventsView({
                   >
                     <Pencil size={15} /> Sửa
                   </button>
-                  <DeleteButton
-                    onDelete={async () => {
+
+                  <button
+                    type="button"
+                    className="mem-action-btn delete"
+                    onClick={async () => {
+                      if (!confirm('Xoá kỷ niệm này? App không thể hoàn tác.')) return
                       await deleteEvent(viewingEvent.id)
                       setViewing(null)
                     }}
-                  />
+                  >
+                    <Trash2 size={15} /> Xoá
+                  </button>
                 </div>
               </div>
             )
@@ -1198,6 +1296,141 @@ export function SharedEventsView({
           </div>
         </Modal>
       )}
+
+      {/* ─── FULLSCREEN LIGHTBOX (XEM TOÀN MÀN HÌNH ẢNH & VIDEO) ─── */}
+      {fullscreenIdx !== null && viewing && (() => {
+        const allImages = viewing.images && viewing.images.length
+          ? viewing.images
+          : (viewing.image_url ? [viewing.image_url] : [])
+
+        if (!allImages.length) return null
+
+        return (
+          <div className="mem-lightbox" role="dialog" aria-modal="true">
+            <div className="mem-lightbox-topbar">
+              <div className="mem-lightbox-title">
+                <strong>{viewing.title}</strong>
+                <span>{viDate(viewing.event_date)} {viewing.event_time ? `· ${viewing.event_time}` : ''}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {allImages.length > 1 && (
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: 20 }}>
+                    {fullscreenIdx + 1} / {allImages.length}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="mem-lightbox-close"
+                  onClick={() => setFullscreenIdx(null)}
+                  title="Đóng toàn màn hình (Esc)"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+
+            {/* Mũi tên trái / phải */}
+            {allImages.length > 1 && (
+              <>
+                {fullscreenIdx > 0 && (
+                  <button
+                    type="button"
+                    className="mem-gallery-nav-btn prev"
+                    style={{ left: 16, width: 44, height: 44, zIndex: 35 }}
+                    onClick={() => {
+                      const next = fullscreenIdx - 1
+                      setFullscreenIdx(next)
+                      lightboxTrackRef.current?.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' })
+                    }}
+                  >
+                    <ChevronLeft size={26} />
+                  </button>
+                )}
+                {fullscreenIdx < allImages.length - 1 && (
+                  <button
+                    type="button"
+                    className="mem-gallery-nav-btn next"
+                    style={{ right: 16, width: 44, height: 44, zIndex: 35 }}
+                    onClick={() => {
+                      const next = fullscreenIdx + 1
+                      setFullscreenIdx(next)
+                      lightboxTrackRef.current?.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' })
+                    }}
+                  >
+                    <ChevronRight size={26} />
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Slide track toàn màn hình */}
+            <div
+              className="mem-lightbox-track"
+              ref={lightboxTrackRef}
+              onScroll={(e) => {
+                const el = e.currentTarget
+                const idx = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+                if (idx !== fullscreenIdx && idx >= 0 && idx < allImages.length) {
+                  setFullscreenIdx(idx)
+                  setSelectedImageIdx(idx)
+                }
+              }}
+            >
+              {allImages.map((mediaUrl, idx) => {
+                const isVid = isMediaVideo(mediaUrl)
+                return (
+                  <div className="mem-lightbox-slide" key={idx}>
+                    {isVid ? (
+                      <video
+                        src={mediaUrl}
+                        controls
+                        autoPlay={idx === fullscreenIdx}
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img src={mediaUrl} alt={`${viewing.title} — ảnh ${idx + 1}`} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Dải thumbnail dưới đáy */}
+            {allImages.length > 1 && (
+              <div className="mem-lightbox-bottom">
+                <div className="mem-gallery-thumbs" style={{ justifyContent: 'center' }}>
+                  {allImages.map((mediaUrl, idx) => {
+                    const isVid = isMediaVideo(mediaUrl)
+                    return (
+                      <div
+                        key={idx}
+                        className={`mem-gallery-thumb-item ${idx === fullscreenIdx ? 'on' : ''}`}
+                        onClick={() => {
+                          setFullscreenIdx(idx)
+                          setSelectedImageIdx(idx)
+                          lightboxTrackRef.current?.scrollTo({ left: idx * window.innerWidth, behavior: 'smooth' })
+                        }}
+                      >
+                        {isVid ? (
+                          <>
+                            <video src={mediaUrl} preload="metadata" muted playsInline />
+                            <span className="mem-gallery-thumb-badge">
+                              <Video size={8} />
+                            </span>
+                          </>
+                        ) : (
+                          <img src={mediaUrl} alt="" loading="lazy" />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </section>
   )
 }
