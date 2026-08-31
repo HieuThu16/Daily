@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Volume2, VolumeX, Heart,
   Share2, Bookmark, ExternalLink, Play,
   Pause, ChevronUp, ChevronDown, RefreshCw,
   Search, Flame, Music, Layers,
-  Compass, Radio, Check, MessageSquare
+  Compass, Radio, Check, MessageSquare,
+  History, Trash2
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
@@ -14,6 +15,11 @@ import { isShortVideo, type VideoRow, type CustomCategoryItem, INITIAL_YOUTUBE_C
 import { getRemoteAppSetting } from '../../lib/userAppSettings'
 import { YoutubeCrawlModal, GlobalYoutubeCrawlerWatcher } from './YoutubeCrawlModal'
 import './youtubeShorts.css'
+
+export type ShortWatchHistoryItem = {
+  video_id: string
+  watched_at: string
+}
 
 export type ShortItem = VideoRow & {
   likesCount?: number
@@ -51,7 +57,7 @@ export function YoutubeShortsPage() {
     return localStorage.getItem('yts_muted') !== 'false'
   })
   const [isPlaying, setIsPlaying] = useState(true)
-  const [activeTab, setActiveTab] = useState<'foryou' | 'following' | 'saved'>('foryou')
+  const [activeTab, setActiveTab] = useState<'foryou' | 'following' | 'saved' | 'history'>('foryou')
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
   const [customCategories, setCustomCategories] = useState<CustomCategoryItem[]>(INITIAL_YOUTUBE_CATEGORIES)
   const [searchQuery, setSearchQuery] = useState('')
@@ -59,6 +65,18 @@ export function YoutubeShortsPage() {
   const [showCommentsModal, setShowCommentsModal] = useState(false)
   const [crawlModalOpen, setCrawlModalOpen] = useState(false)
   const [rawChannels, setRawChannels] = useState<any[]>([])
+
+  // Lịch sử xem Shorts (lưu danh sách video đã xem, không lặp lại trong luồng xem)
+  const [watchHistory, setWatchHistory] = useState<ShortWatchHistoryItem[]>(() => {
+    try {
+      const s = localStorage.getItem('yts_watch_history')
+      return s ? JSON.parse(s) : []
+    } catch {
+      return []
+    }
+  })
+
+  const watchedIds = useMemo(() => new Set(watchHistory.map((w) => w.video_id)), [watchHistory])
 
   // Local storage sets for likes, subscriptions, and bookmarks
   const [likedIds, setLikedIds] = useState<Set<string>>(() => {
@@ -179,14 +197,27 @@ export function YoutubeShortsPage() {
     void loadShortsData()
   }, [loadShortsData])
 
-  // Lọc theo Tab, Thể loại và Tìm kiếm
+  // Lọc theo Tab, Thể loại, Tìm kiếm và Lịch sử xem (không lặp lại video đã xem)
   const displayedShorts = useMemo(() => {
     let list = shorts
 
-    if (activeTab === 'following') {
-      list = list.filter((s) => subscribedCreators.has(s.creator_id || s.creator_name || ''))
+    if (activeTab === 'foryou') {
+      // Ẩn các video đã xem để không hiển thị lại trong luồng xem
+      list = list.filter((s) => !watchedIds.has(s.video_id))
+    } else if (activeTab === 'following') {
+      list = list.filter(
+        (s) =>
+          subscribedCreators.has(s.creator_id || s.creator_name || '') &&
+          !watchedIds.has(s.video_id),
+      )
     } else if (activeTab === 'saved') {
       list = list.filter((s) => savedVideoIds.has(s.video_id))
+    } else if (activeTab === 'history') {
+      // Hiển thị danh sách theo thứ tự xem gần nhất
+      const historyIndexMap = new Map(watchHistory.map((w, idx) => [w.video_id, idx]))
+      list = shorts
+        .filter((s) => historyIndexMap.has(s.video_id))
+        .sort((a, b) => (historyIndexMap.get(a.video_id) ?? 9999) - (historyIndexMap.get(b.video_id) ?? 9999))
     }
 
     if (selectedCategory !== 'ALL') {
@@ -205,7 +236,35 @@ export function YoutubeShortsPage() {
     }
 
     return list
-  }, [shorts, activeTab, selectedCategory, searchQuery, subscribedCreators, savedVideoIds])
+  }, [shorts, activeTab, selectedCategory, searchQuery, subscribedCreators, savedVideoIds, watchedIds, watchHistory])
+
+  // Ghi nhận video đã xem vào Lịch sử khi người dùng xem >= 1.2 giây
+  useEffect(() => {
+    const cur = displayedShorts[activeIndex]
+    if (!cur || activeTab === 'history') return
+
+    const timer = setTimeout(() => {
+      setWatchHistory((prev) => {
+        const withoutCur = prev.filter((item) => item.video_id !== cur.video_id)
+        const updated = [{ video_id: cur.video_id, watched_at: new Date().toISOString() }, ...withoutCur]
+        try {
+          localStorage.setItem('yts_watch_history', JSON.stringify(updated.slice(0, 1000)))
+        } catch {}
+        return updated
+      })
+    }, 1200)
+
+    return () => clearTimeout(timer)
+  }, [activeIndex, displayedShorts, activeTab])
+
+  // Xóa toàn bộ lịch sử xem Shorts để xem lại từ đầu
+  const handleClearHistory = () => {
+    setWatchHistory([])
+    try {
+      localStorage.removeItem('yts_watch_history')
+    } catch {}
+    showToast('🗑️ Đã làm mới lịch sử xem Shorts', 'info')
+  }
 
   // Đồng bộ lệnh Play/Pause vào iframe YouTube
   useEffect(() => {
@@ -444,6 +503,17 @@ export function YoutubeShortsPage() {
             </button>
 
             <button
+              className={`yts-nav-item ${activeTab === 'history' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('history')
+                scrollToIndex(0)
+              }}
+            >
+              <History size={22} />
+              <span>Lịch sử xem {watchHistory.length > 0 && `(${watchHistory.length})`}</span>
+            </button>
+
+            <button
               className="yts-nav-item"
               onClick={() => setCrawlModalOpen(true)}
               style={{ marginTop: 12, color: '#ff4e45' }}
@@ -507,6 +577,15 @@ export function YoutubeShortsPage() {
               >
                 Đã lưu
               </button>
+              <button
+                className={`yts-top-tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('history')
+                  scrollToIndex(0)
+                }}
+              >
+                Lịch sử {watchHistory.length > 0 && `(${watchHistory.length})`}
+              </button>
             </div>
           </div>
 
@@ -565,6 +644,53 @@ export function YoutubeShortsPage() {
           </div>
         )}
 
+        {/* BANNER THÔNG BÁO LỊCH SỬ VÀ NÚT XOÁ */}
+        {activeTab === 'history' && displayedShorts.length > 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 58,
+              left: 12,
+              right: 12,
+              zIndex: 25,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 12px',
+              borderRadius: 12,
+              background: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              fontSize: '0.76rem',
+              color: '#fff',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <History size={14} color="#8b5cf6" />
+              <span>Đang xem lại lịch sử ({displayedShorts.length} video)</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              style={{
+                background: 'rgba(239, 68, 68, 0.25)',
+                color: '#ff6b6b',
+                border: '1px solid rgba(239, 68, 68, 0.5)',
+                borderRadius: 8,
+                padding: '4px 9px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <Trash2 size={12} /> Xoá lịch sử
+            </button>
+          </div>
+        )}
+
         {/* FEED CUỘN DỌC LIÊN TỤC (SNAP SCROLL) */}
         <div className="yts-feed" ref={feedRef} onScroll={handleScroll}>
           {loading ? (
@@ -574,19 +700,73 @@ export function YoutubeShortsPage() {
             </div>
           ) : displayedShorts.length === 0 ? (
             <div className="yts-empty-state">
-              <Flame size={48} color="#555" />
-              <h3 style={{ marginTop: 12, color: '#fff' }}>Chưa có Shorts nào phù hợp</h3>
-              <p style={{ fontSize: '0.84rem', marginTop: 4 }}>
-                Bấm vào nút bên dưới để quét thêm video ngắn từ các kênh YouTube của bạn.
-              </p>
-              <button
-                type="button"
-                className="tv-btn primary"
-                onClick={() => setCrawlModalOpen(true)}
-                style={{ marginTop: 16, background: '#ff0000', borderRadius: 20, padding: '10px 24px', fontWeight: 700 }}
-              >
-                <Radio size={16} style={{ marginRight: 6 }} /> Cào Shorts từ các kênh
-              </button>
+              {activeTab === 'history' ? (
+                <>
+                  <History size={48} color="#8b5cf6" />
+                  <h3 style={{ marginTop: 12, color: '#fff' }}>Chưa có lịch sử xem</h3>
+                  <p style={{ fontSize: '0.84rem', marginTop: 4, maxWidth: 320 }}>
+                    Khi bạn lướt xem các video Shorts, chúng sẽ được lưu vào đây và tự động ẩn khỏi luồng gợi ý để bạn không bị xem trùng lặp.
+                  </p>
+                  <button
+                    type="button"
+                    className="tv-btn primary"
+                    onClick={() => setActiveTab('foryou')}
+                    style={{ marginTop: 16, background: '#ff0000', borderRadius: 20, padding: '10px 24px', fontWeight: 700 }}
+                  >
+                    Xem Shorts ngay
+                  </button>
+                </>
+              ) : activeTab === 'foryou' && watchHistory.length > 0 ? (
+                <>
+                  <Check size={48} color="#10b981" />
+                  <h3 style={{ marginTop: 12, color: '#fff' }}>Bạn đã xem hết video mới!</h3>
+                  <p style={{ fontSize: '0.84rem', marginTop: 4, maxWidth: 340 }}>
+                    Bạn đã xem hết {watchHistory.length} video. Không có video nào bị phát lặp lại.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      className="tv-btn"
+                      onClick={() => setActiveTab('history')}
+                      style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '9px 18px', fontWeight: 700 }}
+                    >
+                      <History size={15} style={{ marginRight: 5 }} /> Xem lại Lịch sử
+                    </button>
+                    <button
+                      type="button"
+                      className="tv-btn"
+                      onClick={handleClearHistory}
+                      style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 20, padding: '9px 18px', fontWeight: 700 }}
+                    >
+                      <RefreshCw size={15} style={{ marginRight: 5 }} /> Làm mới xem lại từ đầu
+                    </button>
+                    <button
+                      type="button"
+                      className="tv-btn primary"
+                      onClick={() => setCrawlModalOpen(true)}
+                      style={{ background: '#ff0000', borderRadius: 20, padding: '9px 18px', fontWeight: 700 }}
+                    >
+                      <Radio size={15} style={{ marginRight: 5 }} /> Cào thêm Shorts mới
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Flame size={48} color="#555" />
+                  <h3 style={{ marginTop: 12, color: '#fff' }}>Chưa có Shorts nào phù hợp</h3>
+                  <p style={{ fontSize: '0.84rem', marginTop: 4 }}>
+                    Bấm vào nút bên dưới để quét thêm video ngắn từ các kênh YouTube của bạn.
+                  </p>
+                  <button
+                    type="button"
+                    className="tv-btn primary"
+                    onClick={() => setCrawlModalOpen(true)}
+                    style={{ marginTop: 16, background: '#ff0000', borderRadius: 20, padding: '10px 24px', fontWeight: 700 }}
+                  >
+                    <Radio size={16} style={{ marginRight: 6 }} /> Cào Shorts từ các kênh
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             displayedShorts.map((short, idx) => {
