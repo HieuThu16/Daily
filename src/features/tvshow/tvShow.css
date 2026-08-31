@@ -2542,6 +2542,69 @@
 
 .yt-watch-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* Hàng Icon Actions Gọn Gàng Trên Cùng 1 Hàng */
+.yt-watch-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 10px 0 14px;
+  padding: 2px 0;
+  width: 100%;
+}
+
+.yt-action-icon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 40px;
+  height: 52px;
+  padding: 6px 2px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+  flex: 1;
+  max-width: 60px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.yt-action-icon-btn:hover {
+  background: var(--bg-main);
+  border-color: var(--primary, #8b5cf6);
+  color: var(--primary, #8b5cf6);
+  transform: translateY(-1px);
+}
+
+.yt-action-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.yt-action-icon-btn.on {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #10b981;
+}
+
+.yt-action-icon-sublabel {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  line-height: 1;
+  text-align: center;
+}
+
+.yt-action-icon-btn.on .yt-action-icon-sublabel {
+  color: inherit;
+  font-weight: 700;
+}
+
 .yt-chip {
   display: inline-flex;
   align-items: center;

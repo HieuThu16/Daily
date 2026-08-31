@@ -16,12 +16,16 @@ export function WatchTogetherButton({
   item,
   className = 'yt-chip',
   label = 'Xem chung',
+  sublabel,
+  title,
   size = 15,
   style,
 }: {
   item: WatchItem | (() => WatchItem | null)
   className?: string
-  label?: string
+  label?: string | null
+  sublabel?: string
+  title?: string
   size?: number
   style?: React.CSSProperties
 }) {
@@ -37,8 +41,16 @@ export function WatchTogetherButton({
 
   return (
     <>
-      <button type="button" className={className} onClick={openPicker} style={style}>
-        <Users size={size} /> {label}
+      <button
+        type="button"
+        className={className}
+        onClick={openPicker}
+        style={style}
+        title={title || (typeof label === 'string' ? label : 'Xem chung')}
+      >
+        <Users size={size} />
+        {label ? <span>{label}</span> : null}
+        {sublabel ? <span className="yt-action-icon-sublabel">{sublabel}</span> : null}
       </button>
       {open && pending && <PeoplePicker item={pending} onClose={() => setOpen(false)} />}
     </>

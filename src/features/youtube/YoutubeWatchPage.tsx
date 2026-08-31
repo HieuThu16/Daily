@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Check, CheckCircle2, Circle, ExternalLink,
   PictureInPicture2, Share2, ChevronRight, Layers, Sparkles,
-  Headphones, Volume2, Trash2, Loader2,
+  Headphones, Volume2, Loader2,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchYouTubeMeta } from '../../lib/youtubeMeta'
@@ -16,7 +16,6 @@ import {
   useOfflineAudioState,
   downloadAndSaveYoutubeAudio,
   getOfflineAudioPlayUrl,
-  deleteOfflineAudio,
 } from '../../lib/youtubeAudioCache'
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
@@ -224,16 +223,6 @@ export function YoutubeWatchPage() {
     }
   }
 
-  const handleDeleteAudio = async () => {
-    if (!video) return
-    try {
-      await deleteOfflineAudio(video.video_id)
-      showToast('🗑️ Đã xóa file Audio khỏi máy, giải phóng dung lượng thành công!')
-    } catch (err: any) {
-      showToast(`❌ Không xóa được: ${err?.message || err}`, 'delete')
-    }
-  }
-
   const handleToggleCollect = async () => {
     if (!video) return
     const res = await toggleSaveToCollection({
@@ -270,15 +259,54 @@ export function YoutubeWatchPage() {
 
       if (!row) {
         /*
-         * Không có trong kho — nhưng vẫn phải xem được. Bấm một kết quả tìm kiếm
-         * YouTube mà nhận "Không tìm thấy video này trong kho" thì vô lý.
-         * Điều hướng từ ô tìm kiếm có kèm sẵn tiêu đề nên hiện ngay; vào thẳng
-         * bằng URL thì hỏi oEmbed, chậm một nhịp nhưng vẫn ra.
+         * Không có trong kho — nhưng vẫn phải xem được và hiển thị đầy đủ tên kênh chính xác.
          */
-        const meta = hint?.title ? null : await fetchYouTubeMeta(`https://www.youtube.com/watch?v=${videoId}`)
+        let meta = null
+        let title = hint?.title
+        let channelName = hint?.channelName
+
+        if (!channelName || !title) {
+          meta = await fetchYouTubeMeta(`https://www.youtube.com/watch?v=${videoId}`)
+          if (meta) {
+            if (!channelName && meta.author) channelName = meta.author
+            if (!title && meta.title) title = meta.title
+          }
+        }
+
+        // Tự động phân giải tên kênh từ title nếu có định dạng "... | TÊN KÊNH" hoặc "... - TÊN KÊNH"
+        if (!channelName && title) {
+          const parts = title.split('|')
+          if (parts.length > 1) {
+            const possible = parts[parts.length - 1].trim()
+            if (possible.length >= 2 && possible.length <= 40) {
+              channelName = possible
+            }
+          }
+        }
+
+        const fallback = buildFallbackVideo(
+          videoId,
+          { ...hint, channelName: channelName || undefined, title: title || undefined },
+          meta
+        )
         if (!alive) return
-        setVideo(buildFallbackVideo(videoId, hint, meta))
-        setSiblings([])
+        setVideo(fallback)
+
+        // Tìm các video cùng kênh nếu có trong kho
+        if (channelName && supabase) {
+          const [sameTv, sameRev] = await Promise.all([
+            supabase.from('tvshow_videos').select(COLUMNS).ilike('creator_name', `%${channelName}%`).limit(100),
+            supabase.from('review_videos').select(COLUMNS).ilike('creator_name', `%${channelName}%`).limit(100),
+          ])
+          const sameList = [
+            ...((sameTv?.data ?? []) as any[]).map((v) => ({ ...v, sourceType: 'tvshow' as const })),
+            ...((sameRev?.data ?? []) as any[]).map((v) => ({ ...v, sourceType: 'review' as const })),
+          ].filter((v) => v.video_id !== videoId)
+          if (alive) setSiblings(sameList)
+        } else {
+          setSiblings([])
+        }
+
         setLoading(false)
         return
       }
@@ -446,78 +474,65 @@ export function YoutubeWatchPage() {
           </span>
         </div>
 
-        <div className="yt-watch-actions">
-          {/* Nút Nghe YouTube Audio / Phát Audio */}
+        <div className="yt-watch-actions-bar">
+          {/* 1. Nút Nghe YouTube Audio / Phát Audio */}
           {isAudioSaved ? (
-            <>
-              <button
-                type="button"
-                className="yt-chip on"
-                onClick={() => void handlePlayAudio()}
-                disabled={audioLoading}
-                style={{
-                  background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-                  color: '#ffffff',
-                  borderColor: '#06b6d4',
-                  fontWeight: 700,
-                }}
-                title="Phát audio đã lưu offline trên máy (có thể tắt màn hình điện thoại)"
-              >
-                <Volume2 size={15} />
-                <span>Phát Audio ({audioSizeLabel})</span>
-              </button>
-
-              <button
-                type="button"
-                className="yt-chip"
-                onClick={() => void handleDeleteAudio()}
-                style={{
-                  color: '#ef4444',
-                  borderColor: 'rgba(239, 68, 68, 0.35)',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                }}
-                title="Xóa file audio khỏi bộ nhớ máy để giải phóng dung lượng"
-              >
-                <Trash2 size={14} />
-                <span>Xóa Audio</span>
-              </button>
-            </>
+            <button
+              type="button"
+              className="yt-action-icon-btn on"
+              onClick={() => void handlePlayAudio()}
+              disabled={audioLoading}
+              title={`Phát Audio offline (${audioSizeLabel})`}
+              style={{
+                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.25))',
+                color: '#06b6d4',
+                borderColor: '#06b6d4',
+              }}
+            >
+              <Volume2 size={18} />
+              <span className="yt-action-icon-sublabel">Audio</span>
+            </button>
           ) : (
             <button
               type="button"
-              className="yt-chip"
+              className="yt-action-icon-btn"
               onClick={() => void handlePlayAudio()}
               disabled={audioLoading}
+              title="Tải & phát YouTube Audio chạy nền"
               style={{
-                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15))',
                 color: '#06b6d4',
-                borderColor: 'rgba(6, 182, 212, 0.4)',
-                fontWeight: 700,
+                borderColor: 'rgba(6, 182, 212, 0.35)',
               }}
-              title="Chuyển đổi video thành Audio, lưu vào máy và phát nền"
             >
-              {audioLoading ? (
-                <>
-                  <Loader2 size={15} className="tv-spin" />
-                  <span>Đang tải audio {audioPercent > 0 ? `${audioPercent}%` : '...'}</span>
-                </>
-              ) : (
-                <>
-                  <Headphones size={15} />
-                  <span>Nghe YouTube Audio</span>
-                </>
-              )}
+              {audioLoading ? <Loader2 size={18} className="tv-spin" /> : <Headphones size={18} />}
+              <span className="yt-action-icon-sublabel">{audioLoading ? `${audioPercent}%` : 'Audio'}</span>
             </button>
           )}
 
-          <button type="button" className={`yt-chip ${watched ? 'on' : ''}`} onClick={() => void toggleWatched()}>
-            {watched ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-            {watched ? 'Đã xem xong' : 'Đánh dấu đã xem'}
-          </button>
-
+          {/* 2. Đánh dấu đã xem */}
           <button
             type="button"
-            className="yt-chip"
+            className={`yt-action-icon-btn ${watched ? 'on' : ''}`}
+            onClick={() => void toggleWatched()}
+            title={watched ? 'Đã xem xong (Bấm để hủy)' : 'Đánh dấu đã xem'}
+            style={
+              watched
+                ? {
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    color: '#10b981',
+                    borderColor: '#10b981',
+                  }
+                : undefined
+            }
+          >
+            {watched ? <CheckCircle2 size={18} color="#10b981" /> : <Circle size={18} />}
+            <span className="yt-action-icon-sublabel">{watched ? 'Đã xong' : 'Đã xem'}</span>
+          </button>
+
+          {/* 3. Phát nền (PiP) */}
+          <button
+            type="button"
+            className="yt-action-icon-btn"
             onClick={() =>
               playInMini({
                 videoId: video.video_id,
@@ -527,10 +542,13 @@ export function YoutubeWatchPage() {
                 startSeconds: progress?.seconds,
               })
             }
+            title="Phát nền (Picture in Picture)"
           >
-            <PictureInPicture2 size={15} /> Phát nền
+            <PictureInPicture2 size={18} />
+            <span className="yt-action-icon-sublabel">Phát nền</span>
           </button>
 
+          {/* 4. Xem chung */}
           <WatchTogetherButton
             item={{
               kind: 'VIDEO',
@@ -540,32 +558,54 @@ export function YoutubeWatchPage() {
               thumbnail: video.thumbnail,
               url: `https://www.youtube.com/watch?v=${video.video_id}`,
             }}
+            className="yt-action-icon-btn"
+            label={null}
+            sublabel="Xem chung"
+            size={18}
+            title="Xem chung cùng người thân"
           />
 
+          {/* 5. Sưu tầm */}
           <button
             type="button"
-            className={`yt-chip ${isCollected ? 'on' : ''}`}
+            className={`yt-action-icon-btn ${isCollected ? 'on' : ''}`}
             onClick={handleToggleCollect}
-            style={{
-              background: isCollected ? 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(139, 92, 246, 0.25))' : undefined,
-              color: isCollected ? '#ec4899' : undefined,
-              borderColor: isCollected ? '#ec4899' : undefined,
-            }}
+            title={isCollected ? 'Đã lưu vào bộ sưu tập' : 'Lưu vào Bộ sưu tập'}
+            style={
+              isCollected
+                ? {
+                    background: 'rgba(236, 72, 153, 0.15)',
+                    color: '#ec4899',
+                    borderColor: '#ec4899',
+                  }
+                : undefined
+            }
           >
-            <Sparkles size={15} /> {isCollected ? 'Đã sưu tầm' : 'Sưu tầm'}
+            <Sparkles size={18} color={isCollected ? '#ec4899' : undefined} />
+            <span className="yt-action-icon-sublabel">Sưu tầm</span>
           </button>
 
-          <button type="button" className="yt-chip" onClick={() => void share()}>
-            <Share2 size={15} /> Chia sẻ
+          {/* 6. Chia sẻ */}
+          <button
+            type="button"
+            className="yt-action-icon-btn"
+            onClick={() => void share()}
+            title="Chia sẻ video"
+          >
+            <Share2 size={18} />
+            <span className="yt-action-icon-sublabel">Chia sẻ</span>
           </button>
 
+          {/* 7. Mở YouTube */}
           <a
-            className="yt-chip"
+            className="yt-action-icon-btn"
             href={video.canonical_url || `https://www.youtube.com/watch?v=${video.video_id}`}
             target="_blank"
             rel="noopener noreferrer"
+            title="Mở trên YouTube"
           >
-            <ExternalLink size={14} /> Mở YouTube
+            <ExternalLink size={18} />
+            <span className="yt-action-icon-sublabel">YouTube</span>
           </a>
         </div>
 

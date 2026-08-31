@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ExternalLink,
@@ -320,7 +320,8 @@ export function WatchTogetherPage() {
   // Danh sách hiển thị theo Hộp thư và Bộ lọc
   const activePairs = box === 'INBOX' ? dualInboxPairs : dualSentPairs
 
-  // Tự động đẩy tiến độ thực tế lên Supabase watch_shares để đối phương nhìn thấy ngay
+  // Đồng bộ tiến độ thực tế lên Supabase watch_shares 1 lần mỗi khi có tiến độ mới (chống loop re-render giật giật)
+  const syncedRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!supabase || !myId) return
     activePairs.forEach((pair) => {
@@ -328,7 +329,10 @@ export function WatchTogetherPage() {
       const refId = pair.share.ref_id
       const myLocalPercent = pair.myProgress.percent
       const myLocalText = pair.myProgress.text
-      if (myLocalPercent > 0) {
+      const syncKey = `${kind}:${refId}:${myLocalPercent}`
+
+      if (myLocalPercent > 0 && !syncedRef.current.has(syncKey)) {
+        syncedRef.current.add(syncKey)
         void updateMyShareProgress(kind, refId, myLocalPercent, myLocalText)
       }
     })
@@ -388,7 +392,13 @@ export function WatchTogetherPage() {
     rememberRef(`${s.kind}:${s.ref_id}`)
     if (s.kind === 'VIDEO') {
       navigate(`/youtube/watch/${s.ref_id}`, {
-        state: { from: '/watch', fromLabel: 'Xem chung', title: s.title, thumbnail: s.thumbnail },
+        state: {
+          from: '/watch',
+          fromLabel: 'Xem chung',
+          title: s.title,
+          channelName: s.subtitle || undefined,
+          thumbnail: s.thumbnail,
+        },
       })
     } else if (s.kind === 'MANGA') {
       if (s.url && s.url.startsWith('/')) {
