@@ -120,7 +120,7 @@ export function AudiobooksPage() {
             <div>
               <h1 className="audiobooks-hero-title">Thư Viện Sách Nói</h1>
               <p className="audiobooks-hero-subtitle">
-                Sách nói & Radio chất lượng cao từ Dilib.vn · Tự động đồng bộ tiến độ nghe
+                Sách nói & Radio chất lượng cao từ Dilib.vn + DTV-eBook · Tự động đồng bộ tiến độ nghe
               </p>
             </div>
           </div>
@@ -129,10 +129,10 @@ export function AudiobooksPage() {
             type="button"
             className="audiobooks-crawl-btn"
             onClick={() => setShowCrawlerModal(true)}
-            title="Cào sách nói từ Dilib.vn"
+            title="Cào sách nói & ebook từ Dilib.vn + DTV-eBook"
           >
             <Sparkles size={16} />
-            <span>Cào Sách Nói Dilib</span>
+            <span>Cào Sách Đa Nguồn</span>
           </button>
         </div>
       </div>
@@ -242,9 +242,9 @@ export function AudiobooksPage() {
         <div className="audiobooks-empty-state">
           <Headphones size={48} color="var(--primary, #8b5cf6)" />
           <h3>Chưa có sách nói nào trong thư viện</h3>
-          <p>Nhấn nút “Cào Sách Nói Dilib” để tìm kiếm và thêm hàng ngàn sách nói miễn phí!</p>
+          <p>Nhấn nút “Cào Sách Đa Nguồn” để tìm kiếm và thêm hàng ngàn sách & sách nói miễn phí từ Dilib và DTV eBook!</p>
           <button type="button" className="audiobooks-crawl-btn" onClick={() => setShowCrawlerModal(true)}>
-            <Sparkles size={16} /> Cào Sách Nói Ngay
+            <Sparkles size={16} /> Cào Sách Đa Nguồn
           </button>
         </div>
       ) : (

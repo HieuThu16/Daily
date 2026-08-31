@@ -2,352 +2,394 @@ import { saveAudiobook } from './audiobookRepository'
 import { supabase } from './supabase'
 import type { Audiobook, DilibCategory } from '../types/audiobook'
 
-export const DILIB_CATEGORIES: DilibCategory[] = [
-  // 1. Tủ sách & Kinh điển
+export type UnifiedBookCategory = {
+  id: string
+  name: string
+  icon: string
+  dilibUrl?: string
+  dtvUrl?: string
+  keywords: string[]
+}
+
+/** Danh mục thể loại HỢP NHẤT từ cả 2 nguồn Dilib.vn và DTV-eBook.com.vn */
+export const UNIFIED_CATEGORIES: UnifiedBookCategory[] = [
+  // 1. Trinh thám & Hình sự & Bí ẩn
+  {
+    id: 'trinh-tham',
+    name: 'Trinh Thám - Hình Sự - Bí Ẩn',
+    icon: '🔍',
+    dilibUrl: 'https://dilib.vn/thu-vien/trinh-tham-hinh-su-kinh-di/',
+    dtvUrl: 'https://dtv-ebook.com.vn/trinh-tham-492.html',
+    keywords: ['trinh thám', 'hình sự', 'kinh dị', 'vụ án', 'bí ẩn', 'sát nhân', 'thám tử'],
+  },
+
+  // 2. Tác phẩm kinh điển & Tinh hoa
   {
     id: 'tac-pham-kinh-dien',
     name: 'Tác Phẩm Kinh Điển',
     icon: '🏛️',
-    url: 'https://dilib.vn/thu-vien/tac-pham-kinh-dien/',
-    keywords: ['kinh điển', 'tác phẩm kinh điển', 'văn học kinh điển', 'danh tác'],
+    dilibUrl: 'https://dilib.vn/thu-vien/tac-pham-kinh-dien/',
+    dtvUrl: 'https://dtv-ebook.com.vn/van-hoc-kinh-dien-491.html',
+    keywords: ['kinh điển', 'tác phẩm kinh điển', 'văn học kinh điển', 'danh tác', 'văn học nước ngoài'],
   },
   {
     id: 'tu-sach-tinh-hoa',
-    name: 'Tủ Sách Tinh Hoa',
+    name: 'Tủ Sách Tinh Hoa & Best Seller',
     icon: '💎',
-    url: 'https://dilib.vn/tu-sach-tinh-hoa/',
-    keywords: ['tinh hoa', 'tủ sách tinh hoa', 'kiến thức tinh hoa'],
-  },
-  {
-    id: 'gioi-thieu-sach-moi',
-    name: 'Giới Thiệu Sách Mới',
-    icon: '✨',
-    url: 'https://dilib.vn/gioi-thieu-sach-moi/',
-    keywords: ['sách mới', 'mới nhất', 'phát hành'],
-  },
-  {
-    id: 'sach-bo',
-    name: 'Sách Bộ (Trọn Bộ)',
-    icon: '📚',
-    url: 'https://dilib.vn/sach-bo/',
-    keywords: ['sách bộ', 'trọn bộ', 'tinh hoa', 'kinh điển'],
+    dilibUrl: 'https://dilib.vn/tu-sach-tinh-hoa/',
+    dtvUrl: 'https://dtv-ebook.com.vn/best-seller-493.html',
+    keywords: ['tinh hoa', 'tủ sách', 'bán chạy', 'best seller'],
   },
   {
     id: 'sach-noi',
     name: 'Sách Nói (Audiobooks)',
     icon: '🎧',
-    url: 'https://dilib.vn/sach-noi/',
+    dilibUrl: 'https://dilib.vn/sach-noi/',
+    dtvUrl: 'https://dtv-ebook.com.vn/sach-noi-5583.html',
     keywords: ['sách nói', 'audiobook', 'nghe sách', 'mp3'],
   },
   {
     id: 'radio',
     name: 'Radio & Tâm Hồn',
     icon: '📻',
-    url: 'https://dilib.vn/radio/',
+    dilibUrl: 'https://dilib.vn/radio/',
     keywords: ['radio', 'tâm hồn', 'suy ngẫm', 'truyện ngắn'],
   },
+  {
+    id: 'sach-bo',
+    name: 'Sách Bộ (Trọn Bộ)',
+    icon: '📚',
+    dilibUrl: 'https://dilib.vn/sach-bo/',
+    keywords: ['sách bộ', 'trọn bộ', 'tinh hoa', 'kinh điển'],
+  },
 
-  // 2. Kỹ năng & Phát triển bản thân
+  // 3. Kỹ năng & Phát triển bản thân
   {
     id: 'tam-ly-ky-nang',
-    name: 'Tâm Lý - Kỹ Năng',
+    name: 'Tâm Lý - Kỹ Năng Sống',
     icon: '🧠',
-    url: 'https://dilib.vn/thu-vien/tam-ly-ky-nang/',
+    dilibUrl: 'https://dilib.vn/thu-vien/tam-ly-ky-nang/',
+    dtvUrl: 'https://dtv-ebook.com.vn/tam-ly-ky-nang-song-490.html',
     keywords: ['tâm lý', 'kỹ năng', 'đắc nhân tâm', 'giao tiếp', 'tư duy', 'thuyết phục'],
   },
   {
     id: 'phat-trien-ban-than',
-    name: 'Phát Triển Bản Thân',
+    name: 'Phát Triển Bản Thân - Self Help',
     icon: '🌱',
-    url: 'https://dilib.vn/thu-vien/phat-trien-ban-than/',
-    keywords: ['phát triển bản thân', 'thành công', 'thói quen nguyên tử', 'tự lực'],
+    dilibUrl: 'https://dilib.vn/thu-vien/phat-trien-ban-than/',
+    dtvUrl: 'https://dtv-ebook.com.vn/phat-trien-ban-than-489.html',
+    keywords: ['phát triển bản thân', 'thành công', 'thói quen nguyên tử', 'tự lực', 'self help'],
   },
   {
     id: 'nuoi-duong-tam-hon',
     name: 'Nuôi Dưỡng Tâm Hồn',
     icon: '🌸',
-    url: 'https://dilib.vn/thu-vien/nuoi-duong-tam-hon/',
+    dilibUrl: 'https://dilib.vn/thu-vien/nuoi-duong-tam-hon/',
     keywords: ['tâm hồn', 'nuôi dưỡng', 'bình an', 'hạnh phúc', 'sống đẹp'],
   },
   {
     id: 'khai-tam-mo-tri',
     name: 'Khai Tâm - Mở Trí',
     icon: '💡',
-    url: 'https://dilib.vn/thu-vien/khai-tam-mo-tri/',
+    dilibUrl: 'https://dilib.vn/thu-vien/khai-tam-mo-tri/',
     keywords: ['khai tâm', 'mở trí', 'trí tuệ', 'nhận thức', 'khai sáng'],
   },
 
-  // 3. Kinh doanh & Quản trị
+  // 4. Kinh doanh & Quản trị
   {
     id: 'quan-tri-kinh-doanh',
-    name: 'Quản Trị - Kinh Doanh',
+    name: 'Kinh Tế - Quản Trị - Kinh Doanh',
     icon: '💼',
-    url: 'https://dilib.vn/thu-vien/quan-tri-kinh-doanh/',
-    keywords: ['kinh doanh', 'quản trị', 'lãnh đạo', 'doanh nghiệp'],
+    dilibUrl: 'https://dilib.vn/thu-vien/quan-tri-kinh-doanh/',
+    dtvUrl: 'https://dtv-ebook.com.vn/kinh-te-quan-ly-488.html',
+    keywords: ['kinh doanh', 'quản trị', 'lãnh đạo', 'doanh nghiệp', 'kinh tế'],
   },
   {
     id: 'self-help-khoi-nghiep',
-    name: 'Self Help - Khởi Nghiệp',
+    name: 'Khởi Nghiệp - Làm Giàu',
     icon: '🚀',
-    url: 'https://dilib.vn/thu-vien/self-help-khoi-nghiep/',
+    dilibUrl: 'https://dilib.vn/thu-vien/self-help-khoi-nghiep/',
+    dtvUrl: 'https://dtv-ebook.com.vn/tai-chinh-tien-te-1447.html',
     keywords: ['khởi nghiệp', 'startup', 'làm giàu', 'tài chính', 'cha giàu'],
   },
   {
     id: 'marketing-ban-hang',
     name: 'Marketing - Bán Hàng',
     icon: '📈',
-    url: 'https://dilib.vn/thu-vien/marketing-ban-hang/',
+    dilibUrl: 'https://dilib.vn/thu-vien/marketing-ban-hang/',
     keywords: ['marketing', 'bán hàng', 'quảng cáo', 'truyền thông'],
   },
 
-  // 4. Tâm linh, Triết học & Y học
+  // 5. Kiếm hiệp, Tiên hiệp, Ngôn tình
+  {
+    id: 'kiem-hiep-tien-hiep',
+    name: 'Kiếm Hiệp - Tiên Hiệp',
+    icon: '🗡️',
+    dilibUrl: 'https://dilib.vn/thu-vien/kiem-hiep-tien-hiep/',
+    dtvUrl: 'https://dtv-ebook.com.vn/kiem-hiep-486.html',
+    keywords: ['kiếm hiệp', 'tiên hiệp', 'tu chân', 'võ hiệp', 'kim dung', 'cổ long'],
+  },
+  {
+    id: 'lang-man-ngon-tinh',
+    name: 'Ngôn Tình - Lãng Mạn',
+    icon: '💖',
+    dilibUrl: 'https://dilib.vn/thu-vien/lang-man-ngon-tinh/',
+    dtvUrl: 'https://dtv-ebook.com.vn/ngon-tinh-487.html',
+    keywords: ['ngôn tình', 'lãng mạn', 'tình yêu', 'tình cảm', 'cổ đại'],
+  },
+  {
+    id: 'dam-my-bach-hop',
+    name: 'Đam Mỹ - Bách Hợp',
+    icon: '🌈',
+    dilibUrl: 'https://dilib.vn/thu-vien/dam-my-bach-hop/',
+    dtvUrl: 'https://dtv-ebook.com.vn/dam-my-494.html',
+    keywords: ['đam mỹ', 'bách hợp', 'bl', 'gl'],
+  },
+
+  // 6. Tâm linh, Triết học & Y học
   {
     id: 'ton-giao-tam-linh',
     name: 'Tôn Giáo - Tâm Linh',
     icon: '🧘',
-    url: 'https://dilib.vn/thu-vien/ton-giao-tam-linh/',
+    dilibUrl: 'https://dilib.vn/thu-vien/ton-giao-tam-linh/',
+    dtvUrl: 'https://dtv-ebook.com.vn/ton-giao-tam-linh-1451.html',
     keywords: ['tâm linh', 'thiền', 'phật giáo', 'thức tỉnh', 'tâm thức', 'linh hồn'],
   },
   {
     id: 'yoga-thien',
-    name: 'Yoga - Thiền',
+    name: 'Yoga - Thiền Định',
     icon: '🧘‍♂️',
-    url: 'https://dilib.vn/thu-vien/yoga-thien/',
+    dilibUrl: 'https://dilib.vn/thu-vien/yoga-thien/',
     keywords: ['yoga', 'thiền định', 'chánh niệm', 'năng lượng', 'thở'],
   },
   {
     id: 'triet-hoc-ly-luan',
     name: 'Triết Học - Lý Luận',
     icon: '📜',
-    url: 'https://dilib.vn/thu-vien/triet-hoc-ly-luan/',
+    dilibUrl: 'https://dilib.vn/thu-vien/triet-hoc-ly-luan/',
+    dtvUrl: 'https://dtv-ebook.com.vn/triet-hoc-1448.html',
     keywords: ['triết học', 'lý luận', 'tư tưởng', 'khắc kỷ', 'đạo đức'],
   },
   {
     id: 'y-hoc-suc-khoe',
     name: 'Y Học - Sức Khỏe',
     icon: '🩺',
-    url: 'https://dilib.vn/thu-vien/y-hoc-suc-khoe/',
+    dilibUrl: 'https://dilib.vn/thu-vien/y-hoc-suc-khoe/',
+    dtvUrl: 'https://dtv-ebook.com.vn/y-hoc-suc-khoe-1452.html',
     keywords: ['sức khỏe', 'y học', 'dinh dưỡng', 'chữa lành', 'dưỡng sinh'],
   },
 
-  // 5. Lịch sử, Khoa học & Xã hội
+  // 7. Lịch sử, Khoa học & Xã hội
   {
     id: 'lich-su-quan-su',
-    name: 'Lịch Sử - Quân Sự',
+    name: 'Lịch Sử - Quân Sự - Chiến Tranh',
     icon: '⚔️',
-    url: 'https://dilib.vn/thu-vien/lich-su-quan-su/',
+    dilibUrl: 'https://dilib.vn/thu-vien/lich-su-quan-su/',
+    dtvUrl: 'https://dtv-ebook.com.vn/chien-tranh-1449.html',
     keywords: ['lịch sử', 'quân sự', 'chiến tranh', 'việt nam', 'thế giới'],
   },
   {
     id: 'nhan-vat-lich-su',
-    name: 'Nhân Vật Lịch Sử',
+    name: 'Nhân Vật Lịch Sử - Danh Nhân',
     icon: '👑',
-    url: 'https://dilib.vn/thu-vien/nhan-vat-lich-su/',
+    dilibUrl: 'https://dilib.vn/thu-vien/nhan-vat-lich-su/',
     keywords: ['nhân vật', 'danh nhân', 'lãnh tụ', 'danh tướng', 'vua chúa'],
   },
   {
     id: 'hoi-ky-tuy-but',
     name: 'Hồi Ký - Tùy Bút',
     icon: '🖋️',
-    url: 'https://dilib.vn/thu-vien/hoi-ky-tuy-but/',
+    dilibUrl: 'https://dilib.vn/thu-vien/hoi-ky-tuy-but/',
     keywords: ['hồi ký', 'tự truyện', 'tùy bút', 'nhân vật', 'cuộc đời'],
   },
   {
     id: 'khoa-hoc-cong-nghe',
-    name: 'Khoa Học - Công Nghệ',
+    name: 'Khoa Học - Viễn Tưởng',
     icon: '🔬',
-    url: 'https://dilib.vn/thu-vien/khoa-hoc-cong-nghe/',
-    keywords: ['khoa học', 'vũ trụ', 'công nghệ', 'ai', 'vật lý', 'thiên văn'],
+    dilibUrl: 'https://dilib.vn/thu-vien/khoa-hoc-cong-nghe/',
+    dtvUrl: 'https://dtv-ebook.com.vn/khoa-hoc-vien-tuong-497.html',
+    keywords: ['khoa học', 'vũ trụ', 'công nghệ', 'ai', 'vật lý', 'thiên văn', 'viễn tưởng'],
   },
   {
     id: 'cong-nghe-thong-tin',
     name: 'Công Nghệ Thông Tin',
     icon: '💻',
-    url: 'https://dilib.vn/thu-vien/cong-nghe-thong-tin/',
+    dilibUrl: 'https://dilib.vn/thu-vien/cong-nghe-thong-tin/',
     keywords: ['lập trình', 'tin học', 'it', 'mạng', 'phần mềm', 'python'],
   },
   {
     id: 'van-hoa-xa-hoi',
     name: 'Văn Hóa - Xã Hội',
     icon: '🌐',
-    url: 'https://dilib.vn/thu-vien/van-hoa-xa-hoi/',
+    dilibUrl: 'https://dilib.vn/thu-vien/van-hoa-xa-hoi/',
     keywords: ['văn hóa', 'xã hội', 'phong tục', 'con người'],
   },
   {
     id: 'giao-duc-dao-tao',
     name: 'Giáo Dục - Đào Tạo',
     icon: '🎓',
-    url: 'https://dilib.vn/thu-vien/giao-duc-dao-tao/',
+    dilibUrl: 'https://dilib.vn/thu-vien/giao-duc-dao-tao/',
     keywords: ['giáo dục', 'đào tạo', 'học tập', 'phương pháp'],
   },
-  {
-    id: 'tai-lieu-tham-khao',
-    name: 'Tài Liệu - Tham Khảo',
-    icon: '📑',
-    url: 'https://dilib.vn/thu-vien/tai-lieu-tham-khao/',
-    keywords: ['tài liệu', 'tham khảo', 'giáo trình', 'nghiên cứu'],
-  },
 
-  // 6. Văn học, Tiểu thuyết & Truyện
+  // 8. Văn học, Tiểu thuyết & Truyện
   {
     id: 'van-hoc-nghe-thuat',
     name: 'Văn Học - Nghệ Thuật',
     icon: '🎨',
-    url: 'https://dilib.vn/thu-vien/van-hoc-nghe-thuat/',
+    dilibUrl: 'https://dilib.vn/thu-vien/van-hoc-nghe-thuat/',
     keywords: ['văn học', 'nghệ thuật', 'thơ ca', 'tiểu thuyết'],
   },
   {
     id: 'truyen-ngan-tieu-thuyet',
     name: 'Truyện Ngắn - Tiểu Thuyết',
     icon: '📖',
-    url: 'https://dilib.vn/thu-vien/truyen-ngan-tieu-thuyet/',
+    dilibUrl: 'https://dilib.vn/thu-vien/truyen-ngan-tieu-thuyet/',
+    dtvUrl: 'https://dtv-ebook.com.vn/the-loai-truyen-313.html',
     keywords: ['truyện ngắn', 'tiểu thuyết', 'truyện chữ'],
-  },
-  {
-    id: 'trinh-tham-hinh-su-kinh-di',
-    name: 'Trinh Thám - Kinh Dị',
-    icon: '🔍',
-    url: 'https://dilib.vn/thu-vien/trinh-tham-hinh-su-kinh-di/',
-    keywords: ['trinh thám', 'hình sự', 'kinh dị', 'vụ án', 'bí ẩn'],
-  },
-  {
-    id: 'kiem-hiep-tien-hiep',
-    name: 'Kiếm Hiệp - Tiên Hiệp',
-    icon: '🗡️',
-    url: 'https://dilib.vn/thu-vien/kiem-hiep-tien-hiep/',
-    keywords: ['kiếm hiệp', 'tiên hiệp', 'tu chân', 'võ hiệp', 'kim dung'],
-  },
-  {
-    id: 'lang-man-ngon-tinh',
-    name: 'Lãng Mạn - Ngôn Tình',
-    icon: '💖',
-    url: 'https://dilib.vn/thu-vien/lang-man-ngon-tinh/',
-    keywords: ['ngôn tình', 'lãng mạn', 'tình yêu', 'tình cảm'],
-  },
-  {
-    id: 'dam-my-bach-hop',
-    name: 'Đam Mỹ - Bách Hợp',
-    icon: '🌈',
-    url: 'https://dilib.vn/thu-vien/dam-my-bach-hop/',
-    keywords: ['đam mỹ', 'bách hợp', 'bl', 'gl'],
   },
   {
     id: 'tinh-cam-gia-dinh',
     name: 'Tình Cảm - Gia Đình',
     icon: '🏡',
-    url: 'https://dilib.vn/thu-vien/tinh-cam-gia-dinh/',
+    dilibUrl: 'https://dilib.vn/thu-vien/tinh-cam-gia-dinh/',
     keywords: ['gia đình', 'cha mẹ', 'con cái', 'hôn nhân'],
   },
   {
     id: 'tre-em-thieu-nhi',
     name: 'Trẻ Em - Thiếu Nhi',
     icon: '🧸',
-    url: 'https://dilib.vn/thu-vien/tre-em-thieu-nhi/',
+    dilibUrl: 'https://dilib.vn/thu-vien/tre-em-thieu-nhi/',
     keywords: ['thiếu nhi', 'trẻ em', 'cổ tích', 'đồng dao'],
   },
   {
     id: 'tuoi-hoc-tro',
     name: 'Tuổi Học Trò',
     icon: '🎒',
-    url: 'https://dilib.vn/thu-vien/tuoi-hoc-tro/',
+    dilibUrl: 'https://dilib.vn/thu-vien/tuoi-hoc-tro/',
     keywords: ['học trò', 'áo trắng', 'tuổi thơ', 'nguyễn nhật ánh'],
   },
   {
     id: 'tu-vi-phong-thuy',
     name: 'Tử Vi - Phong Thủy',
     icon: '☯️',
-    url: 'https://dilib.vn/thu-vien/tu-vi-phong-thuy/',
+    dilibUrl: 'https://dilib.vn/thu-vien/tu-vi-phong-thuy/',
     keywords: ['tử vi', 'phong thủy', 'kinh dịch', 'tướng số'],
-  },
-  {
-    id: 'bien-khao-dia-ly',
-    name: 'Biên Khảo - Địa Lý',
-    icon: '🗺️',
-    url: 'https://dilib.vn/thu-vien/bien-khao-dia-ly/',
-    keywords: ['biên khảo', 'địa lý', 'danh lam', 'thắng cảnh'],
   },
   {
     id: 'kham-pha-bi-an',
     name: 'Khám Phá - Bí Ẩn',
     icon: '🛸',
-    url: 'https://dilib.vn/thu-vien/kham-pha-bi-an/',
+    dilibUrl: 'https://dilib.vn/thu-vien/kham-pha-bi-an/',
     keywords: ['khám phá', 'bí ẩn', 'tam giác quỷ', 'ufo'],
   },
   {
     id: 'phieu-luu-mao-hiem',
     name: 'Phiêu Lưu - Mạo Hiểm',
     icon: '🧭',
-    url: 'https://dilib.vn/thu-vien/phieu-luu-mao-hiem/',
+    dilibUrl: 'https://dilib.vn/thu-vien/phieu-luu-mao-hiem/',
     keywords: ['phiêu lưu', 'mạo hiểm', 'thám hiểm', 'rừng rậm'],
   },
 ]
 
+export const DILIB_CATEGORIES: DilibCategory[] = UNIFIED_CATEGORIES.map((c) => ({
+  id: c.id,
+  name: c.name,
+  icon: c.icon,
+  url: c.dilibUrl || c.dtvUrl || 'https://dilib.vn/thu-vien/',
+  keywords: c.keywords,
+}))
+
 export const DILIB_POPULAR_AUTHORS: string[] = [
+  // Trinh thám & Bí ẩn
+  'Agatha Christie',
+  'Arthur Conan Doyle',
+  'Higashino Keigo',
+  'Dan Brown',
+  'Edogawa Ranpo',
+  'Stephen King',
+  'Gillian Flynn',
+  'Thomas Harris',
+  'Jo Nesbo',
+
+  // Phát triển bản thân & Kỹ năng
   'Dale Carnegie',
-  'Nguyễn Nhật Ánh',
-  'Thích Nhất Hạnh',
-  'Osho',
   'John C. Maxwell',
   'Napoleon Hill',
   'Brian Tracy',
   'Robert Kiyosaki',
-  'Yuval Noah Harari',
   'Robin Sharma',
-  'Eckhart Tolle',
-  'Paulo Coelho',
-  'Tony Buổi Sáng',
-  'Haruki Murakami',
-  'Dan Brown',
-  'Malcolm Gladwell',
   'James Clear',
-  'Daniel Kahneman',
-  'Warren Buffett',
   'Stephen Covey',
-  'Jim Rohn',
-  'Victor Hugo',
-  'Arthur Conan Doyle',
-  'Nam Cao',
-  'Vũ Trọng Phụng',
-  'Nguyễn Du',
-  'Stephen Hawking',
-  'J.K. Rowling',
-  'Agatha Christie',
-  'George Orwell',
+  'Malcolm Gladwell',
+  'Daniel Kahneman',
   'Mark Manson',
   'Simon Sinek',
-  'Jack Ma',
-  'Steve Jobs',
-  'Bill Gates',
+  'Jim Rohn',
+  'Tony Robbins',
+
+  // Tâm linh, Thiền & Triết học
+  'Thích Nhất Hạnh',
+  'Osho',
+  'Eckhart Tolle',
   'Hòa Thượng Thích Thanh Từ',
-  'Nguyễn Hiến Lê',
-  'Nguyễn Phong',
-  'Nguyễn Mạnh Hùng',
   'Thiền Sư Ajahn Chah',
+  'Nguyễn Phong',
   'Lão Tử',
   'Khổng Tử',
   'Trang Tử',
-  'Tô Hoài',
+
+  // Văn học Việt Nam
+  'Nguyễn Nhật Ánh',
+  'Nam Cao',
+  'Vũ Trọng Phụng',
   'Ngô Tất Tố',
+  'Tô Hoài',
+  'Nguyễn Du',
   'Xuân Diệu',
   'Hàn Mặc Tử',
   'Trịnh Công Sơn',
+  'Tony Buổi Sáng',
+  'Nguyễn Hiến Lê',
+  'Nguyễn Mạnh Hùng',
   'Khôi Hoàng',
-  'Phạm Thành Long',
-  'Nguyễn Anh Dũng',
+
+  // Văn học & Kinh điển Thế giới
+  'Haruki Murakami',
+  'Paulo Coelho',
+  'Victor Hugo',
+  'George Orwell',
+  'J.K. Rowling',
+  'Yuval Noah Harari',
+  'Stephen Hawking',
+  'Kim Dung',
+  'Cổ Long',
+  'Lưu Cừu Chu',
+
+  // Kinh doanh & Doanh nhân
+  'Warren Buffett',
+  'Jack Ma',
+  'Steve Jobs',
+  'Bill Gates',
   'Lý Gia Thành',
   'Inamori Kazuo',
-  'Morihei Ueshiba',
-  'Sun Tzu (Tôn Tử)',
 ]
 
-export type DilibSearchResult = {
+export type CrawlerSource = 'ALL' | 'DILIB' | 'DTV'
+
+export type UnifiedSearchResult = {
   url: string
   title: string
   thumbnail: string
+  source: 'Dilib' | 'DTV eBook'
+  author?: string
 }
 
-export type DilibBookDetail = {
+export type DilibSearchResult = UnifiedSearchResult
+
+export type UnifiedBookDetail = {
   url: string
+  source: 'Dilib' | 'DTV eBook'
   title: string
   author: string
   genre: string
@@ -358,7 +400,11 @@ export type DilibBookDetail = {
   audioTracks: Array<{ id: string; title: string; url: string; duration?: number }>
   readbookUrl: string | null
   pdfUrl: string | null
+  epubUrl?: string | null
+  mobiUrl?: string | null
 }
+
+export type DilibBookDetail = UnifiedBookDetail
 
 export type CrawlReport = {
   totalScanned: number
@@ -366,9 +412,12 @@ export type CrawlReport = {
   booksPdfAdded: number
   totalAudioFiles: number
   durationSeconds: number
+  dilibCount: number
+  dtvCount: number
   items: Array<{
     title: string
     author: string
+    source: 'Dilib' | 'DTV eBook'
     hasAudio: boolean
     hasPdf: boolean
     audioCount: number
@@ -376,30 +425,29 @@ export type CrawlReport = {
   }>
 }
 
-/** Tìm kiếm sách trực tuyến trên Dilib.vn */
-export async function searchDilib(keyword: string): Promise<DilibSearchResult[]> {
+/** 1. TÌM KIẾM DILIB.VN */
+export async function searchDilib(keyword: string): Promise<UnifiedSearchResult[]> {
   const q = keyword.trim()
   if (!q) return []
   try {
     const res = await fetch(`https://dilib.vn/search/ajax-search.php?keyword=${encodeURIComponent(q)}`)
     const html = await res.text()
-    const items: DilibSearchResult[] = []
+    const items: UnifiedSearchResult[] = []
     const regex = /<a[^>]+href="([^"]+)"[^>]*title="([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[\s\S]*?<\/a>/gi
     let m: RegExpExecArray | null
 
     while ((m = regex.exec(html)) !== null) {
-      const rawHref = m[1]
+      let url = m[1]
       const title = m[2].trim()
       let thumbnail = m[3]
       if (thumbnail && !thumbnail.startsWith('http')) {
         thumbnail = 'https://dilib.vn' + (thumbnail.startsWith('/') ? '' : '/') + thumbnail
       }
-      let url = rawHref
       if (url && !url.startsWith('http')) {
         url = 'https://dilib.vn' + (url.startsWith('/') ? '' : '/') + url
       }
       if (url && title && !items.some((i) => i.url === url)) {
-        items.push({ url, title, thumbnail })
+        items.push({ url, title, thumbnail, source: 'Dilib' })
       }
     }
     return items
@@ -409,15 +457,99 @@ export async function searchDilib(keyword: string): Promise<DilibSearchResult[]>
   }
 }
 
-/** Tìm kiếm tác giả và gợi ý danh sách tác giả */
+/** 2. TÌM KIẾM DTV-EBOOK.COM.VN */
+export async function searchDtvEbook(keyword: string): Promise<UnifiedSearchResult[]> {
+  const q = keyword.trim()
+  if (!q) return []
+  try {
+    const url = `https://dtv-ebook.com.vn/tim-kiem.html?keyword=${encodeURIComponent(q)}`
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    })
+    const html = await res.text()
+    const items: UnifiedSearchResult[] = []
+    const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+_\d+\.html)"[^>]*>([\s\S]*?)<\/a>/gi)]
+    const seen = new Set<string>()
+
+    for (const m of linkMatches) {
+      let rawHref = m[1]
+      const inner = m[2]
+      const title = inner.replace(/<[^>]+>/g, '').trim()
+      const img = inner.match(/src="([^"]+)"/i)?.[1] || ''
+
+      if (!rawHref.startsWith('http')) {
+        rawHref = 'https://dtv-ebook.com.vn/' + rawHref.replace(/^\//, '')
+      }
+
+      if (
+        rawHref.includes('ung-ho') ||
+        rawHref.includes('huong-dan') ||
+        rawHref.includes('phan-mem') ||
+        !title ||
+        title.length < 3 ||
+        title.toLowerCase().includes('mua máy')
+      ) {
+        continue
+      }
+
+      if (!seen.has(rawHref)) {
+        seen.add(rawHref)
+        items.push({
+          url: rawHref,
+          title,
+          thumbnail: img,
+          source: 'DTV eBook',
+        })
+      }
+    }
+    return items
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi tìm kiếm DTV eBook:', err)
+    return []
+  }
+}
+
+/** 3. TÌM KIẾM HỢP NHẤT SONG SONG CẢ 2 NGUỒN */
+export async function searchMultiSource(keyword: string, source: CrawlerSource = 'ALL'): Promise<UnifiedSearchResult[]> {
+  const q = keyword.trim()
+  if (!q) return []
+
+  const promises: Promise<UnifiedSearchResult[]>[] = []
+  if (source === 'ALL' || source === 'DILIB') {
+    promises.push(searchDilib(q))
+  }
+  if (source === 'ALL' || source === 'DTV') {
+    promises.push(searchDtvEbook(q))
+  }
+
+  const results = await Promise.allSettled(promises)
+  const combined: UnifiedSearchResult[] = []
+
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      combined.push(...r.value)
+    }
+  }
+
+  // Loại bỏ các mục trùng URL
+  const uniqueMap = new Map<string, UnifiedSearchResult>()
+  for (const item of combined) {
+    if (!uniqueMap.has(item.url)) {
+      uniqueMap.set(item.url, item)
+    }
+  }
+  return Array.from(uniqueMap.values())
+}
+
+/** Gợi ý danh sách tác giả phù hợp khi gõ */
 export function getSuggestedAuthors(input: string): string[] {
   const q = input.trim().toLowerCase()
-  if (!q) return DILIB_POPULAR_AUTHORS.slice(0, 15)
+  if (!q) return DILIB_POPULAR_AUTHORS.slice(0, 16)
   return DILIB_POPULAR_AUTHORS.filter((a) => a.toLowerCase().includes(q))
 }
 
-/** Lấy chi tiết sách từ Dilib.vn (bao gồm kiểm tra Audio & PDF) */
-export async function fetchDilibDetail(url: string): Promise<DilibBookDetail | null> {
+/** 4. BÓC TÁCH CHI TIẾT SÁCH DILIB.VN */
+export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail | null> {
   try {
     const res = await fetch(url)
     const html = await res.text()
@@ -433,11 +565,11 @@ export async function fetchDilibDetail(url: string): Promise<DilibBookDetail | n
       author = author.split('.')[0].trim()
     }
 
-    // Genre / Categories
+    // Genre
     const genreMatches = [...html.matchAll(/Thể loại:\s*<[^>]+>([^<]+)<\/a>/gi)].map((m) => m[1].trim())
     const genre = genreMatches.join(', ') || 'Sách tổng hợp'
 
-    // Cover image
+    // Cover
     const imgMatch =
       html.match(/<img[^>]+id="img_01"[^>]+src="([^"]+)"/i) ||
       html.match(/<img[^>]+class="attachment-shop_single[^"]*"[^>]+src="([^"]+)"/i) ||
@@ -458,7 +590,7 @@ export async function fetchDilibDetail(url: string): Promise<DilibBookDetail | n
           .trim()
       : ''
 
-    // Audio tracks (Sách nói)
+    // Audio tracks
     const audioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
     const audioRegex = /<audio[^>]*src="([^"]+)"/gi
     let am: RegExpExecArray | null
@@ -484,14 +616,13 @@ export async function fetchDilibDetail(url: string): Promise<DilibBookDetail | n
       }
     }
 
-    // Readbook URL / PDF embed
+    // Readbook / PDF
     const readbookMatches = [...html.matchAll(/href="([^"]*(?:readbook|doc-sach)[^"]*)"/gi)].map((m) => m[1])
     let readbookUrl = readbookMatches[0] || null
     if (readbookUrl && !readbookUrl.startsWith('http')) {
       readbookUrl = 'https://dilib.vn' + (readbookUrl.startsWith('/') ? '' : '/') + readbookUrl
     }
 
-    // Direct PDF download
     const pdfMatches = [...html.matchAll(/href="([^"]+\.pdf[^"]*)"/gi)].map((m) => m[1])
     let pdfUrl = pdfMatches[0] || null
     if (pdfUrl && !pdfUrl.startsWith('http')) {
@@ -503,6 +634,7 @@ export async function fetchDilibDetail(url: string): Promise<DilibBookDetail | n
 
     return {
       url,
+      source: 'Dilib',
       title,
       author,
       genre,
@@ -520,8 +652,121 @@ export async function fetchDilibDetail(url: string): Promise<DilibBookDetail | n
   }
 }
 
-/** Lưu một cuốn sách Dilib vào cơ sở dữ liệu (tự động phân loại Sách PDF & Sách Nói) */
-export async function saveDilibBook(detail: DilibBookDetail): Promise<{ addedAudio: boolean; addedPdf: boolean }> {
+/** 5. BÓC TÁCH CHI TIẾT SÁCH DTV-EBOOK.COM.VN */
+export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    })
+    const html = await res.text()
+
+    // Title, Author, Genre from Title Tag
+    const rawTitle = html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() || ''
+    let title = rawTitle.replace(/^Tải\s+(?:ebook|sách|truyện|audiobook)\s+/i, '')
+    let genre = ''
+    const genreMatch = title.match(/\[([^\]]+)\]$/)
+    if (genreMatch) {
+      genre = genreMatch[1].trim()
+      title = title.replace(/\[[^\]]+\]$/, '').trim()
+    }
+    title = title.replace(/\s+full\s+(?:mobi|pdf|epub|azw3|audio|truyện|mp3|prc).*$/i, '').trim()
+    title = title.replace(/\s*-\s*DTV\s*eBook.*$/i, '').trim()
+
+    let author = 'Chưa rõ tác giả'
+    if (title.includes(' - ')) {
+      const parts = title.split(' - ')
+      title = parts[0].trim()
+      author = parts.slice(1).join(' - ').trim()
+    }
+
+    // Cover image
+    const imgMatches = [...html.matchAll(/<img[^>]+(?:src|data-src)="([^"]+)"/gi)].map((m) => m[1])
+    let cover =
+      imgMatches.find(
+        (src) =>
+          (src.includes('files_') || src.includes('images/') || src.includes('upload')) &&
+          !src.includes('logo') &&
+          !src.includes('icon') &&
+          !src.includes('top.png') &&
+          !src.includes('banner')
+      ) || ''
+    if (cover && !cover.startsWith('http')) {
+      cover = 'https://dtv-ebook.com.vn/' + cover.replace(/^\//, '')
+    }
+
+    // Description
+    const metaDesc = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i)?.[1] || ''
+
+    // Read Online Link (embedded doconline.php reader)
+    const readOnlineMatch = html.match(/href="([^"]*doconline\.php\?[^"]*)"/i)?.[1] || null
+    const readbookUrl = readOnlineMatch
+      ? readOnlineMatch.startsWith('http')
+        ? readOnlineMatch
+        : 'https://dtv-ebook.com.vn/' + readOnlineMatch.replace(/^\//, '')
+      : null
+
+    // Download Links
+    const downloadBtns = [...html.matchAll(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)].map((m) => ({
+      href: m[1],
+      text: m[2].replace(/<[^>]+>/g, '').trim().toUpperCase(),
+    }))
+
+    const pdfUrl = downloadBtns.find((b) => b.text.includes('PDF') && b.href.includes('google'))?.href || null
+    const epubUrl = downloadBtns.find((b) => b.text.includes('EPUB') && b.href.includes('google'))?.href || null
+    const mobiUrl = downloadBtns.find((b) => (b.text.includes('MOBI') || b.text.includes('AZW3')) && b.href.includes('google'))?.href || null
+
+    // Audio tracks
+    const audioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
+    const mp3Matches = [...html.matchAll(/(?:src|data-src|href)="([^"]+\.mp3[^"]*)"/gi)].map((m) => m[1])
+    for (const mp3 of mp3Matches) {
+      let mp3Url = mp3
+      if (!mp3Url.startsWith('http')) mp3Url = 'https://dtv-ebook.com.vn/' + mp3Url.replace(/^\//, '')
+      if (!audioTracks.some((t) => t.url === mp3Url)) {
+        audioTracks.push({
+          id: `track-${audioTracks.length + 1}`,
+          title: `${title} - Phần ${audioTracks.length + 1}`,
+          url: mp3Url,
+        })
+      }
+    }
+
+    const hasAudio = audioTracks.length > 0
+    const hasPdf = Boolean(readbookUrl || pdfUrl || epubUrl)
+
+    return {
+      url,
+      source: 'DTV eBook',
+      title,
+      author,
+      genre: genre || 'Sách tổng hợp',
+      cover,
+      description: metaDesc,
+      hasAudio,
+      hasPdf,
+      audioTracks,
+      readbookUrl,
+      pdfUrl: pdfUrl || readbookUrl,
+      epubUrl,
+      mobiUrl,
+    }
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi fetch detail DTV eBook:', err)
+    return null
+  }
+}
+
+/** 6. BÓC TÁCH CHI TIẾT TỔNG HỢP TỪ BẤT KỲ NGUỒN NÀO */
+export async function fetchUnifiedDetail(url: string): Promise<UnifiedBookDetail | null> {
+  if (url.includes('dtv-ebook.com.vn')) {
+    return fetchDtvDetail(url)
+  }
+  return fetchDilibDetail(url)
+}
+
+export const fetchDilibDetailAuto = fetchUnifiedDetail
+
+/** 7. LƯU SÁCH VÀO SUPABASE & LOCAL STORAGE */
+export async function saveDilibBook(detail: UnifiedBookDetail): Promise<{ addedAudio: boolean; addedPdf: boolean }> {
   let addedAudio = false
   let addedPdf = false
 
@@ -548,7 +793,7 @@ export async function saveDilibBook(detail: DilibBookDetail): Promise<{ addedAud
     addedAudio = true
   }
 
-  // 2. Lưu Sách Đọc (PDF / Ebook) vào media_items
+  // 2. Lưu Sách Đọc (PDF / EPUB / Reader) vào media_items
   if (detail.hasPdf && supabase) {
     try {
       const pdfRecord = {
@@ -561,9 +806,11 @@ export async function saveDilibBook(detail: DilibBookDetail): Promise<{ addedAud
         description: detail.description,
         url: detail.readbookUrl || detail.pdfUrl || detail.url,
         notes: JSON.stringify({
+          source: detail.source,
           dilibUrl: detail.url,
           readbookUrl: detail.readbookUrl,
           pdfUrl: detail.pdfUrl,
+          epubUrl: detail.epubUrl,
           hasAudio: detail.hasAudio,
         }),
         status: 'PLANNED',
@@ -580,16 +827,20 @@ export async function saveDilibBook(detail: DilibBookDetail): Promise<{ addedAud
   return { addedAudio, addedPdf }
 }
 
-/** Bộ điều khiển cào tự động (hỗ trợ hẹn giờ trong bao nhiêu phút) */
-export async function crawlDilib({
+/** 8. BỘ ĐIỀU KHIỂN CÀO TỰ ĐỘNG ĐA NGUỒN (HỖ TRỢ HẸN GIỜ) */
+export async function crawlUnified({
   category,
+  author,
   searchQuery,
+  source = 'ALL',
   maxMinutes = 3,
   signal,
   onProgress,
 }: {
-  category?: DilibCategory
+  category?: UnifiedBookCategory
+  author?: string
   searchQuery?: string
+  source?: CrawlerSource
   maxMinutes?: number
   signal?: AbortSignal
   onProgress?: (progress: {
@@ -610,6 +861,8 @@ export async function crawlDilib({
   let addedAudio = 0
   let addedPdf = 0
   let totalAudioFiles = 0
+  let dilibCount = 0
+  let dtvCount = 0
   const itemsReport: CrawlReport['items'] = []
 
   const updateStatus = (currentBook: string, msg: string) => {
@@ -629,37 +882,64 @@ export async function crawlDilib({
   // 1. Thu thập danh sách URLs cần quét
   const urlsToVisit = new Set<string>()
 
-  if (searchQuery) {
-    updateStatus('', `Đang tìm kiếm sách với từ khóa "${searchQuery}"...`)
-    const searchRes = await searchDilib(searchQuery)
-    searchRes.forEach((r) => urlsToVisit.add(r.url))
+  if (author) {
+    updateStatus('', `Đang tìm tất cả sách của tác giả "${author}" từ cả 2 nguồn...`)
+    const results = await searchMultiSource(author, source)
+    results.forEach((r) => urlsToVisit.add(r.url))
+  } else if (searchQuery) {
+    updateStatus('', `Đang tìm kiếm sách với từ khóa "${searchQuery}" từ cả 2 nguồn...`)
+    const results = await searchMultiSource(searchQuery, source)
+    results.forEach((r) => urlsToVisit.add(r.url))
   } else if (category) {
-    updateStatus('', `Đang nạp danh mục "${category.name}"...`)
-    // Quét trang category gốc
-    try {
-      const catRes = await fetch(category.url)
-      const catHtml = await catRes.text()
-      const regex = /<a[^>]+href="([^"]+-\d+\.html)"[^>]*title="([^"]+)"/gi
-      let m: RegExpExecArray | null
-      while ((m = regex.exec(catHtml)) !== null) {
-        let u = m[1]
-        if (!u.startsWith('http')) u = 'https://dilib.vn' + (u.startsWith('/') ? '' : '/') + u
-        urlsToVisit.add(u)
+    updateStatus('', `Đang nạp danh mục "${category.name}" từ cả 2 nguồn...`)
+
+    // A. Quét Dilib category
+    if ((source === 'ALL' || source === 'DILIB') && category.dilibUrl) {
+      try {
+        const catRes = await fetch(category.dilibUrl)
+        const catHtml = await catRes.text()
+        const regex = /<a[^>]+href="([^"]+-\d+\.html)"[^>]*title="([^"]+)"/gi
+        let m: RegExpExecArray | null
+        while ((m = regex.exec(catHtml)) !== null) {
+          let u = m[1]
+          if (!u.startsWith('http')) u = 'https://dilib.vn' + (u.startsWith('/') ? '' : '/') + u
+          urlsToVisit.add(u)
+        }
+      } catch (e) {
+        console.warn('Lỗi đọc category Dilib:', e)
       }
-    } catch (e) {
-      console.warn('Lỗi đọc category:', e)
     }
 
-    // Quét thêm theo các từ khóa của category để khai thác tối đa
-    for (const kw of category.keywords) {
+    // B. Quét DTV eBook category
+    if ((source === 'ALL' || source === 'DTV') && category.dtvUrl) {
+      try {
+        const dtvRes = await fetch(category.dtvUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        })
+        const dtvHtml = await dtvRes.text()
+        const linkMatches = [...dtvHtml.matchAll(/<a[^>]+href="([^"]+_\d+\.html)"[^>]*>/gi)]
+        for (const m of linkMatches) {
+          let u = m[1]
+          if (!u.startsWith('http')) u = 'https://dtv-ebook.com.vn/' + u.replace(/^\//, '')
+          if (!u.includes('ung-ho') && !u.includes('huong-dan')) {
+            urlsToVisit.add(u)
+          }
+        }
+      } catch (e) {
+        console.warn('Lỗi đọc category DTV:', e)
+      }
+    }
+
+    // C. Quét thêm theo từ khóa của danh mục
+    for (const kw of category.keywords.slice(0, 3)) {
       if (signal?.aborted || (!isUnlimited && Date.now() - startTime >= maxDurationMs)) break
       updateStatus('', `Đang quét từ khóa "${kw}"...`)
-      const kwRes = await searchDilib(kw)
-      kwRes.forEach((r) => urlsToVisit.add(r.url))
+      const kwResults = await searchMultiSource(kw, source)
+      kwResults.forEach((r) => urlsToVisit.add(r.url))
     }
   }
 
-  updateStatus('', `Đã phát hiện ${urlsToVisit.size} đầu sách. Đang tiến hành bóc tách...`)
+  updateStatus('', `Đã phát hiện ${urlsToVisit.size} đầu sách từ 2 nguồn. Đang tiến hành bóc tách...`)
 
   // 2. Duyệt từng sách và kiểm tra Audio / PDF
   for (const bookUrl of Array.from(urlsToVisit)) {
@@ -672,10 +952,16 @@ export async function crawlDilib({
     scanned++
     updateStatus(bookUrl, `Đang kiểm tra: ${bookUrl}...`)
 
-    const detail = await fetchDilibDetail(bookUrl)
+    const detail = await fetchUnifiedDetail(bookUrl)
     if (!detail) continue
 
-    updateStatus(detail.title, `Đang xử lý: ${detail.title} (Audio: ${detail.hasAudio ? 'Có' : 'Không'}, PDF: ${detail.hasPdf ? 'Có' : 'Không'})`)
+    if (detail.source === 'Dilib') dilibCount++
+    else dtvCount++
+
+    updateStatus(
+      detail.title,
+      `[${detail.source}] Đang xử lý: ${detail.title} (Audio: ${detail.hasAudio ? 'Có' : 'Không'}, PDF/EPUB: ${detail.hasPdf ? 'Có' : 'Không'})`
+    )
 
     const result = await saveDilibBook(detail)
     if (result.addedAudio) {
@@ -687,14 +973,14 @@ export async function crawlDilib({
     itemsReport.push({
       title: detail.title,
       author: detail.author,
+      source: detail.source,
       hasAudio: detail.hasAudio,
       hasPdf: detail.hasPdf,
       audioCount: detail.audioTracks.length,
       readbookUrl: detail.readbookUrl,
     })
 
-    // Nghỉ nhẹ 80ms giữa các request để giữ kết nối mượt mà
-    await new Promise((r) => setTimeout(r, 80))
+    await new Promise((r) => setTimeout(r, 70))
   }
 
   const durationSec = Math.floor((Date.now() - startTime) / 1000)
@@ -705,6 +991,10 @@ export async function crawlDilib({
     booksPdfAdded: addedPdf,
     totalAudioFiles,
     durationSeconds: durationSec,
+    dilibCount,
+    dtvCount,
     items: itemsReport,
   }
 }
+
+export const crawlDilib = crawlUnified

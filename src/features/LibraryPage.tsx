@@ -1309,7 +1309,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           <button
             className="library-import-btn"
             onClick={() => setShowDilibCrawler(true)}
-            title="Cào sách & sách nói từ Dilib.vn"
+            title="Cào sách & sách nói từ Dilib.vn + DTV-eBook.com.vn"
             style={{
               flex: 1,
               background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15))',
@@ -1318,7 +1318,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               fontWeight: 700,
             }}
           >
-            <Sparkles size={13} /> Cào Dilib.vn
+            <Sparkles size={13} /> Cào Sách Đa Nguồn
           </button>
           <button className="library-import-btn" onClick={() => setImportOpen(true)} title="Nhập sách từ file PDF hoặc EPUB" style={{ flex: 1 }}>
             <FileUp size={13} /> Nhập PDF/EPUB

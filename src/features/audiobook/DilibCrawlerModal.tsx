@@ -11,16 +11,17 @@ import {
 } from 'lucide-react'
 import { Modal } from '../shared'
 import {
-  DILIB_CATEGORIES,
-  searchDilib,
-  crawlDilib,
-  fetchDilibDetail,
+  UNIFIED_CATEGORIES,
+  searchMultiSource,
+  crawlUnified,
+  fetchUnifiedDetail,
   saveDilibBook,
   getSuggestedAuthors,
-  type DilibSearchResult,
+  type UnifiedBookCategory,
+  type UnifiedSearchResult,
   type CrawlReport,
+  type CrawlerSource,
 } from '../../lib/dilibCrawler'
-import type { DilibCategory } from '../../types/audiobook'
 import { useToast } from '../ToastContext'
 
 export function DilibCrawlerModal({
@@ -36,7 +37,8 @@ export function DilibCrawlerModal({
 }) {
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<'CATEGORY' | 'AUTHOR' | 'SEARCH'>(initialMode)
-  const [selectedCategory, setSelectedCategory] = useState<DilibCategory>(DILIB_CATEGORIES[0])
+  const [selectedSource, setSelectedSource] = useState<CrawlerSource>('ALL')
+  const [selectedCategory, setSelectedCategory] = useState<UnifiedBookCategory>(UNIFIED_CATEGORIES[0])
   const [categorySearch, setCategorySearch] = useState('')
   const [maxMinutes, setMaxMinutes] = useState<number>(3)
 
@@ -44,13 +46,13 @@ export function DilibCrawlerModal({
   const [authorInput, setAuthorInput] = useState('')
   const [selectedAuthor, setSelectedAuthor] = useState('')
   const [isSearchingAuthor, setIsSearchingAuthor] = useState(false)
-  const [authorBooks, setAuthorBooks] = useState<DilibSearchResult[]>([])
+  const [authorBooks, setAuthorBooks] = useState<UnifiedSearchResult[]>([])
   const [selectedAuthorUrls, setSelectedAuthorUrls] = useState<Set<string>>(new Set())
 
   // 2. Book Title Search State
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<DilibSearchResult[]>([])
+  const [searchResults, setSearchResults] = useState<UnifiedSearchResult[]>([])
   const [selectedSearchUrls, setSelectedSearchUrls] = useState<Set<string>>(new Set())
 
   // 3. Crawling State
@@ -75,15 +77,15 @@ export function DilibCrawlerModal({
   // Lọc thể loại chuẩn theo từ khóa
   const filteredCategories = useMemo(() => {
     const q = categorySearch.trim().toLowerCase()
-    if (!q) return DILIB_CATEGORIES
-    return DILIB_CATEGORIES.filter(
+    if (!q) return UNIFIED_CATEGORIES
+    return UNIFIED_CATEGORIES.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.keywords.some((k) => k.toLowerCase().includes(q))
     )
   }, [categorySearch])
 
-  // Tìm kiếm sách theo tác giả
+  // Tìm kiếm sách theo tác giả trên cả 2 nguồn
   const handleSelectAuthor = async (authorName: string) => {
     setSelectedAuthor(authorName)
     setAuthorInput(authorName)
@@ -92,9 +94,8 @@ export function DilibCrawlerModal({
     setSelectedAuthorUrls(new Set())
 
     try {
-      const results = await searchDilib(authorName)
+      const results = await searchMultiSource(authorName, selectedSource)
       setAuthorBooks(results)
-      // Tự động chọn tất cả sách của tác giả để tiện cào một chạm
       setSelectedAuthorUrls(new Set(results.map((r) => r.url)))
     } catch (err) {
       console.warn('Lỗi tìm sách theo tác giả:', err)
@@ -114,13 +115,13 @@ export function DilibCrawlerModal({
 
     const timer = setTimeout(async () => {
       setIsSearching(true)
-      const res = await searchDilib(q)
+      const res = await searchMultiSource(q, selectedSource)
       setSearchResults(res)
       setIsSearching(false)
-    }, 300)
+    }, 320)
 
     return () => clearTimeout(timer)
-  }, [searchQuery, activeTab])
+  }, [searchQuery, selectedSource, activeTab])
 
   // Bắt đầu cào danh mục
   const handleStartCategoryCrawl = async () => {
@@ -130,8 +131,9 @@ export function DilibCrawlerModal({
     abortControllerRef.current = controller
 
     try {
-      const report = await crawlDilib({
+      const report = await crawlUnified({
         category: selectedCategory,
+        source: selectedSource,
         maxMinutes,
         signal: controller.signal,
         onProgress: (p) => setCrawlProgress(p),
@@ -163,6 +165,8 @@ export function DilibCrawlerModal({
     let addedAudio = 0
     let addedPdf = 0
     let totalAudioFiles = 0
+    let dilibCount = 0
+    let dtvCount = 0
     const itemsReport: CrawlReport['items'] = []
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -181,8 +185,11 @@ export function DilibCrawlerModal({
           remainingSeconds: 0,
         })
 
-        const detail = await fetchDilibDetail(url)
+        const detail = await fetchUnifiedDetail(url)
         if (detail) {
+          if (detail.source === 'Dilib') dilibCount++
+          else dtvCount++
+
           const res = await saveDilibBook(detail)
           if (res.addedAudio) {
             addedAudio++
@@ -193,6 +200,7 @@ export function DilibCrawlerModal({
           itemsReport.push({
             title: detail.title,
             author: detail.author,
+            source: detail.source,
             hasAudio: detail.hasAudio,
             hasPdf: detail.hasPdf,
             audioCount: detail.audioTracks.length,
@@ -208,6 +216,8 @@ export function DilibCrawlerModal({
         booksPdfAdded: addedPdf,
         totalAudioFiles,
         durationSeconds: Math.floor((Date.now() - startTime) / 1000),
+        dilibCount,
+        dtvCount,
         items: itemsReport,
       }
       setCrawlReport(report)
@@ -250,7 +260,7 @@ export function DilibCrawlerModal({
   if (!isOpen) return null
 
   return (
-    <Modal title="🕷️ Cào Sách & Sách Nói Nguồn Dilib.vn" onClose={onClose}>
+    <Modal title="🕷️ Cào Sách & Sách Nói (Dilib.vn + DTV eBook)" onClose={onClose}>
       <div className="dilib-crawler-modal-wrap" style={{ minWidth: 320, maxWidth: 660 }}>
         {/* Đang Cào (Live Crawling View) */}
         {isCrawling && crawlProgress ? (
@@ -259,7 +269,7 @@ export function DilibCrawlerModal({
               <Loader2 size={36} className="tv-spin" color="var(--primary, #8b5cf6)" />
             </div>
 
-            <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 800 }}>Đang Cào Dữ Liệu Từ Dilib.vn</h3>
+            <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 800 }}>Đang Cào Dữ Liệu Đa Nguồn</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: '0 0 16px' }}>
               {crawlProgress.statusMessage}
             </p>
@@ -291,7 +301,7 @@ export function DilibCrawlerModal({
                 <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#10b981' }}>
                   📖 {crawlProgress.addedPdf}
                 </div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sách PDF</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sách PDF/EPUB</div>
               </div>
             </div>
 
@@ -331,9 +341,9 @@ export function DilibCrawlerModal({
           <div className="dilib-report-card" style={{ padding: '10px 4px' }}>
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: '2rem', marginBottom: 4 }}>🎉</div>
-              <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: 800 }}>Báo Cáo Kết Quả Cào Dilib.vn</h3>
+              <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: 800 }}>Báo Cáo Kết Quả Cào Đa Nguồn</h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
-                Thời gian thực hiện: {crawlReport.durationSeconds} giây
+                Thời gian thực hiện: {crawlReport.durationSeconds} giây · Dilib: {crawlReport.dilibCount} · DTV eBook: {crawlReport.dtvCount}
               </p>
             </div>
 
@@ -363,7 +373,7 @@ export function DilibCrawlerModal({
                 <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>
                   {crawlReport.booksPdfAdded}
                 </div>
-                <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>Sách PDF</div>
+                <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>PDF / EPUB</div>
               </div>
               <div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#06b6d4' }}>
@@ -404,7 +414,12 @@ export function DilibCrawlerModal({
                       >
                         {item.title}
                       </div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>{item.author}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span>{item.author}</span>
+                        <span style={{ fontSize: '0.62rem', padding: '1px 4px', borderRadius: 4, background: item.source === 'Dilib' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)', color: item.source === 'Dilib' ? '#8b5cf6' : '#10b981', fontWeight: 700 }}>
+                          {item.source}
+                        </span>
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                       {item.hasAudio && (
@@ -432,7 +447,7 @@ export function DilibCrawlerModal({
                             fontWeight: 700,
                           }}
                         >
-                          📖 PDF
+                          📖 Sách đọc
                         </span>
                       )}
                     </div>
@@ -477,8 +492,40 @@ export function DilibCrawlerModal({
             </div>
           </div>
         ) : (
-          /* Màn Hình Chọn Chế Độ Cào: 3 Tabs (Thể loại, Tác giả, Tên sách) */
+          /* Màn Hình Chọn Chế Độ Cào Đa Nguồn: 3 Tabs (Thể loại, Tác giả, Tên sách) */
           <div>
+            {/* Lựa Chọn Nguồn Cào */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 750, color: 'var(--text-muted)' }}>
+                Nguồn khai thác:
+              </span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {([
+                  { id: 'ALL', label: '⚡ Cả 2 nguồn' },
+                  { id: 'DILIB', label: '🌐 Dilib.vn' },
+                  { id: 'DTV', label: '📗 DTV eBook' },
+                ] as const).map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelectedSource(s.id)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      fontSize: '0.7rem',
+                      fontWeight: selectedSource === s.id ? 800 : 550,
+                      border: `1px solid ${selectedSource === s.id ? 'var(--primary, #8b5cf6)' : 'var(--card-border)'}`,
+                      background: selectedSource === s.id ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-main)',
+                      color: selectedSource === s.id ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 3 Tabs Điều Hướng */}
             <div
               style={{
@@ -558,12 +605,12 @@ export function DilibCrawlerModal({
               </button>
             </div>
 
-            {/* TAB 1: CÀO THEO THỂ LOẠI CHUẨN CỦA NGUỒN DILIB */}
+            {/* TAB 1: CÀO THEO THỂ LOẠI HỢP NHẤT */}
             {activeTab === 'CATEGORY' && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <label style={{ fontSize: '0.78rem', fontWeight: 700 }}>
-                    1. Chọn thể loại nguồn ({filteredCategories.length} mục):
+                    1. Chọn thể loại ({filteredCategories.length} mục hợp nhất):
                   </label>
                   <input
                     type="text"
@@ -612,18 +659,20 @@ export function DilibCrawlerModal({
                         }}
                       >
                         <span style={{ fontSize: '1rem' }}>{cat.icon}</span>
-                        <span
-                          style={{
-                            fontSize: '0.75rem',
-                            fontWeight: isSelected ? 800 : 600,
-                            color: isSelected ? 'var(--primary, #8b5cf6)' : 'var(--text-main)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {cat.name}
-                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: '0.75rem',
+                              fontWeight: isSelected ? 800 : 600,
+                              color: isSelected ? 'var(--primary, #8b5cf6)' : 'var(--text-main)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {cat.name}
+                          </div>
+                        </div>
                       </div>
                     )
                   })}
@@ -685,7 +734,7 @@ export function DilibCrawlerModal({
               </div>
             )}
 
-            {/* TAB 2: CÀO THEO TÁC GIẢ (KÈM GỢI Ý TRỰC TIẾP KHI GÕ) */}
+            {/* TAB 2: CÀO THEO TÁC GIẢ ĐA NGUỒN */}
             {activeTab === 'AUTHOR' && (
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
@@ -705,7 +754,7 @@ export function DilibCrawlerModal({
                         void handleSelectAuthor(authorInput.trim())
                       }
                     }}
-                    placeholder="Nhập tên tác giả (vd: Dale Carnegie, Thích Nhất Hạnh, Nguyễn Nhật Ánh...)..."
+                    placeholder="Nhập tác giả (vd: Agatha Christie, Conan Doyle, Higashino Keigo, Dale Carnegie...)..."
                     style={{
                       width: '100%',
                       padding: '9px 12px 9px 36px',
@@ -719,13 +768,13 @@ export function DilibCrawlerModal({
                   />
                 </div>
 
-                {/* Danh Sách Gợi Ý Tác Giả Trực Tiếp */}
+                {/* Gợi Ý Tác Giả Trực Tiếp */}
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>
-                    💡 Gợi ý tác giả tiêu biểu (bấm để chọn):
+                    💡 Gợi ý tác giả tiêu biểu (bấm để quét cả 2 nguồn):
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 85, overflowY: 'auto' }}>
-                    {authorSuggestions.slice(0, 14).map((author) => {
+                    {authorSuggestions.slice(0, 16).map((author) => {
                       const isChosen = selectedAuthor === author
                       return (
                         <button
@@ -754,7 +803,7 @@ export function DilibCrawlerModal({
                 {isSearchingAuthor ? (
                   <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                     <Loader2 size={20} className="tv-spin" style={{ margin: '0 auto 6px', display: 'block' }} />
-                    Đang tìm tất cả sách của tác giả "{selectedAuthor}" trên Dilib.vn...
+                    Đang tìm sách của tác giả "{selectedAuthor}" từ cả 2 nguồn...
                   </div>
                 ) : authorBooks.length > 0 ? (
                   <div>
@@ -768,7 +817,7 @@ export function DilibCrawlerModal({
                       }}
                     >
                       <span style={{ color: 'var(--text-muted)' }}>
-                        Tìm thấy <strong>{authorBooks.length}</strong> cuốn sách của <b>{selectedAuthor}</b>:
+                        Tìm thấy <strong>{authorBooks.length}</strong> cuốn của <b>{selectedAuthor}</b>:
                       </span>
                       <button
                         type="button"
@@ -818,8 +867,13 @@ export function DilibCrawlerModal({
                                 style={{ width: 32, height: 44, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
                               />
                             )}
-                            <div style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {item.title}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {item.title}
+                              </div>
+                              <span style={{ fontSize: '0.62rem', padding: '0 4px', borderRadius: 4, background: item.source === 'Dilib' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)', color: item.source === 'Dilib' ? '#8b5cf6' : '#10b981', fontWeight: 700 }}>
+                                {item.source}
+                              </span>
                             </div>
                           </div>
                         )
@@ -853,17 +907,17 @@ export function DilibCrawlerModal({
                   </div>
                 ) : selectedAuthor ? (
                   <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    Không tìm thấy sách nào của tác giả "{selectedAuthor}" trên Dilib.vn.
+                    Không tìm thấy sách nào của tác giả "{selectedAuthor}".
                   </div>
                 ) : null}
               </div>
             )}
 
-            {/* TAB 3: TÌM KIẾM & GỢI Ý THEO TÊN SÁCH */}
+            {/* TAB 3: TÌM KIẾM THEO TÊN SÁCH ĐA NGUỒN */}
             {activeTab === 'SEARCH' && (
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
-                  Nhập tên sách (gợi ý thời gian thực):
+                  Nhập tên sách (tìm kiếm song song cả 2 nguồn):
                 </label>
                 <div style={{ position: 'relative', marginBottom: 12 }}>
                   <Search
@@ -874,7 +928,7 @@ export function DilibCrawlerModal({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Nhập tên sách (vd: Đắc nhân tâm, Khởi nghiệp, Thiền, Cha giàu...)..."
+                    placeholder="Nhập tên sách (vd: Án mạng trên chuyến tàu, Đắc nhân tâm, Thiền, Khởi nghiệp...)..."
                     style={{
                       width: '100%',
                       padding: '9px 12px 9px 36px',
@@ -891,7 +945,7 @@ export function DilibCrawlerModal({
                 {isSearching ? (
                   <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                     <Loader2 size={20} className="tv-spin" style={{ margin: '0 auto 6px', display: 'block' }} />
-                    Đang tìm kiếm sách trên Dilib.vn...
+                    Đang tìm kiếm trên Dilib.vn và DTV-eBook...
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div
@@ -904,7 +958,7 @@ export function DilibCrawlerModal({
                       borderRadius: 12,
                     }}
                   >
-                    {searchQuery ? 'Không tìm thấy sách nào khớp trên Dilib.vn' : 'Hãy nhập từ khóa để tìm kiếm sách'}
+                    {searchQuery ? 'Không tìm thấy sách nào khớp từ cả 2 nguồn' : 'Hãy nhập từ khóa để tìm kiếm sách'}
                   </div>
                 ) : (
                   <div>
@@ -917,7 +971,7 @@ export function DilibCrawlerModal({
                         fontSize: '0.75rem',
                       }}
                     >
-                      <span style={{ color: 'var(--text-muted)' }}>Tìm thấy {searchResults.length} kết quả:</span>
+                      <span style={{ color: 'var(--text-muted)' }}>Tìm thấy {searchResults.length} kết quả từ 2 nguồn:</span>
                       {selectedSearchUrls.size > 0 && (
                         <button
                           type="button"
@@ -979,6 +1033,9 @@ export function DilibCrawlerModal({
                               >
                                 {item.title}
                               </div>
+                              <span style={{ fontSize: '0.62rem', padding: '0 4px', borderRadius: 4, background: item.source === 'Dilib' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)', color: item.source === 'Dilib' ? '#8b5cf6' : '#10b981', fontWeight: 700 }}>
+                                {item.source}
+                              </span>
                             </div>
                             <button
                               type="button"
