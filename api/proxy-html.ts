@@ -6,7 +6,7 @@
 
 export const config = { maxDuration: 30 }
 
-function isAllowedUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {
+function isAllowedUrl(raw: string): { ok: boolean; url?: URL; reason?: string } {
   let url: URL
   try {
     url = new URL(raw)
@@ -56,7 +56,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const upstream = await fetch(check.url.toString(), {
+    const upstream = await fetch(check.url!.toString(), {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',

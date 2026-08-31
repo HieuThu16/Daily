@@ -19,7 +19,7 @@ const MAX_BYTES = 512 * 1024
  * thì có thể bị lợi dụng để dò mạng nội bộ hoặc endpoint metadata của nhà cung
  * cấp đám mây (169.254.169.254).
  */
-function isPublicHttpUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {
+function isPublicHttpUrl(raw: string): { ok: boolean; url?: URL; reason?: string } {
   let url: URL
   try {
     url = new URL(raw)
@@ -61,7 +61,7 @@ export default async function handler(req: any, res: any) {
   if (!check.ok) return res.status(400).json({ error: check.reason })
 
   try {
-    const upstream = await fetch(check.url.toString(), {
+    const upstream = await fetch(check.url!.toString(), {
       headers: {
         // Không có User-Agent thì nhiều trang trả 403.
         'User-Agent':
