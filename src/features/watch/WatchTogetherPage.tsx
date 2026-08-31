@@ -653,24 +653,24 @@ function DualShareCard({
     <article className={`watch-card-dual ${pair.syncState === 'BOTH_DONE' ? 'both-done-glow' : ''}`}>
       {/* KHỐI TRÊN: ẢNH + TIÊU ĐỀ + THÔNG TIN NGƯỜI GỬI + CÁC NÚT THAO TÁC */}
       <div className="watch-card-top-row">
-        {/* Ảnh thumbnail có nút Play overlay */}
+        {/* Ảnh thumbnail nhỏ gọn có nút Play overlay */}
         <div className="watch-thumb-wrapper" onClick={onOpen} role="button" tabIndex={0}>
           {s.thumbnail ? (
             <img src={s.thumbnail} alt={s.title} className="watch-thumb-img" loading="lazy" />
           ) : (
             <div className="watch-thumb-placeholder">
-              <KindIcon size={24} />
+              <KindIcon size={18} />
             </div>
           )}
           {/* Badge phân loại media */}
           <span className="watch-kind-pill" style={{ background: `linear-gradient(135deg, ${kindMeta.color}, #4f46e5)` }}>
-            <KindIcon size={10} />
+            <KindIcon size={9} />
             <span>{kindMeta.label}</span>
           </span>
 
           {/* Hover Play Button */}
           <div className="watch-thumb-play-overlay">
-            <Play size={20} fill="#ffffff" />
+            <Play size={16} fill="#ffffff" />
           </div>
         </div>
 
@@ -683,14 +683,14 @@ function DualShareCard({
           <div className="watch-card-meta-line">
             {partnerPerson ? (
               <span className="watch-partner-chip" onClick={onRename} title="Bấm để đổi tên">
-                <Avatar person={partnerPerson} size={18} />
+                <Avatar person={partnerPerson} size={15} />
                 <span className="watch-partner-name">
                   {box === 'INBOX' ? 'Từ' : 'Gửi'} <b>{partnerLabel}</b>
                 </span>
               </span>
             ) : (
               <span className="watch-partner-chip">
-                <Users size={14} />
+                <Users size={12} />
                 <span className="watch-partner-name">
                   {box === 'INBOX' ? 'Từ' : 'Gửi'} <b>{partnerLabel}</b>
                 </span>
@@ -710,8 +710,8 @@ function DualShareCard({
             onClick={onOpen}
             title={s.kind === 'MANGA' ? 'Đọc ngay' : 'Xem ngay'}
           >
-            <Play size={13} fill="currentColor" />
-            <span>{s.kind === 'MANGA' ? 'Đọc ngay' : 'Xem ngay'}</span>
+            <Play size={12} fill="currentColor" />
+            <span>{s.kind === 'MANGA' ? 'Đọc' : 'Xem'}</span>
           </button>
 
           {onRename && (
@@ -722,7 +722,7 @@ function DualShareCard({
               title="Đặt tên cho người này"
               aria-label="Đổi tên liên hệ"
             >
-              <Pencil size={14} />
+              <Pencil size={13} />
             </button>
           )}
 
@@ -734,7 +734,7 @@ function DualShareCard({
               title="Gỡ khỏi xem chung"
               aria-label="Gỡ mục này"
             >
-              <Trash2 size={14} />
+              <Trash2 size={13} />
             </button>
           )}
 
@@ -745,69 +745,65 @@ function DualShareCard({
             title="Mở nội dung"
             aria-label="Mở"
           >
-            <ExternalLink size={14} />
+            <ExternalLink size={13} />
           </button>
         </div>
       </div>
 
-      {/* KHỐI DƯỚI: BẢNG TIẾN ĐỘ CẢ 2 NGƯỜI (DUAL PROGRESS DASHBOARD) */}
+      {/* KHỐI DƯỚI: BẢNG TIẾN ĐỘ CẢ 2 NGƯỜI (DUAL PROGRESS COMPACT) */}
       <div className="watch-dual-progress-box">
-        {/* Thanh trạng thái đồng bộ chung (Sync Status Banner) */}
-        <div className={`watch-sync-status-badge ${syncBadgeVariant}`}>
-          <Sparkles size={13} />
-          <span>{syncBadgeLabel}</span>
+        {/* Header tiến độ: Sync badge */}
+        <div className="watch-dual-progress-head">
+          <div className={`watch-sync-status-badge ${syncBadgeVariant}`}>
+            <Sparkles size={11} />
+            <span>{syncBadgeLabel}</span>
+          </div>
         </div>
 
-        {/* Lưới hiển thị 2 thanh tiến độ song song */}
+        {/* Lưới hiển thị 2 thanh tiến độ dạng inline row gọn gàng */}
         <div className="watch-dual-bars-grid">
           {/* 1. TIẾN ĐỘ CỦA BẠN (MÌNH) */}
           <div className="watch-person-progress-row my-progress">
-            <div className="watch-person-header">
-              <div className="watch-person-identity">
-                <div className="watch-person-avatar-pill you">👤</div>
-                <span className="watch-person-title">Bạn (Mình)</span>
-              </div>
-              <span className={`watch-person-status-chip ${myProgress.isDone ? 'done' : myProgress.isStarted ? 'in-progress' : 'unwatched'}`}>
-                {myProgress.isDone && <CheckCircle2 size={11} />}
-                {myProgress.text}
-              </span>
+            <div className="watch-person-identity">
+              <span className="watch-person-avatar-pill you">👤</span>
+              <span className="watch-person-title">Bạn (Mình)</span>
             </div>
 
             <div className="watch-progress-track">
               <div
                 className={`watch-progress-fill you ${myProgress.isDone ? 'done' : ''}`}
                 style={{ width: `${Math.min(100, Math.max(0, myProgress.percent))}%` }}
-              >
-                {myProgress.percent > 12 && <span className="watch-bar-percent-label">{myProgress.percent}%</span>}
-              </div>
+              />
             </div>
+
+            <span className={`watch-person-status-chip ${myProgress.isDone ? 'done' : myProgress.isStarted ? 'in-progress' : 'unwatched'}`}>
+              {myProgress.isDone && <CheckCircle2 size={10} />}
+              {myProgress.text}
+            </span>
           </div>
 
-          {/* 2. TIẾN ĐỘ CỦA ĐỐI PHƯƠNG (VỢ / CHỒNG / NGƯỜI THƯƠNG) */}
+          {/* 2. TIẾN ĐỘ CỦA ĐỐI PHƯƠNG */}
           <div className="watch-person-progress-row partner-progress">
-            <div className="watch-person-header">
-              <div className="watch-person-identity">
-                {partnerPerson ? (
-                  <Avatar person={partnerPerson} size={18} />
-                ) : (
-                  <div className="watch-person-avatar-pill partner">👰</div>
-                )}
-                <span className="watch-person-title">{partnerLabel}</span>
-              </div>
-              <span className={`watch-person-status-chip partner ${partnerProgress.isDone ? 'done' : partnerProgress.isStarted ? 'in-progress' : 'unwatched'}`}>
-                {partnerProgress.isDone && <CheckCircle2 size={11} />}
-                {partnerProgress.text}
-              </span>
+            <div className="watch-person-identity">
+              {partnerPerson ? (
+                <Avatar person={partnerPerson} size={15} />
+              ) : (
+                <span className="watch-person-avatar-pill partner">👰</span>
+              )}
+              <span className="watch-person-title">{partnerLabel}</span>
             </div>
 
             <div className="watch-progress-track">
               <div
                 className={`watch-progress-fill partner ${partnerProgress.isDone ? 'done' : ''}`}
                 style={{ width: `${Math.min(100, Math.max(0, partnerProgress.percent))}%` }}
-              >
-                {partnerProgress.percent > 12 && <span className="watch-bar-percent-label">{partnerProgress.percent}%</span>}
-              </div>
+              />
             </div>
+
+            <span className={`watch-person-status-chip partner ${partnerProgress.isDone ? 'done' : partnerProgress.isStarted ? 'in-progress' : 'unwatched'}`}>
+              {partnerProgress.isDone && <CheckCircle2 size={10} />}
+              {partnerProgress.text}
+            </span>
           </div>
         </div>
       </div>
