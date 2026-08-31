@@ -241,7 +241,19 @@ function unlockBodyScroll(previous?: string) {
   if (openModalCount === 0) document.body.style.overflow = previous ?? ''
 }
 
-export function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+export function Modal({
+  title,
+  children,
+  onClose,
+  className = '',
+  hideHeader = false,
+}: {
+  title?: string
+  children: React.ReactNode
+  onClose: () => void
+  className?: string
+  hideHeader?: boolean
+}) {
   const panel = useRef<HTMLElement>(null)
   // `onClose` thường là arrow inline nên đổi mỗi lần render. Giữ qua ref để effect
   // chỉ chạy đúng một lần lúc mở — chạy lại sẽ cướp tiêu điểm giữa lúc người dùng gõ.
@@ -278,13 +290,15 @@ export function Modal({ title, children, onClose }: { title: string; children: R
 
   return createPortal(
     <div className="modal-backdrop" role="presentation" {...backdrop}>
-      <section ref={panel} className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <button className="icon" aria-label="Đóng" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
+      <section ref={panel} className={`modal ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title || 'Hộp thoại'}>
+        {!hideHeader && (
+          <div className="modal-head">
+            <h2>{title}</h2>
+            <button className="icon" aria-label="Đóng" onClick={onClose}>
+              <X size={20} />
+            </button>
+          </div>
+        )}
         {children}
       </section>
     </div>,
