@@ -44,6 +44,13 @@ export function groupByChannel(rows: VideoRow[], kind: ChannelUpdate['kind']): C
   return [...byChannel.values()]
 }
 
+export function markManualCrawlSeen() {
+  try {
+    localStorage.setItem(SEEN_KEY, new Date().toISOString())
+    window.dispatchEvent(new CustomEvent('daily_new_videos_cleared'))
+  } catch {}
+}
+
 const getSeenAt = () =>
   localStorage.getItem(SEEN_KEY) ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
@@ -77,12 +84,17 @@ export function useNewVideos() {
   useEffect(() => {
     void check()
     const onFocus = () => void check()
+    const onCleared = () => setUpdates([])
     window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
+    window.addEventListener('daily_new_videos_cleared', onCleared)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('daily_new_videos_cleared', onCleared)
+    }
   }, [check])
 
   const dismissAll = useCallback(() => {
-    localStorage.setItem(SEEN_KEY, new Date().toISOString())
+    markManualCrawlSeen()
     setUpdates([])
   }, [])
 

@@ -1,5 +1,6 @@
 import { apiFetch } from '../../lib/apiFetch'
 import { getRemoteAppSetting, saveAppSetting } from '../../lib/userAppSettings'
+import { markManualCrawlSeen } from '../newVideos'
 
 export type YoutubeCrawlChannelTarget = {
   id: string
@@ -509,6 +510,7 @@ class YoutubeChannelCrawlerManager {
         targetDurationSeconds,
         lastReport: report,
       }
+      markManualCrawlSeen()
       this.notify()
     }
   }

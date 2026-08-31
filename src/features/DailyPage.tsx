@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3, Clock, History, ImagePlus,
   Loader2, NotebookPen, Pencil, Plus, Save,
-  Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag, Play
+  Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag, Play,
+  Users, Check, X
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
@@ -221,6 +222,15 @@ export function DailyPage() {
   const [mediaUploading, setMediaUploading] = useState(false)
   const formFileInputRef = useRef<HTMLInputElement>(null)
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
+
+  // Người thân được chọn gắn kèm nhật ký
+  const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([])
+  const [showPeopleModal, setShowPeopleModal] = useState(false)
+  const [peopleSearch, setPeopleSearch] = useState('')
+
+  const selectedPeople = useMemo(() => {
+    return peopleQuery.items.filter((p) => selectedPersonIds.includes(p.id))
+  }, [peopleQuery.items, selectedPersonIds])
 
   const handleUploadFormMedia = async (file: File) => {
     if (!supabase) {
@@ -574,18 +584,42 @@ export function DailyPage() {
             tags: row.tags && row.tags.length > 0 ? row.tags : tagsList,
           })) as Entry[]
 
-          // Lưu người được nhắc tên nếu có
-          const mentioned = peopleQuery.items.filter((person) =>
-            lines.some((line) => line.includes(`@${person.name}`))
-          )
-          if (mentioned.length > 0 && supabase) {
+          // Thu thập danh sách người cần lưu vào nhật ký riêng (người được chọn + người được tag @)
+          const targetPeople: Person[] = []
+          selectedPersonIds.forEach((pid) => {
+            const p = peopleQuery.items.find((x) => x.id === pid)
+            if (p && !targetPeople.some((t) => t.id === p.id)) targetPeople.push(p)
+          })
+          peopleQuery.items.forEach((person) => {
+            if (lines.some((line) => line.includes(`@${person.name}`)) && !targetPeople.some((t) => t.id === person.id)) {
+              targetPeople.push(person)
+            }
+          })
+
+          if (targetPeople.length > 0 && supabase) {
+            const newLogChunk = lines.join('\n')
             await Promise.all(
-              mentioned.map((person) =>
-                supabase!.from('person_daily_logs').upsert(
-                  { person_id: person.id, log_date: date, content: lines.join('\n') },
-                  { onConflict: 'user_id,person_id,log_date' }
-                )
-              )
+              targetPeople.map(async (person) => {
+                try {
+                  const { data: existing } = await supabase!
+                    .from('person_daily_logs')
+                    .select('content')
+                    .eq('person_id', person.id)
+                    .eq('log_date', date)
+                    .maybeSingle()
+
+                  const combined = existing?.content && !existing.content.includes(newLogChunk)
+                    ? `${existing.content.trim()}\n\n${newLogChunk}`
+                    : newLogChunk
+
+                  return supabase!.from('person_daily_logs').upsert(
+                    { person_id: person.id, log_date: date, content: combined },
+                    { onConflict: 'user_id,person_id,log_date' }
+                  )
+                } catch (e) {
+                  console.warn(`Lỗi lưu nhật ký riêng cho ${person.name}:`, e)
+                }
+              })
             ).catch(() => {})
           }
         } else if (error) {
@@ -626,7 +660,9 @@ export function DailyPage() {
       setIsFirstTime(false)
       setIsSpecial(false)
       setAttachedMedia(null)
-      showToast(`☁️ Đã lưu ${lines.length} bài nhật ký lên Supabase!`, 'success')
+      setSelectedPersonIds([])
+      const peopleMsg = selectedPeople.length > 0 ? ` & nhật ký ${selectedPeople.map(p => p.name).join(', ')}` : ''
+      showToast(`☁️ Đã lưu ${lines.length} bài nhật ký${peopleMsg} lên Supabase!`, 'success')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung lên Supabase ✨`)
       setTimeout(() => setSaveSuccess(''), 3500)
     } else {
@@ -642,6 +678,7 @@ export function DailyPage() {
       setIsFirstTime(false)
       setIsSpecial(false)
       setAttachedMedia(null)
+      setSelectedPersonIds([])
       showToast(`💾 Đã lưu ${lines.length} bài vào Local (Hàng đợi đồng bộ)`, 'local')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung vào Local 💾`)
       setTimeout(() => setSaveSuccess(''), 3500)
@@ -1195,16 +1232,16 @@ export function DailyPage() {
               </div>
             </div>
 
-            {/* 3 Nút Hành động & Tiện ích: Hành động nhanh | Gắn YouTube | Tải Ảnh/Video */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+            {/* 4 Nút Hành động & Tiện ích: Hành động nhanh | Gắn YouTube | Tải Ảnh/Video | Gắn Người Thân */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
               {/* 1. Nút Hành động */}
               <button
                 type="button"
                 onClick={() => setShowActionModal(true)}
                 style={{
-                  padding: '8px 6px',
+                  padding: '8px 4px',
                   borderRadius: 12,
-                  fontSize: '0.76rem',
+                  fontSize: '0.74rem',
                   fontWeight: 800,
                   border: '1.5px solid var(--amber)',
                   background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.22))',
@@ -1213,13 +1250,13 @@ export function DailyPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 5,
+                  gap: 4,
                   boxShadow: '0 2px 6px rgba(245, 158, 11, 0.12)',
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Zap size={14} style={{ flexShrink: 0 }} />
+                <Zap size={13} style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Hành động</span>
               </button>
 
@@ -1228,9 +1265,9 @@ export function DailyPage() {
                 type="button"
                 onClick={() => setShowVideoModal(true)}
                 style={{
-                  padding: '8px 6px',
+                  padding: '8px 4px',
                   borderRadius: 12,
-                  fontSize: '0.76rem',
+                  fontSize: '0.74rem',
                   fontWeight: 800,
                   border: '1.5px solid #ef4444',
                   background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))',
@@ -1239,14 +1276,14 @@ export function DailyPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 5,
+                  gap: 4,
                   boxShadow: '0 2px 6px rgba(239, 68, 68, 0.12)',
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Youtube size={14} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>YouTube / TV</span>
+                <Youtube size={13} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>YouTube</span>
               </button>
 
               {/* 3. Nút Upload Ảnh / Video (Có lưu Database) */}
@@ -1255,9 +1292,9 @@ export function DailyPage() {
                 onClick={() => formFileInputRef.current?.click()}
                 disabled={mediaUploading || !supabase}
                 style={{
-                  padding: '8px 6px',
+                  padding: '8px 4px',
                   borderRadius: 12,
-                  fontSize: '0.76rem',
+                  fontSize: '0.74rem',
                   fontWeight: 800,
                   border: attachedMedia ? '1.5px solid #10b981' : '1.5px solid #06b6d4',
                   background: attachedMedia
@@ -1268,7 +1305,7 @@ export function DailyPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 5,
+                  gap: 4,
                   boxShadow: attachedMedia ? '0 2px 8px rgba(16, 185, 129, 0.2)' : '0 2px 6px rgba(6, 182, 212, 0.12)',
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
@@ -1276,12 +1313,12 @@ export function DailyPage() {
                 title="Tải ảnh hoặc video đính kèm bài viết này"
               >
                 {mediaUploading ? (
-                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
                 ) : (
-                  <ImagePlus size={14} style={{ flexShrink: 0 }} />
+                  <ImagePlus size={13} style={{ flexShrink: 0 }} />
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {mediaUploading ? 'Đang tải...' : attachedMedia ? 'Đã có file ✓' : 'Ảnh / Video'}
+                  {mediaUploading ? 'Tải...' : attachedMedia ? 'Đã có file' : 'Ảnh/Video'}
                 </span>
               </button>
               <input
@@ -1295,7 +1332,105 @@ export function DailyPage() {
                   e.target.value = ''
                 }}
               />
+
+              {/* 4. Nút Gắn Người Thân (Lưu nhật ký riêng) */}
+              <button
+                type="button"
+                onClick={() => setShowPeopleModal(true)}
+                style={{
+                  padding: '8px 4px',
+                  borderRadius: 12,
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  border: selectedPersonIds.length > 0 ? '1.5px solid #8b5cf6' : '1.5px solid rgba(139, 92, 246, 0.4)',
+                  background: selectedPersonIds.length > 0
+                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.22), rgba(168, 85, 247, 0.32))'
+                    : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.15))',
+                  color: '#8b5cf6',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  boxShadow: selectedPersonIds.length > 0 ? '0 2px 8px rgba(139, 92, 246, 0.25)' : 'none',
+                  transition: 'all 0.18s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Gắn người thân để đồng thời lưu vào nhật ký riêng của người đó"
+              >
+                <Users size={13} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Người thân'}
+                </span>
+              </button>
             </div>
+
+            {/* Khung hiển thị danh sách người thân đã chọn */}
+            {selectedPeople.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  flexWrap: 'wrap',
+                  padding: '7px 10px',
+                  background: 'rgba(139, 92, 246, 0.08)',
+                  borderRadius: 12,
+                  border: '1px solid rgba(139, 92, 246, 0.25)',
+                  marginBottom: 10,
+                }}
+              >
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Users size={13} /> Gắn người thân:
+                </span>
+                {selectedPeople.map((p) => (
+                  <span
+                    key={p.id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      borderRadius: 8,
+                      background: 'var(--card-bg)',
+                      border: '1px solid var(--purple)',
+                      color: 'var(--purple)',
+                      fontSize: '0.74rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span>👤 {p.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPersonIds((prev) => prev.filter((id) => id !== p.id))}
+                      style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 0, color: 'var(--rose)', display: 'flex', alignItems: 'center' }}
+                      title={`Bỏ gắn ${p.name}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowPeopleModal(true)}
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '1px 6px',
+                    borderRadius: 6,
+                    border: '1px dashed var(--purple)',
+                    background: 'transparent',
+                    color: 'var(--purple)',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  + Thêm
+                </button>
+                <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700, marginLeft: 'auto' }}>
+                  ✓ Sẽ lưu vào Nhật ký riêng
+                </span>
+              </div>
+            )}
 
             {/* Media Preview Box nếu đã chọn file */}
             {attachedMedia && (
@@ -2803,6 +2938,139 @@ export function DailyPage() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: CHỌN NGƯỜI THÂN ĐỂ GHI NHẬT KÝ */}
+      {showPeopleModal && (
+        <Modal title="👥 Chọn người thân ghi nhật ký chung" onClose={() => setShowPeopleModal(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 300, maxWidth: 440 }}>
+            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              Khi chọn người thân, bài nhật ký này sẽ vừa lưu ở trang Daily vừa được tự động lưu vào <strong style={{ color: 'var(--text-main)' }}>Nhật ký riêng</strong> trong trang Người thân của người đó.
+            </p>
+
+            <input
+              type="text"
+              placeholder="🔍 Tìm kiếm theo tên người thân..."
+              value={peopleSearch}
+              onChange={(e) => setPeopleSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1.5px solid var(--card-border)',
+                background: 'var(--bg-main)',
+                color: 'var(--text-main)',
+                fontSize: '0.84rem',
+                outline: 'none',
+              }}
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              <span>Đã chọn: <strong style={{ color: 'var(--purple)' }}>{selectedPersonIds.length} người</strong></span>
+              {selectedPersonIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedPersonIds([])}
+                  style={{ border: 0, background: 'transparent', color: 'var(--rose)', cursor: 'pointer', fontWeight: 700, fontSize: '0.74rem' }}
+                >
+                  Bỏ chọn tất cả
+                </button>
+              )}
+            </div>
+
+            <div style={{ maxHeight: 260, overflowY: 'auto', display: 'grid', gap: 6, paddingRight: 2 }}>
+              {peopleQuery.items
+                .filter((p) => !peopleSearch.trim() || p.name.toLowerCase().includes(peopleSearch.trim().toLowerCase()))
+                .map((person) => {
+                  const isSelected = selectedPersonIds.includes(person.id)
+                  return (
+                    <div
+                      key={person.id}
+                      onClick={() => {
+                        setSelectedPersonIds((prev) =>
+                          isSelected ? prev.filter((id) => id !== person.id) : [...prev, person.id]
+                        )
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 12px',
+                        borderRadius: 12,
+                        border: isSelected ? '1.5px solid var(--purple)' : '1px solid var(--card-border)',
+                        background: isSelected ? 'rgba(139, 92, 246, 0.12)' : 'var(--bg-main)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: '#fff',
+                          fontWeight: 800,
+                          fontSize: '0.82rem',
+                          flexShrink: 0,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {person.avatar_url ? (
+                          <img src={person.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          person.name.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {person.name}
+                        </div>
+                        {(person.is_partner || person.group_key || person.notes) && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {person.is_partner ? '❤️ Người yêu' : person.group_key ? `Nhóm: ${person.group_key}` : person.notes}
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 7,
+                          border: isSelected ? '1.5px solid var(--purple)' : '1px solid var(--card-border)',
+                          background: isSelected ? 'var(--purple)' : 'transparent',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: '#fff',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isSelected && <Check size={13} />}
+                      </div>
+                    </div>
+                  )
+                })}
+              {peopleQuery.items.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Chưa có người thân nào trong danh bạ. Bạn có thể qua trang <strong style={{ color: 'var(--primary)' }}>Người thân</strong> để thêm danh bạ nhé!
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setShowPeopleModal(false)}
+                style={{ padding: '8px 20px', fontSize: '0.82rem', fontWeight: 700, borderRadius: 10 }}
+              >
+                Xong ({selectedPersonIds.length})
+              </button>
             </div>
           </div>
         </Modal>
