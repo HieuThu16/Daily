@@ -1,10 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Search,
   Sparkles,
   Loader2,
   Layers,
   StopCircle,
+  User,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 import { Modal } from '../shared'
 import {
@@ -13,6 +16,7 @@ import {
   crawlDilib,
   fetchDilibDetail,
   saveDilibBook,
+  getSuggestedAuthors,
   type DilibSearchResult,
   type CrawlReport,
 } from '../../lib/dilibCrawler'
@@ -28,20 +32,28 @@ export function DilibCrawlerModal({
   isOpen: boolean
   onClose: () => void
   onFinished?: () => void
-  initialMode?: 'CATEGORY' | 'SEARCH'
+  initialMode?: 'CATEGORY' | 'AUTHOR' | 'SEARCH'
 }) {
   const { showToast } = useToast()
-  const [activeTab, setActiveTab] = useState<'CATEGORY' | 'SEARCH'>(initialMode)
+  const [activeTab, setActiveTab] = useState<'CATEGORY' | 'AUTHOR' | 'SEARCH'>(initialMode)
   const [selectedCategory, setSelectedCategory] = useState<DilibCategory>(DILIB_CATEGORIES[0])
+  const [categorySearch, setCategorySearch] = useState('')
   const [maxMinutes, setMaxMinutes] = useState<number>(3)
 
-  // Search state
+  // 1. Author Tab State
+  const [authorInput, setAuthorInput] = useState('')
+  const [selectedAuthor, setSelectedAuthor] = useState('')
+  const [isSearchingAuthor, setIsSearchingAuthor] = useState(false)
+  const [authorBooks, setAuthorBooks] = useState<DilibSearchResult[]>([])
+  const [selectedAuthorUrls, setSelectedAuthorUrls] = useState<Set<string>>(new Set())
+
+  // 2. Book Title Search State
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<DilibSearchResult[]>([])
   const [selectedSearchUrls, setSelectedSearchUrls] = useState<Set<string>>(new Set())
 
-  // Crawling state
+  // 3. Crawling State
   const [isCrawling, setIsCrawling] = useState(false)
   const [crawlProgress, setCrawlProgress] = useState<{
     scanned: number
@@ -55,7 +67,43 @@ export function DilibCrawlerModal({
   const [crawlReport, setCrawlReport] = useState<CrawlReport | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Xử lý tìm kiếm
+  // Gợi ý tác giả trực tiếp theo input
+  const authorSuggestions = useMemo(() => {
+    return getSuggestedAuthors(authorInput)
+  }, [authorInput])
+
+  // Lọc thể loại chuẩn theo từ khóa
+  const filteredCategories = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase()
+    if (!q) return DILIB_CATEGORIES
+    return DILIB_CATEGORIES.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.keywords.some((k) => k.toLowerCase().includes(q))
+    )
+  }, [categorySearch])
+
+  // Tìm kiếm sách theo tác giả
+  const handleSelectAuthor = async (authorName: string) => {
+    setSelectedAuthor(authorName)
+    setAuthorInput(authorName)
+    setIsSearchingAuthor(true)
+    setAuthorBooks([])
+    setSelectedAuthorUrls(new Set())
+
+    try {
+      const results = await searchDilib(authorName)
+      setAuthorBooks(results)
+      // Tự động chọn tất cả sách của tác giả để tiện cào một chạm
+      setSelectedAuthorUrls(new Set(results.map((r) => r.url)))
+    } catch (err) {
+      console.warn('Lỗi tìm sách theo tác giả:', err)
+    } finally {
+      setIsSearchingAuthor(false)
+    }
+  }
+
+  // Tự động tìm kiếm sách theo tên sách khi gõ
   useEffect(() => {
     if (activeTab !== 'SEARCH') return
     const q = searchQuery.trim()
@@ -69,7 +117,7 @@ export function DilibCrawlerModal({
       const res = await searchDilib(q)
       setSearchResults(res)
       setIsSearching(false)
-    }, 350)
+    }, 300)
 
     return () => clearTimeout(timer)
   }, [searchQuery, activeTab])
@@ -101,8 +149,8 @@ export function DilibCrawlerModal({
     }
   }
 
-  // Bắt đầu cào sách đã chọn từ tìm kiếm
-  const handleStartSearchCrawl = async (urlsToCrawl: string[]) => {
+  // Bắt đầu cào danh sách URL đã chọn (từ Tác giả hoặc Tìm kiếm)
+  const handleStartBatchCrawl = async (urlsToCrawl: string[]) => {
     if (urlsToCrawl.length === 0) {
       showToast('Vui lòng chọn ít nhất một cuốn sách để cào', 'info')
       return
@@ -116,9 +164,12 @@ export function DilibCrawlerModal({
     let addedPdf = 0
     let totalAudioFiles = 0
     const itemsReport: CrawlReport['items'] = []
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     try {
       for (const url of urlsToCrawl) {
+        if (controller.signal.aborted) break
         scanned++
         setCrawlProgress({
           scanned,
@@ -163,21 +214,31 @@ export function DilibCrawlerModal({
       showToast(`🎉 Đã cào xong ${report.audiobooksAdded} Sách nói & ${report.booksPdfAdded} Sách PDF.`)
       onFinished?.()
     } catch (err: any) {
-      showToast(`❌ Lỗi cào sách: ${err?.message || err}`, 'error')
+      if (err?.name !== 'AbortError') {
+        showToast(`❌ Lỗi cào sách: ${err?.message || err}`, 'error')
+      }
     } finally {
       setIsCrawling(false)
       setCrawlProgress(null)
     }
   }
 
-  // Dừng cào
   const handleStopCrawl = () => {
     abortControllerRef.current?.abort()
     setIsCrawling(false)
     showToast('Đã dừng cào sách.', 'info')
   }
 
-  const toggleSelectUrl = (url: string) => {
+  const toggleSelectAuthorUrl = (url: string) => {
+    setSelectedAuthorUrls((prev) => {
+      const next = new Set(prev)
+      if (next.has(url)) next.delete(url)
+      else next.add(url)
+      return next
+    })
+  }
+
+  const toggleSelectSearchUrl = (url: string) => {
     setSelectedSearchUrls((prev) => {
       const next = new Set(prev)
       if (next.has(url)) next.delete(url)
@@ -189,8 +250,8 @@ export function DilibCrawlerModal({
   if (!isOpen) return null
 
   return (
-    <Modal title="🕷️ Cào Sách & Sách Nói (Dilib.vn)" onClose={onClose}>
-      <div className="dilib-crawler-modal-wrap" style={{ minWidth: 320, maxWidth: 640 }}>
+    <Modal title="🕷️ Cào Sách & Sách Nói Nguồn Dilib.vn" onClose={onClose}>
+      <div className="dilib-crawler-modal-wrap" style={{ minWidth: 320, maxWidth: 660 }}>
         {/* Đang Cào (Live Crawling View) */}
         {isCrawling && crawlProgress ? (
           <div className="dilib-crawling-card" style={{ textAlign: 'center', padding: '20px 10px' }}>
@@ -238,7 +299,7 @@ export function DilibCrawlerModal({
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 ⏱️ Đã chạy: <strong>{crawlProgress.elapsedSeconds}s</strong>
               </span>
-              {crawlProgress.remainingSeconds < 9000 && (
+              {crawlProgress.remainingSeconds < 9000 && crawlProgress.remainingSeconds > 0 && (
                 <span style={{ fontSize: '0.78rem', color: '#f59e0b' }}>
                   ⏳ Còn lại: <strong>{crawlProgress.remainingSeconds}s</strong>
                 </span>
@@ -266,11 +327,11 @@ export function DilibCrawlerModal({
             </button>
           </div>
         ) : crawlReport ? (
-          /* Báo Cáo Kết Quả Cào (Crawl Summary Report) */
+          /* Báo Cáo Kết Quả Cào (Summary Report) */
           <div className="dilib-report-card" style={{ padding: '10px 4px' }}>
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: '2rem', marginBottom: 4 }}>🎉</div>
-              <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: 800 }}>Báo Cáo Kết Quả Cào</h3>
+              <h3 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: 800 }}>Báo Cáo Kết Quả Cào Dilib.vn</h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
                 Thời gian thực hiện: {crawlReport.durationSeconds} giây
               </p>
@@ -416,13 +477,14 @@ export function DilibCrawlerModal({
             </div>
           </div>
         ) : (
-          /* Màn Hình Thiết Lập & Lựa Chọn Cào */
+          /* Màn Hình Chọn Chế Độ Cào: 3 Tabs (Thể loại, Tác giả, Tên sách) */
           <div>
-            {/* Tabs chuyển đổi */}
+            {/* 3 Tabs Điều Hướng */}
             <div
               style={{
-                display: 'flex',
-                gap: 6,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 4,
                 background: 'var(--bg-main)',
                 padding: 4,
                 borderRadius: 12,
@@ -433,54 +495,93 @@ export function DilibCrawlerModal({
                 type="button"
                 onClick={() => setActiveTab('CATEGORY')}
                 style={{
-                  flex: 1,
-                  padding: '7px 10px',
+                  padding: '7px 6px',
                   borderRadius: 8,
                   border: 'none',
                   background: activeTab === 'CATEGORY' ? 'var(--card-bg)' : 'transparent',
                   color: activeTab === 'CATEGORY' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
-                  fontWeight: 700,
-                  fontSize: '0.8rem',
+                  fontWeight: 750,
+                  fontSize: '0.76rem',
                   cursor: 'pointer',
                   boxShadow: activeTab === 'CATEGORY' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 6,
+                  gap: 4,
                 }}
               >
-                <Layers size={14} /> Cào Theo Thể Loại
+                <Layers size={13} /> Thể Loại
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('AUTHOR')}
+                style={{
+                  padding: '7px 6px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: activeTab === 'AUTHOR' ? 'var(--card-bg)' : 'transparent',
+                  color: activeTab === 'AUTHOR' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
+                  fontWeight: 750,
+                  fontSize: '0.76rem',
+                  cursor: 'pointer',
+                  boxShadow: activeTab === 'AUTHOR' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                }}
+              >
+                <User size={13} /> Tác Giả
+              </button>
+
               <button
                 type="button"
                 onClick={() => setActiveTab('SEARCH')}
                 style={{
-                  flex: 1,
-                  padding: '7px 10px',
+                  padding: '7px 6px',
                   borderRadius: 8,
                   border: 'none',
                   background: activeTab === 'SEARCH' ? 'var(--card-bg)' : 'transparent',
                   color: activeTab === 'SEARCH' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
-                  fontWeight: 700,
-                  fontSize: '0.8rem',
+                  fontWeight: 750,
+                  fontSize: '0.76rem',
                   cursor: 'pointer',
                   boxShadow: activeTab === 'SEARCH' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 6,
+                  gap: 4,
                 }}
               >
-                <Search size={14} /> Tìm Kiếm & Cào Đúng Quyển
+                <Search size={13} /> Tên Sách
               </button>
             </div>
 
-            {/* TAB 1: CÀO THEO THỂ LOẠI */}
-            {activeTab === 'CATEGORY' ? (
+            {/* TAB 1: CÀO THEO THỂ LOẠI CHUẨN CỦA NGUỒN DILIB */}
+            {activeTab === 'CATEGORY' && (
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
-                  1. Chọn thể loại sách muốn cào:
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                    1. Chọn thể loại nguồn ({filteredCategories.length} mục):
+                  </label>
+                  <input
+                    type="text"
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                    placeholder="Lọc thể loại..."
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid var(--card-border)',
+                      background: 'var(--bg-main)',
+                      color: 'var(--text-main)',
+                      fontSize: '0.7rem',
+                      width: 120,
+                    }}
+                  />
+                </div>
+
                 <div
                   style={{
                     display: 'grid',
@@ -492,7 +593,7 @@ export function DilibCrawlerModal({
                     paddingRight: 2,
                   }}
                 >
-                  {DILIB_CATEGORIES.map((cat) => {
+                  {filteredCategories.map((cat) => {
                     const isSelected = selectedCategory.id === cat.id
                     return (
                       <div
@@ -501,8 +602,8 @@ export function DilibCrawlerModal({
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 8,
-                          padding: '8px 10px',
+                          gap: 7,
+                          padding: '7px 9px',
                           borderRadius: 10,
                           background: isSelected ? 'rgba(139, 92, 246, 0.12)' : 'var(--bg-main)',
                           border: `1.5px solid ${isSelected ? 'var(--primary, #8b5cf6)' : 'var(--card-border)'}`,
@@ -510,12 +611,15 @@ export function DilibCrawlerModal({
                           transition: 'all 0.15s ease',
                         }}
                       >
-                        <span style={{ fontSize: '1.1rem' }}>{cat.icon}</span>
+                        <span style={{ fontSize: '1rem' }}>{cat.icon}</span>
                         <span
                           style={{
-                            fontSize: '0.76rem',
+                            fontSize: '0.75rem',
                             fontWeight: isSelected ? 800 : 600,
                             color: isSelected ? 'var(--primary, #8b5cf6)' : 'var(--text-main)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
                           {cat.name}
@@ -528,10 +632,10 @@ export function DilibCrawlerModal({
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
                   2. Hẹn giờ cào (tự động dừng khi hết giờ):
                 </label>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
                   {[
                     { val: 1, label: '1 phút' },
-                    { val: 3, label: '3 phút (Khuyên dùng)' },
+                    { val: 3, label: '3 phút' },
                     { val: 5, label: '5 phút' },
                     { val: 10, label: '10 phút' },
                     { val: 0, label: 'Không giới hạn' },
@@ -541,9 +645,9 @@ export function DilibCrawlerModal({
                       type="button"
                       onClick={() => setMaxMinutes(t.val)}
                       style={{
-                        padding: '6px 12px',
+                        padding: '5px 10px',
                         borderRadius: 8,
-                        fontSize: '0.75rem',
+                        fontSize: '0.72rem',
                         fontWeight: 700,
                         border: `1px solid ${maxMinutes === t.val ? 'var(--primary, #8b5cf6)' : 'var(--card-border)'}`,
                         background: maxMinutes === t.val ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-main)',
@@ -554,14 +658,6 @@ export function DilibCrawlerModal({
                       {t.label}
                     </button>
                   ))}
-                </div>
-
-                <div style={{ background: 'var(--bg-main)', padding: '10px 12px', borderRadius: 12, marginBottom: 16 }}>
-                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                    💡 <strong>Cơ chế thông minh:</strong> Hệ thống tự động kiểm tra nguồn Dilib: nếu có Sách Nói (audio
-                    mp3) thì lưu vào tab <strong>Sách Nói</strong>, nếu có PDF thì lưu vào tab <strong>Sách</strong>, có
-                    cả hai thì lưu cả hai!
-                  </div>
                 </div>
 
                 <button
@@ -575,7 +671,7 @@ export function DilibCrawlerModal({
                     background: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
                     color: '#ffffff',
                     fontWeight: 800,
-                    fontSize: '0.88rem',
+                    fontSize: '0.86rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -584,22 +680,201 @@ export function DilibCrawlerModal({
                     boxShadow: '0 4px 14px rgba(139, 92, 246, 0.35)',
                   }}
                 >
-                  <Sparkles size={17} /> Bắt đầu cào thể loại "{selectedCategory.name}"
+                  <Sparkles size={16} /> Bắt đầu cào thể loại "{selectedCategory.name}"
                 </button>
               </div>
-            ) : (
-              /* TAB 2: TÌM KIẾM & CÀO ĐÚNG QUYỂN */
+            )}
+
+            {/* TAB 2: CÀO THEO TÁC GIẢ (KÈM GỢI Ý TRỰC TIẾP KHI GÕ) */}
+            {activeTab === 'AUTHOR' && (
               <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
+                  Nhập tên tác giả (sẽ tự động gợi ý):
+                </label>
+                <div style={{ position: 'relative', marginBottom: 8 }}>
+                  <User
+                    size={16}
+                    style={{ position: 'absolute', left: 12, top: 10, color: 'var(--text-muted)' }}
+                  />
+                  <input
+                    type="text"
+                    value={authorInput}
+                    onChange={(e) => setAuthorInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && authorInput.trim()) {
+                        void handleSelectAuthor(authorInput.trim())
+                      }
+                    }}
+                    placeholder="Nhập tên tác giả (vd: Dale Carnegie, Thích Nhất Hạnh, Nguyễn Nhật Ánh...)..."
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px 9px 36px',
+                      borderRadius: 10,
+                      border: '1px solid var(--card-border)',
+                      background: 'var(--bg-main)',
+                      color: 'var(--text-main)',
+                      fontSize: '0.82rem',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                {/* Danh Sách Gợi Ý Tác Giả Trực Tiếp */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>
+                    💡 Gợi ý tác giả tiêu biểu (bấm để chọn):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 85, overflowY: 'auto' }}>
+                    {authorSuggestions.slice(0, 14).map((author) => {
+                      const isChosen = selectedAuthor === author
+                      return (
+                        <button
+                          key={author}
+                          type="button"
+                          onClick={() => void handleSelectAuthor(author)}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '99px',
+                            border: `1px solid ${isChosen ? 'var(--primary, #8b5cf6)' : 'var(--card-border)'}`,
+                            background: isChosen ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-main)',
+                            color: isChosen ? 'var(--primary, #8b5cf6)' : 'var(--text-main)',
+                            fontSize: '0.72rem',
+                            fontWeight: isChosen ? 750 : 550,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ✍️ {author}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Kết quả tìm sách theo tác giả */}
+                {isSearchingAuthor ? (
+                  <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    <Loader2 size={20} className="tv-spin" style={{ margin: '0 auto 6px', display: 'block' }} />
+                    Đang tìm tất cả sách của tác giả "{selectedAuthor}" trên Dilib.vn...
+                  </div>
+                ) : authorBooks.length > 0 ? (
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: 8,
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        Tìm thấy <strong>{authorBooks.length}</strong> cuốn sách của <b>{selectedAuthor}</b>:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedAuthorUrls.size === authorBooks.length) {
+                            setSelectedAuthorUrls(new Set())
+                          } else {
+                            setSelectedAuthorUrls(new Set(authorBooks.map((b) => b.url)))
+                          }
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary, #8b5cf6)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {selectedAuthorUrls.size === authorBooks.length ? 'Bỏ chọn hết' : 'Chọn tất cả'}
+                      </button>
+                    </div>
+
+                    <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
+                      {authorBooks.map((item) => {
+                        const isChecked = selectedAuthorUrls.has(item.url)
+                        return (
+                          <div
+                            key={item.url}
+                            onClick={() => toggleSelectAuthorUrl(item.url)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '5px 8px',
+                              borderRadius: 8,
+                              background: isChecked ? 'rgba(139, 92, 246, 0.1)' : 'var(--bg-main)',
+                              border: `1px solid ${isChecked ? 'var(--primary, #8b5cf6)' : 'var(--card-border)'}`,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {isChecked ? <CheckSquare size={15} color="var(--primary, #8b5cf6)" /> : <Square size={15} color="var(--text-muted)" />}
+                            {item.thumbnail && (
+                              <img
+                                src={item.thumbnail}
+                                alt={item.title}
+                                style={{ width: 32, height: 44, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                              />
+                            )}
+                            <div style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.title}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={selectedAuthorUrls.size === 0}
+                      onClick={() => void handleStartBatchCrawl(Array.from(selectedAuthorUrls))}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: 12,
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: '0.84rem',
+                        cursor: selectedAuthorUrls.size === 0 ? 'not-allowed' : 'pointer',
+                        opacity: selectedAuthorUrls.size === 0 ? 0.6 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        boxShadow: '0 3px 10px rgba(59, 130, 246, 0.3)',
+                      }}
+                    >
+                      <Sparkles size={15} /> Cào {selectedAuthorUrls.size} sách của tác giả "{selectedAuthor}"
+                    </button>
+                  </div>
+                ) : selectedAuthor ? (
+                  <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    Không tìm thấy sách nào của tác giả "{selectedAuthor}" trên Dilib.vn.
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* TAB 3: TÌM KIẾM & GỢI Ý THEO TÊN SÁCH */}
+            {activeTab === 'SEARCH' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, marginBottom: 6 }}>
+                  Nhập tên sách (gợi ý thời gian thực):
+                </label>
                 <div style={{ position: 'relative', marginBottom: 12 }}>
                   <Search
                     size={16}
-                    style={{ position: 'absolute', left: 12, top: 11, color: 'var(--text-muted)' }}
+                    style={{ position: 'absolute', left: 12, top: 10, color: 'var(--text-muted)' }}
                   />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Nhập tên sách (vd: Đắc nhân tâm, Khởi nghiệp, Thiền...)..."
+                    placeholder="Nhập tên sách (vd: Đắc nhân tâm, Khởi nghiệp, Thiền, Cha giàu...)..."
                     style={{
                       width: '100%',
                       padding: '9px 12px 9px 36px',
@@ -616,13 +891,13 @@ export function DilibCrawlerModal({
                 {isSearching ? (
                   <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                     <Loader2 size={20} className="tv-spin" style={{ margin: '0 auto 6px', display: 'block' }} />
-                    Đang tìm kiếm trên Dilib.vn...
+                    Đang tìm kiếm sách trên Dilib.vn...
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div
                     style={{
                       textAlign: 'center',
-                      padding: '30px 10px',
+                      padding: '24px 10px',
                       color: 'var(--text-muted)',
                       fontSize: '0.8rem',
                       background: 'var(--bg-main)',
@@ -646,13 +921,14 @@ export function DilibCrawlerModal({
                       {selectedSearchUrls.size > 0 && (
                         <button
                           type="button"
-                          onClick={() => void handleStartSearchCrawl(Array.from(selectedSearchUrls))}
+                          onClick={() => void handleStartBatchCrawl(Array.from(selectedSearchUrls))}
                           style={{
                             background: 'var(--primary, #8b5cf6)',
                             color: '#fff',
                             border: 'none',
                             padding: '4px 10px',
                             borderRadius: 6,
+                            fontSize: '0.72rem',
                             fontWeight: 700,
                             cursor: 'pointer',
                           }}
@@ -662,7 +938,7 @@ export function DilibCrawlerModal({
                       )}
                     </div>
 
-                    <div style={{ maxHeight: 250, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {searchResults.map((item) => {
                         const isChecked = selectedSearchUrls.has(item.url)
                         return (
@@ -681,14 +957,14 @@ export function DilibCrawlerModal({
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => toggleSelectUrl(item.url)}
+                              onChange={() => toggleSelectSearchUrl(item.url)}
                               style={{ cursor: 'pointer' }}
                             />
                             {item.thumbnail && (
                               <img
                                 src={item.thumbnail}
                                 alt={item.title}
-                                style={{ width: 36, height: 50, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+                                style={{ width: 34, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
                               />
                             )}
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -706,7 +982,7 @@ export function DilibCrawlerModal({
                             </div>
                             <button
                               type="button"
-                              onClick={() => void handleStartSearchCrawl([item.url])}
+                              onClick={() => void handleStartBatchCrawl([item.url])}
                               style={{
                                 background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
                                 color: '#fff',

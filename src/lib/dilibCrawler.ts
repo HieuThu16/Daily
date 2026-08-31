@@ -3,12 +3,41 @@ import { supabase } from './supabase'
 import type { Audiobook, DilibCategory } from '../types/audiobook'
 
 export const DILIB_CATEGORIES: DilibCategory[] = [
+  // 1. Tủ sách & Kinh điển
+  {
+    id: 'tac-pham-kinh-dien',
+    name: 'Tác Phẩm Kinh Điển',
+    icon: '🏛️',
+    url: 'https://dilib.vn/thu-vien/tac-pham-kinh-dien/',
+    keywords: ['kinh điển', 'tác phẩm kinh điển', 'văn học kinh điển', 'danh tác'],
+  },
+  {
+    id: 'tu-sach-tinh-hoa',
+    name: 'Tủ Sách Tinh Hoa',
+    icon: '💎',
+    url: 'https://dilib.vn/tu-sach-tinh-hoa/',
+    keywords: ['tinh hoa', 'tủ sách tinh hoa', 'kiến thức tinh hoa'],
+  },
+  {
+    id: 'gioi-thieu-sach-moi',
+    name: 'Giới Thiệu Sách Mới',
+    icon: '✨',
+    url: 'https://dilib.vn/gioi-thieu-sach-moi/',
+    keywords: ['sách mới', 'mới nhất', 'phát hành'],
+  },
+  {
+    id: 'sach-bo',
+    name: 'Sách Bộ (Trọn Bộ)',
+    icon: '📚',
+    url: 'https://dilib.vn/sach-bo/',
+    keywords: ['sách bộ', 'trọn bộ', 'tinh hoa', 'kinh điển'],
+  },
   {
     id: 'sach-noi',
-    name: 'Sách Nói (Tổng hợp)',
+    name: 'Sách Nói (Audiobooks)',
     icon: '🎧',
     url: 'https://dilib.vn/sach-noi/',
-    keywords: ['sách nói', 'audiobook', 'nghe sách', 'phát triển bản thân'],
+    keywords: ['sách nói', 'audiobook', 'nghe sách', 'mp3'],
   },
   {
     id: 'radio',
@@ -17,62 +46,298 @@ export const DILIB_CATEGORIES: DilibCategory[] = [
     url: 'https://dilib.vn/radio/',
     keywords: ['radio', 'tâm hồn', 'suy ngẫm', 'truyện ngắn'],
   },
+
+  // 2. Kỹ năng & Phát triển bản thân
   {
     id: 'tam-ly-ky-nang',
     name: 'Tâm Lý - Kỹ Năng',
     icon: '🧠',
     url: 'https://dilib.vn/thu-vien/tam-ly-ky-nang/',
-    keywords: ['tâm lý', 'kỹ năng', 'đắc nhân tâm', 'thao túng', 'giao tiếp', 'tư duy'],
+    keywords: ['tâm lý', 'kỹ năng', 'đắc nhân tâm', 'giao tiếp', 'tư duy', 'thuyết phục'],
   },
+  {
+    id: 'phat-trien-ban-than',
+    name: 'Phát Triển Bản Thân',
+    icon: '🌱',
+    url: 'https://dilib.vn/thu-vien/phat-trien-ban-than/',
+    keywords: ['phát triển bản thân', 'thành công', 'thói quen nguyên tử', 'tự lực'],
+  },
+  {
+    id: 'nuoi-duong-tam-hon',
+    name: 'Nuôi Dưỡng Tâm Hồn',
+    icon: '🌸',
+    url: 'https://dilib.vn/thu-vien/nuoi-duong-tam-hon/',
+    keywords: ['tâm hồn', 'nuôi dưỡng', 'bình an', 'hạnh phúc', 'sống đẹp'],
+  },
+  {
+    id: 'khai-tam-mo-tri',
+    name: 'Khai Tâm - Mở Trí',
+    icon: '💡',
+    url: 'https://dilib.vn/thu-vien/khai-tam-mo-tri/',
+    keywords: ['khai tâm', 'mở trí', 'trí tuệ', 'nhận thức', 'khai sáng'],
+  },
+
+  // 3. Kinh doanh & Quản trị
   {
     id: 'quan-tri-kinh-doanh',
     name: 'Quản Trị - Kinh Doanh',
     icon: '💼',
     url: 'https://dilib.vn/thu-vien/quan-tri-kinh-doanh/',
-    keywords: ['kinh doanh', 'quản trị', 'lãnh đạo', 'bán hàng', 'marketing', 'khởi nghiệp', 'đầu tư', 'tiền'],
+    keywords: ['kinh doanh', 'quản trị', 'lãnh đạo', 'doanh nghiệp'],
   },
+  {
+    id: 'self-help-khoi-nghiep',
+    name: 'Self Help - Khởi Nghiệp',
+    icon: '🚀',
+    url: 'https://dilib.vn/thu-vien/self-help-khoi-nghiep/',
+    keywords: ['khởi nghiệp', 'startup', 'làm giàu', 'tài chính', 'cha giàu'],
+  },
+  {
+    id: 'marketing-ban-hang',
+    name: 'Marketing - Bán Hàng',
+    icon: '📈',
+    url: 'https://dilib.vn/thu-vien/marketing-ban-hang/',
+    keywords: ['marketing', 'bán hàng', 'quảng cáo', 'truyền thông'],
+  },
+
+  // 4. Tâm linh, Triết học & Y học
   {
     id: 'ton-giao-tam-linh',
     name: 'Tôn Giáo - Tâm Linh',
     icon: '🧘',
     url: 'https://dilib.vn/thu-vien/ton-giao-tam-linh/',
-    keywords: ['tâm linh', 'thiền', 'phật giáo', 'thức tỉnh', 'luân hồi', 'linh hồn', 'tâm thức'],
+    keywords: ['tâm linh', 'thiền', 'phật giáo', 'thức tỉnh', 'tâm thức', 'linh hồn'],
   },
   {
-    id: 'khoa-hoc-cong-nghe',
-    name: 'Khoa Học - Công Nghệ',
-    icon: '🚀',
-    url: 'https://dilib.vn/thu-vien/khoa-hoc-cong-nghe/',
-    keywords: ['khoa học', 'vũ trụ', 'công nghệ', 'ai', 'trí tuệ nhân tạo', 'vật lý', 'thiên văn'],
+    id: 'yoga-thien',
+    name: 'Yoga - Thiền',
+    icon: '🧘‍♂️',
+    url: 'https://dilib.vn/thu-vien/yoga-thien/',
+    keywords: ['yoga', 'thiền định', 'chánh niệm', 'năng lượng', 'thở'],
+  },
+  {
+    id: 'triet-hoc-ly-luan',
+    name: 'Triết Học - Lý Luận',
+    icon: '📜',
+    url: 'https://dilib.vn/thu-vien/triet-hoc-ly-luan/',
+    keywords: ['triết học', 'lý luận', 'tư tưởng', 'khắc kỷ', 'đạo đức'],
   },
   {
     id: 'y-hoc-suc-khoe',
     name: 'Y Học - Sức Khỏe',
     icon: '🩺',
     url: 'https://dilib.vn/thu-vien/y-hoc-suc-khoe/',
-    keywords: ['sức khỏe', 'y học', 'dinh dưỡng', 'chữa lành', 'dưỡng sinh', 'thực dưỡng', 'bệnh'],
+    keywords: ['sức khỏe', 'y học', 'dinh dưỡng', 'chữa lành', 'dưỡng sinh'],
   },
+
+  // 5. Lịch sử, Khoa học & Xã hội
   {
     id: 'lich-su-quan-su',
     name: 'Lịch Sử - Quân Sự',
     icon: '⚔️',
     url: 'https://dilib.vn/thu-vien/lich-su-quan-su/',
-    keywords: ['lịch sử', 'quân sự', 'chiến tranh', 'việt nam', 'thế giới', 'danh tướng', 'tam quốc'],
+    keywords: ['lịch sử', 'quân sự', 'chiến tranh', 'việt nam', 'thế giới'],
+  },
+  {
+    id: 'nhan-vat-lich-su',
+    name: 'Nhân Vật Lịch Sử',
+    icon: '👑',
+    url: 'https://dilib.vn/thu-vien/nhan-vat-lich-su/',
+    keywords: ['nhân vật', 'danh nhân', 'lãnh tụ', 'danh tướng', 'vua chúa'],
   },
   {
     id: 'hoi-ky-tuy-but',
     name: 'Hồi Ký - Tùy Bút',
-    icon: '📜',
+    icon: '🖋️',
     url: 'https://dilib.vn/thu-vien/hoi-ky-tuy-but/',
     keywords: ['hồi ký', 'tự truyện', 'tùy bút', 'nhân vật', 'cuộc đời'],
   },
   {
-    id: 'sach-bo',
-    name: 'Sách Bộ',
-    icon: '📚',
-    url: 'https://dilib.vn/sach-bo/',
-    keywords: ['sách bộ', 'trọn bộ', 'tinh hoa', 'kinh điển'],
+    id: 'khoa-hoc-cong-nghe',
+    name: 'Khoa Học - Công Nghệ',
+    icon: '🔬',
+    url: 'https://dilib.vn/thu-vien/khoa-hoc-cong-nghe/',
+    keywords: ['khoa học', 'vũ trụ', 'công nghệ', 'ai', 'vật lý', 'thiên văn'],
   },
+  {
+    id: 'cong-nghe-thong-tin',
+    name: 'Công Nghệ Thông Tin',
+    icon: '💻',
+    url: 'https://dilib.vn/thu-vien/cong-nghe-thong-tin/',
+    keywords: ['lập trình', 'tin học', 'it', 'mạng', 'phần mềm', 'python'],
+  },
+  {
+    id: 'van-hoa-xa-hoi',
+    name: 'Văn Hóa - Xã Hội',
+    icon: '🌐',
+    url: 'https://dilib.vn/thu-vien/van-hoa-xa-hoi/',
+    keywords: ['văn hóa', 'xã hội', 'phong tục', 'con người'],
+  },
+  {
+    id: 'giao-duc-dao-tao',
+    name: 'Giáo Dục - Đào Tạo',
+    icon: '🎓',
+    url: 'https://dilib.vn/thu-vien/giao-duc-dao-tao/',
+    keywords: ['giáo dục', 'đào tạo', 'học tập', 'phương pháp'],
+  },
+  {
+    id: 'tai-lieu-tham-khao',
+    name: 'Tài Liệu - Tham Khảo',
+    icon: '📑',
+    url: 'https://dilib.vn/thu-vien/tai-lieu-tham-khao/',
+    keywords: ['tài liệu', 'tham khảo', 'giáo trình', 'nghiên cứu'],
+  },
+
+  // 6. Văn học, Tiểu thuyết & Truyện
+  {
+    id: 'van-hoc-nghe-thuat',
+    name: 'Văn Học - Nghệ Thuật',
+    icon: '🎨',
+    url: 'https://dilib.vn/thu-vien/van-hoc-nghe-thuat/',
+    keywords: ['văn học', 'nghệ thuật', 'thơ ca', 'tiểu thuyết'],
+  },
+  {
+    id: 'truyen-ngan-tieu-thuyet',
+    name: 'Truyện Ngắn - Tiểu Thuyết',
+    icon: '📖',
+    url: 'https://dilib.vn/thu-vien/truyen-ngan-tieu-thuyet/',
+    keywords: ['truyện ngắn', 'tiểu thuyết', 'truyện chữ'],
+  },
+  {
+    id: 'trinh-tham-hinh-su-kinh-di',
+    name: 'Trinh Thám - Kinh Dị',
+    icon: '🔍',
+    url: 'https://dilib.vn/thu-vien/trinh-tham-hinh-su-kinh-di/',
+    keywords: ['trinh thám', 'hình sự', 'kinh dị', 'vụ án', 'bí ẩn'],
+  },
+  {
+    id: 'kiem-hiep-tien-hiep',
+    name: 'Kiếm Hiệp - Tiên Hiệp',
+    icon: '🗡️',
+    url: 'https://dilib.vn/thu-vien/kiem-hiep-tien-hiep/',
+    keywords: ['kiếm hiệp', 'tiên hiệp', 'tu chân', 'võ hiệp', 'kim dung'],
+  },
+  {
+    id: 'lang-man-ngon-tinh',
+    name: 'Lãng Mạn - Ngôn Tình',
+    icon: '💖',
+    url: 'https://dilib.vn/thu-vien/lang-man-ngon-tinh/',
+    keywords: ['ngôn tình', 'lãng mạn', 'tình yêu', 'tình cảm'],
+  },
+  {
+    id: 'dam-my-bach-hop',
+    name: 'Đam Mỹ - Bách Hợp',
+    icon: '🌈',
+    url: 'https://dilib.vn/thu-vien/dam-my-bach-hop/',
+    keywords: ['đam mỹ', 'bách hợp', 'bl', 'gl'],
+  },
+  {
+    id: 'tinh-cam-gia-dinh',
+    name: 'Tình Cảm - Gia Đình',
+    icon: '🏡',
+    url: 'https://dilib.vn/thu-vien/tinh-cam-gia-dinh/',
+    keywords: ['gia đình', 'cha mẹ', 'con cái', 'hôn nhân'],
+  },
+  {
+    id: 'tre-em-thieu-nhi',
+    name: 'Trẻ Em - Thiếu Nhi',
+    icon: '🧸',
+    url: 'https://dilib.vn/thu-vien/tre-em-thieu-nhi/',
+    keywords: ['thiếu nhi', 'trẻ em', 'cổ tích', 'đồng dao'],
+  },
+  {
+    id: 'tuoi-hoc-tro',
+    name: 'Tuổi Học Trò',
+    icon: '🎒',
+    url: 'https://dilib.vn/thu-vien/tuoi-hoc-tro/',
+    keywords: ['học trò', 'áo trắng', 'tuổi thơ', 'nguyễn nhật ánh'],
+  },
+  {
+    id: 'tu-vi-phong-thuy',
+    name: 'Tử Vi - Phong Thủy',
+    icon: '☯️',
+    url: 'https://dilib.vn/thu-vien/tu-vi-phong-thuy/',
+    keywords: ['tử vi', 'phong thủy', 'kinh dịch', 'tướng số'],
+  },
+  {
+    id: 'bien-khao-dia-ly',
+    name: 'Biên Khảo - Địa Lý',
+    icon: '🗺️',
+    url: 'https://dilib.vn/thu-vien/bien-khao-dia-ly/',
+    keywords: ['biên khảo', 'địa lý', 'danh lam', 'thắng cảnh'],
+  },
+  {
+    id: 'kham-pha-bi-an',
+    name: 'Khám Phá - Bí Ẩn',
+    icon: '🛸',
+    url: 'https://dilib.vn/thu-vien/kham-pha-bi-an/',
+    keywords: ['khám phá', 'bí ẩn', 'tam giác quỷ', 'ufo'],
+  },
+  {
+    id: 'phieu-luu-mao-hiem',
+    name: 'Phiêu Lưu - Mạo Hiểm',
+    icon: '🧭',
+    url: 'https://dilib.vn/thu-vien/phieu-luu-mao-hiem/',
+    keywords: ['phiêu lưu', 'mạo hiểm', 'thám hiểm', 'rừng rậm'],
+  },
+]
+
+export const DILIB_POPULAR_AUTHORS: string[] = [
+  'Dale Carnegie',
+  'Nguyễn Nhật Ánh',
+  'Thích Nhất Hạnh',
+  'Osho',
+  'John C. Maxwell',
+  'Napoleon Hill',
+  'Brian Tracy',
+  'Robert Kiyosaki',
+  'Yuval Noah Harari',
+  'Robin Sharma',
+  'Eckhart Tolle',
+  'Paulo Coelho',
+  'Tony Buổi Sáng',
+  'Haruki Murakami',
+  'Dan Brown',
+  'Malcolm Gladwell',
+  'James Clear',
+  'Daniel Kahneman',
+  'Warren Buffett',
+  'Stephen Covey',
+  'Jim Rohn',
+  'Victor Hugo',
+  'Arthur Conan Doyle',
+  'Nam Cao',
+  'Vũ Trọng Phụng',
+  'Nguyễn Du',
+  'Stephen Hawking',
+  'J.K. Rowling',
+  'Agatha Christie',
+  'George Orwell',
+  'Mark Manson',
+  'Simon Sinek',
+  'Jack Ma',
+  'Steve Jobs',
+  'Bill Gates',
+  'Hòa Thượng Thích Thanh Từ',
+  'Nguyễn Hiến Lê',
+  'Nguyễn Phong',
+  'Nguyễn Mạnh Hùng',
+  'Thiền Sư Ajahn Chah',
+  'Lão Tử',
+  'Khổng Tử',
+  'Trang Tử',
+  'Tô Hoài',
+  'Ngô Tất Tố',
+  'Xuân Diệu',
+  'Hàn Mặc Tử',
+  'Trịnh Công Sơn',
+  'Khôi Hoàng',
+  'Phạm Thành Long',
+  'Nguyễn Anh Dũng',
+  'Lý Gia Thành',
+  'Inamori Kazuo',
+  'Morihei Ueshiba',
+  'Sun Tzu (Tôn Tử)',
 ]
 
 export type DilibSearchResult = {
@@ -142,6 +407,13 @@ export async function searchDilib(keyword: string): Promise<DilibSearchResult[]>
     console.warn('[dilibCrawler] Lỗi tìm kiếm Dilib:', err)
     return []
   }
+}
+
+/** Tìm kiếm tác giả và gợi ý danh sách tác giả */
+export function getSuggestedAuthors(input: string): string[] {
+  const q = input.trim().toLowerCase()
+  if (!q) return DILIB_POPULAR_AUTHORS.slice(0, 15)
+  return DILIB_POPULAR_AUTHORS.filter((a) => a.toLowerCase().includes(q))
 }
 
 /** Lấy chi tiết sách từ Dilib.vn (bao gồm kiểm tra Audio & PDF) */

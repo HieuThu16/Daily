@@ -289,7 +289,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
     { title: 'Nhịp ngày & Sưu tập', ids: ['habit', 'daily', 'tasks', 'collection'] as Tab[] },
     { title: 'Giải trí & Video', ids: ['youtube', 'youtubeshorts', 'tiktok', 'music', 'movies', 'manga'] as Tab[] },
-    { title: 'Sách & Truyện online', ids: ['books', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
+    { title: 'Sách & Truyện online', ids: ['books', 'audiobooks', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition', 'sleep'] as Tab[] },
     { title: 'Kiến thức & con người', ids: ['english', 'knowledge', 'people', 'watch'] as Tab[] },
     { title: 'Hệ thống', ids: ['usage', 'settings'] as Tab[] },
