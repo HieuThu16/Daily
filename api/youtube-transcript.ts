@@ -195,19 +195,23 @@ export default async function handler(req: any, res: any) {
 
   const videoId = String(req.query?.v || req.body?.v || '').trim()
   const tl = String(req.query?.tl || 'vi').trim()
+  const sl = String(req.query?.sl || req.body?.sl || 'en').trim().toLowerCase()
   if (!/^[\w-]{11}$/.test(videoId)) {
     return res.status(400).json({ error: 'Thiếu hoặc sai video id (v)' })
   }
 
   try {
     let cues: TranscriptCue[] = []
-    let sourceLang = 'en'
+    let sourceLang = sl
+    let isOfficial = true
     for (const client of ['IOS', 'ANDROID'] as const) {
-      const track = pickTrack(await fetchTracks(videoId, client), 'en')
+      const tracks = await fetchTracks(videoId, client)
+      const track = pickTrack(tracks, sl)
       if (!track?.baseUrl) continue
       cues = await fetchCues(track.baseUrl)
       if (cues.length) {
-        sourceLang = track.languageCode || 'en'
+        sourceLang = track.languageCode || sl
+        isOfficial = track.kind !== 'asr'
         break
       }
     }
@@ -220,7 +224,7 @@ export default async function handler(req: any, res: any) {
     }
 
     res.setHeader('cache-control', 's-maxage=86400, stale-while-revalidate=604800')
-    return res.status(200).json({ videoId, sourceLang, cues })
+    return res.status(200).json({ videoId, sourceLang, isOfficial, cues })
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'Lỗi lấy phụ đề' })
   }

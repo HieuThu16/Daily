@@ -25,6 +25,9 @@ import {
   type LanguageDetail,
 } from '../../lib/languageAI'
 import { NativeSpeakerVideoPlayer } from './NativeSpeakerVideoPlayer'
+import { InteractiveSentence } from './InteractiveSentence'
+import { QuickWordLookupModal } from './QuickWordLookupModal'
+import { VideoSubtitleLearnView } from './VideoSubtitleLearnView'
 import './language.css'
 
 export type SavedLanguageCard = {
@@ -45,7 +48,7 @@ export function LanguagePage() {
   const { showToast } = useToast()
 
   // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'TRANSLATE' | 'VAULT' | 'PRACTICE'>('TRANSLATE')
+  const [activeTab, setActiveTab] = useState<'TRANSLATE' | 'VIDEO_LEARN' | 'VAULT' | 'PRACTICE'>('TRANSLATE')
 
   // Search & Generator State
   const [inputText, setInputText] = useState('')
@@ -53,6 +56,9 @@ export function LanguagePage() {
   const [currentResult, setCurrentResult] = useState<LanguageDetail | null>(null)
   const [selectedTagsForSave, setSelectedTagsForSave] = useState<string[]>(['Giao tiếp'])
   const [customTagInput, setCustomTagInput] = useState('')
+
+  // Interactive Quick Word Lookup Popup
+  const [lookupWord, setLookupWord] = useState<{ word: string; lang: 'en' | 'zh' | 'vi' } | null>(null)
 
   // Video Speaker Query (Chỉ gọi khi nhấn nút)
   const [activeVideoTarget, setActiveVideoTarget] = useState<{
@@ -293,14 +299,21 @@ export function LanguagePage() {
           className={`lang-nav-tab-btn ${activeTab === 'TRANSLATE' ? 'active' : ''}`}
           onClick={() => setActiveTab('TRANSLATE')}
         >
-          <Sparkles size={15} /> <span>Tra cứu & Video</span>
+          <Sparkles size={14} /> <span>Tra Cứu</span>
+        </button>
+        <button
+          type="button"
+          className={`lang-nav-tab-btn ${activeTab === 'VIDEO_LEARN' ? 'active' : ''}`}
+          onClick={() => setActiveTab('VIDEO_LEARN')}
+        >
+          <Video size={14} /> <span>Học Qua Video</span>
         </button>
         <button
           type="button"
           className={`lang-nav-tab-btn ${activeTab === 'VAULT' ? 'active' : ''}`}
           onClick={() => setActiveTab('VAULT')}
         >
-          <BookOpen size={15} /> <span>Sổ tay ({savedCards.length})</span>
+          <BookOpen size={14} /> <span>Sổ Tay ({savedCards.length})</span>
         </button>
         <button
           type="button"
@@ -312,7 +325,7 @@ export function LanguagePage() {
           }}
           disabled={savedCards.length === 0}
         >
-          <Shuffle size={15} /> <span>Flashcards</span>
+          <Shuffle size={14} /> <span>Flashcard</span>
         </button>
       </div>
 
@@ -401,7 +414,13 @@ export function LanguagePage() {
                     </div>
                   </div>
                   <div>
-                    <h3 className="lang-main-term">{currentResult.english.text}</h3>
+                    <h3 className="lang-main-term">
+                      <InteractiveSentence
+                        text={currentResult.english.text}
+                        lang="en"
+                        onWordClick={(w, l) => setLookupWord({ word: w, lang: l })}
+                      />
+                    </h3>
                     {currentResult.english.phonetic && (
                       <div className="lang-phonetic-badge">{currentResult.english.phonetic}</div>
                     )}
@@ -445,7 +464,11 @@ export function LanguagePage() {
                   </div>
                   <div>
                     <h3 className="lang-main-term" style={{ fontSize: '1.6rem', color: '#f472b6' }}>
-                      {currentResult.chinese.text}
+                      <InteractiveSentence
+                        text={currentResult.chinese.text}
+                        lang="zh"
+                        onWordClick={(w, l) => setLookupWord({ word: w, lang: l })}
+                      />
                     </h3>
                     <div className="lang-pinyin-badge">Pinyin: {currentResult.chinese.pinyin}</div>
                   </div>
@@ -531,7 +554,7 @@ export function LanguagePage() {
                     <span>Câu Mẫu Ngữ Cảnh Đời Thực ({currentResult.examples.length})</span>
                   </h3>
                   <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    Nhấn nút 🎬 ở mỗi câu để xem clip người bản xứ phát âm câu đó
+                    💡 Chạm vào từng từ để tra nghĩa nhanh · Nhấn 🎬 để xem clip
                   </span>
                 </div>
 
@@ -584,7 +607,13 @@ export function LanguagePage() {
 
                       <div className="lang-example-row">
                         <div style={{ flex: 1 }}>
-                          <div className="lang-example-en">{ex.english}</div>
+                          <div className="lang-example-en">
+                            <InteractiveSentence
+                              text={ex.english}
+                              lang="en"
+                              onWordClick={(w, l) => setLookupWord({ word: w, lang: l })}
+                            />
+                          </div>
                         </div>
                         <button
                           type="button"
@@ -598,7 +627,13 @@ export function LanguagePage() {
 
                       <div className="lang-example-row">
                         <div style={{ flex: 1 }}>
-                          <div className="lang-example-zh">{ex.chinese}</div>
+                          <div className="lang-example-zh">
+                            <InteractiveSentence
+                              text={ex.chinese}
+                              lang="zh"
+                              onWordClick={(w, l) => setLookupWord({ word: w, lang: l })}
+                            />
+                          </div>
                           <div className="lang-example-py">{ex.chinesePinyin}</div>
                         </div>
                         <button
@@ -651,6 +686,33 @@ export function LanguagePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* 4. TAB 2: HỌC QUA VIDEO CÓ PHỤ ĐỀ SONG NGỮ KHỚP LỜI */}
+      {activeTab === 'VIDEO_LEARN' && (
+        <VideoSubtitleLearnView
+          onSaveWordToVault={(term, meaning, details) => {
+            const newCard: SavedLanguageCard = {
+              id: Math.random().toString(36).slice(2, 10),
+              term,
+              meaning,
+              details,
+              tags: ['Video'],
+              created_at: new Date().toISOString(),
+            }
+            setSavedCards((prev) => [newCard, ...prev])
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([newCard, ...savedCards]))
+            } catch {}
+          }}
+          onSearchWordGlobal={(word) => {
+            setInputText(word)
+            setActiveTab('TRANSLATE')
+            setTimeout(() => {
+              void handleTranslate(word)
+            }, 100)
+          }}
+        />
       )}
 
       {/* 4. TAB 2: SỔ TAY ĐÃ LƯU (SAVED VAULT) */}
@@ -1076,6 +1138,36 @@ export function LanguagePage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Floating Interactive Quick Word Lookup Modal */}
+      {lookupWord && (
+        <QuickWordLookupModal
+          word={lookupWord.word}
+          lang={lookupWord.lang}
+          onClose={() => setLookupWord(null)}
+          onFullSearch={(word) => {
+            setInputText(word)
+            setActiveTab('TRANSLATE')
+            setTimeout(() => {
+              void handleTranslate(word)
+            }, 100)
+          }}
+          onSaveToVault={(term, meaning, details) => {
+            const newCard: SavedLanguageCard = {
+              id: Math.random().toString(36).slice(2, 10),
+              term,
+              meaning,
+              details,
+              tags: ['Tra cứu'],
+              created_at: new Date().toISOString(),
+            }
+            setSavedCards((prev) => [newCard, ...prev])
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([newCard, ...savedCards]))
+            } catch {}
+          }}
+        />
       )}
     </div>
   )
