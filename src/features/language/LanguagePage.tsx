@@ -14,6 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Lightbulb,
+  Video,
+  X,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useToast } from '../ToastContext'
@@ -22,6 +24,7 @@ import {
   playLanguageSpeech,
   type LanguageDetail,
 } from '../../lib/languageAI'
+import { NativeSpeakerVideoPlayer } from './NativeSpeakerVideoPlayer'
 import './language.css'
 
 export type SavedLanguageCard = {
@@ -33,17 +36,6 @@ export type SavedLanguageCard = {
   is_learned?: boolean
   created_at?: string
 }
-
-const QUICK_PROMPTS = [
-  'Xin chào',
-  'Cảm ơn bạn rất nhiều',
-  'Tôi muốn đặt một phòng khách sạn',
-  'Gửi báo giá dự án cho tôi',
-  'Hẹn gặp lại bạn vào cuối tuần',
-  'Món ăn này rất ngon',
-  'Bạn có thể giúp tôi một việc được không',
-  'Chúc bạn một ngày làm việc tốt lành',
-]
 
 const DEFAULT_TAG_OPTIONS = ['Giao tiếp', 'Công việc', 'Du lịch', 'Mua sắm', 'Ăn uống', 'Kinh doanh', 'Bạn bè']
 
@@ -61,6 +53,10 @@ export function LanguagePage() {
   const [currentResult, setCurrentResult] = useState<LanguageDetail | null>(null)
   const [selectedTagsForSave, setSelectedTagsForSave] = useState<string[]>(['Giao tiếp'])
   const [customTagInput, setCustomTagInput] = useState('')
+
+  // Video Speaker Query
+  const [videoPhrase, setVideoPhrase] = useState<string>('')
+  const [videoLang, setVideoLang] = useState<'english' | 'chinese'>('english')
 
   // Vault State
   const [savedCards, setSavedCards] = useState<SavedLanguageCard[]>([])
@@ -140,8 +136,10 @@ export function LanguagePage() {
     try {
       const result = await translateAndGenerateBilingual(q)
       setCurrentResult(result)
+      setVideoPhrase(result.english.text)
+      setVideoLang('english')
       if (overrideQuery) setInputText(overrideQuery)
-      showToast('✨ Đã dịch và tạo câu mẫu ngữ cảnh thành công!')
+      showToast('✨ Đã dịch và trích xuất video người bản xứ!')
     } catch (err: any) {
       showToast(`❌ Lỗi dịch thuật: ${err?.message || err}`, 'error')
     } finally {
@@ -259,55 +257,48 @@ export function LanguagePage() {
 
   return (
     <div className="lang-page-container">
-      {/* 1. Header Banner */}
-      <div className="lang-hero-card">
-        <div className="lang-hero-header">
-          <div className="lang-hero-title-group">
-            <div className="lang-hero-icon-wrap">
-              <Languages size={24} />
-            </div>
-            <div>
-              <h1 className="lang-hero-title">Trợ Lý Đa Ngôn Ngữ (Anh - Trung)</h1>
-              <p className="lang-hero-subtitle">
-                Gõ tiếng Việt (từ hoặc câu) → Tự động tạo bản dịch Tiếng Anh & Tiếng Trung (Pinyin) kèm câu mẫu theo nhiều tình huống đời thực.
-              </p>
-            </div>
+      {/* 1. Header Banner (Compact Mobile) */}
+      <div className="lang-compact-header">
+        <div className="lang-compact-brand">
+          <div className="lang-hero-icon-wrap" style={{ width: 36, height: 36, borderRadius: 10 }}>
+            <Languages size={18} />
           </div>
+          <div>
+            <h1 className="lang-compact-title">Ngôn ngữ Song ngữ (Anh - Trung)</h1>
+            <p className="lang-compact-desc">Dịch ngữ cảnh & xem video người bản xứ phát âm câu thực tế</p>
+          </div>
+        </div>
 
-          <div className="lang-hero-stats">
-            <div className="lang-stat-badge">
-              <BookOpen size={14} color="#8b5cf6" />
-              <span>{savedCards.length} thẻ lưu</span>
-            </div>
-            <div className="lang-stat-badge">
-              <CheckCircle2 size={14} color="#10b981" />
-              <span>{learnedCount} đã thuộc</span>
-            </div>
-            {unlearnedCount > 0 && (
-              <div className="lang-stat-badge">
-                <Circle size={14} color="#f59e0b" />
-                <span>{unlearnedCount} cần ôn</span>
-              </div>
-            )}
-          </div>
+        <div className="lang-compact-stats">
+          <span className="lang-compact-badge" title="Đã lưu vào sổ tay">
+            <BookOpen size={13} color="#8b5cf6" /> <b>{savedCards.length}</b> thẻ
+          </span>
+          <span className="lang-compact-badge" title="Đã thuộc">
+            <CheckCircle2 size={13} color="#10b981" /> <b>{learnedCount}</b> thuộc
+          </span>
+          {unlearnedCount > 0 && (
+            <span className="lang-compact-badge" title="Cần ôn tập">
+              <Circle size={13} color="#f59e0b" /> <b>{unlearnedCount}</b> ôn
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 2. Navigation Tabs */}
+      {/* 2. Navigation Tabs (Compact Segment Bar) */}
       <div className="lang-nav-tabs">
         <button
           type="button"
           className={`lang-nav-tab-btn ${activeTab === 'TRANSLATE' ? 'active' : ''}`}
           onClick={() => setActiveTab('TRANSLATE')}
         >
-          <Sparkles size={16} /> <span>Tra cứu & Tạo câu mẫu</span>
+          <Sparkles size={15} /> <span>Tra cứu & Video</span>
         </button>
         <button
           type="button"
           className={`lang-nav-tab-btn ${activeTab === 'VAULT' ? 'active' : ''}`}
           onClick={() => setActiveTab('VAULT')}
         >
-          <BookOpen size={16} /> <span>Sổ tay đã lưu ({savedCards.length})</span>
+          <BookOpen size={15} /> <span>Sổ tay ({savedCards.length})</span>
         </button>
         <button
           type="button"
@@ -319,13 +310,14 @@ export function LanguagePage() {
           }}
           disabled={savedCards.length === 0}
         >
-          <Shuffle size={16} /> <span>Luyện Flashcards</span>
+          <Shuffle size={15} /> <span>Flashcards</span>
         </button>
       </div>
 
-      {/* 3. TAB 1: TRA CỨU & TẠO CÂU MẪU (TRANSLATE & GENERATE) */}
+      {/* 3. TAB 1: TRA CỨU & TẠO CÂU MẪU + VIDEO NGƯỜI BẢN XỨ */}
       {activeTab === 'TRANSLATE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Search Box without bulky pills */}
           <div className="lang-search-card">
             <form
               onSubmit={(e) => {
@@ -335,43 +327,38 @@ export function LanguagePage() {
               className="lang-input-row"
             >
               <div className="lang-input-wrap">
-                <Search size={20} className="lang-input-icon" />
+                <Search size={18} className="lang-input-icon" />
                 <input
                   type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Gõ từ hoặc câu tiếng Việt (vd: xin chào, đặt phòng khách sạn, báo giá, hẹn gặp lại...)"
+                  placeholder="Gõ từ hoặc câu tiếng Việt cần tra..."
                   className="lang-main-input"
                   autoFocus
                 />
+                {inputText && (
+                  <button
+                    type="button"
+                    className="lang-input-clear-btn"
+                    onClick={() => setInputText('')}
+                    title="Xóa nội dung"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
               </div>
               <button type="submit" disabled={isTranslating || !inputText.trim()} className="lang-submit-btn">
                 {isTranslating ? (
                   <>
-                    <Sparkles size={16} className="tv-spin" /> <span>Đang dịch...</span>
+                    <Sparkles size={16} className="tv-spin" /> <span className="hide-on-xs">Đang tìm...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={16} /> <span>Dịch & Tạo câu mẫu</span>
+                    <Sparkles size={16} /> <span>Dịch & Video</span>
                   </>
                 )}
               </button>
             </form>
-
-            {/* Quick Suggestion Pills */}
-            <div className="lang-quick-pills">
-              <span className="lang-quick-label">Gợi ý thử nhanh:</span>
-              {QUICK_PROMPTS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => void handleTranslate(p)}
-                  className="lang-pill-btn"
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Results Area */}
@@ -382,15 +369,28 @@ export function LanguagePage() {
                 {/* 1. Tiếng Anh */}
                 <div className="lang-lang-card">
                   <div className="lang-card-header">
-                    <span className="lang-card-tag en">🇺🇸 Tiếng Anh (English)</span>
-                    <button
-                      type="button"
-                      className="lang-audio-btn"
-                      onClick={() => playLanguageSpeech(currentResult.english.text, 'en')}
-                      title="Phát âm tiếng Anh"
-                    >
-                      <Volume2 size={18} />
-                    </button>
+                    <span className="lang-card-tag en">🇺🇸 Tiếng Anh</span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        type="button"
+                        className="lang-video-quick-btn"
+                        onClick={() => {
+                          setVideoPhrase(currentResult.english.text)
+                          setVideoLang('english')
+                        }}
+                        title="Xem video người bản xứ phát âm câu này"
+                      >
+                        <Video size={13} /> <span>Clip</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="lang-audio-btn"
+                        onClick={() => playLanguageSpeech(currentResult.english.text, 'en')}
+                        title="Phát âm tiếng Anh"
+                      >
+                        <Volume2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <h3 className="lang-main-term">{currentResult.english.text}</h3>
@@ -398,7 +398,7 @@ export function LanguagePage() {
                       <div className="lang-phonetic-badge">{currentResult.english.phonetic}</div>
                     )}
                   </div>
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     {currentResult.english.explanation}
                   </p>
                 </div>
@@ -406,72 +406,122 @@ export function LanguagePage() {
                 {/* 2. Tiếng Trung */}
                 <div className="lang-lang-card">
                   <div className="lang-card-header">
-                    <span className="lang-card-tag zh">🇨🇳 Tiếng Trung (中文)</span>
-                    <button
-                      type="button"
-                      className="lang-audio-btn"
-                      onClick={() => playLanguageSpeech(currentResult.chinese.text, 'zh')}
-                      title="Phát âm tiếng Trung"
-                    >
-                      <Volume2 size={18} />
-                    </button>
+                    <span className="lang-card-tag zh">🇨🇳 Tiếng Trung</span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        type="button"
+                        className="lang-video-quick-btn zh"
+                        onClick={() => {
+                          setVideoPhrase(currentResult.chinese.text)
+                          setVideoLang('chinese')
+                        }}
+                        title="Xem video tiếng Trung phát âm câu này"
+                      >
+                        <Video size={13} /> <span>Clip</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="lang-audio-btn"
+                        onClick={() => playLanguageSpeech(currentResult.chinese.text, 'zh')}
+                        title="Phát âm tiếng Trung"
+                      >
+                        <Volume2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   <div>
-                    <h3 className="lang-main-term" style={{ fontSize: '1.8rem', color: '#f472b6' }}>
+                    <h3 className="lang-main-term" style={{ fontSize: '1.6rem', color: '#f472b6' }}>
                       {currentResult.chinese.text}
                     </h3>
                     <div className="lang-pinyin-badge">Pinyin: {currentResult.chinese.pinyin}</div>
                   </div>
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     {currentResult.chinese.explanation}
                   </p>
                 </div>
               </div>
 
+              {/* NATIVE SPEAKER VIDEO SECTION (YOUGLISH / YOUTUBE CLIP CUTTER) */}
+              <NativeSpeakerVideoPlayer
+                initialQuery={videoPhrase || currentResult.english.text}
+                initialLanguage={videoLang}
+              />
+
               {/* Situational Context Examples Section */}
               <div className="lang-examples-section">
-                <h3 className="lang-examples-title">
-                  <Lightbulb size={20} color="#f59e0b" />
-                  <span>Các Câu Mẫu Theo Tình Huống Đời Thực ({currentResult.examples.length} trường hợp)</span>
-                </h3>
+                <div className="lang-examples-header">
+                  <h3 className="lang-examples-title">
+                    <Lightbulb size={18} color="#f59e0b" />
+                    <span>Câu Mẫu Ngữ Cảnh Đời Thực ({currentResult.examples.length})</span>
+                  </h3>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    Bấm nút 🎬 ở từng câu để xem clip người bản xứ nói câu đó
+                  </span>
+                </div>
 
                 <div className="lang-examples-grid">
                   {currentResult.examples.map((ex, idx) => (
                     <div key={idx} className="lang-example-card">
-                      <span className="lang-example-context">📌 {ex.context}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span className="lang-example-context">📌 {ex.context}</span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            type="button"
+                            className="lang-mini-video-btn"
+                            onClick={() => {
+                              setVideoPhrase(ex.english)
+                              setVideoLang('english')
+                              window.scrollTo({ top: 120, behavior: 'smooth' })
+                            }}
+                            title="Xem video người bản xứ nói câu tiếng Anh này"
+                          >
+                            <Video size={11} /> <span>Video EN</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="lang-mini-video-btn zh"
+                            onClick={() => {
+                              setVideoPhrase(ex.chinese)
+                              setVideoLang('chinese')
+                              window.scrollTo({ top: 120, behavior: 'smooth' })
+                            }}
+                            title="Xem video nói câu tiếng Trung này"
+                          >
+                            <Video size={11} /> <span>Video ZH</span>
+                          </button>
+                        </div>
+                      </div>
                       
                       <div className="lang-example-vi">
                         <strong>Tiếng Việt:</strong> {ex.vietnamese}
                       </div>
 
                       <div className="lang-example-row">
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <div className="lang-example-en">{ex.english}</div>
                         </div>
                         <button
                           type="button"
-                          className="lang-audio-btn"
-                          style={{ width: 28, height: 28 }}
+                          className="lang-audio-btn small"
                           onClick={() => playLanguageSpeech(ex.english, 'en')}
                           title="Phát âm câu tiếng Anh"
                         >
-                          <Volume2 size={14} />
+                          <Volume2 size={13} />
                         </button>
                       </div>
 
                       <div className="lang-example-row">
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <div className="lang-example-zh">{ex.chinese}</div>
                           <div className="lang-example-py">{ex.chinesePinyin}</div>
                         </div>
                         <button
                           type="button"
-                          className="lang-audio-btn"
-                          style={{ width: 28, height: 28 }}
+                          className="lang-audio-btn small"
                           onClick={() => playLanguageSpeech(ex.chinese, 'zh')}
                           title="Phát âm câu tiếng Trung"
                         >
-                          <Volume2 size={14} />
+                          <Volume2 size={13} />
                         </button>
                       </div>
                     </div>
@@ -480,8 +530,8 @@ export function LanguagePage() {
 
                 {/* Save to Vault Action Bar */}
                 <div className="lang-save-row">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Chọn thẻ phân loại:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 700 }}>Thẻ:</span>
                     {DEFAULT_TAG_OPTIONS.map((t) => {
                       const isSelected = selectedTagsForSave.includes(t)
                       return (
@@ -508,7 +558,7 @@ export function LanguagePage() {
                   </div>
 
                   <button type="button" onClick={handleSaveToVault} className="lang-save-btn">
-                    <BookmarkPlus size={18} /> <span>Lưu vào Sổ tay ngôn ngữ</span>
+                    <BookmarkPlus size={16} /> <span>Lưu vào Sổ tay</span>
                   </button>
                 </div>
               </div>
@@ -762,6 +812,20 @@ export function LanguagePage() {
 
                     {/* Card Actions */}
                     <div className="lang-vault-actions">
+                      <button
+                        type="button"
+                        className="lang-card-action-btn"
+                        onClick={() => {
+                          setVideoPhrase(card.details?.english?.text || card.meaning)
+                          setVideoLang('english')
+                          setActiveTab('TRANSLATE')
+                          window.scrollTo({ top: 120, behavior: 'smooth' })
+                        }}
+                        title="Xem video người bản xứ nói câu này"
+                      >
+                        <Video size={13} color="#f87171" /> <span>🎬 Video</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleCopy(card.meaning)}
