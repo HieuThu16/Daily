@@ -160,6 +160,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const musicArtistsQuery = useQuery<MusicArtist>('music_artists', 'name')
   const movieGenresQuery = useQuery<MovieGenre>('movie_genres', 'name')
   const musicGenresQuery = useQuery<MusicGenre>('music_genres', 'name')
+  const bookReadingLogsQuery = useQuery<BookReadingLog>('book_reading_logs')
 
   // Selected Category
   const [selectedType, setSelectedType] = useState<'ALL' | Kind>(defaultType)
@@ -207,11 +208,12 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       if (item.status === 'IN_PROGRESS') return true
       if (item.status === 'COMPLETED') return false
       if (lastReadBook?.mediaItemId === item.id) return true
+      if (bookReadingLogsQuery.items.some((l) => l.media_item_id === item.id)) return true
       const sessionLogs = getBookReadingSessionLogs()
       if (sessionLogs.some((s) => s.mediaItemId === item.id && s.status !== 'COMPLETED')) return true
       return false
     },
-    [lastReadBook],
+    [lastReadBook, bookReadingLogsQuery.items],
   )
 
   useEffect(() => {
@@ -298,7 +300,6 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const coverFileInput = useRef<HTMLInputElement>(null)
 
   // Book reading log state
-  const bookReadingLogsQuery = useQuery<BookReadingLog>('book_reading_logs')
   const [bookLogModal, setBookLogModal] = useState<{ item: Media } | null>(null)
   const [bookHistoryModal, setBookHistoryModal] = useState<{ item: Media } | null>(null)
   const [logPage, setLogPage] = useState<string>('')
