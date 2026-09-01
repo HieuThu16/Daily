@@ -33,14 +33,24 @@ export function answerLines(answer: string): string[] {
 
 export type LessonEntry = { question: string; answers: string[] }
 
-/** Soạn bài học bằng tay: mỗi mục là một câu hỏi kèm danh sách câu trả lời. */
-export function lessonRows(entries: LessonEntry[], category: string): { question: string; answer: string; category: string }[] {
+/** Soạn bài học bằng tay: mỗi mục là một câu hỏi kèm danh sách câu trả lời và video nguồn (nếu có). */
+export function lessonRows(
+  entries: LessonEntry[],
+  category: string,
+  sourceVideoId?: string | null,
+): { question: string; answer: string; category: string; source_video_id?: string | null }[] {
   const cat = normalizeCategory(category)
   return entries
-    .map((e) => ({
-      question: e.question.trim(),
-      answer: e.answers.map((a) => a.trim()).filter(Boolean).join('\n'),
-      category: cat,
-    }))
+    .map((e) => {
+      const row: { question: string; answer: string; category: string; source_video_id?: string | null } = {
+        question: e.question.trim(),
+        answer: e.answers.map((a) => a.trim()).filter(Boolean).join('\n'),
+        category: cat,
+      }
+      if (sourceVideoId) {
+        row.source_video_id = sourceVideoId.trim()
+      }
+      return row
+    })
     .filter((r) => r.question)
 }

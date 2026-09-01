@@ -61,4 +61,10 @@ describe('lessonRows', () => {
   it('không có thể loại thì mặc định Chung', () => {
     expect(lessonRows([{ question: 'a', answers: [] }], '')).toEqual([{ question: 'a', answer: '', category: 'Chung' }])
   })
+
+  it('gắn source_video_id nếu có truyền', () => {
+    expect(lessonRows([{ question: 'Bài học 1', answers: ['Ý 1'] }], 'Kinh doanh', 'dQw4w9WgXcQ')).toEqual([
+      { question: 'Bài học 1', answer: 'Ý 1', category: 'Kinh doanh', source_video_id: 'dQw4w9WgXcQ' },
+    ])
+  })
 })

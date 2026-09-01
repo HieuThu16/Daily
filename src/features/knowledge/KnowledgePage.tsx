@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Brain, Check, ChevronDown, FilePlus2, Plus, Search, Settings2, Tags, Trash2, BookOpen, ChevronRight, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Brain,
+  Check,
+  ChevronDown,
+  FilePlus2,
+  Plus,
+  Search,
+  Settings2,
+  Tags,
+  Trash2,
+  BookOpen,
+  ChevronRight,
+  X,
+  Youtube,
+} from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useHeaderAction } from '../HeaderAction'
 import { Modal } from '../shared'
@@ -10,8 +25,10 @@ import type { LessonEntry } from './knowledge'
 import { ReviewSession } from '../study/ReviewSession'
 import { useDeck } from '../study/useDeck'
 import { StudyProgressBar } from '../study/StudyProgressBar'
+import { useVideoProgressMap } from '../../lib/videoProgress'
+import { youtubeVideoId } from '../../lib/youtubeMeta'
 
-const EMPTY_FORM = { question: '', answer: '', category: '' }
+const EMPTY_FORM = { question: '', answer: '', category: '', source_video_id: null as string | null }
 
 /** Bảng chưa được tạo trên Supabase — cần chạy migration 20260913000000_knowledge_items.sql. */
 const MISSING_TABLE_CODES = ['42P01', 'PGRST205']
@@ -26,8 +43,268 @@ export function getCategoryAccent(cat: string): string {
   return colors[Math.abs(hash) % colors.length]
 }
 
+/** Component chọn video YouTube từ lịch sử gần đây hoặc dán link */
+function YoutubeVideoPicker({
+  selectedVideoId,
+  onSelectVideo,
+}: {
+  selectedVideoId: string | null | undefined
+  onSelectVideo: (videoId: string | null) => void
+}) {
+  const [mode, setMode] = useState<'recent' | 'url'>('recent')
+  const [customInput, setCustomInput] = useState('')
+  const progressMap = useVideoProgressMap()
+
+  const recentVideos = useMemo(() => {
+    return Object.values(progressMap)
+      .filter((p) => p && p.videoId)
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+      .slice(0, 10)
+  }, [progressMap])
+
+  const selectedMeta = useMemo(() => {
+    if (!selectedVideoId) return null
+    return (
+      progressMap[selectedVideoId] || {
+        videoId: selectedVideoId,
+        title: `YouTube Video (${selectedVideoId})`,
+        thumbnail: `https://i.ytimg.com/vi/${selectedVideoId}/hqdefault.jpg`,
+        channelName: undefined,
+      }
+    )
+  }, [selectedVideoId, progressMap])
+
+  const handleApplyUrl = () => {
+    const parsedId = youtubeVideoId(customInput.trim())
+    if (parsedId) {
+      onSelectVideo(parsedId)
+      setCustomInput('')
+    }
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: 12,
+        borderRadius: 12,
+        background: 'var(--bg-main)',
+        border: '1px solid var(--card-border)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
+          <Youtube size={16} color="#f43f5e" />
+          <span>Gắn video YouTube nguồn (tùy chọn)</span>
+        </div>
+        {selectedVideoId && (
+          <button
+            type="button"
+            onClick={() => onSelectVideo(null)}
+            style={{ fontSize: '0.72rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+          >
+            Bỏ gắn video
+          </button>
+        )}
+      </div>
+
+      {selectedVideoId ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: 8,
+            borderRadius: 10,
+            background: 'var(--card-bg)',
+            border: '1px solid rgba(244, 63, 94, 0.35)',
+            boxShadow: '0 2px 8px rgba(244, 63, 94, 0.08)',
+          }}
+        >
+          <img
+            src={selectedMeta?.thumbnail || `https://i.ytimg.com/vi/${selectedVideoId}/hqdefault.jpg`}
+            alt=""
+            style={{ width: 68, height: 40, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--text-main)',
+                display: '-webkit-box',
+                WebkitLineClamp: 1,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
+              {selectedMeta?.title || selectedVideoId}
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              {selectedMeta?.channelName || 'YouTube'} · ID: {selectedVideoId}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSelectVideo(null)}
+            style={{
+              padding: '4px 8px',
+              borderRadius: 6,
+              border: '1px solid var(--card-border)',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+            }}
+          >
+            Đổi
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            <button
+              type="button"
+              onClick={() => setMode('recent')}
+              style={{
+                flex: 1,
+                padding: '4px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                borderRadius: 6,
+                border: `1px solid ${mode === 'recent' ? 'var(--primary)' : 'var(--card-border)'}`,
+                background: mode === 'recent' ? 'var(--primary)' : 'transparent',
+                color: mode === 'recent' ? '#fff' : 'var(--text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              ⏱️ Video vừa xem ({recentVideos.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('url')}
+              style={{
+                flex: 1,
+                padding: '4px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                borderRadius: 6,
+                border: `1px solid ${mode === 'url' ? 'var(--primary)' : 'var(--card-border)'}`,
+                background: mode === 'url' ? 'var(--primary)' : 'transparent',
+                color: mode === 'url' ? '#fff' : 'var(--text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              🔗 Dán link YouTube
+            </button>
+          </div>
+
+          {mode === 'recent' ? (
+            recentVideos.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                {recentVideos.map((v) => (
+                  <div
+                    key={v.videoId}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectVideo(v.videoId)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      background: 'var(--card-bg)',
+                      border: '1px solid var(--card-border)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <img
+                      src={v.thumbnail || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`}
+                      alt=""
+                      style={{ width: 48, height: 28, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          color: 'var(--text-main)',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {v.title || v.videoId}
+                      </div>
+                      <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>
+                        {v.channelName || 'YouTube'} {v.percent > 0 ? `· Đã xem ${v.percent}%` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', padding: '10px 0' }}>
+                Chưa có video xem gần đây. Bạn có thể bấm sang &ldquo;Dán link YouTube&rdquo;.
+              </div>
+            )
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="text"
+                placeholder="Dán link YouTube (youtu.be/... hoặc youtube.com/watch?v=...)"
+                value={customInput}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setCustomInput(val)
+                  const parsed = youtubeVideoId(val.trim())
+                  if (parsed) {
+                    onSelectVideo(parsed)
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  fontSize: '0.76rem',
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleApplyUrl}
+                disabled={!youtubeVideoId(customInput.trim())}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  opacity: youtubeVideoId(customInput.trim()) ? 1 : 0.5,
+                }}
+              >
+                Gắn
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Tab Kiến thức: sơ đồ tư duy thể loại → câu hỏi → các câu trả lời, lọc theo thể loại và tìm kiếm. */
 export function KnowledgePage() {
+  const navigate = useNavigate()
   const { showToast, showUndoToast } = useToast()
   const [items, setItems] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,7 +317,7 @@ export function KnowledgePage() {
   const [managing, setManaging] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [reviewing, setReviewing] = useState(false)
-  const [lesson, setLesson] = useState<{ category: string; entries: LessonEntry[] } | null>(null) // != null: đang soạn bài học tay
+  const [lesson, setLesson] = useState<{ category: string; sourceVideoId?: string | null; entries: LessonEntry[] } | null>(null) // != null: đang soạn bài học tay
   const [lessonBusy, setLessonBusy] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
@@ -131,6 +408,7 @@ export function KnowledgePage() {
         question,
         answer: form.answer.trim(),
         category: normalizeCategory(form.category),
+        source_video_id: form.source_video_id ? form.source_video_id.trim() : null,
       })
       .select()
       .single()
@@ -147,7 +425,7 @@ export function KnowledgePage() {
   /** Lưu cả bài học tự soạn: mỗi dòng thành một thẻ. Không gọi AI. */
   const saveLesson = async () => {
     if (!lesson || !supabase) return
-    const rows = lessonRows(lesson.entries, lesson.category)
+    const rows = lessonRows(lesson.entries, lesson.category, lesson.sourceVideoId)
     if (!rows.length) return
     setLessonBusy(true)
     const { data, error } = await supabase.from('knowledge_items').insert(rows).select()
@@ -175,6 +453,11 @@ export function KnowledgePage() {
 
   const toggleNode = (id: string) => setOpen((prev) => ({ ...prev, [id]: !prev[id] }))
 
+  const closeForm = () => {
+    setAdding(false)
+    setForm(EMPTY_FORM)
+  }
+
   /** Nhánh sơ đồ: mỗi thể loại là một nhánh, mỗi thẻ là một nút con. */
   const branches = useMemo(() => {
     const map = new Map<string, KnowledgeItem[]>()
@@ -184,47 +467,48 @@ export function KnowledgePage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
   }, [visible])
 
-  const closeForm = () => {
-    setAdding(false)
-    setForm(EMPTY_FORM)
-  }
-
-  const pick = (value: string | null) => {
-    setCategory(value)
-    setPickerOpen(false)
-  }
+  const selectedCount = category === null ? items.length : (stats.find((s) => s.name === category)?.count ?? 0)
 
   return (
-    <section className="eng-page">
+    <section className="kn-page">
       {needsMigration && (
         <div className="card kn-notice">
-          Bảng <code>knowledge_items</code> chưa có trên Supabase. Chạy{' '}
-          <code>supabase/migrations/20260913000000_knowledge_items.sql</code> rồi tải lại trang.
+          <strong>Chưa tạo bảng kiến thức trên đám mây</strong>
+          <p className="muted">
+            Bảng <code>knowledge_items</code> chưa có trên Supabase. Chạy{' '}
+            <code>supabase/migrations/20260913000000_knowledge_items.sql</code> rồi tải lại trang.
+          </p>
         </div>
       )}
 
       {/* Compact Minimal Header / Toolbar */}
-      <div className="card eng-compact-header">
-        <div className="kn-toolbar">
-          <div className="kn-search">
-            <Search size={14} />
-            <input
-              placeholder="Tìm câu hỏi, câu trả lời…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Tìm trong thẻ kiến thức"
-            />
-          </div>
+      <div className="card kn-toolbar">
+        <div className="kn-search">
+          <Search size={16} className="muted" />
+          <input
+            placeholder="Tìm câu hỏi, câu trả lời, thể loại…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="eng-icon-action-btn" aria-label="Xoá tìm kiếm" onClick={() => setSearch('')}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
+        <div className="kn-toolbar-actions">
           <div className="kn-picker" ref={pickerRef}>
             <button
-              className={`kn-picker-btn ${category ? 'is-on' : ''}`}
+              className={`kn-picker-btn ${category !== null ? 'is-on' : ''}`}
               onClick={() => setPickerOpen((p) => !p)}
               aria-expanded={pickerOpen}
               aria-haspopup="listbox"
             >
               <Tags size={14} />
-              <span className="kn-picker-label">{category ?? 'Tất cả thể loại'}</span>
+              <span className="kn-picker-label">
+                {category ?? 'Tất cả thể loại'} ({selectedCount})
+              </span>
               <ChevronDown size={14} className="kn-picker-chevron" />
             </button>
 
@@ -234,25 +518,33 @@ export function KnowledgePage() {
                   className={`kn-picker-item ${category === null ? 'is-on' : ''}`}
                   role="option"
                   aria-selected={category === null}
-                  onClick={() => pick(null)}
+                  onClick={() => {
+                    setCategory(null)
+                    setPickerOpen(false)
+                  }}
                 >
                   <span className="kn-picker-name">Tất cả thể loại</span>
                   <span className="kn-picker-count">{items.length}</span>
                   {category === null && <Check size={14} />}
                 </button>
+                <div className="kn-picker-divider" />
                 {stats.map((s) => (
                   <button
                     key={s.name}
                     className={`kn-picker-item ${category === s.name ? 'is-on' : ''}`}
                     role="option"
                     aria-selected={category === s.name}
-                    onClick={() => pick(s.name)}
+                    onClick={() => {
+                      setCategory(s.name)
+                      setPickerOpen(false)
+                    }}
                   >
                     <span className="kn-picker-name">{s.name}</span>
                     <span className="kn-picker-count">{s.count}</span>
                     {category === s.name && <Check size={14} />}
                   </button>
                 ))}
+                <div className="kn-picker-divider" />
                 <button
                   className="kn-picker-manage"
                   onClick={() => {
@@ -346,12 +638,19 @@ export function KnowledgePage() {
               onChange={(e) => setLesson({ ...lesson, category: e.target.value })}
             />
           </label>
-          <div className="kn-lesson-list">
+
+          {/* Chọn hoặc dán link YouTube nguồn cho bài học */}
+          <YoutubeVideoPicker
+            selectedVideoId={lesson.sourceVideoId}
+            onSelectVideo={(id) => setLesson({ ...lesson, sourceVideoId: id })}
+          />
+
+          <div className="kn-lesson-list" style={{ marginTop: 12 }}>
             {lesson.entries.map((entry, qi) => (
               <div key={qi} className="kn-lesson-q">
                 <div className="kn-lesson-q-head">
                   <input
-                    placeholder={`Câu hỏi ${qi + 1}`}
+                    placeholder={`Ý chính / Câu hỏi ${qi + 1}`}
                     value={entry.question}
                     onChange={(e) => setLesson({ ...lesson, entries: lesson.entries.map((x, i) => (i === qi ? { ...x, question: e.target.value } : x)) })}
                   />
@@ -368,7 +667,7 @@ export function KnowledgePage() {
                 {entry.answers.map((ans, ai) => (
                   <div key={ai} className="kn-lesson-a">
                     <input
-                      placeholder={`Câu trả lời ${ai + 1}`}
+                      placeholder={`Chi tiết / Câu trả lời ${ai + 1}`}
                       value={ans}
                       onChange={(e) =>
                         setLesson({
@@ -401,23 +700,24 @@ export function KnowledgePage() {
                     setLesson({ ...lesson, entries: lesson.entries.map((x, i) => (i === qi ? { ...x, answers: [...x.answers, ''] } : x)) })
                   }
                 >
-                  <Plus size={14} /> Thêm câu trả lời
+                  <Plus size={14} /> Thêm chi tiết
                 </button>
               </div>
             ))}
           </div>
           <button
             className="kn-manage-btn"
+            style={{ marginTop: 8 }}
             onClick={() => setLesson({ ...lesson, entries: [...lesson.entries, { question: '', answers: [''] }] })}
           >
-            <Plus size={14} /> Thêm câu hỏi
+            <Plus size={14} /> Thêm ý chính
           </button>
-          <p className="muted" style={{ fontSize: '0.8rem', margin: '4px 0 0' }}>
-            {lessonRows(lesson.entries, lesson.category).length} thẻ sẽ được tạo.
+          <p className="muted" style={{ fontSize: '0.8rem', margin: '6px 0 0' }}>
+            {lessonRows(lesson.entries, lesson.category, lesson.sourceVideoId).length} thẻ sẽ được tạo.
           </p>
           <div className="modal-actions">
             <button onClick={() => setLesson(null)}>Huỷ</button>
-            <button className="primary" onClick={saveLesson} disabled={lessonBusy || !lessonRows(lesson.entries, lesson.category).length}>
+            <button className="primary" onClick={saveLesson} disabled={lessonBusy || !lessonRows(lesson.entries, lesson.category, lesson.sourceVideoId).length}>
               {lessonBusy ? 'Đang lưu…' : 'Lưu bài học'}
             </button>
           </div>
@@ -458,6 +758,13 @@ export function KnowledgePage() {
               <option key={c} value={c} />
             ))}
           </datalist>
+
+          {/* Chọn hoặc dán link YouTube nguồn cho thẻ */}
+          <YoutubeVideoPicker
+            selectedVideoId={form.source_video_id}
+            onSelectVideo={(id) => setForm({ ...form, source_video_id: id })}
+          />
+
           <div className="modal-actions">
             <button onClick={closeForm}>Huỷ</button>
             <button className="primary" onClick={save} disabled={!form.question.trim()}>
@@ -508,6 +815,39 @@ export function KnowledgePage() {
                               <span className="kn-node-text">{item.question}</span>
                               {answers.length > 1 && <span className="kn-picker-count">{answers.length}</span>}
                             </button>
+
+                            {/* Badge mở video nguồn YouTube nếu có */}
+                            {item.source_video_id && (
+                              <button
+                                type="button"
+                                className="kn-video-source-badge"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigate(`/youtube/watch/${item.source_video_id}`)
+                                }}
+                                title="Xem video bài học nguồn trên YouTube"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
+                                  background: 'rgba(244, 63, 94, 0.1)',
+                                  color: 'var(--rose, #f43f5e)',
+                                  border: '1px solid rgba(244, 63, 94, 0.3)',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  flexShrink: 0,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <Youtube size={12} color="#f43f5e" />
+                                <span>Video nguồn</span>
+                              </button>
+                            )}
+
                             <button
                               className="eng-icon-action-btn is-delete"
                               aria-label={`Xoá thẻ "${item.question}"`}

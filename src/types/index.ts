@@ -6,6 +6,7 @@ export type KnowledgeItem = {
   question: string
   answer: string
   category: string
+  source_video_id?: string | null
   created_at?: string
   deleted_at?: string | null
 }
