@@ -261,7 +261,9 @@ export function isEntryFirstTime(entry: Partial<Entry> | null | undefined): bool
     entry.tags?.includes('is_first_time') ||
     entry.tags?.includes('Lần đầu') ||
     entry.tags?.includes('lan_dau') ||
-    entry.entry_type === 'FIRST_TIME'
+    entry.entry_type === 'FIRST_TIME' ||
+    entry.content?.includes('✨ Lần đầu') ||
+    entry.content?.includes('[Lần đầu]')
   )
 }
 
@@ -273,7 +275,9 @@ export function isEntrySpecial(entry: Partial<Entry> | null | undefined): boolea
     entry.tags?.includes('is_special') ||
     entry.tags?.includes('Đặc biệt') ||
     entry.tags?.includes('dac_biet') ||
-    entry.entry_type === 'SPECIAL'
+    entry.entry_type === 'SPECIAL' ||
+    entry.content?.includes('🌟 Đặc biệt') ||
+    entry.content?.includes('[Đặc biệt]')
   )
 }
 /** Người được mời xem sự kiện chung, định danh bằng email đăng nhập. */

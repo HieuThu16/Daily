@@ -23,11 +23,28 @@ import { Memory3DCard } from './daily/Memory3DCard'
 export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = []
 
 export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]): DailyCategoryItem | null {
-  const catLabel = entry.category || (entry.tags && entry.tags.length > 0 ? entry.tags[0] : null)
-  if (catLabel) {
-    const found = allCategories.find((c) => c.label === catLabel || c.id === catLabel)
+  if (entry.category) {
+    const found = allCategories.find((c) => c.label === entry.category || c.id === entry.category)
     if (found) return found
-    return { id: catLabel, label: catLabel, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+    return { id: entry.category, label: entry.category, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+  }
+  if (entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0) {
+    const specialTags = new Set(['FIRST_TIME', 'SPECIAL', 'Lần đầu', 'lan_dau', 'Đặc biệt', 'dac_biet', 'is_first_time', 'is_special'])
+    const nonSpecialTag = entry.tags.find((t) => !specialTags.has(t))
+    if (nonSpecialTag) {
+      const found = allCategories.find((c) => c.label === nonSpecialTag || c.id === nonSpecialTag)
+      if (found) return found
+      return { id: nonSpecialTag, label: nonSpecialTag, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+    }
+  }
+  // Fallback: Kiểm tra nếu nội dung có gắn [Thể loại]
+  if (entry.content) {
+    const match = entry.content.match(/^\[([^\]]+)\]/)
+    if (match && match[1]) {
+      const catLabel = match[1].trim()
+      const found = allCategories.find((c) => c.label.toLowerCase() === catLabel.toLowerCase() || c.id === catLabel)
+      if (found) return found
+    }
   }
   return null
 }
@@ -556,11 +573,14 @@ export function DailyPage() {
     if (isFirstTime) tagsList.push('FIRST_TIME', 'Lần đầu', 'lan_dau')
     if (isSpecial) tagsList.push('SPECIAL', 'Đặc biệt', 'dac_biet')
 
+    // Luôn dùng entry_type chuẩn của database ('FEELING' / 'NEW_THING') để không bao giờ bị dính lỗi check constraint của PostgreSQL
+    const safeEntryType: DailyType = isFirstTime ? 'NEW_THING' : 'FEELING'
+
     // Tạo payload chuẩn xác với is_first_time, is_special, category, tags và ảnh/video đính kèm
     const payload = lines.map((lineText, idx) => ({
       content: lineText,
       entry_date: date,
-      entry_type: (selectedCategory as DailyType) || (isFirstTime ? 'FIRST_TIME' : isSpecial ? 'SPECIAL' : 'FEELING'),
+      entry_type: safeEntryType,
       entry_time: currentTimeString,
       is_first_time: Boolean(isFirstTime),
       is_special: Boolean(isSpecial),
@@ -574,17 +594,74 @@ export function DailyPage() {
 
     try {
       if (supabase) {
+        // Tier 1: Insert đầy đủ is_first_time, is_special, tags
         const { data, error } = await supabase.from('daily_entries').insert(payload).select()
         if (!error && data && data.length > 0) {
           savedToSupabase = true
           savedItems = (data as any[]).map((row) => ({
             ...row,
+            category: selectedCategory,
             is_first_time: Boolean(isFirstTime || row.is_first_time),
             is_special: Boolean(isSpecial || row.is_special),
             tags: row.tags && row.tags.length > 0 ? row.tags : tagsList,
           })) as Entry[]
+        } else if (error) {
+          console.warn('Lỗi Supabase Tier 1, thử lại phương án Tier 2 (bảo lưu tags):', error)
+          // Tier 2: Thử lại nếu DB chưa chạy migration is_first_time/is_special nhưng có tags
+          const tier2Payload = lines.map((lineText, idx) => ({
+            content: lineText,
+            entry_date: date,
+            entry_type: safeEntryType,
+            entry_time: currentTimeString,
+            tags: tagsList,
+            image_url: idx === 0 ? attachedMedia?.url ?? null : null,
+            image_path: idx === 0 ? attachedMedia?.path ?? null : null,
+          }))
+          const { data: retryData, error: retryErr } = await supabase
+            .from('daily_entries')
+            .insert(tier2Payload)
+            .select()
 
-          // Thu thập danh sách người cần lưu vào nhật ký riêng (người được chọn + người được tag @)
+          if (!retryErr && retryData && retryData.length > 0) {
+            savedToSupabase = true
+            savedItems = (retryData as any[]).map((row) => ({
+              ...row,
+              category: selectedCategory,
+              is_first_time: Boolean(isFirstTime),
+              is_special: Boolean(isSpecial),
+              tags: tagsList,
+            })) as Entry[]
+          } else if (retryErr) {
+            console.warn('Lỗi Supabase Tier 2, thử lại Tier 3 (cột cơ bản nhất):', retryErr)
+            // Tier 3: Thử lại với schema cơ bản nhất (không có cột mới)
+            const tier3Payload = lines.map((lineText, idx) => ({
+              content: lineText,
+              entry_date: date,
+              entry_type: safeEntryType,
+              entry_time: currentTimeString,
+              image_url: idx === 0 ? attachedMedia?.url ?? null : null,
+              image_path: idx === 0 ? attachedMedia?.path ?? null : null,
+            }))
+            const { data: r3Data, error: r3Err } = await supabase
+              .from('daily_entries')
+              .insert(tier3Payload)
+              .select()
+
+            if (!r3Err && r3Data && r3Data.length > 0) {
+              savedToSupabase = true
+              savedItems = (r3Data as any[]).map((row) => ({
+                ...row,
+                category: selectedCategory,
+                is_first_time: Boolean(isFirstTime),
+                is_special: Boolean(isSpecial),
+                tags: tagsList,
+              })) as Entry[]
+            }
+          }
+        }
+
+        // Thu thập danh sách người cần lưu vào nhật ký riêng (người được chọn + người được tag @)
+        if (savedToSupabase) {
           const targetPeople: Person[] = []
           selectedPersonIds.forEach((pid) => {
             const p = peopleQuery.items.find((x) => x.id === pid)
@@ -621,32 +698,6 @@ export function DailyPage() {
                 }
               })
             ).catch(() => {})
-          }
-        } else if (error) {
-          console.warn('Lỗi Supabase, thử lại phương án dự phòng bảo lưu tags:', error)
-          // Thử lại nếu DB từ chối cột mới
-          const simplePayload = lines.map((lineText, idx) => ({
-            content: lineText,
-            entry_date: date,
-            entry_type: (selectedCategory as DailyType) || (isFirstTime ? 'FIRST_TIME' : isSpecial ? 'SPECIAL' : 'FEELING'),
-            entry_time: currentTimeString,
-            tags: tagsList,
-            image_url: idx === 0 ? attachedMedia?.url ?? null : null,
-            image_path: idx === 0 ? attachedMedia?.path ?? null : null,
-          }))
-          const { data: retryData, error: retryErr } = await supabase
-            .from('daily_entries')
-            .insert(simplePayload)
-            .select()
-
-          if (!retryErr && retryData && retryData.length > 0) {
-            savedToSupabase = true
-            savedItems = (retryData as any[]).map((row) => ({
-              ...row,
-              is_first_time: Boolean(isFirstTime),
-              is_special: Boolean(isSpecial),
-              tags: tagsList,
-            })) as Entry[]
           }
         }
       }
@@ -723,10 +774,12 @@ export function DailyPage() {
     if (editIsFirstTime) editTagsList.push('FIRST_TIME', 'Lần đầu', 'lan_dau')
     if (editIsSpecial) editTagsList.push('SPECIAL', 'Đặc biệt', 'dac_biet')
 
+    const safeEditEntryType: DailyType = editIsFirstTime ? 'NEW_THING' : 'FEELING'
+
     const patch = {
       content: editText.trim(),
       entry_date: date,
-      entry_type: (editCategory as DailyType) || (editIsFirstTime ? 'FIRST_TIME' : editIsSpecial ? 'SPECIAL' : 'FEELING'),
+      entry_type: safeEditEntryType,
       entry_time: finalTime || null,
       is_first_time: Boolean(editIsFirstTime),
       is_special: Boolean(editIsSpecial),
@@ -740,16 +793,28 @@ export function DailyPage() {
         if (!error) {
           updatedOnline = true
         } else {
-          // Thử lại nếu DB chưa có cột mới
+          // Thử lại nếu DB chưa có cột is_first_time/is_special
           const simplePatch = {
             content: editText.trim(),
             entry_date: date,
-            entry_type: (editCategory as DailyType) || (editIsFirstTime ? 'FIRST_TIME' : editIsSpecial ? 'SPECIAL' : 'FEELING'),
+            entry_type: safeEditEntryType,
             entry_time: finalTime || null,
             tags: editTagsList,
           }
           const { error: err2 } = await supabase.from('daily_entries').update(simplePatch).eq('id', editing.id)
-          if (!err2) updatedOnline = true
+          if (!err2) {
+            updatedOnline = true
+          } else {
+            // Thử lại với payload cơ bản nhất
+            const basicPatch = {
+              content: editText.trim(),
+              entry_date: date,
+              entry_type: safeEditEntryType,
+              entry_time: finalTime || null,
+            }
+            const { error: err3 } = await supabase.from('daily_entries').update(basicPatch).eq('id', editing.id)
+            if (!err3) updatedOnline = true
+          }
         }
       }
     } catch (e) {
@@ -1160,165 +1225,156 @@ export function DailyPage() {
               />
             </div>
 
-            {/* Khung chọn 2 nút Giờ: Giờ từ ➔ Giờ đến */}
-            <div style={{ padding: '10px 12px', background: 'var(--bg-main)', borderRadius: 14, border: '1px solid var(--card-border)', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={13} color="var(--amber)" /> Khung giờ nhật ký:
+            {/* Khung chọn Giờ: Giờ từ ➔ Giờ đến & Nút Hiện tại */}
+            <div style={{ padding: '8px 12px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 2 }}>
+                  <Clock size={13} color="var(--amber)" /> Khung giờ:
                 </span>
-                {(timeFrom || timeTo || timeOverride) && (
-                  <button
-                    type="button"
-                    onClick={clearTimeRange}
-                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--rose)', cursor: 'pointer', fontWeight: 700 }}
-                  >
-                    ✕ Xóa giờ
-                  </button>
-                )}
-              </div>
 
-              {/* 2 nút chọn giờ: Giờ từ & Giờ đến */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
-                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
                   <input
                     aria-label="Giờ bắt đầu"
                     type="time"
                     value={timeFrom}
                     onChange={(e) => handleTimeFromChange(e.target.value)}
-                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.86rem', fontWeight: 700, padding: 0, width: 76, outline: 'none' }}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
                   />
                 </div>
 
-                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
 
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 10, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
-                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
                   <input
                     aria-label="Giờ kết thúc"
                     type="time"
                     value={timeTo}
                     onChange={(e) => handleTimeToChange(e.target.value)}
-                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.86rem', fontWeight: 700, padding: 0, width: 76, outline: 'none' }}
+                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
                   />
                 </div>
 
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Mốc:</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '2px 8px', borderRadius: 8 }}>
-                    {timeOverride || clock}
-                  </span>
-                </div>
-              </div>
+                <button
+                  type="button"
+                  onClick={() => setQuickTime(clock, '')}
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '4px 8px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    color: 'var(--amber)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                  title="Điền giờ hiện tại"
+                >
+                  <Clock size={11} /> {clock}
+                </button>
 
-              {/* Quick time preset chips */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)' }}>Mẫu nhanh:</span>
-                <button type="button" onClick={() => setQuickTime('07:00', '08:00')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  🌅 Sáng
-                </button>
-                <button type="button" onClick={() => setQuickTime('11:30', '12:30')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  ☀️ Trưa
-                </button>
-                <button type="button" onClick={() => setQuickTime('17:00', '18:00')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  🌇 Chiều
-                </button>
-                <button type="button" onClick={() => setQuickTime('20:00', '21:30')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  🌙 Tối
-                </button>
-                <button type="button" onClick={() => setQuickTime(clock, '')} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: 7, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--amber)', cursor: 'pointer' }}>
-                  ⏱️ Hiện tại ({clock})
-                </button>
+                {(timeFrom || timeTo || timeOverride) && (
+                  <button
+                    type="button"
+                    onClick={clearTimeRange}
+                    style={{ fontSize: '0.68rem', padding: '3px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--rose)', cursor: 'pointer', fontWeight: 700 }}
+                    title="Xóa giờ đã chọn"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* 4 Nút Hành động & Tiện ích: Hành động nhanh | Gắn YouTube | Tải Ảnh/Video | Gắn Người Thân */}
+            {/* 4 Nút Tiện Ích: Hành động nhanh | Gắn YouTube | Tải Ảnh/Video | Gắn Người Thân */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
               {/* 1. Nút Hành động */}
               <button
                 type="button"
                 onClick={() => setShowActionModal(true)}
                 style={{
-                  padding: '8px 4px',
-                  borderRadius: 12,
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  border: '1.5px solid var(--amber)',
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.22))',
+                  padding: '7px 2px',
+                  borderRadius: 10,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.18))',
                   color: 'var(--amber)',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
-                  boxShadow: '0 2px 6px rgba(245, 158, 11, 0.12)',
+                  gap: 3,
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Zap size={13} style={{ flexShrink: 0 }} />
+                <Zap size={12} style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Hành động</span>
               </button>
 
-              {/* 2. Nút Gắn YouTube / TV Show */}
+              {/* 2. Nút Gắn YouTube */}
               <button
                 type="button"
                 onClick={() => setShowVideoModal(true)}
                 style={{
-                  padding: '8px 4px',
-                  borderRadius: 12,
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  border: '1.5px solid #ef4444',
-                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.18))',
+                  padding: '7px 2px',
+                  borderRadius: 10,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 63, 94, 0.15))',
                   color: '#ef4444',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
-                  boxShadow: '0 2px 6px rgba(239, 68, 68, 0.12)',
+                  gap: 3,
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Youtube size={13} style={{ flexShrink: 0 }} />
+                <Youtube size={12} style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>YouTube</span>
               </button>
 
-              {/* 3. Nút Upload Ảnh / Video (Có lưu Database) */}
+              {/* 3. Nút Upload Ảnh / Video */}
               <button
                 type="button"
                 onClick={() => formFileInputRef.current?.click()}
                 disabled={mediaUploading || !supabase}
                 style={{
-                  padding: '8px 4px',
-                  borderRadius: 12,
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  border: attachedMedia ? '1.5px solid #10b981' : '1.5px solid #06b6d4',
+                  padding: '7px 2px',
+                  borderRadius: 10,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  border: attachedMedia ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
                   background: attachedMedia
                     ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25))'
-                    : 'linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(99, 102, 241, 0.18))',
+                    : 'linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(99, 102, 241, 0.15))',
                   color: attachedMedia ? '#10b981' : '#06b6d4',
                   cursor: mediaUploading ? 'wait' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
-                  boxShadow: attachedMedia ? '0 2px 8px rgba(16, 185, 129, 0.2)' : '0 2px 6px rgba(6, 182, 212, 0.12)',
+                  gap: 3,
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
-                title="Tải ảnh hoặc video đính kèm bài viết này"
+                title="Tải ảnh hoặc video đính kèm"
               >
                 {mediaUploading ? (
-                  <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                  <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
                 ) : (
-                  <ImagePlus size={13} style={{ flexShrink: 0 }} />
+                  <ImagePlus size={12} style={{ flexShrink: 0 }} />
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {mediaUploading ? 'Tải...' : attachedMedia ? 'Đã có file' : 'Ảnh/Video'}
+                  {mediaUploading ? 'Tải...' : attachedMedia ? 'Có file' : 'Ảnh/Video'}
                 </span>
               </button>
               <input
@@ -1333,32 +1389,31 @@ export function DailyPage() {
                 }}
               />
 
-              {/* 4. Nút Gắn Người Thân (Lưu nhật ký riêng) */}
+              {/* 4. Nút Gắn Người Thân */}
               <button
                 type="button"
                 onClick={() => setShowPeopleModal(true)}
                 style={{
-                  padding: '8px 4px',
-                  borderRadius: 12,
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  border: selectedPersonIds.length > 0 ? '1.5px solid #8b5cf6' : '1.5px solid rgba(139, 92, 246, 0.4)',
+                  padding: '7px 2px',
+                  borderRadius: 10,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
                   background: selectedPersonIds.length > 0
-                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.22), rgba(168, 85, 247, 0.32))'
+                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.3))'
                     : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.15))',
                   color: '#8b5cf6',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
-                  boxShadow: selectedPersonIds.length > 0 ? '0 2px 8px rgba(139, 92, 246, 0.25)' : 'none',
+                  gap: 3,
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
-                title="Gắn người thân để đồng thời lưu vào nhật ký riêng của người đó"
+                title="Gắn người thân để đồng thời lưu vào nhật ký riêng"
               >
-                <Users size={13} style={{ flexShrink: 0 }} />
+                <Users size={12} style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Người thân'}
                 </span>
