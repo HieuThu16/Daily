@@ -130,13 +130,13 @@ export function FoodPeriodView({ logs, days, mealFilter, onMealFilter, onDelete,
                 <span className="nutrition-history-icon" style={{ color: meal.color }}>{meal.emoji}</span>
                 <div><strong>{entry.food_name}</strong><small>{meal.label}{entry.log_time ? ` · ${entry.log_time}` : ''}</small></div>
                 <b style={{ color: meal.color }}>{money(entry.price)}</b>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div className="nutrition-history-actions">
                   {onEdit && (
-                    <button type="button" aria-label={`Sửa ${entry.food_name}`} onClick={() => onEdit(entry)} style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}>
+                    <button type="button" aria-label={`Sửa ${entry.food_name}`} onClick={() => onEdit(entry)} style={{ color: 'var(--text-muted)' }}>
                       <Pencil size={14} />
                     </button>
                   )}
-                  <button type="button" aria-label={`Xóa ${entry.food_name}`} onClick={() => onDelete(entry.id)} style={{ border: 0, background: 'none', color: '#ef4444', cursor: 'pointer', padding: 2 }}><Trash2 size={14} /></button>
+                  <button type="button" aria-label={`Xóa ${entry.food_name}`} onClick={() => onDelete(entry.id)} style={{ color: '#ef4444' }}><Trash2 size={14} /></button>
                 </div>
               </div>
             )
@@ -203,18 +203,18 @@ export function SleepPeriodView({
                   <span className="nutrition-history-icon sleep"><Moon size={16} /></span>
                   <div><strong>{entry.sleep_start} → {entry.sleep_end}</strong><small style={{ color: quality.color }}>{quality.label}</small></div>
                   <b style={{ color: quality.color }}>{duration(entry.duration_minutes)}</b>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div className="nutrition-history-actions">
                     {onDream && (
-                      <button type="button" aria-label={`Ghi giấc mơ ${entry.sleep_start}`} title={entry.dream ? 'Sửa giấc mơ' : 'Thêm giấc mơ'} onClick={() => onDream(entry)} style={{ border: 0, background: 'none', color: '#8b5cf6', padding: 2, cursor: 'pointer' }}>
+                      <button type="button" aria-label={`Ghi giấc mơ ${entry.sleep_start}`} title={entry.dream ? 'Sửa giấc mơ' : 'Thêm giấc mơ'} onClick={() => onDream(entry)} style={{ color: '#8b5cf6' }}>
                         <CloudMoon size={15} />
                       </button>
                     )}
                     {onEdit && (
-                      <button type="button" aria-label={`Sửa giấc ngủ ${entry.sleep_start}`} title="Sửa phiên ngủ" onClick={() => onEdit(entry)} style={{ border: 0, background: 'none', color: 'var(--text-muted)', padding: 2, cursor: 'pointer' }}>
+                      <button type="button" aria-label={`Sửa giấc ngủ ${entry.sleep_start}`} title="Sửa phiên ngủ" onClick={() => onEdit(entry)} style={{ color: 'var(--text-muted)' }}>
                         <Pencil size={14} />
                       </button>
                     )}
-                    <button type="button" aria-label={`Xóa giấc ngủ ${entry.sleep_start}`} title="Xoá phiên ngủ" onClick={() => onDelete(entry.id)} style={{ border: 0, background: 'none', color: '#ef4444', padding: 2, cursor: 'pointer' }}><Trash2 size={14} /></button>
+                    <button type="button" aria-label={`Xóa giấc ngủ ${entry.sleep_start}`} title="Xoá phiên ngủ" onClick={() => onDelete(entry.id)} style={{ color: '#ef4444' }}><Trash2 size={14} /></button>
                   </div>
                 </div>
                 {entry.dream && (
