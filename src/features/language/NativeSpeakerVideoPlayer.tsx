@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Loader2,
   Tv,
+  X,
 } from 'lucide-react'
 
 declare global {
@@ -21,12 +22,14 @@ type NativeSpeakerVideoPlayerProps = {
   initialLanguage?: 'english' | 'chinese'
   onQueryChange?: (q: string) => void
   compact?: boolean
+  onClose?: () => void
 }
 
 export function NativeSpeakerVideoPlayer({
   initialQuery,
   initialLanguage = 'english',
   compact = false,
+  onClose,
 }: NativeSpeakerVideoPlayerProps) {
   const [query, setQuery] = useState(initialQuery)
   const [language, setLanguage] = useState<'english' | 'chinese'>(initialLanguage)
@@ -203,27 +206,40 @@ export function NativeSpeakerVideoPlayer({
             <span>Người Bản Xứ Nói Video</span>
           </div>
 
-          <div className="native-video-lang-switch">
-            <button
-              type="button"
-              className={`native-lang-chip ${language === 'english' ? 'active' : ''}`}
-              onClick={() => {
-                setLanguage('english')
-                handleSearchPhrase(query, 'english', accent)
-              }}
-            >
-              🇺🇸 Tiếng Anh
-            </button>
-            <button
-              type="button"
-              className={`native-lang-chip ${language === 'chinese' ? 'active' : ''}`}
-              onClick={() => {
-                setLanguage('chinese')
-                handleSearchPhrase(query, 'chinese', 'all')
-              }}
-            >
-              🇨🇳 Tiếng Trung
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="native-video-lang-switch">
+              <button
+                type="button"
+                className={`native-lang-chip ${language === 'english' ? 'active' : ''}`}
+                onClick={() => {
+                  setLanguage('english')
+                  handleSearchPhrase(query, 'english', accent)
+                }}
+              >
+                🇺🇸 Tiếng Anh
+              </button>
+              <button
+                type="button"
+                className={`native-lang-chip ${language === 'chinese' ? 'active' : ''}`}
+                onClick={() => {
+                  setLanguage('chinese')
+                  handleSearchPhrase(query, 'chinese', 'all')
+                }}
+              >
+                🇨🇳 Tiếng Trung
+              </button>
+            </div>
+
+            {onClose && (
+              <button
+                type="button"
+                className="native-close-btn"
+                onClick={onClose}
+                title="Đóng khung video"
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
         </div>
 

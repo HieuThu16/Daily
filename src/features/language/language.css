@@ -336,7 +336,103 @@
   margin-top: 2px;
 }
 
-/* 5. NATIVE SPEAKER VIDEO SECTION (YOUGLISH / YOUTUBE TIMED SPEECH) */
+/* 5. Nút Kích Hoạt Video Người Bản Xứ (Trigger Bar) */
+.lang-video-trigger-box {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%);
+  border: 1px dashed rgba(239, 68, 68, 0.35);
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lang-video-trigger-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lang-video-trigger-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.lang-video-trigger-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lang-video-call-btn {
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.lang-video-call-btn.en {
+  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(6, 182, 212, 0.12);
+  color: #38bdf8;
+}
+
+.lang-video-call-btn.en:hover,
+.lang-video-call-btn.en.active {
+  background: rgba(6, 182, 212, 0.3);
+  border-color: #06b6d4;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+}
+
+.lang-video-call-btn.zh {
+  border-color: rgba(236, 72, 153, 0.4);
+  background: rgba(236, 72, 153, 0.12);
+  color: #f472b6;
+}
+
+.lang-video-call-btn.zh:hover,
+.lang-video-call-btn.zh.active {
+  background: rgba(236, 72, 153, 0.3);
+  border-color: #ec4899;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
+}
+
+.native-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.native-close-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ffffff;
+}
+
+/* 6. NATIVE SPEAKER VIDEO SECTION (YOUGLISH / YOUTUBE TIMED SPEECH) */
 .native-video-wrapper {
   background: var(--bg-card, rgba(30, 30, 35, 0.8));
   border: 1.5px solid rgba(139, 92, 246, 0.3);

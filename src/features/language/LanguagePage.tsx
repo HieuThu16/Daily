@@ -54,9 +54,12 @@ export function LanguagePage() {
   const [selectedTagsForSave, setSelectedTagsForSave] = useState<string[]>(['Giao tiếp'])
   const [customTagInput, setCustomTagInput] = useState('')
 
-  // Video Speaker Query
-  const [videoPhrase, setVideoPhrase] = useState<string>('')
-  const [videoLang, setVideoLang] = useState<'english' | 'chinese'>('english')
+  // Video Speaker Query (Chỉ gọi khi nhấn nút)
+  const [activeVideoTarget, setActiveVideoTarget] = useState<{
+    phrase: string
+    lang: 'english' | 'chinese'
+    title?: string
+  } | null>(null)
 
   // Vault State
   const [savedCards, setSavedCards] = useState<SavedLanguageCard[]>([])
@@ -133,13 +136,12 @@ export function LanguagePage() {
     }
 
     setIsTranslating(true)
+    setActiveVideoTarget(null) // Đóng video cũ để ưu tiên xem nghĩa trước
     try {
       const result = await translateAndGenerateBilingual(q)
       setCurrentResult(result)
-      setVideoPhrase(result.english.text)
-      setVideoLang('english')
       if (overrideQuery) setInputText(overrideQuery)
-      showToast('✨ Đã dịch và trích xuất video người bản xứ!')
+      showToast('✨ Đã tra cứu nghĩa Tiếng Anh & Tiếng Trung!')
     } catch (err: any) {
       showToast(`❌ Lỗi dịch thuật: ${err?.message || err}`, 'error')
     } finally {
@@ -350,11 +352,11 @@ export function LanguagePage() {
               <button type="submit" disabled={isTranslating || !inputText.trim()} className="lang-submit-btn">
                 {isTranslating ? (
                   <>
-                    <Sparkles size={16} className="tv-spin" /> <span className="hide-on-xs">Đang tìm...</span>
+                    <Sparkles size={16} className="tv-spin" /> <span className="hide-on-xs">Đang dịch...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={16} /> <span>Dịch & Video</span>
+                    <Sparkles size={16} /> <span>Tra cứu & Dịch</span>
                   </>
                 )}
               </button>
@@ -364,7 +366,7 @@ export function LanguagePage() {
           {/* Results Area */}
           {currentResult && (
             <div className="lang-result-container">
-              {/* Bilingual Comparison Cards */}
+              {/* Bilingual Comparison Cards (Hiển thị nghĩa Tiếng Anh & Tiếng Trung trước) */}
               <div className="lang-bilingual-grid">
                 {/* 1. Tiếng Anh */}
                 <div className="lang-lang-card">
@@ -375,12 +377,18 @@ export function LanguagePage() {
                         type="button"
                         className="lang-video-quick-btn"
                         onClick={() => {
-                          setVideoPhrase(currentResult.english.text)
-                          setVideoLang('english')
+                          setActiveVideoTarget({
+                            phrase: currentResult.english.text,
+                            lang: 'english',
+                            title: `Tiếng Anh: "${currentResult.english.text}"`,
+                          })
+                          setTimeout(() => {
+                            document.getElementById('native-video-player-box')?.scrollIntoView({ behavior: 'smooth' })
+                          }, 100)
                         }}
                         title="Xem video người bản xứ phát âm câu này"
                       >
-                        <Video size={13} /> <span>Clip</span>
+                        <Video size={13} /> <span>Video</span>
                       </button>
                       <button
                         type="button"
@@ -412,12 +420,18 @@ export function LanguagePage() {
                         type="button"
                         className="lang-video-quick-btn zh"
                         onClick={() => {
-                          setVideoPhrase(currentResult.chinese.text)
-                          setVideoLang('chinese')
+                          setActiveVideoTarget({
+                            phrase: currentResult.chinese.text,
+                            lang: 'chinese',
+                            title: `Tiếng Trung: "${currentResult.chinese.text}"`,
+                          })
+                          setTimeout(() => {
+                            document.getElementById('native-video-player-box')?.scrollIntoView({ behavior: 'smooth' })
+                          }, 100)
                         }}
                         title="Xem video tiếng Trung phát âm câu này"
                       >
-                        <Video size={13} /> <span>Clip</span>
+                        <Video size={13} /> <span>Video</span>
                       </button>
                       <button
                         type="button"
@@ -441,11 +455,73 @@ export function LanguagePage() {
                 </div>
               </div>
 
-              {/* NATIVE SPEAKER VIDEO SECTION (YOUGLISH / YOUTUBE CLIP CUTTER) */}
-              <NativeSpeakerVideoPlayer
-                initialQuery={videoPhrase || currentResult.english.text}
-                initialLanguage={videoLang}
-              />
+              {/* Nút gọi Video Người Bản Xứ (Chỉ tải & phát khi người dùng nhấn nút) */}
+              <div className="lang-video-trigger-box">
+                <div className="lang-video-trigger-info">
+                  <div className="lang-video-trigger-icon">
+                    <Video size={18} />
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: '0.88rem', display: 'block' }}>Video Người Bản Xứ (YouTube Clips)</strong>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      {activeVideoTarget
+                        ? `Đang xem: ${activeVideoTarget.title || activeVideoTarget.phrase}`
+                        : 'Nhấn nút bên phải để tải & xem người bản xứ phát âm từ/câu này'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="lang-video-trigger-btns">
+                  <button
+                    type="button"
+                    className={`lang-video-call-btn en ${activeVideoTarget?.lang === 'english' && activeVideoTarget?.phrase === currentResult.english.text ? 'active' : ''}`}
+                    onClick={() => {
+                      if (activeVideoTarget?.lang === 'english' && activeVideoTarget?.phrase === currentResult.english.text) {
+                        setActiveVideoTarget(null)
+                      } else {
+                        setActiveVideoTarget({
+                          phrase: currentResult.english.text,
+                          lang: 'english',
+                          title: `Tiếng Anh: "${currentResult.english.text}"`,
+                        })
+                      }
+                    }}
+                  >
+                    <Video size={14} />
+                    <span>{activeVideoTarget?.lang === 'english' && activeVideoTarget?.phrase === currentResult.english.text ? 'Đang mở Video EN' : '🎬 Xem Video EN'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`lang-video-call-btn zh ${activeVideoTarget?.lang === 'chinese' && activeVideoTarget?.phrase === currentResult.chinese.text ? 'active' : ''}`}
+                    onClick={() => {
+                      if (activeVideoTarget?.lang === 'chinese' && activeVideoTarget?.phrase === currentResult.chinese.text) {
+                        setActiveVideoTarget(null)
+                      } else {
+                        setActiveVideoTarget({
+                          phrase: currentResult.chinese.text,
+                          lang: 'chinese',
+                          title: `Tiếng Trung: "${currentResult.chinese.text}"`,
+                        })
+                      }
+                    }}
+                  >
+                    <Video size={14} />
+                    <span>{activeVideoTarget?.lang === 'chinese' && activeVideoTarget?.phrase === currentResult.chinese.text ? 'Đang mở Video ZH' : '🎬 Xem Video ZH'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* KHUNG VIDEO: CHỈ HIỂN THỊ KHI ĐÃ NHẤN NÚT */}
+              {activeVideoTarget && (
+                <div id="native-video-player-box" style={{ scrollMarginTop: 80 }}>
+                  <NativeSpeakerVideoPlayer
+                    initialQuery={activeVideoTarget.phrase}
+                    initialLanguage={activeVideoTarget.lang}
+                    onClose={() => setActiveVideoTarget(null)}
+                  />
+                </div>
+              )}
 
               {/* Situational Context Examples Section */}
               <div className="lang-examples-section">
@@ -455,7 +531,7 @@ export function LanguagePage() {
                     <span>Câu Mẫu Ngữ Cảnh Đời Thực ({currentResult.examples.length})</span>
                   </h3>
                   <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    Bấm nút 🎬 ở từng câu để xem clip người bản xứ nói câu đó
+                    Nhấn nút 🎬 ở mỗi câu để xem clip người bản xứ phát âm câu đó
                   </span>
                 </div>
 
@@ -469,9 +545,14 @@ export function LanguagePage() {
                             type="button"
                             className="lang-mini-video-btn"
                             onClick={() => {
-                              setVideoPhrase(ex.english)
-                              setVideoLang('english')
-                              window.scrollTo({ top: 120, behavior: 'smooth' })
+                              setActiveVideoTarget({
+                                phrase: ex.english,
+                                lang: 'english',
+                                title: `Ví dụ EN: "${ex.english}"`,
+                              })
+                              setTimeout(() => {
+                                document.getElementById('native-video-player-box')?.scrollIntoView({ behavior: 'smooth' })
+                              }, 100)
                             }}
                             title="Xem video người bản xứ nói câu tiếng Anh này"
                           >
@@ -481,9 +562,14 @@ export function LanguagePage() {
                             type="button"
                             className="lang-mini-video-btn zh"
                             onClick={() => {
-                              setVideoPhrase(ex.chinese)
-                              setVideoLang('chinese')
-                              window.scrollTo({ top: 120, behavior: 'smooth' })
+                              setActiveVideoTarget({
+                                phrase: ex.chinese,
+                                lang: 'chinese',
+                                title: `Ví dụ ZH: "${ex.chinese}"`,
+                              })
+                              setTimeout(() => {
+                                document.getElementById('native-video-player-box')?.scrollIntoView({ behavior: 'smooth' })
+                              }, 100)
                             }}
                             title="Xem video nói câu tiếng Trung này"
                           >
@@ -816,10 +902,15 @@ export function LanguagePage() {
                         type="button"
                         className="lang-card-action-btn"
                         onClick={() => {
-                          setVideoPhrase(card.details?.english?.text || card.meaning)
-                          setVideoLang('english')
+                          setActiveVideoTarget({
+                            phrase: card.details?.english?.text || card.meaning,
+                            lang: 'english',
+                            title: card.term,
+                          })
                           setActiveTab('TRANSLATE')
-                          window.scrollTo({ top: 120, behavior: 'smooth' })
+                          setTimeout(() => {
+                            document.getElementById('native-video-player-box')?.scrollIntoView({ behavior: 'smooth' })
+                          }, 150)
                         }}
                         title="Xem video người bản xứ nói câu này"
                       >
