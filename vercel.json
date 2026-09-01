@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/audio-proxy",
+      "destination": "/api/link-preview?audio=1"
+    },
+    {
       "source": "/((?!api/|assets/|manifest\\.webmanifest$|registerSW\\.js$|sw\\.js$|version\\.json$|workbox-.*\\.js$).*)",
       "destination": "/index.html"
     }
