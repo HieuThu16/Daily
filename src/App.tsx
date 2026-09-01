@@ -67,7 +67,7 @@ const HMangaPage = lazy(() => import('./features/manga/HMangaPage').then((m) => 
 const HMangaDetailPage = lazy(() => import('./features/manga/HMangaDetailPage').then((m) => ({ default: m.HMangaDetailPage })))
 const HMangaReaderPage = lazy(() => import('./features/manga/HMangaReaderPage').then((m) => ({ default: m.HMangaReaderPage })))
 const HMangaScreenshotPage = lazy(() => import('./features/manga/HMangaScreenshotPage').then((m) => ({ default: m.HMangaScreenshotPage })))
-const EnglishPage = lazy(() => import('./features/english/EnglishPage').then((m) => ({ default: m.EnglishPage })))
+const LanguagePage = lazy(() => import('./features/language/LanguagePage').then((m) => ({ default: m.LanguagePage })))
 const KnowledgePage = lazy(() => import('./features/knowledge/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
 const YoutubeView = lazy(() => import('./features/youtube/YoutubeView').then((m) => ({ default: m.YoutubeView })))
 const YoutubeWatchPage = lazy(() => import('./features/youtube/YoutubeWatchPage').then((m) => ({ default: m.YoutubeWatchPage })))
@@ -92,7 +92,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'bl', label: 'Truyện BL', icon: Heart, colorClass: 'icon-box-rose' },
   { id: 'ngontinh', label: 'Ngôn Tình', icon: HeartHandshake, colorClass: 'icon-box-rose' },
   { id: 'manga', label: 'Truyện', icon: BookMarked, colorClass: 'icon-box-emerald' },
-  { id: 'english', label: 'English', icon: Languages, colorClass: 'icon-box-cyan' },
+  { id: 'english', label: 'Ngôn ngữ', icon: Languages, colorClass: 'icon-box-cyan' },
   { id: 'knowledge', label: 'Kiến thức', icon: Lightbulb, colorClass: 'icon-box-purple' },
   { id: 'money', label: 'Tiền', icon: Wallet, colorClass: 'icon-box-amber' },
   { id: 'calendar', label: 'Lịch', icon: CalendarDays, colorClass: 'icon-box-blue' },
@@ -628,7 +628,8 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/truyenh/screenshots" element={<HPinGate><HMangaScreenshotPage /></HPinGate>} />
                       <Route path="/truyenh/:slug" element={<HPinGate><HMangaDetailPage /></HPinGate>} />
                       <Route path="/truyenh/:slug/read/:chapterNum" element={<HPinGate><HMangaReaderPage /></HPinGate>} />
-                      <Route path="/english" element={<EnglishPage />} />
+                      <Route path="/english" element={<LanguagePage />} />
+                      <Route path="/language" element={<LanguagePage />} />
                       <Route path="/knowledge" element={<KnowledgePage />} />
                       <Route path="/people" element={<PeoplePage />} />
                       <Route path="/watch" element={<WatchTogetherPage />} />
