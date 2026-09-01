@@ -14,6 +14,7 @@ import {
   type SleepLog,
 } from './nutrition/periodData'
 import { SkeletonList } from './Skeleton'
+import { queueWrite } from '../lib/offlineQueue'
 
 function duration(minutes: number) {
   const hours = Math.floor(minutes / 60)
@@ -118,13 +119,26 @@ export function SleepPage() {
   async function saveDreamOnly() {
     if (!dreamModalLog) return
     const updatedDream = dreamText.trim()
+    let savedOnline = false
     try {
-      await supabase!
-        .from('sleep_logs')
-        .update({ dream: updatedDream })
-        .eq('id', dreamModalLog.id)
+      if (supabase) {
+        const { error } = await supabase
+          .from('sleep_logs')
+          .update({ dream: updatedDream })
+          .eq('id', dreamModalLog.id)
+        if (!error) savedOnline = true
+      }
     } catch {
       // fallback
+    }
+
+    if (!savedOnline) {
+      queueWrite({
+        table: 'sleep_logs',
+        op: 'update',
+        payload: { dream: updatedDream },
+        match: { id: dreamModalLog.id },
+      })
     }
 
     setSleepLogs((prev) =>
@@ -144,60 +158,164 @@ export function SleepPage() {
       return
     }
 
-    const payload = {
+    const cleanDream = dream.trim() || null
+
+    const basePayload: Record<string, unknown> = {
       log_date: currentDate,
       sleep_start: sleepStart,
       sleep_end: sleepEnd,
       duration_minutes: dur,
-      quality: dur >= 450 ? 5 : dur >= 360 ? 4 : 3,
-      dream: dream.trim(),
     }
+    if (cleanDream) {
+      basePayload.dream = cleanDream
+    }
+
+    let savedItem: SleepLog | null = null
+    let savedToSupabase = false
 
     if (editingSleep) {
       try {
-        const { data } = await supabase!
-          .from('sleep_logs')
-          .update(payload)
-          .eq('id', editingSleep.id)
-          .select()
-          .single()
-        if (data) {
-          setSleepLogs((prev) =>
-            prev.map((item) => (item.id === editingSleep.id ? (data as SleepLog) : item)),
-          )
-          setPeriodSleepLogs((prev) =>
-            prev.map((item) => (item.id === editingSleep.id ? (data as SleepLog) : item)),
-          )
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('sleep_logs')
+            .update(basePayload)
+            .eq('id', editingSleep.id)
+            .select()
+            .single()
+
+          if (!error && data) {
+            savedItem = data as SleepLog
+            savedToSupabase = true
+          } else if (error) {
+            console.warn('Lỗi update sleep_logs Tier 1, thử lại không kèm dream:', error)
+            const fallbackPayload = {
+              log_date: currentDate,
+              sleep_start: sleepStart,
+              sleep_end: sleepEnd,
+              duration_minutes: dur,
+            }
+            const { data: retryData, error: retryErr } = await supabase
+              .from('sleep_logs')
+              .update(fallbackPayload)
+              .eq('id', editingSleep.id)
+              .select()
+              .single()
+
+            if (!retryErr && retryData) {
+              savedItem = { ...(retryData as SleepLog), dream: cleanDream }
+              savedToSupabase = true
+            }
+          }
         }
-      } catch {
-        // fallback
+      } catch (e) {
+        console.warn('Lỗi kết nối Supabase khi update sleep_logs:', e)
       }
+
+      if (!savedItem) {
+        savedItem = {
+          ...editingSleep,
+          ...basePayload,
+          dream: cleanDream,
+        } as SleepLog
+        queueWrite({
+          table: 'sleep_logs',
+          op: 'update',
+          payload: basePayload,
+          match: { id: editingSleep.id },
+        })
+      }
+
+      setSleepLogs((prev) =>
+        prev.map((item) => (item.id === editingSleep.id ? savedItem! : item)),
+      )
+      setPeriodSleepLogs((prev) =>
+        prev.map((item) => (item.id === editingSleep.id ? savedItem! : item)),
+      )
     } else {
       try {
-        const { data } = await supabase!.from('sleep_logs').insert(payload).select().single()
-        if (data) {
-          setSleepLogs((prev) => [...prev, data as SleepLog])
-          setPeriodSleepLogs((prev) => [...prev, data as SleepLog])
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('sleep_logs')
+            .insert(basePayload)
+            .select()
+            .single()
+
+          if (!error && data) {
+            savedItem = data as SleepLog
+            savedToSupabase = true
+          } else if (error) {
+            console.warn('Lỗi insert sleep_logs Tier 1, thử lại không kèm dream:', error)
+            const fallbackPayload = {
+              log_date: currentDate,
+              sleep_start: sleepStart,
+              sleep_end: sleepEnd,
+              duration_minutes: dur,
+            }
+            const { data: retryData, error: retryErr } = await supabase
+              .from('sleep_logs')
+              .insert(fallbackPayload)
+              .select()
+              .single()
+
+            if (!retryErr && retryData) {
+              savedItem = { ...(retryData as SleepLog), dream: cleanDream }
+              savedToSupabase = true
+            }
+          }
         }
-      } catch {
-        // fallback
+      } catch (e) {
+        console.warn('Lỗi kết nối Supabase khi insert sleep_logs:', e)
       }
+
+      if (!savedItem) {
+        const localId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}`
+        savedItem = {
+          id: localId,
+          created_at: new Date().toISOString(),
+          ...basePayload,
+          dream: cleanDream,
+        } as SleepLog
+        queueWrite({
+          table: 'sleep_logs',
+          op: 'insert',
+          payload: { id: localId, ...basePayload },
+        })
+      }
+
+      setSleepLogs((prev) => [...prev, savedItem!])
+      setPeriodSleepLogs((prev) => [...prev, savedItem!])
     }
 
     setSleepModal(false)
     setEditingSleep(null)
-    showToast('💾 Đã lưu giấc ngủ')
+    if (savedToSupabase) {
+      showToast('☁️ Đã lưu giấc ngủ lên Supabase!', 'success')
+    } else {
+      showToast('💾 Đã lưu giấc ngủ vào Local (Đã xếp hàng đồng bộ)', 'local')
+    }
   }
 
   async function deleteSleep(id: string) {
+    let deletedOnline = false
     try {
-      await supabase!.from('sleep_logs').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+      if (supabase) {
+        const { error } = await supabase.from('sleep_logs').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+        if (!error) deletedOnline = true
+      }
     } catch {
       // fallback
     }
+    if (!deletedOnline) {
+      queueWrite({
+        table: 'sleep_logs',
+        op: 'update',
+        payload: { deleted_at: new Date().toISOString() },
+        match: { id },
+      })
+    }
     setSleepLogs((current) => current.filter((log) => log.id !== id))
     setPeriodSleepLogs((current) => current.filter((log) => log.id !== id))
-    showToast('🗑️ Đã xoá')
+    showToast('🗑️ Đã xoá giấc ngủ', 'delete')
   }
 
   const totalSleep = sleepLogs.reduce((sum, log) => sum + sleepMinutesOn(log, currentDate), 0)

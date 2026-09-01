@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Cake, Heart, Plus, Trash2 } from 'lucide-react'
+import { Cake, Heart, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { localDate, shortDate } from '../../lib/date'
 import { countdownLabel, isLunar, lunarLabel, upcomingOccasions } from '../../lib/occasions'
 import type { OccasionCalendar, OccasionKind, Person, PersonOccasion } from '../../types'
@@ -15,6 +15,7 @@ type Props = {
   title?: string
   withinDays?: number
   onAdd: (input: NewOccasion) => void
+  onUpdate?: (id: string, input: Partial<NewOccasion>) => void
   onRemove: (id: string) => void
 }
 
@@ -25,9 +26,11 @@ export function OccasionsSection({
   title = 'Sinh nhật & Kỉ niệm',
   withinDays = 90,
   onAdd,
+  onUpdate,
   onRemove,
 }: Props) {
   const [open, setOpen] = useState(false)
+  const [editingOccasion, setEditingOccasion] = useState<PersonOccasion | null>(null)
   const [kind, setKind] = useState<OccasionKind>('BIRTHDAY')
   const [label, setLabel] = useState('')
   const [date, setDate] = useState(localDate())
@@ -39,9 +42,33 @@ export function OccasionsSection({
   const scoped = personId ? occasions.filter((o) => o.person_id === personId) : occasions
   const items = upcomingOccasions(scoped, people, new Date(), { withinDays, limit: 50 })
 
+  const openAdd = () => {
+    setEditingOccasion(null)
+    setKind('BIRTHDAY')
+    setLabel('')
+    setDate(localDate())
+    setTarget(personId ?? '')
+    setYearly(true)
+    setCalendar('SOLAR')
+    setIsShared(true)
+    setOpen(true)
+  }
+
+  const openEdit = (occ: PersonOccasion) => {
+    setEditingOccasion(occ)
+    setKind(occ.kind)
+    setLabel(occ.title || '')
+    setDate(occ.occasion_date)
+    setTarget(occ.person_id ?? '')
+    setYearly(Boolean(occ.is_yearly))
+    setCalendar(occ.calendar || 'SOLAR')
+    setIsShared(occ.is_shared ?? true)
+    setOpen(true)
+  }
+
   const submit = () => {
     if (!date) return
-    onAdd({
+    const payload: NewOccasion = {
       person_id: personId ?? (target || null),
       kind,
       title: label,
@@ -49,7 +76,15 @@ export function OccasionsSection({
       is_yearly: yearly,
       calendar,
       is_shared: isShared,
-    })
+    }
+
+    if (editingOccasion && onUpdate) {
+      onUpdate(editingOccasion.id, payload)
+    } else {
+      onAdd(payload)
+    }
+
+    setEditingOccasion(null)
     setLabel('')
     setDate(localDate())
     setKind('BIRTHDAY')
@@ -66,7 +101,7 @@ export function OccasionsSection({
         <h3>
           <Cake size={17} color="var(--rose)" /> {title}
         </h3>
-        <button type="button" className="link-add" onClick={() => setOpen(true)}>
+        <button type="button" className="link-add" onClick={openAdd}>
           <Plus size={16} /> Thêm dịp
         </button>
       </div>
@@ -99,22 +134,36 @@ export function OccasionsSection({
               )}
               <span className={'countdown-badge' + (days <= 7 ? ' soon' : '')}>{countdownLabel(days)}</span>
               <time style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{shortDate(next)}</time>
-              <button
-                type="button"
-                className="icon danger"
-                aria-label={`Xoá ${name}`}
-                onClick={() => onRemove(occasion.id)}
-                style={{ padding: 4 }}
-              >
-                <Trash2 size={14} />
-              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 2 }}>
+                <button
+                  type="button"
+                  className="icon"
+                  aria-label={`Sửa ${name}`}
+                  onClick={() => openEdit(occasion)}
+                  style={{ padding: 4, color: 'var(--text-muted)', cursor: 'pointer' }}
+                  title="Sửa dịp kỷ niệm"
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="icon danger"
+                  aria-label={`Xoá ${name}`}
+                  onClick={() => onRemove(occasion.id)}
+                  style={{ padding: 4, cursor: 'pointer' }}
+                  title="Xoá dịp kỷ niệm"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           )
         })
       )}
 
       {open && (
-        <Modal title="Thêm dịp" onClose={() => setOpen(false)}>
+        <Modal title={editingOccasion ? 'Sửa dịp kỷ niệm' : 'Thêm dịp'} onClose={() => { setOpen(false); setEditingOccasion(null) }}>
           <div className="person-form">
             <label className="field">
               <span>Loại dịp</span>
@@ -167,11 +216,12 @@ export function OccasionsSection({
             </label>
 
             <div className="modal-actions">
-              <button type="button" onClick={() => setOpen(false)}>
+              <button type="button" onClick={() => { setOpen(false); setEditingOccasion(null) }}>
                 Huỷ
               </button>
               <button type="button" className="primary" onClick={submit}>
-                <Plus size={14} /> Thêm dịp
+                {editingOccasion ? <Save size={14} /> : <Plus size={14} />}
+                <span>{editingOccasion ? 'Lưu thay đổi' : 'Thêm dịp'}</span>
               </button>
             </div>
           </div>

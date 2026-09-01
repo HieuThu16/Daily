@@ -164,6 +164,41 @@ export function usePeopleData() {
     return 'Supabase'
   }
 
+  const updateOccasion = async (id: string, patch: Partial<NewOccasion>): Promise<DataSource> => {
+    const next = occasions.map((o) =>
+      o.id === id
+        ? {
+            ...o,
+            ...patch,
+            title: patch.title !== undefined ? patch.title.trim() : o.title,
+          }
+        : o,
+    )
+    persistOccasions(next)
+
+    if (!supabase) {
+      setSource('Local')
+      return 'Local'
+    }
+
+    const payload: Record<string, unknown> = {}
+    if (patch.person_id !== undefined) payload.person_id = patch.person_id
+    if (patch.kind !== undefined) payload.kind = patch.kind
+    if (patch.title !== undefined) payload.title = patch.title.trim()
+    if (patch.occasion_date !== undefined) payload.occasion_date = patch.occasion_date
+    if (patch.is_yearly !== undefined) payload.is_yearly = patch.is_yearly
+    if (patch.calendar !== undefined) payload.calendar = patch.calendar
+    if (patch.is_shared !== undefined) payload.is_shared = patch.is_shared
+
+    const { error } = await supabase.from('person_occasions').update(payload).eq('id', id)
+    if (error) {
+      setSource('Local')
+      return 'Local'
+    }
+    setSource('Supabase')
+    return 'Supabase'
+  }
+
   const removeOccasion = async (id: string) => {
     const next = occasions.filter((o) => o.id !== id)
     if (!supabase) {
@@ -309,6 +344,7 @@ export function usePeopleData() {
     updatePerson,
     deletePerson,
     addOccasion,
+    updateOccasion,
     removeOccasion,
     sendPartnerInvitation,
     acceptPartnerInvitation,

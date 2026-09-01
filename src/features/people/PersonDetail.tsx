@@ -22,6 +22,7 @@ type Props = {
   people: Person[]
   onBack: () => void
   onAddOccasion: (input: NewOccasion) => void
+  onUpdateOccasion?: (id: string, patch: Partial<NewOccasion>) => void
   onRemoveOccasion: (id: string) => void
   onUpdatePerson: (id: string, patch: Pick<Person, 'name' | 'group_key' | 'is_partner'>) => void
   onDeletePerson?: (id: string) => void
@@ -34,6 +35,7 @@ export function PersonDetail({
   people,
   onBack,
   onAddOccasion,
+  onUpdateOccasion,
   onRemoveOccasion,
   onUpdatePerson,
   onDeletePerson,
@@ -42,8 +44,10 @@ export function PersonDetail({
   // Ẩn Header chung của App khi xem chi tiết người thân, nhấn quay lại sẽ hiện lại
   useHideHeader(true)
 
+  const isLove = Boolean(person.is_partner || person.room_code)
+
   const availableTabs = [
-    ...(person.is_partner ? [
+    ...(isLove ? [
       { key: 'location' as const, label: 'Vị trí' },
     ] : []),
     { key: 'events' as const, label: 'Kỷ niệm' },
@@ -52,7 +56,7 @@ export function PersonDetail({
     { key: 'journal' as const, label: 'Nhật ký' },
   ]
 
-  const [tab, setTab] = useState<DetailTab>(person.is_partner ? 'location' : 'info')
+  const [tab, setTab] = useState<DetailTab>(isLove ? 'location' : 'info')
 
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(person.name)
@@ -213,6 +217,7 @@ export function PersonDetail({
           title="Dịp quan trọng"
           withinDays={400}
           onAdd={onAddOccasion}
+          onUpdate={onUpdateOccasion}
           onRemove={onRemoveOccasion}
         />
       )}

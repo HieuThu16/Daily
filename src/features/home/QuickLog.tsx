@@ -3,6 +3,7 @@ import { Moon, Plus, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { sleepDuration } from '../../lib/sleep'
 import { useToast } from '../ToastContext'
+import { queueWrite } from '../../lib/offlineQueue'
 import type { NutritionLog } from '../../types'
 
 type Props = { dateKey: string; onSaved: () => void }
@@ -30,19 +31,37 @@ export function QuickLog({ dateKey, onSaved }: Props) {
   const [end, setEnd] = useState('06:00')
   const [busy, setBusy] = useState(false)
 
-  /** Ghi thẳng xuống bảng; hỏng mạng thì rơi vào localStorage giống trang Ăn uống. */
+  /** Ghi thẳng xuống bảng; hỏng mạng thì xếp vào offline queue & localStorage */
   async function save(table: 'nutrition_logs' | 'sleep_logs', payload: Record<string, unknown>, localKey: string) {
     setBusy(true)
+    let savedOnline = false
     try {
-      const { error } = await supabase!.from(table).insert(payload).select().single()
-      if (error) throw error
-      showToast('✅ Đã ghi!')
-    } catch {
+      if (supabase) {
+        const { error } = await supabase.from(table).insert(payload).select().single()
+        if (!error) {
+          savedOnline = true
+          showToast(table === 'sleep_logs' ? '☁️ Đã lưu giấc ngủ lên Supabase!' : '☁️ Đã lưu bữa ăn lên Supabase!', 'success')
+        } else {
+          console.warn(`Lỗi lưu Supabase [${table}]:`, error)
+        }
+      }
+    } catch (err) {
+      console.warn(`Lỗi kết nối Supabase [${table}]:`, err)
+    }
+
+    if (!savedOnline) {
+      const localId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local_${Date.now()}`
+      queueWrite({
+        table,
+        op: 'insert',
+        payload: { id: localId, ...payload },
+      })
       const key = `${localKey}_${dateKey}`
       const prev = JSON.parse(localStorage.getItem(key) || '[]')
-      localStorage.setItem(key, JSON.stringify([...prev, { ...payload, id: Date.now().toString(), created_at: new Date().toISOString() }]))
-      showToast('📴 Đã lưu offline')
+      localStorage.setItem(key, JSON.stringify([...prev, { ...payload, id: localId, created_at: new Date().toISOString() }]))
+      showToast('💾 Đã lưu offline (Đã xếp hàng đồng bộ)', 'local')
     }
+
     setBusy(false)
     setOpen(null)
     setFood('')
@@ -65,7 +84,6 @@ export function QuickLog({ dateKey, onSaved }: Props) {
       sleep_end: end,
       log_date: dateKey,
       duration_minutes: sleepDuration({ sleep_start: start, sleep_end: end, log_date: dateKey }),
-      dream: null,
     }, 'sleep')
 
   return (

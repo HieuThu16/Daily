@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarHeart, Check, ChevronRight, HeartHandshake, Mail, MapPin, Plus, Search, SlidersHorizontal, UserRound, Users, X } from 'lucide-react'
+import { CalendarHeart, Check, ChevronRight, HeartHandshake, Mail, Plus, Search, SlidersHorizontal, UserRound, Users, X } from 'lucide-react'
 import { localDate } from '../../lib/date'
 import { countdownLabel, daysUntil, isLunar, nextOccurrence, upcomingOccasions } from '../../lib/occasions'
 import { saveSourceLabel } from '../../lib/persistence'
@@ -13,7 +13,6 @@ import { DualCalendarDate } from './DualCalendarDate'
 import { GROUPS, groupLabel } from './groups'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonDetail } from './PersonDetail'
-import { CoupleLocationTab } from './CoupleLocationTab'
 import { usePeopleData, type NewOccasion } from './usePeopleData'
 
 
@@ -38,17 +37,15 @@ export function PeoplePage() {
     updatePerson,
     deletePerson,
     addOccasion,
+    updateOccasion,
     removeOccasion,
     sendPartnerInvitation,
     acceptPartnerInvitation,
     rejectPartnerInvitation,
   } = usePeopleData()
 
-  const partnerPerson = useMemo(() => people.find((p) => p.is_partner) || null, [people])
-  const [mainTab, setMainTab] = useState<'LOCATION' | 'OCCASIONS' | 'PEOPLE'>('LOCATION')
+  const [mainTab, setMainTab] = useState<'OCCASIONS' | 'PEOPLE'>('OCCASIONS')
   const [selected, setSelected] = useState<Person | null>(null)
-
-
 
   const [search, setSearch] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
@@ -84,7 +81,6 @@ export function PeoplePage() {
   const openForm = useCallback(() => setFormOpen(true), [])
   useHeaderAction(mainTab === 'PEOPLE' ? 'Thêm người' : 'Thêm', openForm)
 
-
   const filtered = useMemo(
     () =>
       people.filter(
@@ -110,6 +106,11 @@ export function PeoplePage() {
 
   const handleAddOccasion = async (input: NewOccasion) => {
     const savedTo = await addOccasion(input)
+    showToast(saveSourceLabel(savedTo))
+  }
+
+  const handleUpdateOccasion = async (id: string, patch: Partial<NewOccasion>) => {
+    const savedTo = await updateOccasion(id, patch)
     showToast(saveSourceLabel(savedTo))
   }
 
@@ -192,6 +193,7 @@ export function PeoplePage() {
         people={people}
         onBack={() => setSelected(null)}
         onAddOccasion={handleAddOccasion}
+        onUpdateOccasion={handleUpdateOccasion}
         onRemoveOccasion={removeOccasion}
         onUpdatePerson={handleUpdatePerson}
         onDeletePerson={handleDeletePerson}
@@ -202,12 +204,12 @@ export function PeoplePage() {
 
   return (
     <section className="people-page">
-      {/* Thanh tab chính: Nếu có đối tác kết nối phòng -> Hiện 4 Tab: Vị trí / Xem chung / Kỷ niệm / Người thân */}
+      {/* Thanh tab chính: 2 Tab gọn gàng Kỷ niệm / Người thân (Vị trí đã chuyển vào chi tiết người thương) */}
       <div
         className="people-main-nav"
         style={{
           display: 'grid',
-          gridTemplateColumns: partnerPerson ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)',
+          gridTemplateColumns: 'repeat(2, 1fr)',
           gap: '6px',
           marginBottom: '18px',
           background: 'var(--card-bg)',
@@ -216,30 +218,6 @@ export function PeoplePage() {
           padding: '4px',
         }}
       >
-        {partnerPerson && (
-          <button
-            type="button"
-            onClick={() => setMainTab('LOCATION')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '9px 8px',
-              borderRadius: '12px',
-              border: 'none',
-              background: mainTab === 'LOCATION' ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'transparent',
-              color: mainTab === 'LOCATION' ? '#ffffff' : 'var(--text-muted)',
-              fontWeight: 800,
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <MapPin size={15} /> Vị trí
-          </button>
-        )}
-
         <button
           type="button"
           onClick={() => setMainTab('OCCASIONS')}
@@ -247,27 +225,27 @@ export function PeoplePage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '4px',
+            gap: '6px',
             padding: '9px 8px',
             borderRadius: '12px',
             border: 'none',
-            background: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
-            color: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? '#ffffff' : 'var(--text-muted)',
+            background: mainTab === 'OCCASIONS' ? 'linear-gradient(135deg, #f43f5e, #be123c)' : 'transparent',
+            color: mainTab === 'OCCASIONS' ? '#ffffff' : 'var(--text-muted)',
             fontWeight: 800,
-            fontSize: '0.82rem',
+            fontSize: '0.86rem',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
           }}
         >
-          <CalendarHeart size={15} /> Kỷ niệm
+          <CalendarHeart size={16} /> Kỷ niệm
           {upcomingCount > 0 && (
             <span
               style={{
                 fontSize: '0.68rem',
-                padding: '1px 5px',
+                padding: '1px 6px',
                 borderRadius: '10px',
-                background: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
-                color: (mainTab === 'OCCASIONS' || ((mainTab === 'LOCATION') && !partnerPerson)) ? '#fff' : '#f43f5e',
+                background: mainTab === 'OCCASIONS' ? 'rgba(255,255,255,0.25)' : 'rgba(244,63,94,0.15)',
+                color: mainTab === 'OCCASIONS' ? '#fff' : '#f43f5e',
                 fontWeight: 700,
               }}
             >
@@ -283,23 +261,23 @@ export function PeoplePage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '4px',
+            gap: '6px',
             padding: '9px 8px',
             borderRadius: '12px',
             border: 'none',
             background: mainTab === 'PEOPLE' ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : 'transparent',
             color: mainTab === 'PEOPLE' ? '#ffffff' : 'var(--text-muted)',
             fontWeight: 800,
-            fontSize: '0.82rem',
+            fontSize: '0.86rem',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
           }}
         >
-          <Users size={15} /> Người thân
+          <Users size={16} /> Người thân
           <span
             style={{
               fontSize: '0.68rem',
-              padding: '1px 5px',
+              padding: '1px 6px',
               borderRadius: '10px',
               background: mainTab === 'PEOPLE' ? 'rgba(255,255,255,0.25)' : 'rgba(139,92,246,0.15)',
               color: mainTab === 'PEOPLE' ? '#fff' : '#8b5cf6',
@@ -311,15 +289,8 @@ export function PeoplePage() {
         </button>
       </div>
 
-      {/* TAB 1: VỊ TRÍ ĐÔI LỨA TRỰC TIẾP */}
-      {mainTab === 'LOCATION' && partnerPerson && (
-        <CoupleLocationTab partnerPerson={partnerPerson} />
-      )}
-
-      {/* TAB 2: XEM CHUNG TRỰC TIẾP (KHI ĐÃ KẾT NỐI PHÒNG CHUNG) */}
-
-      {/* TAB 3: KỶ NIỆM */}
-      {(mainTab === 'OCCASIONS' || (mainTab === 'LOCATION' && !partnerPerson)) && (
+      {/* TAB 1: KỶ NIỆM */}
+      {mainTab === 'OCCASIONS' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="people-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <div className="people-stat rose">
@@ -338,12 +309,13 @@ export function PeoplePage() {
             occasions={occasions}
             people={people}
             onAdd={handleAddOccasion}
+            onUpdate={handleUpdateOccasion}
             onRemove={removeOccasion}
           />
         </div>
       )}
 
-      {/* TAB 3: NGƯỜI THÂN QUEN */}
+      {/* TAB 2: NGƯỜI THÂN QUEN */}
       {mainTab === 'PEOPLE' && (
 
 
