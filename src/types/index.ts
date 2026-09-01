@@ -257,13 +257,12 @@ export function isEntryFirstTime(entry: Partial<Entry> | null | undefined): bool
   if (!entry) return false
   return Boolean(
     entry.is_first_time ||
-    entry.tags?.includes('FIRST_TIME') ||
-    entry.tags?.includes('is_first_time') ||
-    entry.tags?.includes('Lần đầu') ||
-    entry.tags?.includes('lan_dau') ||
+    entry.entry_type === 'NEW_THING' ||
     entry.entry_type === 'FIRST_TIME' ||
+    entry.tags?.some((t) => ['FIRST_TIME', 'is_first_time', 'Lần đầu', 'lan_dau', 'lan dau'].includes(t)) ||
+    entry.content?.includes('[Lần đầu]') ||
     entry.content?.includes('✨ Lần đầu') ||
-    entry.content?.includes('[Lần đầu]')
+    entry.content?.includes('[FIRST_TIME]')
   )
 }
 
@@ -271,13 +270,11 @@ export function isEntrySpecial(entry: Partial<Entry> | null | undefined): boolea
   if (!entry) return false
   return Boolean(
     entry.is_special ||
-    entry.tags?.includes('SPECIAL') ||
-    entry.tags?.includes('is_special') ||
-    entry.tags?.includes('Đặc biệt') ||
-    entry.tags?.includes('dac_biet') ||
     entry.entry_type === 'SPECIAL' ||
+    entry.tags?.some((t) => ['SPECIAL', 'is_special', 'Đặc biệt', 'dac_biet', 'dac biet'].includes(t)) ||
+    entry.content?.includes('[Đặc biệt]') ||
     entry.content?.includes('🌟 Đặc biệt') ||
-    entry.content?.includes('[Đặc biệt]')
+    entry.content?.includes('[SPECIAL]')
   )
 }
 /** Người được mời xem sự kiện chung, định danh bằng email đăng nhập. */

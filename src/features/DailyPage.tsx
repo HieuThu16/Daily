@@ -22,34 +22,57 @@ import { Memory3DCard } from './daily/Memory3DCard'
 
 export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = []
 
+export const SPECIAL_TAG_LABELS = new Set([
+  'lần đầu',
+  'lan dau',
+  'lan_dau',
+  'first_time',
+  'first time',
+  'is_first_time',
+  'đặc biệt',
+  'dac biet',
+  'dac_biet',
+  'special',
+  'is_special',
+])
+
 export function formatDisplayContent(content: string): string {
   if (!content) return ''
-  return content.replace(/^\[([^\]]+)\]\s*/, '')
+  return content.replace(/^(\[[^\]]+\]\s*)+/, '')
 }
 
 export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]): DailyCategoryItem | null {
   // 1. Kiểm tra nếu có category trực tiếp
-  if (entry.category) {
-    const found = allCategories.find((c) => c.label.toLowerCase() === entry.category?.toLowerCase() || c.id === entry.category)
+  if (entry.category && !SPECIAL_TAG_LABELS.has(entry.category.trim().toLowerCase())) {
+    const found = allCategories.find(
+      (c) => c.label.toLowerCase() === entry.category?.toLowerCase() || c.id === entry.category
+    )
     if (found) return found
     return { id: entry.category, label: entry.category, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
   }
-  // 2. Kiểm tra nếu nội dung có gắn [Thể loại] (ví dụ: [Sức khỏe] Đi chạy bộ)
+
+  // 2. Kiểm tra nếu nội dung có gắn [Thể loại] (bỏ qua [Lần đầu], [Đặc biệt])
   if (entry.content) {
-    const match = entry.content.match(/^\[([^\]]+)\]/)
-    if (match && match[1]) {
+    const matches = Array.from(entry.content.matchAll(/\[([^\]]+)\]/g))
+    for (const match of matches) {
       const catLabel = match[1].trim()
-      const found = allCategories.find((c) => c.label.toLowerCase() === catLabel.toLowerCase() || c.id === catLabel)
-      if (found) return found
-      return { id: catLabel, label: catLabel, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+      if (!SPECIAL_TAG_LABELS.has(catLabel.toLowerCase())) {
+        const found = allCategories.find(
+          (c) => c.label.toLowerCase() === catLabel.toLowerCase() || c.id === catLabel
+        )
+        if (found) return found
+        return { id: catLabel, label: catLabel, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+      }
     }
   }
+
   // 3. Kiểm tra tags
   if (entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0) {
-    const specialTags = new Set(['FIRST_TIME', 'SPECIAL', 'Lần đầu', 'lan_dau', 'Đặc biệt', 'dac_biet', 'is_first_time', 'is_special'])
-    const nonSpecialTag = entry.tags.find((t) => !specialTags.has(t))
+    const nonSpecialTag = entry.tags.find((t) => !SPECIAL_TAG_LABELS.has(t.trim().toLowerCase()))
     if (nonSpecialTag) {
-      const found = allCategories.find((c) => c.label.toLowerCase() === nonSpecialTag.toLowerCase() || c.id === nonSpecialTag)
+      const found = allCategories.find(
+        (c) => c.label.toLowerCase() === nonSpecialTag.toLowerCase() || c.id === nonSpecialTag
+      )
       if (found) return found
       return { id: nonSpecialTag, label: nonSpecialTag, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
     }
@@ -614,12 +637,14 @@ export function DailyPage() {
     // Luôn dùng entry_type chuẩn của database ('FEELING' / 'NEW_THING') để không bao giờ bị dính lỗi check constraint của PostgreSQL
     const safeEntryType: DailyType = isFirstTime ? 'NEW_THING' : 'FEELING'
 
-    // Encode category into line if selected so it persists everywhere (both locally & in database)
+    // Encode category, first time and special into line so they persist 100% everywhere (both locally & in database across reloads)
     const formattedLines = lines.map((lineText) => {
-      if (selectedCategory && !lineText.startsWith(`[${selectedCategory}]`)) {
-        return `[${selectedCategory}] ${lineText}`
-      }
-      return lineText
+      let l = lineText.trim().replace(/^(\[[^\]]+\]\s*)+/, '')
+      let prefix = ''
+      if (selectedCategory) prefix += `[${selectedCategory}]`
+      if (isFirstTime) prefix += `[Lần đầu]`
+      if (isSpecial) prefix += `[Đặc biệt]`
+      return prefix ? `${prefix} ${l}` : l
     })
 
     // Tạo payload chuẩn xác với is_first_time, is_special, category, tags và ảnh/video đính kèm
@@ -823,10 +848,12 @@ export function DailyPage() {
 
     const safeEditEntryType: DailyType = editIsFirstTime ? 'NEW_THING' : 'FEELING'
 
-    let formattedContent = editText.trim()
-    if (editCategory && !formattedContent.startsWith(`[${editCategory}]`)) {
-      formattedContent = `[${editCategory}] ${formattedContent}`
-    }
+    let cleanText = editText.trim().replace(/^(\[[^\]]+\]\s*)+/, '')
+    let prefix = ''
+    if (editCategory) prefix += `[${editCategory}]`
+    if (editIsFirstTime) prefix += `[Lần đầu]`
+    if (editIsSpecial) prefix += `[Đặc biệt]`
+    const formattedContent = prefix ? `${prefix} ${cleanText}` : cleanText
 
     const patch = {
       content: formattedContent,
@@ -1821,12 +1848,12 @@ export function DailyPage() {
                         {entry.entry_time && (
                           <span style={{ fontSize: '0.72rem', fontWeight: 800, color: catInfo?.color || 'var(--amber)', flexShrink: 0 }}>{entry.entry_time}</span>
                         )}
-                        {entry.is_first_time && (
+                        {isEntryFirstTime(entry) && (
                           <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#06b6d4', background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
                             ✨ Lần đầu
                           </span>
                         )}
-                        {entry.is_special && (
+                        {isEntrySpecial(entry) && (
                           <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
                             🌟 Đặc biệt
                           </span>

@@ -20,14 +20,18 @@ export function formatCardDate(dateStr: string): string {
   }
 }
 
-/** Trích xuất tiêu đề ngắn gọn làm tựa đề bìa sách từ nội dung */
 function getBookTitle(content: string, fallback: string): string {
   if (!content) return fallback
-  const firstLine = content.split('\n')[0].replace(/^Từ\s+.*?:/i, '').replace(/^\[.*?\]/i, '').trim()
+  const firstLine = content.split('\n')[0].replace(/^Từ\s+.*?:/i, '').replace(/^(\[[^\]]+\]\s*)+/i, '').trim()
   if (!firstLine) return fallback
   const words = firstLine.split(/\s+/)
   if (words.length <= 6) return firstLine
   return words.slice(0, 6).join(' ') + '…'
+}
+
+export function formatMemoryCardContent(content: string): string {
+  if (!content) return ''
+  return content.replace(/^(\[[^\]]+\]\s*)+/, '')
 }
 
 /** Sinh mã băm từ chuỗi để chọn biến thể đồ họa ngẫu nhiên nhưng ổn định */
@@ -655,7 +659,7 @@ export function Memory3DCard({
               fontStyle: 'normal',
             }}
           >
-            {entry.content}
+            {formatMemoryCardContent(entry.content)}
           </div>
 
           {/* Footer Mặt trước */}
@@ -753,7 +757,7 @@ export function Memory3DCard({
               border: '1px solid rgba(255,255,255,0.05)',
             }}
           >
-            {entry.content}
+            {formatMemoryCardContent(entry.content)}
           </div>
 
           {/* Footer Mặt sau: nút quay lại mặt trước */}
