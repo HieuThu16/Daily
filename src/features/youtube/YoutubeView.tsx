@@ -8,7 +8,7 @@ import {
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2,
   Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Clock, Tag,
-  Flame, ArrowUpDown, Zap, Headphones, Volume2, Sparkles
+  Flame, ArrowUpDown, Zap, Headphones, Volume2, Sparkles, Calendar, History
 } from 'lucide-react'
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
@@ -37,7 +37,6 @@ import {
   useVideoProgressMap,
   useYouTubeProgress,
   removeVideoProgress,
-  clearAllVideoProgress,
   syncVideoProgressFromSupabase,
 } from '../../lib/videoProgress'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
@@ -267,6 +266,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'channel' | 'video' | 'history'>('video')
+  const [historyPeriod, setHistoryPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all')
   const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [shuffleSeed, setShuffleSeed] = useState(() => Math.random())
 
@@ -1229,6 +1229,108 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return new Set(customCategories.map((c) => c.label))
   }, [customCategories])
 
+  // Danh sách video thô trong Lịch sử xem (kết hợp videoProgress và videoStatus)
+  const rawHistoryVideos = useMemo(() => {
+    const videoLookup = new Map<string, VideoRow>()
+    allVideos.forEach((v) => videoLookup.set(v.video_id, v))
+
+    const historyItems: Array<{
+      video: VideoRow
+      seconds: number
+      percent: number
+      status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
+      updatedAt: string
+    }> = []
+
+    // 1. Từ progressMap (lưu thời gian xem thực tế từng giây)
+    Object.values(progressMap).forEach((p) => {
+      if (!p || !p.videoId || p.percent <= 0) return
+      let v = videoLookup.get(p.videoId)
+      if (!v) {
+        v = {
+          id: `hist-${p.videoId}`,
+          video_id: p.videoId,
+          series_key: null,
+          creator_id: null,
+          creator_name: p.channelName || 'YouTube',
+          title: p.title || 'Video YouTube',
+          canonical_url: `https://www.youtube.com/watch?v=${p.videoId}`,
+          embed_url: `https://www.youtube.com/embed/${p.videoId}`,
+          thumbnail: p.thumbnail || `https://i.ytimg.com/vi/${p.videoId}/hqdefault.jpg`,
+          part_number: null,
+          published_at: null,
+          unavailable_at: null,
+          duration: p.durationSeconds,
+        }
+      }
+      historyItems.push({
+        video: v,
+        seconds: p.seconds,
+        percent: p.percent,
+        status: p.status,
+        updatedAt: p.updatedAt || new Date().toISOString(),
+      })
+    })
+
+    // 2. Từ watchedSet nếu chưa có trong historyItems
+    const existingIds = new Set(historyItems.map((h) => h.video.video_id))
+    watchedSet.forEach((vid) => {
+      if (!existingIds.has(vid)) {
+        const v = videoLookup.get(vid)
+        if (v) {
+          historyItems.push({
+            video: v,
+            seconds: v.duration || 0,
+            percent: 100,
+            status: 'COMPLETED',
+            updatedAt: new Date(0).toISOString(),
+          })
+        }
+      }
+    })
+
+    return historyItems.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }, [allVideos, progressMap, watchedSet])
+
+  // Đếm số video lịch sử theo từng thể loại cho thanh Tab phía trên
+  const historyCategoryCounts = useMemo(() => {
+    const validLabels = new Set(customCategories.map((c) => c.label))
+    const counts: Record<string, number> = { ALL: rawHistoryVideos.length, Khác: 0 }
+    customCategories.forEach((c) => {
+      if (c.label !== 'Khác') counts[c.label] = 0
+    })
+    rawHistoryVideos.forEach((h) => {
+      const cat = h.video.channel_category && validLabels.has(h.video.channel_category) ? h.video.channel_category : 'Khác'
+      counts[cat] = (counts[cat] || 0) + 1
+    })
+    return counts
+  }, [rawHistoryVideos, customCategories])
+
+  // Đếm số video lịch sử theo các khoảng thời gian (Hôm nay, Tuần này, Tháng này)
+  const historyPeriodCounts = useMemo(() => {
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const todayMs = startOfToday.getTime()
+    const sevenDaysAgoMs = Date.now() - 7 * 86400000
+    const thirtyDaysAgoMs = Date.now() - 30 * 86400000
+
+    let today = 0
+    let week = 0
+    let month = 0
+    rawHistoryVideos.forEach((h) => {
+      const t = new Date(h.updatedAt).getTime()
+      if (t >= todayMs) today++
+      if (t >= sevenDaysAgoMs) week++
+      if (t >= thirtyDaysAgoMs) month++
+    })
+    return {
+      all: rawHistoryVideos.length,
+      today,
+      week,
+      month,
+    }
+  }, [rawHistoryVideos])
+
   // Tính số lượng video & kênh cho từng tab thể loại (Đo đạc 100% chuẩn xác theo dữ liệu thực tế)
   const categoryTabStats = useMemo(() => {
     const counts: Record<string, { channels: number; videos: number }> = {}
@@ -1263,13 +1365,18 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   // Danh sách các tab hiển thị trên thanh cuộn ngang: Tất cả + Các thể loại của người dùng + 1 Tab "Khác" cố định
   const dynamicCategoryTabs = useMemo(() => {
     const isChannelView = viewMode === 'channel'
+    const isHistoryView = viewMode === 'history'
 
     const tabs = [
       {
         id: 'ALL',
         label: 'Tất cả',
-        icon: '🎬',
-        count: isChannelView ? channels.length : allVideos.length,
+        icon: isHistoryView ? '⏱️' : '🎬',
+        count: isHistoryView
+          ? (historyCategoryCounts['ALL'] || 0)
+          : isChannelView
+          ? channels.length
+          : allVideos.length,
       },
     ]
 
@@ -1281,7 +1388,11 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         id: c.label,
         label: c.label,
         icon: c.icon || '🏷️',
-        count: isChannelView ? stat.channels : stat.videos,
+        count: isHistoryView
+          ? (historyCategoryCounts[c.label] || 0)
+          : isChannelView
+          ? stat.channels
+          : stat.videos,
       })
     })
 
@@ -1292,11 +1403,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       id: 'Khác',
       label: 'Khác',
       icon: customOther?.icon || '📦',
-      count: isChannelView ? otherStat.channels : otherStat.videos,
+      count: isHistoryView
+        ? (historyCategoryCounts['Khác'] || 0)
+        : isChannelView
+        ? otherStat.channels
+        : otherStat.videos,
     })
 
     return tabs
-  }, [allVideos.length, channels.length, categoryTabStats, customCategories, viewMode])
+  }, [allVideos.length, channels.length, categoryTabStats, customCategories, viewMode, historyCategoryCounts])
 
   // Tính số lượng video cho từng Tag trong Thể loại hiện tại
   const tagCounts = useMemo(() => {
@@ -1304,7 +1419,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     const counts: Record<string, number> = {}
     const tags = categoryTagMap[activeCategoryTab] || []
     tags.forEach((t) => { counts[t] = 0 })
-    allVideos.forEach((v) => {
+    const sourceList = viewMode === 'history' ? rawHistoryVideos.map((h) => h.video) : allVideos
+    sourceList.forEach((v) => {
       const isMatch = activeCategoryTab === 'Khác'
         ? (!v.channel_category || v.channel_category === 'Khác' || !validCategoryLabels.has(v.channel_category))
         : (v.channel_category === activeCategoryTab)
@@ -1313,7 +1429,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       }
     })
     return counts
-  }, [allVideos, activeCategoryTab, categoryTagMap, validCategoryLabels])
+  }, [allVideos, rawHistoryVideos, viewMode, activeCategoryTab, categoryTagMap, validCategoryLabels])
 
   // Lọc Kênh theo Tab Thể Loại, Tag con và Ô Tìm Kiếm
   const filteredChannels = useMemo(() => {
@@ -1455,68 +1571,39 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return result
   }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap, validCategoryLabels])
 
-  // Danh sách video trong Lịch sử xem (kết hợp videoProgress và videoStatus)
+  // Danh sách video trong Lịch sử xem (lọc theo Thể loại, Tag con, Khoảng thời gian và Tìm kiếm)
   const historyVideos = useMemo(() => {
-    const videoLookup = new Map<string, VideoRow>()
-    allVideos.forEach((v) => videoLookup.set(v.video_id, v))
+    let result = [...rawHistoryVideos]
 
-    const historyItems: Array<{
-      video: VideoRow
-      seconds: number
-      percent: number
-      status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
-      updatedAt: string
-    }> = []
-
-    // 1. Từ progressMap (lưu thời gian xem thực tế từng giây)
-    Object.values(progressMap).forEach((p) => {
-      if (!p || !p.videoId || p.percent <= 0) return
-      let v = videoLookup.get(p.videoId)
-      if (!v) {
-        v = {
-          id: `hist-${p.videoId}`,
-          video_id: p.videoId,
-          series_key: null,
-          creator_id: null,
-          creator_name: p.channelName || 'YouTube',
-          title: p.title || 'Video YouTube',
-          canonical_url: `https://www.youtube.com/watch?v=${p.videoId}`,
-          embed_url: `https://www.youtube.com/embed/${p.videoId}`,
-          thumbnail: p.thumbnail || `https://i.ytimg.com/vi/${p.videoId}/hqdefault.jpg`,
-          part_number: null,
-          published_at: null,
-          unavailable_at: null,
-          duration: p.durationSeconds,
-        }
+    // 1. Lọc theo Thể loại
+    if (activeCategoryTab !== 'ALL') {
+      if (activeCategoryTab === 'Khác') {
+        result = result.filter((h) => !h.video.channel_category || h.video.channel_category === 'Khác' || !validCategoryLabels.has(h.video.channel_category))
+      } else {
+        result = result.filter((h) => h.video.channel_category === activeCategoryTab)
       }
-      historyItems.push({
-        video: v,
-        seconds: p.seconds,
-        percent: p.percent,
-        status: p.status,
-        updatedAt: p.updatedAt || new Date().toISOString(),
-      })
-    })
-
-    // 2. Từ watchedSet nếu chưa có trong historyItems
-    const existingIds = new Set(historyItems.map((h) => h.video.video_id))
-    watchedSet.forEach((vid) => {
-      if (!existingIds.has(vid)) {
-        const v = videoLookup.get(vid)
-        if (v) {
-          historyItems.push({
-            video: v,
-            seconds: v.duration || 0,
-            percent: 100,
-            status: 'COMPLETED',
-            updatedAt: new Date(0).toISOString(),
-          })
-        }
+      // Lọc theo Tag con
+      if (activeTagTab !== 'ALL') {
+        result = result.filter((h) => h.video.channel_tag === activeTagTab)
       }
-    })
+    }
 
-    // Lọc theo tìm kiếm nếu có gõ
-    let result = historyItems
+    // 2. Lọc theo Khoảng thời gian Lịch sử (Hôm nay, Tuần này, Tháng này, Tất cả)
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const todayMs = startOfToday.getTime()
+    const sevenDaysAgoMs = Date.now() - 7 * 86400000
+    const thirtyDaysAgoMs = Date.now() - 30 * 86400000
+
+    if (historyPeriod === 'today') {
+      result = result.filter((h) => new Date(h.updatedAt).getTime() >= todayMs)
+    } else if (historyPeriod === 'week') {
+      result = result.filter((h) => new Date(h.updatedAt).getTime() >= sevenDaysAgoMs)
+    } else if (historyPeriod === 'month') {
+      result = result.filter((h) => new Date(h.updatedAt).getTime() >= thirtyDaysAgoMs)
+    }
+
+    // 3. Lọc theo tìm kiếm nếu có gõ
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       result = result.filter(
@@ -1528,7 +1615,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
     // Sắp xếp xem gần nhất lên đầu
     return result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  }, [allVideos, progressMap, watchedSet, search])
+  }, [rawHistoryVideos, activeCategoryTab, activeTagTab, historyPeriod, search, validCategoryLabels])
 
   // Tải từng mẻ nhỏ 12 video/kênh giúp trang nhẹ mượt, không giật lag
   const videoList = useIncrementalList(filteredSavedVideos.length, 12, `${search}|${watchFilter}|${activeCategoryTab}|${shuffleSeed}|${sortMode}`)
@@ -1860,24 +1947,24 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         )}
       </form>
 
-      {/* 2.5. BỘ LỌC TRẠNG THÁI XEM (ĐANG XEM, ĐÃ XEM, CHƯA XEM) & NÚT XÁO TRỘN NGẪU NHIÊN */}
-      {/* Một dòng lướt ngang: 4 bộ lọc + nút xáo trộn mà xuống dòng thì ăn mất
-          3 dòng màn hình điện thoại, đẩy video xuống quá sâu. */}
-      <div className="chip-scroll-row" style={{ margin: '8px 0 14px' }}>
-        {([
-            { id: 'all', label: 'Tất cả video', icon: null, count: watchStatusCounts.all },
-            { id: 'in_progress', label: 'Đang xem', icon: Clock, count: watchStatusCounts.in_progress },
-            { id: 'watched', label: 'Đã xem', icon: CheckCircle2, count: watchStatusCounts.watched },
-            { id: 'unwatched', label: 'Chưa xem', icon: Circle, count: watchStatusCounts.unwatched },
-        ] as const).map((filter) => {
-            const isActive = watchFilter === filter.id
-            const Icon = filter.icon
+      {/* 2.5. BỘ LỌC TRẠNG THÁI XEM HOẶC BỘ LỌC THỜI GIAN LỊCH SỬ */}
+      {viewMode === 'history' ? (
+        /* Khi xem LỊCH SỬ: Tắt bộ lọc Tất cả / Đang xem / Đã xem, thay bằng các mốc thời gian Hôm nay / Tuần / Tháng / Tất cả */
+        <div className="chip-scroll-row" style={{ margin: '8px 0 14px' }}>
+          {([
+            { id: 'all', label: 'Tất cả lịch sử', icon: Clock, count: historyPeriodCounts.all },
+            { id: 'today', label: 'Hôm nay', icon: Sparkles, count: historyPeriodCounts.today },
+            { id: 'week', label: 'Tuần này', icon: Calendar, count: historyPeriodCounts.week },
+            { id: 'month', label: 'Tháng này', icon: History, count: historyPeriodCounts.month },
+          ] as const).map((p) => {
+            const isActive = historyPeriod === p.id
+            const Icon = p.icon
             return (
               <button
-                key={filter.id}
+                key={p.id}
                 type="button"
                 className={`tv-filter-pill ${isActive ? 'active' : ''}`}
-                onClick={() => setWatchFilter(filter.id)}
+                onClick={() => setHistoryPeriod(p.id)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1893,8 +1980,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                   transition: 'all 0.15s ease',
                 }}
               >
-                {Icon && <Icon size={12} />}
-                <span>{filter.label}</span>
+                <Icon size={12} />
+                <span>{p.label}</span>
                 <span
                   style={{
                     padding: '1px 6px',
@@ -1905,65 +1992,116 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                     color: isActive ? '#ffffff' : 'var(--text-muted)',
                   }}
                 >
-                  {filter.count}
+                  {p.count}
                 </span>
               </button>
             )
-        })}
-
-        <div style={{ width: 1, height: 18, background: 'var(--card-border)', margin: '0 4px', flexShrink: 0 }} />
-
-        {/* BỘ LỌC SẮP XẾP: NGẪU NHIÊN (MẶC ĐỊNH KHI MỞ TAB) & MỚI ĐĂNG & NHIỀU VIEW & CŨ NHẤT */}
-        {([
-          { id: 'random', label: 'Ngẫu nhiên', icon: Sparkles, title: 'Hiển thị video xáo trộn ngẫu nhiên mỗi lần mở (Mặc định)' },
-          { id: 'date', label: 'Mới đăng', icon: Zap, title: 'Ưu tiên hiển thị video mới đăng gần nhất' },
-          { id: 'viewCount', label: 'Nhiều view', icon: Flame, title: 'Ưu tiên hiển thị video có nhiều lượt xem' },
-          { id: 'oldest', label: 'Cũ nhất', icon: ArrowUpDown, title: 'Hiển thị video từ cũ nhất đến mới nhất' },
-        ] as const).map((s) => {
-          const isActive = sortMode === s.id
-          const Icon = s.icon
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={`tv-filter-pill ${isActive ? 'active' : ''}`}
-              onClick={() => handleSortChange(s.id)}
-              title={s.title}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '5px 12px',
-                borderRadius: 10,
-                border: `1px solid ${isActive ? 'var(--primary)' : 'var(--card-border)'}`,
-                background: isActive ? 'var(--primary)' : 'var(--card-bg)',
-                color: isActive ? '#ffffff' : 'var(--text-main)',
-                fontSize: '0.76rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <Icon size={12} />
-              <span>{s.label}</span>
-              {s.id === 'random' && (
-                <span
+          })}
+        </div>
+      ) : (
+        /* Khi xem Video / Kênh bình thường */
+        <div className="chip-scroll-row" style={{ margin: '8px 0 14px' }}>
+          {([
+              { id: 'all', label: 'Tất cả video', icon: null, count: watchStatusCounts.all },
+              { id: 'in_progress', label: 'Đang xem', icon: Clock, count: watchStatusCounts.in_progress },
+              { id: 'watched', label: 'Đã xem', icon: CheckCircle2, count: watchStatusCounts.watched },
+              { id: 'unwatched', label: 'Chưa xem', icon: Circle, count: watchStatusCounts.unwatched },
+          ] as const).map((filter) => {
+              const isActive = watchFilter === filter.id
+              const Icon = filter.icon
+              return (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={`tv-filter-pill ${isActive ? 'active' : ''}`}
+                  onClick={() => setWatchFilter(filter.id)}
                   style={{
-                    padding: '1px 5px',
-                    borderRadius: 99,
-                    fontSize: '0.65rem',
-                    fontWeight: 800,
-                    background: isActive ? 'rgba(255, 255, 255, 0.3)' : 'rgba(59, 130, 246, 0.15)',
-                    color: isActive ? '#ffffff' : 'var(--primary)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '5px 12px',
+                    borderRadius: 10,
+                    border: `1px solid ${isActive ? 'var(--primary)' : 'var(--card-border)'}`,
+                    background: isActive ? 'var(--primary)' : 'var(--card-bg)',
+                    color: isActive ? '#ffffff' : 'var(--text-main)',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
-                  Mặc định
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
+                  {Icon && <Icon size={12} />}
+                  <span>{filter.label}</span>
+                  <span
+                    style={{
+                      padding: '1px 6px',
+                      borderRadius: 99,
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      background: isActive ? 'rgba(255, 255, 255, 0.25)' : 'var(--bg-main)',
+                      color: isActive ? '#ffffff' : 'var(--text-muted)',
+                    }}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              )
+          })}
+
+          <div style={{ width: 1, height: 18, background: 'var(--card-border)', margin: '0 4px', flexShrink: 0 }} />
+
+          {/* BỘ LỌC SẮP XẾP: NGẪU NHIÊN (MẶC ĐỊNH KHI MỞ TAB) & MỚI ĐĂNG & NHIỀU VIEW & CŨ NHẤT */}
+          {([
+            { id: 'random', label: 'Ngẫu nhiên', icon: Sparkles, title: 'Hiển thị video xáo trộn ngẫu nhiên mỗi lần mở (Mặc định)' },
+            { id: 'date', label: 'Mới đăng', icon: Zap, title: 'Ưu tiên hiển thị video mới đăng gần nhất' },
+            { id: 'viewCount', label: 'Nhiều view', icon: Flame, title: 'Ưu tiên hiển thị video có nhiều lượt xem' },
+            { id: 'oldest', label: 'Cũ nhất', icon: ArrowUpDown, title: 'Hiển thị video từ cũ nhất đến mới nhất' },
+          ] as const).map((s) => {
+            const isActive = sortMode === s.id
+            const Icon = s.icon
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className={`tv-filter-pill ${isActive ? 'active' : ''}`}
+                onClick={() => handleSortChange(s.id)}
+                title={s.title}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '5px 12px',
+                  borderRadius: 10,
+                  border: `1px solid ${isActive ? 'var(--primary)' : 'var(--card-border)'}`,
+                  background: isActive ? 'var(--primary)' : 'var(--card-bg)',
+                  color: isActive ? '#ffffff' : 'var(--text-main)',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Icon size={12} />
+                <span>{s.label}</span>
+                {s.id === 'random' && (
+                  <span
+                    style={{
+                      padding: '1px 5px',
+                      borderRadius: 99,
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      background: isActive ? 'rgba(255, 255, 255, 0.3)' : 'rgba(59, 130, 246, 0.15)',
+                      color: isActive ? '#ffffff' : 'var(--primary)',
+                    }}
+                  >
+                    Mặc định
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* 3. PHẦN HIỂN THỊ KẾT QUẢ TÌM KIẾM YOUTUBE TRỰC TUYẾN (NẾU ĐANG TÌM KIẾM) */}
       {search.trim() && (searchScope === 'all' || searchScope === 'youtube') && (
@@ -2203,37 +2341,9 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Clock size={18} color="var(--primary)" />
                   <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    Lịch sử xem gần đây ({historyVideos.length})
+                    Lịch sử xem ({historyVideos.length})
                   </h3>
                 </div>
-
-                {historyVideos.length > 0 && (
-                  <button
-                    type="button"
-                    className="tv-btn"
-                    onClick={() => {
-                      if (window.confirm('Bạn có chắc muốn xóa toàn bộ lịch sử xem video?')) {
-                        clearAllVideoProgress()
-                        showToast('🗑️ Đã xóa toàn bộ lịch sử xem', 'info')
-                      }
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(244, 63, 94, 0.3)',
-                      background: 'rgba(244, 63, 94, 0.08)',
-                      color: 'var(--rose, #f43f5e)',
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                    }}
-                  >
-                    <Trash2 size={13} /> Xóa toàn bộ lịch sử
-                  </button>
-                )}
               </div>
 
               {historyVideos.length === 0 ? (

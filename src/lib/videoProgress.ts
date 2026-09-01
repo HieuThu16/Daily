@@ -64,6 +64,11 @@ export async function removeVideoProgress(videoId: string) {
   const map = getLocalProgress()
   delete map[videoId]
   writeLocal(map)
+
+  // Cập nhật trạng thái video thành UNWATCHED
+  void setVideoStatus(videoId, 'tvshow', 'UNWATCHED')
+  void setVideoStatus(videoId, 'review', 'UNWATCHED')
+
   if (supabase) {
     try {
       const { data } = await supabase.auth.getUser()
@@ -71,7 +76,11 @@ export async function removeVideoProgress(videoId: string) {
       if (user) {
         await supabase.from('video_watch_progress').delete().eq('user_id', user.id).eq('video_id', videoId)
       }
-    } catch {}
+      await supabase.from('tvshow_watched').delete().eq('video_id', videoId)
+      await supabase.from('review_watched').delete().eq('video_id', videoId)
+    } catch (err) {
+      console.warn('[videoProgress] Lỗi khi xoá video khỏi Supabase:', err)
+    }
   }
 }
 
