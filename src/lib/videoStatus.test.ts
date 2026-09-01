@@ -1,4 +1,18 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('./supabase', () => ({
+  supabase: {
+    from: () => ({
+      upsert: vi.fn(async () => ({ error: null })),
+      delete: () => ({
+        eq: () => ({
+          eq: vi.fn(async () => ({ error: null })),
+        }),
+      }),
+    }),
+  },
+}))
+
 import {
   autoMarkVideoWatching,
   cycleNextVideoStatus,

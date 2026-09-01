@@ -145,7 +145,6 @@ export function BookGrid({ items, onOpen, onToggleFavorite, onApproveDraft, onDe
         const favoriteLabel = `${item.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'} ${item.name}`
 
         // Tính toán tiến độ đọc từ database
-        const isInProgress = item.status === 'IN_PROGRESS'
         const isCompleted = item.status === 'COMPLETED'
         const prog = progressMap.get(item.id)
 
@@ -160,6 +159,7 @@ export function BookGrid({ items, onOpen, onToggleFavorite, onApproveDraft, onDe
           ? 100 
           : (prog?.percent !== undefined && prog.percent > 0 ? prog.percent : itemPct)
         percent = Math.min(100, Math.max(0, Math.round(percent)))
+        const isInProgress = item.status === 'IN_PROGRESS' || (percent > 0 && percent < 100)
 
         const pageDisplay = prog?.page 
           ? (prog.totalPages ? `${prog.page}/${prog.totalPages}` : `${prog.page}`)

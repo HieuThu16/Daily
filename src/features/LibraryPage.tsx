@@ -28,6 +28,8 @@ import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
 import { ContinueReadingHero } from './library/ContinueReadingHero'
+import { BookAdaptationsAndNobelView } from './library/BookAdaptationsAndNobelView'
+import { useLastReadBook, getBookReadingSessionLogs } from '../lib/bookReadingLog'
 import { SkeletonGrid } from './Skeleton'
 import { DilibCrawlerModal } from './audiobook/DilibCrawlerModal'
 
@@ -82,7 +84,7 @@ const STATUS_TONE: Record<Media['status'], string> = {
 const COVER_BUCKET = 'media-covers'
 
 export type Kind = (typeof categories)[number]['id']
-type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats'
+type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats' | 'curated'
 type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'DRAFT'
 
 function getCurrentTimeString() {
@@ -196,6 +198,20 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const [showDilibCrawler, setShowDilibCrawler] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
+  const lastReadBook = useLastReadBook()
+
+  const isBookEffectivelyInProgress = useCallback(
+    (item: Media) => {
+      if (item.type !== 'BOOK') return item.status === 'IN_PROGRESS'
+      if (item.status === 'IN_PROGRESS') return true
+      if (item.status === 'COMPLETED') return false
+      if (lastReadBook?.mediaItemId === item.id) return true
+      const sessionLogs = getBookReadingSessionLogs()
+      if (sessionLogs.some((s) => s.mediaItemId === item.id && s.status !== 'COMPLETED')) return true
+      return false
+    },
+    [lastReadBook],
+  )
 
   useEffect(() => {
     void loadImportedMediaItemIds().then(setImportedIds)
@@ -887,8 +903,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
     const total = scopeItems.length
     const completed = scopeItems.filter((i) => i.status === 'COMPLETED').length
-    const inProgress = scopeItems.filter((i) => i.status === 'IN_PROGRESS').length
-    const planned = scopeItems.filter((i) => i.status === 'PLANNED').length
+    const inProgress = scopeItems.filter((i) => (i.type === 'BOOK' ? isBookEffectivelyInProgress(i) : i.status === 'IN_PROGRESS')).length
+    const planned = scopeItems.filter((i) => (i.type === 'BOOK' ? (i.status === 'PLANNED' && !isBookEffectivelyInProgress(i)) : i.status === 'PLANNED')).length
     const favoriteCount = scopeItems.filter((i) => i.is_favorite).length
 
     const categoryStats = categories.map((cat) => {
@@ -897,13 +913,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         ...cat,
         count: catItems.length,
         doneCount: catItems.filter((i) => i.status === 'COMPLETED').length,
-        inProgressCount: catItems.filter((i) => i.status === 'IN_PROGRESS').length,
-        plannedCount: catItems.filter((i) => i.status === 'PLANNED').length,
+        inProgressCount: catItems.filter((i) => (i.type === 'BOOK' ? isBookEffectivelyInProgress(i) : i.status === 'IN_PROGRESS')).length,
+        plannedCount: catItems.filter((i) => (i.type === 'BOOK' ? (i.status === 'PLANNED' && !isBookEffectivelyInProgress(i)) : i.status === 'PLANNED')).length,
       }
     })
 
     return { total, completed, inProgress, planned, favoriteCount, categoryStats }
-  }, [items, selectedType, statsMode, statsDate])
+  }, [items, selectedType, statsMode, statsDate, isBookEffectivelyInProgress])
 
   /**
    * Số liệu toàn thời gian của từng thư viện, dùng cho bảng tổng thể khi đang ở
@@ -918,13 +934,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           ...cat,
           count: catItems.length,
           done,
-          inProgress: catItems.filter((i) => i.status === 'IN_PROGRESS').length,
-          planned: catItems.filter((i) => i.status === 'PLANNED').length,
+          inProgress: catItems.filter((i) => (i.type === 'BOOK' ? isBookEffectivelyInProgress(i) : i.status === 'IN_PROGRESS')).length,
+          planned: catItems.filter((i) => (i.type === 'BOOK' ? (i.status === 'PLANNED' && !isBookEffectivelyInProgress(i)) : i.status === 'PLANNED')).length,
           favorite: catItems.filter((i) => i.is_favorite).length,
           percent: catItems.length ? Math.round((done / catItems.length) * 100) : 0,
         }
       }),
-    [items],
+    [items, isBookEffectivelyInProgress],
   )
 
   // Filter Overview Items
@@ -944,7 +960,22 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         if (!isDraft) return false
       } else {
         if (isDraft) return false
-        if (statusFilter !== 'ALL' && i.status !== statusFilter) return false
+        if (statusFilter === 'IN_PROGRESS') {
+          if (i.type === 'BOOK') {
+            if (!isBookEffectivelyInProgress(i)) return false
+          } else {
+            if (i.status !== 'IN_PROGRESS') return false
+          }
+        } else if (statusFilter === 'PLANNED') {
+          if (i.type === 'BOOK') {
+            if (isBookEffectivelyInProgress(i) || i.status === 'COMPLETED') return false
+            if (i.status !== 'PLANNED') return false
+          } else {
+            if (i.status !== 'PLANNED') return false
+          }
+        } else if (statusFilter === 'COMPLETED') {
+          if (i.status !== 'COMPLETED') return false
+        }
       }
 
       if (selectedType === 'MUSIC' && musicGenreFilter !== 'ALL' && (i.music_genre ?? 'Chưa phân loại') !== musicGenreFilter) return false
@@ -957,7 +988,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       const q = search.toLowerCase()
       return i.name.toLowerCase().includes(q) || (i.author && i.author.toLowerCase().includes(q)) || (i.genre && i.genre.toLowerCase().includes(q))
     })
-  }, [items, selectedType, statusFilter, musicGenreFilter, bookGenreFilter, bookAuthorFilter, bookFormatFilter, search])
+  }, [items, selectedType, statusFilter, musicGenreFilter, bookGenreFilter, bookAuthorFilter, bookFormatFilter, search, isBookEffectivelyInProgress])
 
   // Count draft books
   const draftBookCount = useMemo(() => {
@@ -1413,6 +1444,17 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             <span className="library-stat-link">Xem series ›</span>
           </button>
         )}
+        {selectedType === 'BOOK' && (
+          <button
+            role="tab"
+            aria-selected={subView === 'curated'}
+            className={subView === 'curated' ? 'active' : ''}
+            onClick={() => setSubView('curated')}
+          >
+            <span className="library-stat-head"><Sparkles size={13} style={{ color: '#f59e0b' }} /> Phim & Nobel</span>
+            <span className="library-stat-link">Tuyển chọn ›</span>
+          </button>
+        )}
         <button
           role="tab"
           aria-selected={subView === 'stats'}
@@ -1433,6 +1475,14 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             title="Cào sách & sách nói tự động từ các nguồn"
           >
             <Sparkles size={14} /> <span>Cào Sách Đa Nguồn</span>
+          </button>
+          <button
+            type="button"
+            className="library-action-btn-secondary"
+            onClick={() => setSubView('curated')}
+            title="Tuyển tập sách chuyển thể thành phim & tác giả giải Nobel văn học"
+          >
+            <Clapperboard size={13} /> <span>Sách Phim & Nobel</span>
           </button>
           <button
             type="button"
@@ -1531,7 +1581,14 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                   }
                   if (f.key === 'DRAFT') return isDraft
                   if (isDraft) return false
-                  return f.key === 'ALL' || i.status === f.key
+                  if (f.key === 'ALL') return true
+                  if (f.key === 'IN_PROGRESS') {
+                    return i.type === 'BOOK' ? isBookEffectivelyInProgress(i) : i.status === 'IN_PROGRESS'
+                  }
+                  if (f.key === 'PLANNED') {
+                    return i.type === 'BOOK' ? (i.status === 'PLANNED' && !isBookEffectivelyInProgress(i)) : i.status === 'PLANNED'
+                  }
+                  return i.status === f.key
                 }).length
 
                 return (
@@ -1994,6 +2051,14 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             </div>
           </div>
         </div>
+      )}
+
+      {/* VIEW 5: SÁCH CHUYỂN THỂ PHIM & NOBEL VĂN HỌC */}
+      {subView === 'curated' && (
+        <BookAdaptationsAndNobelView
+          existingBooks={items.filter((i) => i.type === 'BOOK')}
+          onAdded={() => {}}
+        />
       )}
 
       {/* Add / Edit Modal with Header Manage Buttons for All Metadata Categories */}

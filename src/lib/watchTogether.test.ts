@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const update = vi.fn(() => chain)
 const eq = vi.fn(() => chain)
+const select = vi.fn(() => chain)
 const upsert = vi.fn(async (_rows: any, _opts?: any) => ({ error: null }))
 const del = vi.fn(() => chain)
-const chain: any = { update, eq, upsert, delete: del, then: (r: any) => r({ error: null }) }
+const chain: any = { select, update, eq, upsert, delete: del, then: (r: any) => r({ data: [], error: null }) }
 
 const notifyUsers = vi.fn(async () => {})
 vi.mock('./push', () => ({ notifyUsers }))
@@ -35,9 +36,9 @@ describe('watchTogether', () => {
     vi.clearAllMocks()
   })
 
-  it('chưa gửi cho ai thì không gọi cập nhật tiến độ', async () => {
+  it('cập nhật tiến độ gọi supabase với đúng tham số', async () => {
     await updateMyShareProgress('VIDEO', 'abc', 50, 'Đang xem 50%')
-    expect(update).not.toHaveBeenCalled()
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ percent: 50, progress_text: 'Đang xem 50%' }))
   })
 
   it('gửi cho nhiều Gmail thì mỗi người một dòng, tiến độ kẹp trong 0..100', async () => {

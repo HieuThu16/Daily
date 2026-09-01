@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { estimatePage, reportPagesRead, saveProgress } from '../../lib/book/repository'
+import { supabase } from '../../lib/supabase'
 
 const SAVE_DEBOUNCE_MS = 2000
 const MIN_SAVE_INTERVAL_MS = 10_000
@@ -67,6 +68,10 @@ export function useBookReadingProgress({ documentId, mediaItemId, totalChars, pa
       })
       if (loggedToday.current) {
         await reportPagesRead(mediaItemId, estimatePage(offset, totalChars, pageCount))
+      }
+      if (supabase && mediaItemId) {
+        const nextStatus = percent >= 100 ? 'COMPLETED' : 'IN_PROGRESS'
+        void supabase.from('media_items').update({ status: nextStatus }).eq('id', mediaItemId)
       }
     } catch (error) {
       // Không chặn việc đọc; lần lưu kế tiếp sẽ thử lại.
