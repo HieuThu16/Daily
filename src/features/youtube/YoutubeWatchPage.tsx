@@ -19,10 +19,10 @@ import {
 } from '../../lib/youtubeAudioCache'
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
-  progressLabel, useVideoProgressMap, useYouTubeProgress,
+  progressLabel, useVideoProgressMap, useYouTubeProgress, saveVideoProgress,
 } from '../../lib/videoProgress'
 import {
-  getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener,
+  getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener, autoMarkVideoWatching,
 } from '../../lib/videoStatus'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
 import '../tvshow/tvShow.css'
@@ -238,12 +238,6 @@ export function YoutubeWatchPage() {
     showToast(res.added ? '✨ Đã lưu vào Bộ sưu tập thẻ 3D!' : '🗑️ Đã bỏ khỏi Bộ sưu tập')
   }
 
-  useVideoStatusListener(() => {
-    if (video) {
-      setWatchedSet(getVideoStatusSets(video.sourceType).watchedSet)
-    }
-  })
-
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -341,11 +335,34 @@ export function YoutubeWatchPage() {
     }
   }, [videoId, hint])
 
+  // Tự động ghi nhận Đang xem ngay khi mở video
+  useEffect(() => {
+    if (video?.video_id) {
+      void autoMarkVideoWatching(video.video_id, video.sourceType, watchedSet, {
+        title: video.title,
+        channel_name: video.creator_name ?? undefined,
+      })
+      const curProg = progressMap[video.video_id]
+      if (!curProg) {
+        void saveVideoProgress({
+          videoId: video.video_id,
+          seconds: 1,
+          durationSeconds: video.duration,
+          title: video.title,
+          channelName: video.creator_name ?? undefined,
+          thumbnail: video.thumbnail,
+          sourceType: video.sourceType,
+        })
+      }
+    }
+  }, [video?.video_id, video?.sourceType])
+
   useYouTubeProgress(iframeRef, {
     videoId: video?.video_id ?? null,
     title: video?.title,
     channelName: video?.creator_name ?? undefined,
     thumbnail: video?.thumbnail,
+    sourceType: video?.sourceType,
   })
 
   const progress = progressMap[videoId]
@@ -360,7 +377,8 @@ export function YoutubeWatchPage() {
   const embedSrc = useMemo(() => {
     if (!video) return ''
     const base = video.embed_url || `https://www.youtube.com/embed/${video.video_id}`
-    return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1${
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    return `${base}${base.includes('?') ? '&' : '?'}autoplay=1&rel=0&enablejsapi=1&playsinline=1&origin=${encodeURIComponent(origin)}${
       start > 3 ? `&start=${start}` : ''
     }`
     // Chỉ dựng lại src khi đổi video, không dựng theo tiến độ đang chạy.
@@ -380,6 +398,19 @@ export function YoutubeWatchPage() {
       title: video.title,
       channel_name: video.creator_name ?? undefined,
     })
+
+    if (next === 'COMPLETED') {
+      const dur = video.duration || progressMap[video.video_id]?.durationSeconds || 100
+      void saveVideoProgress({
+        videoId: video.video_id,
+        seconds: dur,
+        durationSeconds: dur,
+        title: video.title,
+        channelName: video.creator_name ?? undefined,
+        thumbnail: video.thumbnail,
+        sourceType: video.sourceType,
+      })
+    }
     showToast(next === 'COMPLETED' ? 'Đã đánh dấu xem xong' : 'Bỏ đánh dấu đã xem', 'info')
   }
 

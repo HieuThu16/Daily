@@ -7,8 +7,8 @@ import {
   Check, 
   Loader2, LayoutGrid, 
   Edit3, Globe, BookmarkPlus, PictureInPicture2,
-  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Clock, Tag,
-  Flame, ArrowUpDown, Zap, Headphones, Volume2
+  Plus, Trash2, ChevronLeft, ChevronRight, ChevronDown, Clock, Tag,
+  Flame, ArrowUpDown, Zap, Headphones, Volume2, Sparkles
 } from 'lucide-react'
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
@@ -60,7 +60,7 @@ export type CustomCategoryItem = { id: string; label: string; icon: string; tags
 export type ChannelCategoryMap = Record<string, string>
 export type CategoryTagMap = Record<string, string[]>
 export type ChannelTagMap = Record<string, string>
-export type YoutubeSortMode = 'date' | 'viewCount' | 'oldest'
+export type YoutubeSortMode = 'random' | 'date' | 'viewCount' | 'oldest'
 
 export type ChannelItem = {
   id: string
@@ -302,7 +302,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   /** Thứ tự kết quả; đổi là tìm lại vì YouTube xếp ở phía nó, không xếp tại chỗ. */
   const [ytOrder, setYtOrder] = useState<SearchOrder>('date')
-  const [sortMode, setSortMode] = useState<YoutubeSortMode>('date')
+  const [sortMode, setSortMode] = useState<YoutubeSortMode>('random')
   const [savingVideoId, setSavingVideoId] = useState<string | null>(null)
 
   const [selectedChannel, setSelectedChannel] = useState<ChannelItem | null>(null)
@@ -1165,8 +1165,11 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     }
   }
 
-  // Đổi tiêu chí sắp xếp (Mới đăng / Nhiều view / Cũ nhất)
+  // Đổi tiêu chí sắp xếp (Ngẫu nhiên / Mới đăng / Nhiều view / Cũ nhất)
   const handleSortChange = (newSort: YoutubeSortMode) => {
+    if (newSort === 'random') {
+      setShuffleSeed(Math.random())
+    }
     setSortMode(newSort)
     const newYtOrder: SearchOrder = newSort === 'viewCount' ? 'viewCount' : 'date'
     setYtOrder(newYtOrder)
@@ -1420,28 +1423,31 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       )
     }
 
-    // Sắp xếp video: Mặc định là Mới đăng ưu tiên ('date'), hoặc Nhiều view ('viewCount'), hoặc Cũ nhất ('oldest')
-    result.sort((a, b) => {
-      if (sortMode === 'date') {
+    // Sắp xếp video: Mặc định là Ngẫu nhiên ('random'), hoặc Mới đăng ('date'), hoặc Nhiều view ('viewCount'), hoặc Cũ nhất ('oldest')
+    if (sortMode === 'random') {
+      result = shuffleArray(result, shuffleSeed)
+    } else if (sortMode === 'date') {
+      result.sort((a, b) => {
         const tA = a.published_at ? new Date(a.published_at).getTime() : 0
         const tB = b.published_at ? new Date(b.published_at).getTime() : 0
         return tB - tA
-      }
-      if (sortMode === 'oldest') {
+      })
+    } else if (sortMode === 'oldest') {
+      result.sort((a, b) => {
         const tA = a.published_at ? new Date(a.published_at).getTime() : 0
         const tB = b.published_at ? new Date(b.published_at).getTime() : 0
         return tA - tB
-      }
-      if (sortMode === 'viewCount') {
+      })
+    } else if (sortMode === 'viewCount') {
+      result.sort((a, b) => {
         const pA = progressMap[a.video_id]?.percent || 0
         const pB = progressMap[b.video_id]?.percent || 0
         if (pA !== pB) return pB - pA
         const tA = a.published_at ? new Date(a.published_at).getTime() : 0
         const tB = b.published_at ? new Date(b.published_at).getTime() : 0
         return tB - tA
-      }
-      return 0
-    })
+      })
+    }
 
     return result
   }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap, validCategoryLabels])
@@ -1904,9 +1910,10 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
         <div style={{ width: 1, height: 18, background: 'var(--card-border)', margin: '0 4px', flexShrink: 0 }} />
 
-        {/* BỘ LỌC SẮP XẾP: MỚI ĐĂNG (ƯU TIÊN MẶC ĐỊNH) & NHIỀU VIEW & CŨ NHẤT */}
+        {/* BỘ LỌC SẮP XẾP: NGẪU NHIÊN (MẶC ĐỊNH KHI MỞ TAB) & MỚI ĐĂNG & NHIỀU VIEW & CŨ NHẤT */}
         {([
-          { id: 'date', label: 'Mới đăng', icon: Zap, title: 'Ưu tiên hiển thị video mới đăng gần nhất (Mặc định)' },
+          { id: 'random', label: 'Ngẫu nhiên', icon: Sparkles, title: 'Hiển thị video xáo trộn ngẫu nhiên mỗi lần mở (Mặc định)' },
+          { id: 'date', label: 'Mới đăng', icon: Zap, title: 'Ưu tiên hiển thị video mới đăng gần nhất' },
           { id: 'viewCount', label: 'Nhiều view', icon: Flame, title: 'Ưu tiên hiển thị video có nhiều lượt xem' },
           { id: 'oldest', label: 'Cũ nhất', icon: ArrowUpDown, title: 'Hiển thị video từ cũ nhất đến mới nhất' },
         ] as const).map((s) => {
@@ -1936,7 +1943,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             >
               <Icon size={12} />
               <span>{s.label}</span>
-              {s.id === 'date' && (
+              {s.id === 'random' && (
                 <span
                   style={{
                     padding: '1px 5px',
@@ -1947,40 +1954,12 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                     color: isActive ? '#ffffff' : 'var(--primary)',
                   }}
                 >
-                  Ưu tiên
+                  Mặc định
                 </span>
               )}
             </button>
           )
         })}
-
-        {/* Nút Xáo trộn ngẫu nhiên khi ở tab Tất cả */}
-        {activeCategoryTab === 'ALL' && viewMode === 'video' && !search.trim() && (
-          <button
-            type="button"
-            onClick={() => {
-              setShuffleSeed(Math.random())
-              showToast('Đã xáo trộn ngẫu nhiên danh sách video', 'info')
-            }}
-            title="Xáo trộn ngẫu nhiên danh sách video"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '5px 12px',
-              borderRadius: 10,
-              border: '1px solid var(--card-border)',
-              background: 'var(--card-bg)',
-              color: 'var(--text-main)',
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <Shuffle size={13} color="var(--primary)" />
-            <span>Đổi ngẫu nhiên</span>
-          </button>
-        )}
       </div>
 
       {/* 3. PHẦN HIỂN THỊ KẾT QUẢ TÌM KIẾM YOUTUBE TRỰC TUYẾN (NẾU ĐANG TÌM KIẾM) */}

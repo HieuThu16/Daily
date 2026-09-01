@@ -109,6 +109,7 @@ export async function saveVideoProgress(input: {
   title?: string
   channelName?: string
   thumbnail?: string | null
+  sourceType?: 'tvshow' | 'review'
 }): Promise<VideoProgress> {
   const map = getLocalProgress()
   const prev = map[input.videoId]
@@ -117,30 +118,48 @@ export async function saveVideoProgress(input: {
     : (prev?.durationSeconds && prev.durationSeconds > 0 ? prev.durationSeconds : null)
 
   const percent = percentOf(input.seconds, duration)
+  const isCompleted = percent >= COMPLETE_AT_PERCENT || (duration != null && duration > 5 && input.seconds >= duration - 4)
+  const status: VideoProgress['status'] = isCompleted ? 'COMPLETED' : statusOfPercent(percent)
+
   const row: VideoProgress = {
     videoId: input.videoId,
     title: input.title ?? prev?.title,
     channelName: input.channelName ?? prev?.channelName,
     thumbnail: input.thumbnail ?? prev?.thumbnail ?? null,
-    seconds: input.seconds,
+    seconds: isCompleted && duration ? duration : input.seconds,
     durationSeconds: duration,
-    percent,
-    status: statusOfPercent(percent),
+    percent: isCompleted ? 100 : percent,
+    status,
     updatedAt: new Date().toISOString(),
   }
 
-  // Không tụt lùi: xem lại từ đầu vẫn giữ mốc xa nhất đã xem.
-  if (!prev || row.percent >= prev.percent || row.seconds >= prev.seconds) {
+  // Không tụt lùi: xem lại từ đầu vẫn giữ mốc xa nhất đã xem
+  if (!prev || row.percent >= prev.percent || row.seconds >= prev.seconds || isCompleted) {
     map[input.videoId] = row
     writeLocal(map)
   }
 
-  await setVideoStatus(input.videoId, 'tvshow', row.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS', {
+  const secType = input.sourceType || 'tvshow'
+  const targetStatus = status === 'COMPLETED' ? 'COMPLETED' : status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'UNWATCHED'
+  await setVideoStatus(input.videoId, secType, targetStatus, {
     title: input.title,
     channel_name: input.channelName,
   })
+  // Đồng bộ cả 2 section để video nằm ở bảng nào cũng có trạng thái chính xác
+  if (secType === 'tvshow') {
+    void setVideoStatus(input.videoId, 'review', targetStatus, {
+      title: input.title,
+      channel_name: input.channelName,
+    })
+  } else {
+    void setVideoStatus(input.videoId, 'tvshow', targetStatus, {
+      title: input.title,
+      channel_name: input.channelName,
+    })
+  }
+
   await upsertRemote([row])
-  void updateMyShareProgress('VIDEO', input.videoId, percent, progressLabel(row))
+  void updateMyShareProgress('VIDEO', input.videoId, row.percent, progressLabel(row))
   return row
 }
 
@@ -172,7 +191,7 @@ export type YouTubeController = {
  */
 export function useYouTubeProgress(
   iframe: HTMLIFrameElement | React.RefObject<HTMLIFrameElement | null> | null,
-  video: { videoId: string | null; title?: string; channelName?: string; thumbnail?: string | null },
+  video: { videoId: string | null; title?: string; channelName?: string; thumbnail?: string | null; sourceType?: 'tvshow' | 'review' },
 ): YouTubeController {
   const videoRef = useRef(video)
   videoRef.current = video
@@ -216,12 +235,65 @@ export function useYouTubeProgress(
     const handleMessage = (e: MessageEvent) => {
       try {
         const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-        if (data && data.event === 'infoDelivery' && data.info) {
+        if (!data) return
+
+        // 1. infoDelivery / initialDelivery
+        if ((data.event === 'infoDelivery' || data.event === 'initialDelivery') && data.info) {
           if (typeof data.info.currentTime === 'number') {
             currentTimeRef.current = data.info.currentTime
           }
           if (typeof data.info.duration === 'number' && data.info.duration > 0) {
             durationRef.current = data.info.duration
+          }
+          // Player state: 0 = ended, 1 = playing, 2 = paused
+          if (data.info.playerState === 0 || data.info.playerState === '0') {
+            const current = videoRef.current
+            if (current.videoId) {
+              const dur = durationRef.current || currentTimeRef.current || 100
+              void saveVideoProgress({
+                videoId: current.videoId,
+                seconds: dur,
+                durationSeconds: dur,
+                title: current.title,
+                channelName: current.channelName,
+                thumbnail: current.thumbnail,
+                sourceType: current.sourceType,
+              })
+            }
+          }
+        }
+
+        // 2. onStateChange
+        if (data.event === 'onStateChange') {
+          if (data.info === 0 || data.info === '0') {
+            // Video ended (Đã xem xong)
+            const current = videoRef.current
+            if (current.videoId) {
+              const dur = durationRef.current || currentTimeRef.current || 100
+              void saveVideoProgress({
+                videoId: current.videoId,
+                seconds: dur,
+                durationSeconds: dur,
+                title: current.title,
+                channelName: current.channelName,
+                thumbnail: current.thumbnail,
+                sourceType: current.sourceType,
+              })
+            }
+          } else if (data.info === 1 || data.info === '1') {
+            // Video đang phát
+            const current = videoRef.current
+            if (current.videoId && currentTimeRef.current >= 1) {
+              void saveVideoProgress({
+                videoId: current.videoId,
+                seconds: currentTimeRef.current,
+                durationSeconds: durationRef.current,
+                title: current.title,
+                channelName: current.channelName,
+                thumbnail: current.thumbnail,
+                sourceType: current.sourceType,
+              })
+            }
           }
         }
       } catch {
@@ -231,22 +303,30 @@ export function useYouTubeProgress(
     window.addEventListener('message', handleMessage)
 
     // Báo cho YouTube iframe biết parent đang lắng nghe (bắt tay ban đầu khi mount/iframe sẵn sàng)
-    const sendListening = () => {
+    const pingIframe = () => {
       const el = getIframeEl()
       if (el?.contentWindow) {
         try {
           el.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*')
+          el.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getCurrentTime' }), '*')
+          el.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getDuration' }), '*')
+          el.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getPlayerState' }), '*')
         } catch {}
       }
     }
-    sendListening()
-    const t1 = setTimeout(sendListening, 500)
-    const t2 = setTimeout(sendListening, 1500)
+
+    pingIframe()
+    const t1 = setTimeout(pingIframe, 500)
+    const t2 = setTimeout(pingIframe, 1500)
+    const t3 = setTimeout(pingIframe, 3000)
+    const intervalPing = setInterval(pingIframe, 4000)
 
     return () => {
       window.removeEventListener('message', handleMessage)
       clearTimeout(t1)
       clearTimeout(t2)
+      clearTimeout(t3)
+      clearInterval(intervalPing)
     }
   }, [getIframeEl])
 
@@ -261,7 +341,7 @@ export function useYouTubeProgress(
       const seconds = currentTimeRef.current
       const duration = durationRef.current
 
-      if (seconds < 3) return // Bấm nhầm rồi thoát thì không tính là đang xem
+      if (seconds < 1) return // Chưa phát thì bỏ qua
       void saveVideoProgress({
         videoId: current.videoId,
         seconds,
@@ -269,10 +349,11 @@ export function useYouTubeProgress(
         title: current.title,
         channelName: current.channelName,
         thumbnail: current.thumbnail,
+        sourceType: current.sourceType,
       })
     }
 
-    const timer = setInterval(flush, 8000)
+    const timer = setInterval(flush, 5000)
     const onHidden = () => {
       if (document.visibilityState === 'hidden') flush()
     }
