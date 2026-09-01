@@ -49,6 +49,14 @@ export function saveCustomHManga(manga: HManga): void {
   const idx = current.findIndex(m => m.slug === cleanManga.slug);
   let updated: HManga[];
   if (idx >= 0) {
+    const existing = current[idx];
+    const existingCount = Array.isArray(existing.chapters) ? existing.chapters.length : (existing.totalChapters || 0);
+    const newCount = Array.isArray(cleanManga.chapters) ? cleanManga.chapters.length : (cleanManga.totalChapters || 0);
+    // Nếu bản mới ít chapter hơn bản cũ (do cào lỗi/chưa đầy đủ), giữ lại chapters của bản cũ
+    if (existingCount > newCount && existing.chapters && existing.chapters.length > 0) {
+      cleanManga.chapters = existing.chapters;
+      cleanManga.totalChapters = existingCount;
+    }
     updated = [...current];
     updated[idx] = cleanManga;
   } else {
@@ -56,6 +64,7 @@ export function saveCustomHManga(manga: HManga): void {
   }
   try {
     localStorage.setItem(CUSTOM_H_MANGA_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('daily_h_manga_updated', { detail: cleanManga }));
   } catch (e) {
     console.error('Failed to save custom manga to localStorage', e);
   }
@@ -89,17 +98,17 @@ export function saveCustomHManga(manga: HManga): void {
           type: 'STORY',
           name: cleanManga.title,
           author: cleanManga.author || null,
-          genre: cleanManga.genres?.join(', ') || null,
+          genre: 'H_MANGA',
           cover_url: finalCover,
           channel: cleanManga.slug,
           description: JSON.stringify(cleanManga),
           is_public: true,
+          updated_at: new Date().toISOString(),
         };
 
         const { data: existing } = await supabase
           .from('media_items')
-          .select('id')
-          .eq('user_id', user.id)
+          .select('id, description')
           .eq('channel', cleanManga.slug)
           .eq('type', 'STORY')
           .neq('genre', 'H_PROGRESS')
@@ -108,6 +117,19 @@ export function saveCustomHManga(manga: HManga): void {
           .limit(1);
 
         if (existing && existing.length > 0) {
+          // Nếu Supabase đã có nhiều chapter hơn bản chuẩn bị lưu, gộp lại để không làm mất chapter
+          if (existing[0].description && existing[0].description.startsWith('{')) {
+            try {
+              const cloudObj = JSON.parse(existing[0].description) as HManga;
+              const cloudChaps = Array.isArray(cloudObj?.chapters) ? cloudObj.chapters : [];
+              const cleanChaps = Array.isArray(cleanManga.chapters) ? cleanManga.chapters : [];
+              if (cloudChaps.length > cleanChaps.length) {
+                cleanManga.chapters = cloudChaps;
+                cleanManga.totalChapters = cloudChaps.length;
+                payload.description = JSON.stringify(cleanManga);
+              }
+            } catch {}
+          }
           await supabase.from('media_items').update(payload).eq('id', existing[0].id);
         } else {
           await supabase.from('media_items').insert(payload);
@@ -179,12 +201,12 @@ export async function deleteHMangaForever(manga: { slug: string; title?: string 
 
 export async function fetchHMangaList(): Promise<HManga[]> {
   const customList = getCustomHMangaList();
-  const seen = new Set<string>();
-  const combined: HManga[] = [];
+  const mangaMap = new Map<string, HManga>();
 
   for (const item of customList) {
-    seen.add(item.slug);
-    combined.push(sanitizeHManga(item));
+    if (item?.slug) {
+      mangaMap.set(item.slug, sanitizeHManga(item));
+    }
   }
 
   // 1. Tải truyện từ file h_manga.json
@@ -194,9 +216,17 @@ export async function fetchHMangaList(): Promise<HManga[]> {
       const data = await res.json();
       if (Array.isArray(data)) {
         for (const item of data) {
-          if (!seen.has(item.slug)) {
-            seen.add(item.slug);
-            combined.push(sanitizeHManga(item));
+          if (item?.slug) {
+            const existing = mangaMap.get(item.slug);
+            if (!existing) {
+              mangaMap.set(item.slug, sanitizeHManga(item));
+            } else {
+              const existingChaps = Array.isArray(existing.chapters) ? existing.chapters.length : (existing.totalChapters || 0);
+              const staticChaps = Array.isArray(item.chapters) ? item.chapters.length : (item.totalChapters || 0);
+              if (staticChaps > existingChaps) {
+                mangaMap.set(item.slug, sanitizeHManga({ ...item, ...existing, chapters: item.chapters, totalChapters: staticChaps }));
+              }
+            }
           }
         }
       }
@@ -226,14 +256,66 @@ export async function fetchHMangaList(): Promise<HManga[]> {
             try {
               const mangaObj = JSON.parse(row.description) as HManga;
               if (mangaObj?.slug) {
-                const clean = sanitizeHManga(mangaObj);
-                if (!seen.has(clean.slug)) {
-                  seen.add(clean.slug);
-                  combined.unshift(clean);
-                }
-                if (!currentCustom.some(m => m.slug === clean.slug)) {
-                  currentCustom.push(clean);
+                const cloudClean = sanitizeHManga(mangaObj);
+                const localExisting = mangaMap.get(cloudClean.slug);
+
+                const cloudChaptersCount = Array.isArray(cloudClean.chapters) ? cloudClean.chapters.length : (cloudClean.totalChapters || 0);
+                const localChaptersCount = localExisting 
+                  ? (Array.isArray(localExisting.chapters) ? localExisting.chapters.length : (localExisting.totalChapters || 0)) 
+                  : 0;
+
+                const cloudTime = cloudClean.updatedAt ? new Date(cloudClean.updatedAt).getTime() : 0;
+                const localTime = localExisting?.updatedAt ? new Date(localExisting.updatedAt).getTime() : 0;
+
+                // Cloud có chapter mới hơn hoặc bản ghi mới hơn -> Cập nhật vào máy (điện thoại)
+                if (!localExisting || cloudChaptersCount > localChaptersCount || (cloudChaptersCount === localChaptersCount && cloudTime > localTime)) {
+                  let mergedChapters = cloudClean.chapters || [];
+                  if (localExisting?.chapters && localExisting.chapters.length > 0) {
+                    const localChMap = new Map(localExisting.chapters.map(c => [c.number, c]));
+                    mergedChapters = (cloudClean.chapters || []).map(ch => {
+                      const localCh = localChMap.get(ch.number);
+                      if (localCh && (!ch.images || ch.images.length === 0) && (localCh.images && localCh.images.length > 0)) {
+                        return localCh;
+                      }
+                      return ch;
+                    });
+                  }
+
+                  const mergedManga: HManga = {
+                    ...(localExisting || {}),
+                    ...cloudClean,
+                    chapters: mergedChapters,
+                    totalChapters: Math.max(cloudChaptersCount, localChaptersCount, mergedChapters.length),
+                    updatedAt: cloudClean.updatedAt || localExisting?.updatedAt || new Date().toISOString(),
+                  };
+
+                  mangaMap.set(cloudClean.slug, mergedManga);
+
+                  const cIdx = currentCustom.findIndex(m => m.slug === cloudClean.slug);
+                  if (cIdx >= 0) {
+                    currentCustom[cIdx] = mergedManga;
+                  } else {
+                    currentCustom.unshift(mergedManga);
+                  }
                   hasNewFromCloud = true;
+                } else if (localExisting && localChaptersCount > cloudChaptersCount) {
+                  // Máy hiện tại (laptop) vừa cào nhiều chapter hơn Supabase -> Tự động cập nhật lên Cloud ngay
+                  void (async () => {
+                    try {
+                      const user = (await supabase!.auth.getUser())?.data?.user;
+                      if (!user) return;
+                      await supabase!
+                        .from('media_items')
+                        .update({
+                          description: JSON.stringify(localExisting),
+                          name: localExisting.title,
+                          cover_url: localExisting.cover || null,
+                          genre: 'H_MANGA',
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', row.id);
+                    } catch {}
+                  })();
                 }
               }
             } catch {}
@@ -250,37 +332,33 @@ export async function fetchHMangaList(): Promise<HManga[]> {
       // Tự động đẩy truyện local chưa có trên Supabase lên Cloud
       const user = (await supabase.auth.getUser())?.data?.user;
       if (user && customList.length > 0) {
-        void (async () => {
-          for (const manga of customList) {
-            try {
-              const { data: existing } = await supabase
-                .from('media_items')
-                .select('id')
-                .eq('user_id', user.id)
-                .eq('channel', manga.slug)
-                .eq('type', 'STORY')
-                .limit(1);
-
-              if (!existing || existing.length === 0) {
-                await supabase.from('media_items').insert({
-                  user_id: user.id,
-                  type: 'STORY',
-                  name: manga.title,
-                  author: manga.author || null,
-                  genre: manga.genres?.join(', ') || null,
-                  cover_url: manga.cover || null,
-                  channel: manga.slug,
-                  description: JSON.stringify(manga),
-                  is_public: true,
-                });
-              }
-            } catch {}
+        const cloudSlugs = new Set((rows || []).map(r => r.channel).filter(Boolean));
+        for (const manga of customList) {
+          if (!cloudSlugs.has(manga.slug)) {
+            void (async () => {
+              try {
+                await supabase!
+                  .from('media_items')
+                  .insert({
+                    user_id: user.id,
+                    type: 'STORY',
+                    genre: 'H_MANGA',
+                    name: manga.title,
+                    author: manga.author || null,
+                    cover_url: manga.cover || null,
+                    channel: manga.slug,
+                    description: JSON.stringify(manga),
+                    is_public: true,
+                    updated_at: new Date().toISOString(),
+                  });
+              } catch {}
+            })();
           }
-        })();
+        }
       }
 
-      // Đồng bộ tiến độ, yêu thích, theo dõi
-      void syncHMangaProgressWithSupabase();
+      // Đồng bộ tiến độ đọc và cài đặt người dùng từ Supabase
+      await syncHMangaProgressWithSupabase();
       void syncHMangaUserPrefsWithSupabase();
     } catch (err) {
       console.warn('Could not load cloud HManga from Supabase', err);
@@ -289,7 +367,8 @@ export async function fetchHMangaList(): Promise<HManga[]> {
 
   // Bỏ hẳn truyện đã xoá vĩnh viễn, kể cả bản đến từ file tĩnh h_manga.json.
   const deleted = await fetchDeletedHMangaSlugs();
-  return deleted.size > 0 ? combined.filter((m) => !deleted.has(m.slug)) : combined;
+  const allList = [...mangaMap.values()];
+  return deleted.size > 0 ? allList.filter((m) => !deleted.has(m.slug)) : allList;
 }
 
 export async function crawlAndSaveStory(url: string, onProgress?: (msg: string) => void): Promise<HManga> {
@@ -503,7 +582,6 @@ async function syncProgressToSupabase(slug: string, progress: ReadingProgress): 
     const { data: existing } = await supabase
       .from('media_items')
       .select('id')
-      .eq('user_id', user.id)
       .eq('type', 'STORY')
       .eq('genre', 'H_PROGRESS')
       .eq('channel', slug)
@@ -519,6 +597,7 @@ async function syncProgressToSupabase(slug: string, progress: ReadingProgress): 
       description: JSON.stringify(progress),
       status: 'IN_PROGRESS',
       is_public: false,
+      updated_at: new Date().toISOString(),
     };
 
     if (existing && existing.length > 0) {
@@ -591,9 +670,19 @@ export async function syncHMangaProgressWithSupabase(): Promise<Record<string, R
           try {
             const cloudProg = JSON.parse(row.description) as ReadingProgress;
             const localProg = localHistory[row.channel];
-            if (!localProg || (cloudProg.readAt && (!localProg.readAt || new Date(cloudProg.readAt).getTime() > new Date(localProg.readAt).getTime()))) {
+
+            const cloudTime = cloudProg.readAt ? new Date(cloudProg.readAt).getTime() : 0;
+            const localTime = localProg?.readAt ? new Date(localProg.readAt).getTime() : 0;
+            const cloudChap = cloudProg.chapterNumber || 0;
+            const localChap = localProg?.chapterNumber || 0;
+
+            // Nếu Cloud đọc xa hơn hoặc đọc gần đây hơn -> Nhận dữ liệu từ Cloud
+            if (!localProg || cloudChap > localChap || (cloudChap === localChap && cloudTime > localTime)) {
               localHistory[row.channel] = cloudProg;
               changed = true;
+            } else if (localProg && (localChap > cloudChap || (localChap === cloudChap && localTime > cloudTime))) {
+              // Nếu máy này đọc xa hơn -> Cập nhật lên Supabase
+              void syncProgressToSupabase(row.channel, localProg);
             }
           } catch {}
         }

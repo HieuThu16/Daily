@@ -65,16 +65,18 @@ export async function syncMangaInteraction(interaction: MangaInteractionRow): Pr
 
     if (interaction.last_chapter) {
       const mediaType = interaction.manga_type === 'H_MANGA' ? 'STORY' : 'MANGA'
+      const progressGenre = interaction.manga_type === 'H_MANGA' ? 'H_PROGRESS' : interaction.manga_type
       const { data: existing } = await supabase
         .from('media_items')
-        .select('id')
+        .select('id, description')
         .eq('channel', interaction.slug)
+        .eq('genre', progressGenre)
         .limit(1)
 
       const payload = {
         user_id: userId,
         type: mediaType,
-        genre: interaction.manga_type,
+        genre: progressGenre,
         name: interaction.title || interaction.slug,
         channel: interaction.slug,
         current_chapter: interaction.last_chapter,
@@ -120,12 +122,14 @@ export async function syncMangaReadingLogToSupabase(log: MangaReadingLog): Promi
         status: log.status || 'READING',
       }, { onConflict: 'id' })
 
-    // Đồng bộ sang bảng media_items để kích hoạt Realtime cho tab Xem chung
+    // Đồng bộ sang bảng media_items để kích hoạt Realtime cho tab Xem chung (sử dụng genre H_PROGRESS / BL / NGONTINH để không ghi đè truyện gốc)
     const mediaType = log.mangaType === 'H_MANGA' ? 'STORY' : 'MANGA'
+    const progressGenre = log.mangaType === 'H_MANGA' ? 'H_PROGRESS' : log.mangaType
     const { data: existing } = await supabase
       .from('media_items')
-      .select('id')
+      .select('id, description')
       .eq('channel', log.mangaSlug)
+      .eq('genre', progressGenre)
       .limit(1)
 
     const userEmail = userData?.user?.email?.toLowerCase() || ''
@@ -135,7 +139,7 @@ export async function syncMangaReadingLogToSupabase(log: MangaReadingLog): Promi
     const payload = {
       user_id: userId,
       type: mediaType,
-      genre: log.mangaType,
+      genre: progressGenre,
       name: log.mangaTitle || log.mangaSlug,
       channel: log.mangaSlug,
       description: `Đọc bởi ${userName}`,

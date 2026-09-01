@@ -192,53 +192,99 @@ export async function fetchBLMangaList(): Promise<BLManga[]> {
     fetchOtruyenBLList(),
   ]);
 
-  const seenSlugs = new Set<string>();
-  const combined: BLManga[] = [];
+  const mangaMap = new Map<string, BLManga>();
 
-  // 1. Custom / Updated BL manga (local cache & cloud updates)
+  // 1. Custom / Updated BL manga (local cache)
   const customList = getCustomBLMangaList();
   for (const item of customList) {
-    if (item.slug && !seenSlugs.has(item.slug)) {
-      seenSlugs.add(item.slug);
-      combined.push(item);
+    if (item.slug) {
+      mangaMap.set(item.slug, item);
     }
   }
 
   // 2. Add Sany Team mangas
   for (const item of sanyList) {
-    if (seenSlugs.has(item.slug)) continue;
-    seenSlugs.add(item.slug);
-    combined.push({
-      ...item,
-      source: 'teamsany',
-      sourceName: 'Sany Team'
-    });
+    if (!mangaMap.has(item.slug)) {
+      mangaMap.set(item.slug, {
+        ...item,
+        source: 'teamsany',
+        sourceName: 'Sany Team'
+      });
+    }
   }
 
   // 3. Add DuaLeo mangas
   for (const item of dualeoList) {
     let slug = item.slug;
-    if (seenSlugs.has(slug)) {
+    if (mangaMap.has(slug)) {
       slug = `dl-${slug}`;
     }
-    if (seenSlugs.has(slug)) continue;
-    seenSlugs.add(slug);
-    combined.push({
-      ...item,
-      slug,
-      source: item.source || 'dualeo',
-      sourceName: item.sourceName || 'Dưa Leo'
-    });
+    if (!mangaMap.has(slug)) {
+      mangaMap.set(slug, {
+        ...item,
+        slug,
+        source: item.source || 'dualeo',
+        sourceName: item.sourceName || 'Dưa Leo'
+      });
+    }
   }
 
   // 4. Đam mỹ / shounen ai quét từ otruyen: chỉ có mục lục, ảnh tải khi mở chương.
   for (const item of otruyenList) {
-    if (seenSlugs.has(item.slug)) continue;
-    seenSlugs.add(item.slug);
-    combined.push({ ...item, source: 'otruyen', sourceName: 'OTruyen' });
+    if (!mangaMap.has(item.slug)) {
+      mangaMap.set(item.slug, { ...item, source: 'otruyen', sourceName: 'OTruyen' });
+    }
   }
 
-  return combined;
+  // 5. Đồng bộ từ Supabase media_items (type = 'BL')
+  if (supabase) {
+    try {
+      const { data: rows } = await supabase
+        .from('media_items')
+        .select('*')
+        .eq('type', 'BL')
+        .is('deleted_at', null);
+
+      if (rows && rows.length > 0) {
+        let hasNewFromCloud = false;
+        const currentCustom = getCustomBLMangaList();
+
+        for (const row of rows) {
+          if (row.description && row.description.startsWith('{')) {
+            try {
+              const mangaObj = JSON.parse(row.description) as BLManga;
+              if (mangaObj?.slug) {
+                const localExisting = mangaMap.get(mangaObj.slug);
+                const cloudCount = Array.isArray(mangaObj.chapters) ? mangaObj.chapters.length : (mangaObj.totalChapters || 0);
+                const localCount = localExisting ? (Array.isArray(localExisting.chapters) ? localExisting.chapters.length : (localExisting.totalChapters || 0)) : 0;
+
+                if (!localExisting || cloudCount > localCount) {
+                  mangaMap.set(mangaObj.slug, mangaObj);
+                  const cIdx = currentCustom.findIndex(m => m.slug === mangaObj.slug);
+                  if (cIdx >= 0) {
+                    currentCustom[cIdx] = mangaObj;
+                  } else {
+                    currentCustom.unshift(mangaObj);
+                  }
+                  hasNewFromCloud = true;
+                }
+              }
+            } catch {}
+          }
+        }
+
+        if (hasNewFromCloud) {
+          try {
+            localStorage.setItem(CUSTOM_BL_MANGA_KEY, JSON.stringify(currentCustom));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Could not sync BL manga from Supabase', err);
+    }
+  }
+
+  return [...mangaMap.values()];
 }
 
 async function fetchOtruyenBLList(): Promise<BLManga[]> {

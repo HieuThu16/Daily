@@ -67,7 +67,18 @@ export const HMangaReaderPage: React.FC = () => {
       }
     };
     load();
-    return () => { isMounted = false; };
+
+    const handleMangaUpdate = (e: any) => {
+      if (isMounted && e?.detail && e.detail.slug === slug) {
+        setManga(e.detail);
+      }
+    };
+    window.addEventListener('daily_h_manga_updated', handleMangaUpdate);
+
+    return () => { 
+      isMounted = false; 
+      window.removeEventListener('daily_h_manga_updated', handleMangaUpdate);
+    };
   }, [slug]);
 
   // Sorted chapters
@@ -76,10 +87,28 @@ export const HMangaReaderPage: React.FC = () => {
     return [...manga.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
   }, [manga]);
 
+  const exactChapter = useMemo(() => {
+    if (!manga?.chapters) return null;
+    return manga.chapters.find(c => c.number === currentChapterNum);
+  }, [manga, currentChapterNum]);
+
+  // Tự động kiểm tra cào thêm chapter từ nguồn nếu người dùng mở chapter mới chưa có trong máy
+  useEffect(() => {
+    if (manga && !loading && !exactChapter && currentChapterNum > 1) {
+      void import('./hMangaService').then(({ syncHMangaChapters }) => {
+        void syncHMangaChapters(manga).then(res => {
+          if (res.updated && res.manga) {
+            setManga(res.manga);
+          }
+        });
+      });
+    }
+  }, [manga, loading, exactChapter, currentChapterNum]);
+
   const currentIndex = sortedChapters.findIndex(c => c.number === currentChapterNum);
-  const currentChapter = sortedChapters[currentIndex] || manga?.chapters.find(c => c.number === currentChapterNum) || sortedChapters[0];
+  const currentChapter = exactChapter || (currentIndex >= 0 ? sortedChapters[currentIndex] : sortedChapters[0]);
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
-  const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
+  const nextChapter = currentIndex >= 0 && currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
   const isNavigatingRef = useRef(false);
   /** Đã ghi "đọc xong" cho chương đang mở chưa — reset mỗi lần đổi chương. */
@@ -100,6 +129,11 @@ export const HMangaReaderPage: React.FC = () => {
   // Save reading progress & scroll to top on change
   useEffect(() => {
     if (manga && currentChapter) {
+      // Không ghi đè tiến độ thành Chapter 1 nếu đang chờ cào/tải chapter đích
+      if (!exactChapter && sortedChapters.length > 0 && currentChapterNum > (sortedChapters[sortedChapters.length - 1]?.number ?? 0)) {
+        return;
+      }
+
       const chNum = currentChapter.number ?? currentChapterNum;
       const isDifferentChapter = lastChapterNumRef.current !== chNum;
       lastChapterNumRef.current = chNum;
@@ -146,7 +180,7 @@ export const HMangaReaderPage: React.FC = () => {
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [manga, currentChapter, currentChapterNum]);
+  }, [manga, currentChapter, currentChapterNum, exactChapter, sortedChapters]);
 
   useEffect(() => {
     completedRef.current = false;

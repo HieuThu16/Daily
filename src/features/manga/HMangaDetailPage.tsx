@@ -12,7 +12,7 @@ import type { HManga } from './hMangaService';
 import { 
   fetchHMangaList,
   getHMangaFavorites, toggleHMangaFavorite, 
-  getHMangaHistory,
+  getHMangaHistory, getHMangaProgress,
   getHMangaFollows, toggleHMangaFollow,
   getChapterImageUrl,
   isValidHMangaCover,
@@ -99,8 +99,24 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
     setFollows(getHMangaFollows());
     setHistory(getHMangaHistory());
 
+    const handleHistoryUpdate = (e: any) => {
+      if (isMounted) {
+        setHistory(e?.detail || getHMangaHistory());
+      }
+    };
+    const handleMangaUpdate = (e: any) => {
+      if (isMounted && e?.detail && e.detail.slug === slug) {
+        setManga(e.detail);
+      }
+    };
+
+    window.addEventListener('daily_h_history_updated', handleHistoryUpdate);
+    window.addEventListener('daily_h_manga_updated', handleMangaUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('daily_h_history_updated', handleHistoryUpdate);
+      window.removeEventListener('daily_h_manga_updated', handleMangaUpdate);
     };
   }, [slug]);
 
@@ -279,7 +295,8 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
   }, [manga?.chapters]);
 
   const handleStartRead = () => {
-    const targetChapter = userProgress?.chapterNumber ?? firstChapterNum;
+    const fresh = slug ? getHMangaProgress(slug) : null;
+    const targetChapter = fresh?.chapterNumber ?? userProgress?.chapterNumber ?? firstChapterNum;
     navigate(`/truyenh/${slug}/read/${targetChapter}`);
   };
 
