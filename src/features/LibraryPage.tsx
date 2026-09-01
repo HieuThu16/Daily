@@ -26,7 +26,6 @@ import { TvShowView } from './tvshow/TvShowView'
 import { BookGrid } from './library/BookGrid'
 import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
-import { BookStatsModal } from './library/BookStatsModal'
 import { ContinueReadingHero } from './library/ContinueReadingHero'
 import { BookAdaptationsView } from './library/BookAdaptationsView'
 import { NobelLaureatesView } from './library/NobelLaureatesView'
@@ -196,7 +195,6 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   // Sách đã nhập nội dung từ PDF/EPUB — quyết định thẻ nào hiện nút Đọc.
   const nav = useNavigate()
   const [importOpen, setImportOpen] = useState(false)
-  const [bookStatsOpen, setBookStatsOpen] = useState(false)
   const [showDilibCrawler, setShowDilibCrawler] = useState(false)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
   const [selectedBookItemId, setSelectedBookItemId] = useState<string | null>(null)
@@ -1524,7 +1522,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           <button
             type="button"
             className="library-action-btn-secondary"
-            onClick={() => setBookStatsOpen(true)}
+            onClick={() => nav('/books/stats')}
             title="Thống kê số trang đã đọc"
           >
             <BarChart3 size={13} /> <span>Thống kê</span>
@@ -2791,8 +2789,6 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         />
       )}
 
-
-      {bookStatsOpen && <BookStatsModal logs={bookReadingLogsQuery.items} books={items.filter((m) => m.type === 'BOOK')} onClose={() => setBookStatsOpen(false)} />}
 
       {importOpen && (
         <BookImportModal

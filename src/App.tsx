@@ -56,6 +56,7 @@ const WatchTogetherPage = lazy(() => import('./features/watch/WatchTogetherPage'
 const BookReaderPage = lazy(() => import('./features/library/BookReaderPage').then((m) => ({ default: m.BookReaderPage })))
 const AudiobooksPage = lazy(() => import('./features/audiobook/AudiobooksPage').then((m) => ({ default: m.AudiobooksPage })))
 const QuotesPage = lazy(() => import('./features/library/QuotesPage').then((m) => ({ default: m.QuotesPage })))
+const BookStatsPage = lazy(() => import('./features/library/BookStatsPage').then((m) => ({ default: m.BookStatsPage })))
 const MoneyPage = lazy(() => import('./features/MoneyPage').then((m) => ({ default: m.MoneyPage })))
 const CalendarPage = lazy(() => import('./features/CalendarPage').then((m) => ({ default: m.CalendarPage })))
 const BLMangaPage = lazy(() => import('./features/manga/BLMangaPage').then((m) => ({ default: m.BLMangaPage })))
@@ -614,6 +615,9 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/tvshow" element={<Navigate to="/youtube" replace />} />
                       <Route path="/reviews" element={<Navigate to="/youtube" replace />} />
                       <Route path="/music" element={<LibraryPage defaultType="MUSIC" />} />
+                      <Route path="/books/stats" element={<BookStatsPage />} />
+                      <Route path="/book-stats" element={<Navigate to="/books/stats" replace />} />
+                      <Route path="/reading-stats" element={<Navigate to="/books/stats" replace />} />
                       <Route path="/books" element={<LibraryPage defaultType="BOOK" />} />
                       <Route path="/audiobooks" element={<AudiobooksPage />} />
                       <Route path="/sach-noi" element={<Navigate to="/audiobooks" replace />} />

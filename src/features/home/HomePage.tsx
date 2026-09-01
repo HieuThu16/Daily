@@ -180,6 +180,14 @@ export function HomePage() {
                     </strong>
                   </div>
                 )}
+                <div
+                  className="aside-row"
+                  style={{ cursor: 'pointer', color: 'var(--primary)', marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--card-border)' }}
+                  onClick={() => nav('/books/stats')}
+                >
+                  <span style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '0.74rem' }}>📊 Xem chi tiết</span>
+                  <strong style={{ color: 'var(--primary)', fontSize: '0.74rem' }}>→</strong>
+                </div>
               </>
             )}
           </AsideCard>
