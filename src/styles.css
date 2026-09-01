@@ -9571,17 +9571,18 @@ svg.lucide-library {
 .book-filter-toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  font-size: 0.76rem;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--card-border);
   background: var(--card-bg);
   color: var(--text-main);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.16s ease;
+  flex-shrink: 0;
 }
 
 .book-filter-toggle-btn:hover {
@@ -9597,29 +9598,161 @@ svg.lucide-library {
 
 .book-filter-drawer {
   margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bg-main);
-  border: 1px solid var(--card-border);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-main, rgba(18, 18, 22, 0.95));
+  border: 1.5px solid rgba(139, 92, 246, 0.3);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   animation: fadeIn 0.2s ease-out;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 .book-filter-drawer-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
 }
 
 .book-filter-drawer-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--purple);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--purple, #a855f7);
   display: flex;
   align-items: center;
+  gap: 6px;
+}
+
+/* Genre Chips Bar */
+.library-genre-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.library-genre-chip {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
+  background: var(--card-bg, rgba(255, 255, 255, 0.05));
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.library-genre-chip:hover {
+  border-color: var(--purple, #a855f7);
+  color: var(--text-main, #ffffff);
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.library-genre-chip.is-on {
+  border-color: var(--purple, #a855f7) !important;
+  background: var(--purple, #8b5cf6) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+}
+
+/* Author Selector Box */
+.book-author-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.book-author-select {
+  flex: 1;
+  background: var(--bg-main, #0f0f14);
+  color: var(--text-main, #ffffff);
+  border: 1px solid var(--card-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+.book-author-select:focus {
+  border-color: var(--purple, #a855f7);
+}
+
+/* Quick Actions Toolbar */
+.library-quick-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.library-quick-actions-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.library-action-btn-primary {
+  flex: 1.2;
+  min-width: 140px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(139, 92, 246, 0.35);
+  transition: all 0.15s ease;
+}
+
+.library-action-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(139, 92, 246, 0.45);
+}
+
+.library-action-btn-secondary {
+  flex: 1;
+  min-width: 95px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border, rgba(255, 255, 255, 0.12));
+  background: var(--card-bg, rgba(30, 30, 35, 0.7));
+  color: var(--text-main, #ffffff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 5px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.library-action-btn-secondary:hover {
+  border-color: var(--purple, #a855f7);
+  background: rgba(139, 92, 246, 0.15);
 }
 
 .spc-avatar {

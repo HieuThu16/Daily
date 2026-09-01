@@ -171,6 +171,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const [musicGenreFilter, setMusicGenreFilter] = useState<string>('ALL')
   const [bookGenreFilter, setBookGenreFilter] = useState<string>('ALL')
   const [bookAuthorFilter, setBookAuthorFilter] = useState<string>('ALL')
+  const [bookFormatFilter, setBookFormatFilter] = useState<'ALL' | 'READ' | 'LISTEN'>('ALL')
   const [showBookFilters, setShowBookFilters] = useState(false)
   const [subView, setSubView] = useState<SubView>('overview')
   const [search, setSearch] = useState('')
@@ -950,12 +951,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       if (selectedType === 'BOOK') {
         if (bookGenreFilter !== 'ALL' && (i.genre ?? 'Chưa phân loại') !== bookGenreFilter) return false
         if (bookAuthorFilter !== 'ALL' && (i.author ?? 'Chưa rõ tác giả') !== bookAuthorFilter) return false
+        if (bookFormatFilter !== 'ALL' && (i.book_format ?? 'READ') !== bookFormatFilter) return false
       }
       if (!search.trim()) return true
       const q = search.toLowerCase()
       return i.name.toLowerCase().includes(q) || (i.author && i.author.toLowerCase().includes(q)) || (i.genre && i.genre.toLowerCase().includes(q))
     })
-  }, [items, selectedType, statusFilter, musicGenreFilter, bookGenreFilter, bookAuthorFilter, search])
+  }, [items, selectedType, statusFilter, musicGenreFilter, bookGenreFilter, bookAuthorFilter, bookFormatFilter, search])
 
   // Count draft books
   const draftBookCount = useMemo(() => {
@@ -1076,12 +1078,13 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       if (selectedType === 'BOOK') {
         if (bookGenreFilter !== 'ALL' && (i.genre ?? 'Chưa phân loại') !== bookGenreFilter) return false
         if (bookAuthorFilter !== 'ALL' && (i.author ?? 'Chưa rõ tác giả') !== bookAuthorFilter) return false
+        if (bookFormatFilter !== 'ALL' && (i.book_format ?? 'READ') !== bookFormatFilter) return false
       }
       if (!search.trim()) return true
       const q = search.toLowerCase()
       return i.name.toLowerCase().includes(q) || (i.author && i.author.toLowerCase().includes(q)) || (i.genre && i.genre.toLowerCase().includes(q))
     })
-  }, [items, selectedType, musicGenreFilter, bookGenreFilter, bookAuthorFilter, search])
+  }, [items, selectedType, musicGenreFilter, bookGenreFilter, bookAuthorFilter, bookFormatFilter, search])
 
   // Ultra-Resilient Non-Overflowing Media Row Renderer
   const renderMediaRow = (item: Media) => {
@@ -1422,29 +1425,38 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       </div>
 
       {selectedType === 'BOOK' && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="library-quick-actions-bar">
           <button
-            className="library-import-btn"
+            type="button"
+            className="library-action-btn-primary"
             onClick={() => setShowDilibCrawler(true)}
-            title="Cào sách & sách nói từ Dilib.vn + DTV-eBook.com.vn"
-            style={{
-              flex: 1,
-              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.15))',
-              color: 'var(--primary, #8b5cf6)',
-              borderColor: 'rgba(139, 92, 246, 0.35)',
-              fontWeight: 700,
-            }}
+            title="Cào sách & sách nói tự động từ các nguồn"
           >
-            <Sparkles size={13} /> Cào Sách Đa Nguồn
+            <Sparkles size={14} /> <span>Cào Sách Đa Nguồn</span>
           </button>
-          <button className="library-import-btn" onClick={() => setImportOpen(true)} title="Nhập sách từ file PDF hoặc EPUB" style={{ flex: 1 }}>
-            <FileUp size={13} /> Nhập PDF/EPUB
+          <button
+            type="button"
+            className="library-action-btn-secondary"
+            onClick={() => setImportOpen(true)}
+            title="Nhập sách từ file PDF hoặc EPUB"
+          >
+            <FileUp size={13} /> <span>Nhập PDF/EPUB</span>
           </button>
-          <button className="library-import-btn" onClick={() => setBookStatsOpen(true)} title="Thống kê số trang đã đọc" style={{ flex: 1 }}>
-            <BarChart3 size={13} /> Thống kê
+          <button
+            type="button"
+            className="library-action-btn-secondary"
+            onClick={() => nav('/quotes')}
+            title="Xem trích dẫn của tất cả sách"
+          >
+            <BookMarked size={13} /> <span>Trích dẫn</span>
           </button>
-          <button className="library-import-btn" onClick={() => nav('/quotes')} title="Xem trích dẫn của tất cả sách" style={{ flex: 1 }}>
-            <BookMarked size={13} /> Trích dẫn
+          <button
+            type="button"
+            className="library-action-btn-secondary"
+            onClick={() => setBookStatsOpen(true)}
+            title="Thống kê số trang đã đọc"
+          >
+            <BarChart3 size={13} /> <span>Thống kê</span>
           </button>
         </div>
       )}
@@ -1505,8 +1517,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         <div className="card" style={{ padding: 10, margin: 0 }}>
           {/* SEARCH & STATUS SEGMENT BAR */}
           <div className="library-controls">
-            {/* Status Segmented Control (Sẽ / Đang / Đã / Bản nháp) */}
-            <div className="form-row-4 library-status-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {/* Status Segmented Control (Lướt ngang mượt mà trên mobile) */}
+            <div className="library-status-bar">
               {STATUS_FILTERS.map((f) => {
                 const count = items.filter((i) => {
                   if (i.type !== selectedType) return false
@@ -1529,7 +1541,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                     style={statusFilter === f.key ? { background: f.bg, color: f.color } : undefined}
                     onClick={() => setStatusFilter(f.key)}
                   >
-                    {f.icon} {f.label}
+                    {f.icon} <span>{f.label}</span>
                     {f.key !== 'ALL' && ` (${count})`}
                   </button>
                 )
@@ -1538,26 +1550,50 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
             {/* Search Input Bar + Filter Toggle */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <div className="library-search" style={{ flex: 1 }}>
+              <div className="library-search" style={{ flex: 1, position: 'relative' }}>
                 <Search size={15} aria-hidden="true" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Tìm kiếm mục trong thư viện…"
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'rgba(255,255,255,0.1)',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: 20,
+                      height: 20,
+                      display: 'grid',
+                      placeItems: 'center',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                    title="Xóa tìm kiếm"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
               {selectedType === 'BOOK' && (
                 <button
                   type="button"
-                  className={'book-filter-toggle-btn' + (showBookFilters || bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL' ? ' is-active' : '')}
+                  className={'book-filter-toggle-btn' + (showBookFilters || bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL' || bookFormatFilter !== 'ALL' ? ' is-active' : '')}
                   onClick={() => setShowBookFilters((prev) => !prev)}
-                  title="Mở bộ lọc thể loại và tác giả"
+                  title="Mở bộ lọc thể loại, định dạng và tác giả"
                 >
                   <SlidersHorizontal size={14} />
                   <span>Bộ lọc</span>
-                  {(bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL') && (
-                    <span style={{ fontSize: '0.68rem', background: 'var(--purple)', color: '#fff', padding: '1px 5px', borderRadius: 99, fontWeight: 700 }}>
-                      {(bookGenreFilter !== 'ALL' ? 1 : 0) + (bookAuthorFilter !== 'ALL' ? 1 : 0)}
+                  {(bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL' || bookFormatFilter !== 'ALL') && (
+                    <span style={{ fontSize: '0.68rem', background: 'var(--purple)', color: '#fff', padding: '1px 6px', borderRadius: 99, fontWeight: 800 }}>
+                      {(bookGenreFilter !== 'ALL' ? 1 : 0) + (bookAuthorFilter !== 'ALL' ? 1 : 0) + (bookFormatFilter !== 'ALL' ? 1 : 0)}
                     </span>
                   )}
                   <ChevronDown size={13} style={{ transform: showBookFilters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -1600,50 +1636,94 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
               <div className="book-filter-drawer">
                 <div className="book-filter-drawer-header">
                   <span className="book-filter-drawer-title">
-                    <BookOpen size={14} /> Bộ lọc thể loại & tác giả
+                    <SlidersHorizontal size={14} /> Bộ lọc nâng cao
                   </span>
-                  {(bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL') && (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {(bookGenreFilter !== 'ALL' || bookAuthorFilter !== 'ALL' || bookFormatFilter !== 'ALL') && (
+                      <button
+                        type="button"
+                        className="icon small"
+                        onClick={() => {
+                          setBookGenreFilter('ALL')
+                          setBookAuthorFilter('ALL')
+                          setBookFormatFilter('ALL')
+                        }}
+                        style={{ fontSize: '0.72rem', color: 'var(--rose)', fontWeight: 700 }}
+                      >
+                        ✕ Đặt lại tất cả
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="icon small"
-                      onClick={() => {
-                        setBookGenreFilter('ALL')
-                        setBookAuthorFilter('ALL')
-                      }}
-                      style={{ fontSize: '0.72rem', color: 'var(--rose)', fontWeight: 700 }}
+                      onClick={() => setShowBookFilters(false)}
+                      title="Đóng bộ lọc"
+                      style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}
                     >
-                      ✕ Đặt lại bộ lọc
+                      Đóng
                     </button>
-                  )}
+                  </div>
                 </div>
 
-                {/* Hàng lọc thể loại sách */}
+                {/* 1. Lọc định dạng sách */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    📑 Định dạng:
+                  </span>
+                  <button
+                    type="button"
+                    className={'library-genre-chip' + (bookFormatFilter === 'ALL' ? ' is-on' : '')}
+                    onClick={() => setBookFormatFilter('ALL')}
+                  >
+                    Tất cả định dạng ({items.filter((i) => i.type === 'BOOK').length})
+                  </button>
+                  <button
+                    type="button"
+                    className={'library-genre-chip' + (bookFormatFilter === 'READ' ? ' is-on' : '')}
+                    onClick={() => setBookFormatFilter('READ')}
+                  >
+                    📖 Sách đọc ({items.filter((i) => i.type === 'BOOK' && (i.book_format === 'READ' || !i.book_format)).length})
+                  </button>
+                  <button
+                    type="button"
+                    className={'library-genre-chip' + (bookFormatFilter === 'LISTEN' ? ' is-on' : '')}
+                    onClick={() => setBookFormatFilter('LISTEN')}
+                  >
+                    🎧 Sách nói ({items.filter((i) => i.type === 'BOOK' && i.book_format === 'LISTEN').length})
+                  </button>
+                </div>
+
+                {/* 2. Hàng lọc thể loại sách */}
                 {bookGenres.length > 0 && (
-                  <div className="library-genre-bar" style={{ margin: 0, paddingBottom: 2 }}>
-                    <button
-                      className={'library-genre-chip' + (bookGenreFilter === 'ALL' ? ' is-on' : '')}
-                      onClick={() => setBookGenreFilter('ALL')}
-                    >
-                      Tất cả thể loại ({items.filter((i) => i.type === 'BOOK').length})
-                    </button>
-                    {bookGenres.map((g) => {
-                      const count = items.filter((i) => i.type === 'BOOK' && i.genre === g).length
-                      const isSelected = bookGenreFilter === g
-                      return (
-                        <button
-                          key={g}
-                          className={'library-genre-chip' + (isSelected ? ' is-on' : '')}
-                          onClick={() => setBookGenreFilter(isSelected ? 'ALL' : g)}
-                          style={isSelected ? { borderColor: 'var(--purple)', background: 'var(--purple-bg)', color: 'var(--purple)' } : undefined}
-                        >
-                          {g} ({count})
-                        </button>
-                      )
-                    })}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      🏷️ Thể loại sách ({bookGenres.length}):
+                    </span>
+                    <div className="library-genre-bar">
+                      <button
+                        className={'library-genre-chip' + (bookGenreFilter === 'ALL' ? ' is-on' : '')}
+                        onClick={() => setBookGenreFilter('ALL')}
+                      >
+                        Tất cả thể loại
+                      </button>
+                      {bookGenres.map((g) => {
+                        const count = items.filter((i) => i.type === 'BOOK' && i.genre === g).length
+                        const isSelected = bookGenreFilter === g
+                        return (
+                          <button
+                            key={g}
+                            className={'library-genre-chip' + (isSelected ? ' is-on' : '')}
+                            onClick={() => setBookGenreFilter(isSelected ? 'ALL' : g)}
+                          >
+                            {g} ({count})
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
 
-                {/* Hàng lọc tác giả sách */}
+                {/* 3. Hàng lọc tác giả sách */}
                 {authors.length > 0 && (
                   <div className="book-author-select-wrap">
                     <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
