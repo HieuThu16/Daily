@@ -99,11 +99,15 @@ export function VideoSubtitleLearnView({
     })
   }, [activeLangFilter, activeCategoryFilter, searchQuery])
 
-  // Subtitle cue index matching current video time
+  // Subtitle cue index matching current video time with smooth boundary bridging
   const currentCues = activeLesson?.cues || []
   const activeCueIndex = useMemo(() => {
     if (!currentCues.length) return -1
-    return currentCues.findIndex((c) => currentTime >= c.start && currentTime < c.end)
+    return currentCues.findIndex((c, i) => {
+      const nextCue = currentCues[i + 1]
+      const effectiveEnd = nextCue ? Math.min(nextCue.start, c.end + 0.6) : c.end + 1.5
+      return currentTime >= c.start && currentTime < effectiveEnd
+    })
   }, [currentCues, currentTime])
 
   // Load YouTube IFrame API script once
@@ -242,10 +246,13 @@ export function VideoSubtitleLearnView({
         const customLesson: VideoLesson = {
           id: `custom-${vid}`,
           title: `Video YouTube (${vid})`,
+          titleVi: `Video YouTube (${vid})`,
           videoId: vid,
           lang: data.sourceLang?.startsWith('zh') ? 'zh' : 'en',
           level: 'Trung cấp',
           category: '🗣️ Giao tiếp đời sống',
+          duration: 'Tự động',
+          channel: 'YouTube',
           isOfficial: Boolean(data.isOfficial),
           cues: data.cues,
         }
