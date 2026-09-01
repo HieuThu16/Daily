@@ -167,6 +167,9 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   
   useEffect(() => {
     setSelectedType(defaultType)
+    if (defaultType === 'BOOK' && (subView === 'queue' || subView === 'review')) {
+      setSubView('overview')
+    }
   }, [defaultType])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [musicGenreFilter, setMusicGenreFilter] = useState<string>('ALL')
@@ -1274,25 +1277,29 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           <strong>{favoriteItems.length}</strong>
           <small>{unitLabel}</small>
         </button>
-        <button
-          role="tab"
-          aria-selected={subView === 'queue'}
-          className={subView === 'queue' ? 'active' : ''}
-          onClick={() => setSubView('queue')}
-        >
-          <span className="library-stat-head"><ListMusic size={13} style={{ color: 'var(--cyan)' }} /> Nghe liên tục</span>
-          <strong>{audioItems.length}</strong>
-          <small>có MP3</small>
-        </button>
-        <button
-          role="tab"
-          aria-selected={subView === 'review'}
-          className={subView === 'review' ? 'active' : ''}
-          onClick={() => setSubView('review')}
-        >
-          <span className="library-stat-head"><Clapperboard size={13} style={{ color: 'var(--primary)' }} /> Review phim</span>
-          <span className="library-stat-link">Xem series ›</span>
-        </button>
+        {selectedType !== 'BOOK' && (
+          <button
+            role="tab"
+            aria-selected={subView === 'queue'}
+            className={subView === 'queue' ? 'active' : ''}
+            onClick={() => setSubView('queue')}
+          >
+            <span className="library-stat-head"><ListMusic size={13} style={{ color: 'var(--cyan)' }} /> Nghe liên tục</span>
+            <strong>{audioItems.length}</strong>
+            <small>có MP3</small>
+          </button>
+        )}
+        {selectedType !== 'BOOK' && (
+          <button
+            role="tab"
+            aria-selected={subView === 'review'}
+            className={subView === 'review' ? 'active' : ''}
+            onClick={() => setSubView('review')}
+          >
+            <span className="library-stat-head"><Clapperboard size={13} style={{ color: 'var(--primary)' }} /> Review phim</span>
+            <span className="library-stat-link">Xem series ›</span>
+          </button>
+        )}
         <button
           role="tab"
           aria-selected={subView === 'stats'}

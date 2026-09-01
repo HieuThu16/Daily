@@ -9,6 +9,12 @@ import {
   CheckSquare,
   Square,
   Target,
+  BarChart3,
+  Clock,
+  Trash2,
+  ExternalLink,
+  BookOpen,
+  Calendar,
 } from 'lucide-react'
 import { Modal } from '../shared'
 import {
@@ -18,6 +24,7 @@ import {
   fetchUnifiedDetail,
   saveDilibBook,
   getSuggestedAuthors,
+  preloadLibraryBookMap,
   type UnifiedBookCategory,
   type UnifiedSearchResult,
   type CrawlReport,
@@ -26,6 +33,13 @@ import {
   type CrawlerScope,
   type CrawlProgressInfo,
 } from '../../lib/dilibCrawler'
+import {
+  getCrawlStats,
+  clearCrawlHistory,
+  deleteCrawlHistoryItem,
+  formatRelativeTime,
+  type CrawlTimePeriod,
+} from '../../lib/dilibCrawlerHistory'
 import { useToast } from '../ToastContext'
 
 export function DilibCrawlerModal({
@@ -37,12 +51,35 @@ export function DilibCrawlerModal({
   isOpen: boolean
   onClose: () => void
   onFinished?: () => void
-  initialMode?: 'COUNT' | 'CATEGORY' | 'AUTHOR' | 'SEARCH'
+  initialMode?: 'COUNT' | 'CATEGORY' | 'AUTHOR' | 'SEARCH' | 'HISTORY'
 }) {
   const { showToast } = useToast()
-  const [activeTab, setActiveTab] = useState<'COUNT' | 'CATEGORY' | 'AUTHOR' | 'SEARCH'>(initialMode)
+  const [activeTab, setActiveTab] = useState<'COUNT' | 'CATEGORY' | 'AUTHOR' | 'SEARCH' | 'HISTORY'>(initialMode)
   const [selectedSource, setSelectedSource] = useState<CrawlerSource>('ALL')
   const [selectedFormat, setSelectedFormat] = useState<CrawlerBookFormat>('ALL')
+
+  // History & Statistics Tab State
+  const [historyPeriod, setHistoryPeriod] = useState<CrawlTimePeriod>('24H')
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
+
+  const historyStats = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    historyRefreshKey
+    return getCrawlStats(historyPeriod)
+  }, [historyPeriod, historyRefreshKey])
+
+  const filteredHistoryItems = useMemo(() => {
+    const q = historySearch.trim().toLowerCase()
+    if (!q) return historyStats.items
+    return historyStats.items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.author.toLowerCase().includes(q) ||
+        item.source.toLowerCase().includes(q) ||
+        item.actionLabel.toLowerCase().includes(q)
+    )
+  }, [historyStats, historySearch])
 
   // 1. Target Count Mode State
   const [targetCount, setTargetCount] = useState<number>(10)
@@ -216,6 +253,8 @@ export function DilibCrawlerModal({
     let matched = 0
     let addedAudio = 0
     let addedPdf = 0
+    let smartIncrementalCount = 0
+    let alreadyExistedCount = 0
     let totalAudioFiles = 0
     let dilibCount = 0
     let dtvCount = 0
@@ -224,6 +263,8 @@ export function DilibCrawlerModal({
     abortControllerRef.current = controller
 
     try {
+      const libraryMap = await preloadLibraryBookMap()
+
       for (const url of urlsToCrawl) {
         if (controller.signal.aborted) break
         scanned++
@@ -233,6 +274,7 @@ export function DilibCrawlerModal({
           targetCount: urlsToCrawl.length,
           addedAudio,
           addedPdf,
+          smartIncrementalCount,
           currentBook: url,
           statusMessage: `Đang bóc tách sách (${scanned}/${urlsToCrawl.length})...`,
           elapsedSeconds: Math.floor((Date.now() - startTime) / 1000),
@@ -251,13 +293,25 @@ export function DilibCrawlerModal({
             if (detail.source === 'Dilib') dilibCount++
             else dtvCount++
 
-            const res = await saveDilibBook(detail, selectedFormat)
+            const res = await saveDilibBook(detail, selectedFormat, libraryMap)
             if (res.addedAudio) {
               addedAudio++
               totalAudioFiles += detail.audioTracks.length
             }
             if (res.addedPdf) addedPdf++
-            matched++
+
+            if (res.addedAudio || res.addedPdf) {
+              matched++
+            } else {
+              alreadyExistedCount++
+            }
+
+            if (
+              res.action === 'ADDED_AUDIO_TO_EXISTING_PDF' ||
+              res.action === 'ADDED_PDF_TO_EXISTING_AUDIO'
+            ) {
+              smartIncrementalCount++
+            }
 
             itemsReport.push({
               title: detail.title,
@@ -267,7 +321,12 @@ export function DilibCrawlerModal({
               hasPdf: detail.hasPdf,
               audioCount: detail.audioTracks.length,
               readbookUrl: detail.readbookUrl,
+              pdfUrl: detail.pdfUrl,
               cover: detail.cover,
+              addedAudio: res.addedAudio,
+              addedPdf: res.addedPdf,
+              action: res.action,
+              actionLabel: res.actionLabel,
             })
           }
         }
@@ -280,6 +339,8 @@ export function DilibCrawlerModal({
         matchedCount: matched,
         audiobooksAdded: addedAudio,
         booksPdfAdded: addedPdf,
+        smartIncrementalCount,
+        alreadyExistedCount,
         totalAudioFiles,
         durationSeconds: Math.floor((Date.now() - startTime) / 1000),
         dilibCount,
@@ -288,6 +349,7 @@ export function DilibCrawlerModal({
         items: itemsReport,
       }
       setCrawlReport(report)
+      setHistoryRefreshKey((k) => k + 1)
       showToast(`🎉 Đã cào xong ${report.audiobooksAdded} Sách nói & ${report.booksPdfAdded} Sách PDF.`)
       onFinished?.()
     } catch (err: any) {
@@ -371,14 +433,14 @@ export function DilibCrawlerModal({
               </div>
             )}
 
-            {/* 3 Thẻ Thống Kê Trực Tiếp */}
+            {/* Thẻ Thống Kê Trực Tiếp */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 8,
+                gridTemplateColumns: crawlProgress.smartIncrementalCount ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
+                gap: 6,
                 background: 'var(--bg-main)',
-                padding: '12px 10px',
+                padding: '12px 8px',
                 borderRadius: 14,
                 marginBottom: 14,
               }}
@@ -399,8 +461,16 @@ export function DilibCrawlerModal({
                 <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981' }}>
                   📖 {crawlProgress.addedPdf}
                 </div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sách đọc (PDF/EPUB)</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sách đọc (PDF)</div>
               </div>
+              {Boolean(crawlProgress.smartIncrementalCount) && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ec4899' }}>
+                    ⚡ {crawlProgress.smartIncrementalCount}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Bổ sung thiếu</div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 16 }}>
@@ -448,8 +518,8 @@ export function DilibCrawlerModal({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 6,
+                gridTemplateColumns: crawlReport.smartIncrementalCount > 0 ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)',
+                gap: 4,
                 background: 'var(--bg-main)',
                 padding: '12px 6px',
                 borderRadius: 14,
@@ -458,26 +528,34 @@ export function DilibCrawlerModal({
               }}
             >
               <div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>{crawlReport.matchedCount}</div>
-                <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>Thu thập</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{crawlReport.matchedCount}</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Đã thêm</div>
               </div>
               <div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f59e0b' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f59e0b' }}>
                   🎧 {crawlReport.audiobooksAdded}
                 </div>
-                <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>Sách nói</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Sách nói</div>
               </div>
               <div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>
                   📖 {crawlReport.booksPdfAdded}
                 </div>
-                <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>PDF / EPUB</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>PDF / EPUB</div>
               </div>
+              {crawlReport.smartIncrementalCount > 0 && (
+                <div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ec4899' }}>
+                    ⚡ {crawlReport.smartIncrementalCount}
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Bổ sung thiếu</div>
+                </div>
+              )}
               <div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#06b6d4' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#06b6d4' }}>
                   {crawlReport.totalAudioFiles}
                 </div>
-                <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>File Audio</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>File Audio</div>
               </div>
             </div>
 
@@ -512,7 +590,7 @@ export function DilibCrawlerModal({
                       >
                         {item.title}
                       </div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span>{item.author}</span>
                         <span
                           style={{
@@ -526,6 +604,30 @@ export function DilibCrawlerModal({
                         >
                           {item.source}
                         </span>
+                        {item.actionLabel && (
+                          <span
+                            style={{
+                              fontSize: '0.62rem',
+                              padding: '1px 4px',
+                              borderRadius: 4,
+                              background:
+                                item.action === 'ADDED_AUDIO_TO_EXISTING_PDF'
+                                  ? 'rgba(245, 158, 11, 0.15)'
+                                  : item.action === 'ADDED_PDF_TO_EXISTING_AUDIO'
+                                    ? 'rgba(16, 185, 129, 0.15)'
+                                    : 'rgba(139, 92, 246, 0.12)',
+                              color:
+                                item.action === 'ADDED_AUDIO_TO_EXISTING_PDF'
+                                  ? '#d97706'
+                                  : item.action === 'ADDED_PDF_TO_EXISTING_AUDIO'
+                                    ? '#10b981'
+                                    : 'var(--primary, #8b5cf6)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {item.actionLabel}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -677,11 +779,11 @@ export function DilibCrawlerModal({
               </div>
             </div>
 
-            {/* 4 Tabs Điều Hướng */}
+            {/* 5 Tabs Điều Hướng */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
+                gridTemplateColumns: 'repeat(5, 1fr)',
                 gap: 4,
                 background: 'var(--bg-main)',
                 padding: 4,
@@ -693,19 +795,19 @@ export function DilibCrawlerModal({
                 type="button"
                 onClick={() => setActiveTab('COUNT')}
                 style={{
-                  padding: '7px 4px',
+                  padding: '7px 3px',
                   borderRadius: 8,
                   border: 'none',
                   background: activeTab === 'COUNT' ? 'var(--card-bg)' : 'transparent',
                   color: activeTab === 'COUNT' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
                   fontWeight: 750,
-                  fontSize: '0.74rem',
+                  fontSize: '0.72rem',
                   cursor: 'pointer',
                   boxShadow: activeTab === 'COUNT' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
+                  gap: 3,
                 }}
               >
                 <Target size={13} /> Số Cuốn
@@ -715,19 +817,19 @@ export function DilibCrawlerModal({
                 type="button"
                 onClick={() => setActiveTab('CATEGORY')}
                 style={{
-                  padding: '7px 4px',
+                  padding: '7px 3px',
                   borderRadius: 8,
                   border: 'none',
                   background: activeTab === 'CATEGORY' ? 'var(--card-bg)' : 'transparent',
                   color: activeTab === 'CATEGORY' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
                   fontWeight: 750,
-                  fontSize: '0.74rem',
+                  fontSize: '0.72rem',
                   cursor: 'pointer',
                   boxShadow: activeTab === 'CATEGORY' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
+                  gap: 3,
                 }}
               >
                 <Layers size={13} /> Thể Loại
@@ -737,19 +839,19 @@ export function DilibCrawlerModal({
                 type="button"
                 onClick={() => setActiveTab('AUTHOR')}
                 style={{
-                  padding: '7px 4px',
+                  padding: '7px 3px',
                   borderRadius: 8,
                   border: 'none',
                   background: activeTab === 'AUTHOR' ? 'var(--card-bg)' : 'transparent',
                   color: activeTab === 'AUTHOR' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
                   fontWeight: 750,
-                  fontSize: '0.74rem',
+                  fontSize: '0.72rem',
                   cursor: 'pointer',
                   boxShadow: activeTab === 'AUTHOR' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
+                  gap: 3,
                 }}
               >
                 <User size={13} /> Tác Giả
@@ -759,22 +861,44 @@ export function DilibCrawlerModal({
                 type="button"
                 onClick={() => setActiveTab('SEARCH')}
                 style={{
-                  padding: '7px 4px',
+                  padding: '7px 3px',
                   borderRadius: 8,
                   border: 'none',
                   background: activeTab === 'SEARCH' ? 'var(--card-bg)' : 'transparent',
                   color: activeTab === 'SEARCH' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
                   fontWeight: 750,
-                  fontSize: '0.74rem',
+                  fontSize: '0.72rem',
                   cursor: 'pointer',
                   boxShadow: activeTab === 'SEARCH' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 4,
+                  gap: 3,
                 }}
               >
                 <Search size={13} /> Tên Sách
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('HISTORY')}
+                style={{
+                  padding: '7px 3px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: activeTab === 'HISTORY' ? 'var(--card-bg)' : 'transparent',
+                  color: activeTab === 'HISTORY' ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
+                  fontWeight: 750,
+                  fontSize: '0.72rem',
+                  cursor: 'pointer',
+                  boxShadow: activeTab === 'HISTORY' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                }}
+              >
+                <BarChart3 size={13} /> Báo Cáo
               </button>
             </div>
 
@@ -1473,6 +1597,358 @@ export function DilibCrawlerModal({
                         )
                       })}
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 5: BÁO CÁO & THỐNG KÊ SÁCH ĐÃ CÀO (1H, 24H, TOÀN BỘ) */}
+            {activeTab === 'HISTORY' && (
+              <div>
+                {/* 1. Header Toolbar: Bộ lọc thời gian & Xoá lịch sử */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 4,
+                      background: 'var(--bg-main)',
+                      padding: 3,
+                      borderRadius: 8,
+                      border: '1px solid var(--card-border)',
+                    }}
+                  >
+                    {([
+                      { id: '1H', label: '⚡ 1 Giờ Trước', icon: Clock },
+                      { id: '24H', label: '📅 24 Giờ Trước', icon: Calendar },
+                      { id: 'ALL', label: '🌐 Toàn Bộ', icon: Layers },
+                    ] as const).map((p) => {
+                      const Icon = p.icon
+                      const isActive = historyPeriod === p.id
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setHistoryPeriod(p.id)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: 'none',
+                            fontSize: '0.72rem',
+                            fontWeight: isActive ? 800 : 550,
+                            background: isActive ? 'var(--card-bg)' : 'transparent',
+                            color: isActive ? 'var(--primary, #8b5cf6)' : 'var(--text-muted)',
+                            boxShadow: isActive ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Icon size={12} /> {p.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {historyStats.items.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Bạn có chắc muốn xoá toàn bộ lịch sử cào sách?')) {
+                          clearCrawlHistory()
+                          setHistoryRefreshKey((k) => k + 1)
+                          showToast('🗑️ Đã xoá toàn bộ lịch sử cào sách.', 'info')
+                        }
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text-muted)',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                      title="Xoá toàn bộ nhật ký cào"
+                    >
+                      <Trash2 size={12} /> Xoá lịch sử
+                    </button>
+                  )}
+                </div>
+
+                {/* 2. Thống Kê 4 Thẻ KPI */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 6,
+                    background: 'var(--bg-main)',
+                    padding: '10px 6px',
+                    borderRadius: 12,
+                    marginBottom: 12,
+                    textAlign: 'center',
+                    border: '1px solid var(--card-border)',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary, #8b5cf6)' }}>
+                      {historyStats.totalAdded}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Đã thêm</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f59e0b' }}>
+                      🎧 {historyStats.audioAdded}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                      Sách nói ({historyStats.totalAudioTracks} tracks)
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981' }}>
+                      📖 {historyStats.pdfAdded}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Sách đọc (PDF)</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ec4899' }}>
+                      ⚡ {historyStats.smartIncrementalCount}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Bổ sung thông minh</div>
+                  </div>
+                </div>
+
+                {/* 3. Ô Tìm Kiếm trong Lịch Sử */}
+                {historyStats.items.length > 0 && (
+                  <div style={{ position: 'relative', marginBottom: 10 }}>
+                    <Search size={14} style={{ position: 'absolute', left: 10, top: 8, color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      placeholder="Tìm trong danh sách sách đã cào..."
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px 6px 30px',
+                        borderRadius: 8,
+                        border: '1px solid var(--card-border)',
+                        background: 'var(--bg-main)',
+                        color: 'var(--text-main)',
+                        fontSize: '0.76rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* 4. Danh Sách Sách Đã Cào */}
+                {filteredHistoryItems.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '30px 10px',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.8rem',
+                      background: 'var(--bg-main)',
+                      borderRadius: 12,
+                    }}
+                  >
+                    <BarChart3 size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                    <p style={{ margin: '0 0 4px', fontWeight: 600 }}>
+                      {historySearch
+                        ? 'Không tìm thấy sách nào khớp trong lịch sử'
+                        : `Chưa có sách nào được cào trong ${historyPeriod === '1H' ? '1 giờ qua' : historyPeriod === '24H' ? '24 giờ qua' : 'lịch sử'}`}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.72rem', opacity: 0.8 }}>
+                      Chuyển sang tab "Số Cuốn" hoặc "Thể Loại" để cào thêm sách mới!
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 2 }}>
+                    {filteredHistoryItems.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          padding: '8px 10px',
+                          borderRadius: 10,
+                          background: 'var(--bg-main)',
+                          border: '1px solid var(--card-border)',
+                          fontSize: '0.78rem',
+                        }}
+                      >
+                        {item.cover ? (
+                          <img
+                            src={item.cover}
+                            alt={item.title}
+                            style={{ width: 32, height: 44, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 32,
+                              height: 44,
+                              borderRadius: 4,
+                              background: 'var(--primary-light, rgba(139, 92, 246, 0.15))',
+                              display: 'grid',
+                              placeItems: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <BookOpen size={16} color="var(--primary, #8b5cf6)" />
+                          </div>
+                        )}
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontWeight: 750,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              marginBottom: 2,
+                            }}
+                            title={item.title}
+                          >
+                            {item.title}
+                          </div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span>{item.author}</span>
+                            <span
+                              style={{
+                                fontSize: '0.6rem',
+                                padding: '1px 4px',
+                                borderRadius: 4,
+                                background: item.source === 'Dilib' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                                color: item.source === 'Dilib' ? '#8b5cf6' : '#10b981',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {item.source}
+                            </span>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>
+                              ⏱️ {formatRelativeTime(item.crawledAt)}
+                            </span>
+                          </div>
+
+                          {/* Nhãn phân loại hành động thông minh */}
+                          <div style={{ marginTop: 3 }}>
+                            <span
+                              style={{
+                                fontSize: '0.62rem',
+                                padding: '1px 5px',
+                                borderRadius: 4,
+                                fontWeight: 700,
+                                background:
+                                  item.action === 'ADDED_AUDIO_TO_EXISTING_PDF'
+                                    ? 'rgba(245, 158, 11, 0.15)'
+                                    : item.action === 'ADDED_PDF_TO_EXISTING_AUDIO'
+                                      ? 'rgba(16, 185, 129, 0.15)'
+                                      : item.action === 'NEW_BOTH'
+                                        ? 'rgba(139, 92, 246, 0.15)'
+                                        : item.action === 'ALREADY_EXISTS'
+                                          ? 'rgba(156, 163, 175, 0.15)'
+                                          : 'rgba(59, 130, 246, 0.12)',
+                                color:
+                                  item.action === 'ADDED_AUDIO_TO_EXISTING_PDF'
+                                    ? '#d97706'
+                                    : item.action === 'ADDED_PDF_TO_EXISTING_AUDIO'
+                                      ? '#10b981'
+                                      : item.action === 'NEW_BOTH'
+                                        ? '#8b5cf6'
+                                        : item.action === 'ALREADY_EXISTS'
+                                          ? 'var(--text-muted)'
+                                          : '#3b82f6',
+                              }}
+                            >
+                              {item.actionLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Format badges & delete button */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          {item.addedAudio && (
+                            <span
+                              style={{
+                                padding: '2px 5px',
+                                borderRadius: 6,
+                                background: 'rgba(245, 158, 11, 0.15)',
+                                color: '#f59e0b',
+                                fontSize: '0.64rem',
+                                fontWeight: 700,
+                              }}
+                              title={`${item.audioCount} phần audio`}
+                            >
+                              🎧 {item.audioCount} MP3
+                            </span>
+                          )}
+                          {item.addedPdf && (
+                            <span
+                              style={{
+                                padding: '2px 5px',
+                                borderRadius: 6,
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#10b981',
+                                fontSize: '0.64rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              📖 PDF
+                            </span>
+                          )}
+                          {(item.readbookUrl || item.pdfUrl) && (
+                            <a
+                              href={item.readbookUrl || item.pdfUrl || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                color: 'var(--text-muted)',
+                                padding: 3,
+                                display: 'inline-flex',
+                              }}
+                              title="Đọc trực tuyến"
+                            >
+                              <ExternalLink size={13} />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              deleteCrawlHistoryItem(item.id)
+                              setHistoryRefreshKey((k) => k + 1)
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              padding: 3,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                            }}
+                            title="Xoá khỏi nhật ký"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

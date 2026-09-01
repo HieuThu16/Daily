@@ -6,6 +6,7 @@ import {
   Play,
   BookOpen,
   Trash2,
+  BarChart3,
 } from 'lucide-react'
 import type { Audiobook } from '../../types/audiobook'
 import { loadAudiobooks, deleteAudiobook } from '../../lib/audiobookRepository'
@@ -28,6 +29,7 @@ export function AudiobooksPage() {
 
   // Modals
   const [showCrawlerModal, setShowCrawlerModal] = useState(false)
+  const [crawlerInitialTab, setCrawlerInitialTab] = useState<'COUNT' | 'CATEGORY' | 'AUTHOR' | 'SEARCH' | 'HISTORY'>('COUNT')
   const [activePlayerBook, setActivePlayerBook] = useState<Audiobook | null>(null)
 
   const reload = async () => {
@@ -125,15 +127,37 @@ export function AudiobooksPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="audiobooks-crawl-btn"
-            onClick={() => setShowCrawlerModal(true)}
-            title="Cào sách nói & ebook từ Dilib.vn + DTV-eBook"
-          >
-            <Sparkles size={16} />
-            <span>Cào Sách Đa Nguồn</span>
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="audiobooks-crawl-btn"
+              onClick={() => {
+                setCrawlerInitialTab('COUNT')
+                setShowCrawlerModal(true)
+              }}
+              title="Cào sách nói & ebook từ Dilib.vn + DTV-eBook"
+            >
+              <Sparkles size={16} />
+              <span>Cào Sách Đa Nguồn</span>
+            </button>
+            <button
+              type="button"
+              className="audiobooks-crawl-btn"
+              onClick={() => {
+                setCrawlerInitialTab('HISTORY')
+                setShowCrawlerModal(true)
+              }}
+              title="Báo cáo & thống kê sách đã cào trong 1h, 24h và toàn bộ"
+              style={{
+                background: 'rgba(255, 255, 255, 0.15)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                color: 'inherit',
+              }}
+            >
+              <BarChart3 size={16} />
+              <span>Báo Cáo Cào Sách</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -357,6 +381,7 @@ export function AudiobooksPage() {
       {/* Crawler Modal */}
       <DilibCrawlerModal
         isOpen={showCrawlerModal}
+        initialMode={crawlerInitialTab}
         onClose={() => setShowCrawlerModal(false)}
         onFinished={() => void reload()}
       />

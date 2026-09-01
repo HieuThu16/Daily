@@ -1,6 +1,7 @@
-import { saveAudiobook } from './audiobookRepository'
+import { saveAudiobook, getLocalAudiobooks } from './audiobookRepository'
 import { supabase } from './supabase'
 import { apiFetch } from './apiFetch'
+import { addCrawlHistoryItem, type CrawlHistoryAction } from './dilibCrawlerHistory'
 import type { Audiobook, DilibCategory } from '../types/audiobook'
 
 export type UnifiedBookCategory = {
@@ -415,6 +416,8 @@ export type CrawlReport = {
   matchedCount: number
   audiobooksAdded: number
   booksPdfAdded: number
+  smartIncrementalCount: number
+  alreadyExistedCount: number
   totalAudioFiles: number
   durationSeconds: number
   dilibCount: number
@@ -428,7 +431,12 @@ export type CrawlReport = {
     hasPdf: boolean
     audioCount: number
     readbookUrl?: string | null
+    pdfUrl?: string | null
     cover?: string
+    addedAudio: boolean
+    addedPdf: boolean
+    action?: CrawlHistoryAction
+    actionLabel?: string
   }>
 }
 
@@ -937,18 +945,202 @@ export async function fetchUnifiedDetail(url: string): Promise<UnifiedBookDetail
 
 export const fetchDilibDetailAuto = fetchUnifiedDetail
 
-/** 7. LƯU SÁCH VÀO SUPABASE & LOCAL STORAGE */
+/** Chuẩn hóa tiêu đề sách để so sánh fuzzy không phân biệt hoa thường, dấu câu, đuôi thừa */
+export function normalizeBookTitle(title: string): string {
+  if (!title) return ''
+  return title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Bỏ dấu tiếng Việt
+    .replace(/\b(full|audiobook|sach noi|ebook|pdf|epub|mobi|azw3|prc|doc sach|online|tap \d+|trọn bo|tron bo|phan \d+)\b/gi, '')
+    .replace(/[^\w\s]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export type LibraryBookCheckResult = {
+  exists: boolean
+  hasAudio: boolean
+  hasPdf: boolean
+  audioId?: string
+  pdfId?: string
+  matchedTitle?: string
+}
+
+/** Tải trước toàn bộ bản đồ sách trong thư viện (Local Cache + Supabase) để tra cứu cực nhanh */
+export async function preloadLibraryBookMap(): Promise<Map<string, { hasAudio: boolean; hasPdf: boolean; id: string; title: string }>> {
+  const map = new Map<string, { hasAudio: boolean; hasPdf: boolean; id: string; title: string }>()
+
+  // 1. Nạp từ local cache sách nói
+  const localList = getLocalAudiobooks()
+  for (const b of localList) {
+    const norm = normalizeBookTitle(b.title)
+    if (norm) {
+      map.set(norm, {
+        hasAudio: Boolean(b.tracks && b.tracks.length > 0),
+        hasPdf: Boolean(b.hasPdf || b.pdfUrl || b.readbookUrl),
+        id: b.id,
+        title: b.title,
+      })
+    }
+  }
+
+  // 2. Nạp từ Supabase bảng media_items
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('media_items')
+        .select('id, title, author, book_format, url, notes')
+        .eq('type', 'BOOK')
+        .is('deleted_at', null)
+
+      if (data) {
+        for (const row of data) {
+          const norm = normalizeBookTitle(row.title || '')
+          if (!norm) continue
+          const existing = map.get(norm) || { hasAudio: false, hasPdf: false, id: row.id, title: row.title }
+          if (row.book_format === 'LISTEN') {
+            existing.hasAudio = true
+          } else {
+            existing.hasPdf = true
+          }
+          if (row.notes) {
+            try {
+              const p = JSON.parse(row.notes)
+              if (Array.isArray(p.tracks) && p.tracks.length > 0) existing.hasAudio = true
+              if (p.pdfUrl || p.readbookUrl || p.epubUrl) existing.hasPdf = true
+            } catch {}
+          }
+          map.set(norm, existing)
+        }
+      }
+    } catch (err) {
+      console.warn('[dilibCrawler] Lỗi preload thư viện:', err)
+    }
+  }
+
+  return map
+}
+
+/** Kiểm tra nhanh một cuốn sách đã tồn tại định dạng nào trong thư viện */
+export async function checkExistingBookInLibrary(
+  title: string,
+  _author?: string,
+  preloadedMap?: Map<string, { hasAudio: boolean; hasPdf: boolean; id: string; title: string }>
+): Promise<LibraryBookCheckResult> {
+  const norm = normalizeBookTitle(title)
+  if (!norm) return { exists: false, hasAudio: false, hasPdf: false }
+
+  if (preloadedMap && preloadedMap.has(norm)) {
+    const item = preloadedMap.get(norm)!
+    return {
+      exists: item.hasAudio || item.hasPdf,
+      hasAudio: item.hasAudio,
+      hasPdf: item.hasPdf,
+      matchedTitle: item.title,
+      audioId: item.hasAudio ? item.id : undefined,
+      pdfId: item.hasPdf ? item.id : undefined,
+    }
+  }
+
+  // Fallback: Kiểm tra cache local
+  const localAudiobooks = getLocalAudiobooks()
+  const matchedAudioLocal = localAudiobooks.find((b) => {
+    const bNorm = normalizeBookTitle(b.title)
+    return (
+      bNorm === norm ||
+      (norm.length > 4 && bNorm.includes(norm)) ||
+      (bNorm.length > 4 && norm.includes(bNorm)) ||
+      b.title.trim().toLowerCase() === title.trim().toLowerCase()
+    )
+  })
+
+  let hasAudio = Boolean(matchedAudioLocal && matchedAudioLocal.tracks?.length > 0)
+  let hasPdf = Boolean(matchedAudioLocal && (matchedAudioLocal.hasPdf || matchedAudioLocal.readbookUrl || matchedAudioLocal.pdfUrl))
+  let audioId = matchedAudioLocal?.id
+  let pdfId: string | undefined
+  let matchedTitle = matchedAudioLocal?.title
+
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('media_items')
+        .select('id, title, author, book_format, url, notes')
+        .eq('type', 'BOOK')
+        .is('deleted_at', null)
+
+      if (data) {
+        for (const row of data) {
+          const rNorm = normalizeBookTitle(row.title || '')
+          const isMatch =
+            rNorm === norm ||
+            (norm.length > 4 && rNorm.includes(norm)) ||
+            (rNorm.length > 4 && norm.includes(rNorm)) ||
+            row.title?.trim().toLowerCase() === title.trim().toLowerCase()
+
+          if (isMatch) {
+            matchedTitle = row.title
+            if (row.book_format === 'LISTEN') {
+              hasAudio = true
+              audioId = row.id
+            } else {
+              hasPdf = true
+              pdfId = row.id
+            }
+            if (row.notes) {
+              try {
+                const p = JSON.parse(row.notes)
+                if (Array.isArray(p.tracks) && p.tracks.length > 0) hasAudio = true
+                if (p.pdfUrl || p.readbookUrl || p.epubUrl) hasPdf = true
+              } catch {}
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[dilibCrawler] Lỗi tra cứu thư viện:', err)
+    }
+  }
+
+  return {
+    exists: hasAudio || hasPdf,
+    hasAudio,
+    hasPdf,
+    audioId,
+    pdfId,
+    matchedTitle,
+  }
+}
+
+/** 7. LƯU SÁCH VÀO SUPABASE & LOCAL STORAGE (HỖ TRỢ CƠ CHẾ TẢI THÔNG MINH BỔ SUNG ĐỊNH DẠNG CÒN THIẾU) */
 export async function saveDilibBook(
   detail: UnifiedBookDetail,
-  bookFormat: CrawlerBookFormat = 'ALL'
-): Promise<{ addedAudio: boolean; addedPdf: boolean }> {
+  bookFormat: CrawlerBookFormat = 'ALL',
+  preloadedLibraryMap?: Map<string, { hasAudio: boolean; hasPdf: boolean; id: string; title: string }>
+): Promise<{
+  addedAudio: boolean
+  addedPdf: boolean
+  action: CrawlHistoryAction
+  actionLabel: string
+  existingHasAudio: boolean
+  existingHasPdf: boolean
+}> {
   let addedAudio = false
   let addedPdf = false
-
   const idSlug = detail.url.split('/').pop()?.replace('.html', '') || `${Date.now()}`
 
-  // 1. Lưu Sách Nói (Audiobook) nếu sách có Audio và yêu cầu cho phép
-  if (detail.hasAudio && (bookFormat === 'ALL' || bookFormat === 'AUDIO')) {
+  // 1. Kiểm tra trạng thái hiện có trong thư viện
+  const existing = await checkExistingBookInLibrary(detail.title, detail.author, preloadedLibraryMap)
+  const existingHasAudio = existing.hasAudio
+  const existingHasPdf = existing.hasPdf
+
+  // 2. Xác định việc lưu Sách Nói (Audiobook)
+  const shouldSaveAudio =
+    detail.hasAudio &&
+    (bookFormat === 'ALL' || bookFormat === 'AUDIO') &&
+    !existingHasAudio
+
+  if (shouldSaveAudio) {
     const audiobook: Audiobook = {
       id: `ab-${idSlug}`,
       title: detail.title,
@@ -968,8 +1160,13 @@ export async function saveDilibBook(
     addedAudio = true
   }
 
-  // 2. Lưu Sách Đọc (PDF / EPUB / Reader) vào media_items nếu có tài liệu đọc và yêu cầu cho phép
-  if (detail.hasPdf && (bookFormat === 'ALL' || bookFormat === 'READ') && supabase) {
+  // 3. Xác định việc lưu Sách Đọc (PDF / EPUB / Reader)
+  const shouldSavePdf =
+    detail.hasPdf &&
+    (bookFormat === 'ALL' || bookFormat === 'READ') &&
+    !existingHasPdf
+
+  if (shouldSavePdf && supabase) {
     try {
       const pdfRecord = {
         title: detail.title,
@@ -999,7 +1196,84 @@ export async function saveDilibBook(
     }
   }
 
-  return { addedAudio, addedPdf }
+  // 4. Xác định Action Type & Label rõ ràng
+  let action: CrawlHistoryAction = 'ALREADY_EXISTS'
+  let actionLabel = 'Đã có đầy đủ trong thư viện (Bỏ qua)'
+
+  if (addedAudio && addedPdf) {
+    action = 'NEW_BOTH'
+    actionLabel = '✨ Thêm mới Sách nói & Sách đọc PDF'
+  } else if (addedAudio && !addedPdf) {
+    if (existingHasPdf) {
+      action = 'ADDED_AUDIO_TO_EXISTING_PDF'
+      actionLabel = '⚡ Đã có PDF trong thư viện -> Tải thêm bản Sách nói'
+    } else {
+      action = 'NEW_AUDIO'
+      actionLabel = '✨ Thêm mới Sách nói'
+    }
+  } else if (addedPdf && !addedAudio) {
+    if (existingHasAudio) {
+      action = 'ADDED_PDF_TO_EXISTING_AUDIO'
+      actionLabel = '⚡ Đã có Sách nói trong thư viện -> Tải thêm bản Sách đọc PDF'
+    } else {
+      action = 'NEW_PDF'
+      actionLabel = '✨ Thêm mới Sách đọc PDF'
+    }
+  } else {
+    // Không thêm gì mới vì đã có sẵn
+    if (existingHasAudio && existingHasPdf) {
+      action = 'ALREADY_EXISTS'
+      actionLabel = 'Đã có cả PDF & Sách nói (Bỏ qua)'
+    } else if (existingHasPdf && !detail.hasAudio) {
+      action = 'ALREADY_EXISTS'
+      actionLabel = 'Bản PDF đã có sẵn trong thư viện (Bỏ qua)'
+    } else if (existingHasAudio && !detail.hasPdf) {
+      action = 'ALREADY_EXISTS'
+      actionLabel = 'Bản Sách nói đã có sẵn trong thư viện (Bỏ qua)'
+    }
+  }
+
+  // 5. Cập nhật vào Preloaded Library Map nếu có để các lượt duyệt sau đồng bộ
+  if (preloadedLibraryMap) {
+    const norm = normalizeBookTitle(detail.title)
+    if (norm) {
+      const cur = preloadedLibraryMap.get(norm) || { hasAudio: false, hasPdf: false, id: `ab-${idSlug}`, title: detail.title }
+      if (addedAudio) cur.hasAudio = true
+      if (addedPdf) cur.hasPdf = true
+      preloadedLibraryMap.set(norm, cur)
+    }
+  }
+
+  // 6. Ghi nhận vào Lịch Sử Cào Sách Bền Vững (LocalStorage / Thống kê)
+  try {
+    addCrawlHistoryItem({
+      title: detail.title,
+      author: detail.author,
+      source: detail.source,
+      cover: detail.cover,
+      url: detail.url,
+      readbookUrl: detail.readbookUrl,
+      pdfUrl: detail.pdfUrl,
+      hasAudio: detail.hasAudio,
+      hasPdf: detail.hasPdf,
+      audioCount: detail.audioTracks.length,
+      addedAudio,
+      addedPdf,
+      action,
+      actionLabel,
+    })
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi ghi lịch sử cào:', err)
+  }
+
+  return {
+    addedAudio,
+    addedPdf,
+    action,
+    actionLabel,
+    existingHasAudio,
+    existingHasPdf,
+  }
 }
 
 export type CrawlProgressInfo = {
@@ -1008,6 +1282,7 @@ export type CrawlProgressInfo = {
   targetCount: number
   addedAudio: number
   addedPdf: number
+  smartIncrementalCount?: number
   currentBook?: string
   statusMessage: string
   elapsedSeconds: number
@@ -1047,10 +1322,15 @@ export async function crawlUnified({
   let matched = 0
   let addedAudio = 0
   let addedPdf = 0
+  let smartIncrementalCount = 0
+  let alreadyExistedCount = 0
   let totalAudioFiles = 0
   let dilibCount = 0
   let dtvCount = 0
   const itemsReport: CrawlReport['items'] = []
+
+  // Preload map thư viện để kiểm tra định dạng cực nhanh và chính xác
+  const libraryMap = await preloadLibraryBookMap()
 
   const updateStatus = (currentBook: string, msg: string) => {
     const elapsed = Math.floor((Date.now() - startTime) / 1000)
@@ -1064,6 +1344,7 @@ export async function crawlUnified({
       targetCount,
       addedAudio,
       addedPdf,
+      smartIncrementalCount,
       currentBook,
       statusMessage: msg,
       elapsedSeconds: elapsed,
@@ -1121,7 +1402,6 @@ export async function crawlUnified({
   // D. Nếu cào TOÀN BỘ THƯ VIỆN (ALL_LIBRARY)
   else {
     updateStatus('', 'Đang nạp kho sách đa thể loại từ Dilib.vn và DTV eBook...')
-    // Ưu tiên nạp các danh mục tinh hoa, kinh điển, trinh thám, sách nói
     const topCategories = UNIFIED_CATEGORIES.slice(0, 6)
     for (const cat of topCategories) {
       if (signal?.aborted) break
@@ -1134,7 +1414,6 @@ export async function crawlUnified({
         dtvUrls.forEach((u) => urlsToVisit.add(u))
       }
     }
-    // Nạp thêm từ các từ khóa phổ biến nếu cần nhiều cuốn
     if (urlsToVisit.size < (targetCount || 10) * 2) {
       for (const kw of ['kinh điển', 'trinh thám', 'kỹ năng', 'tiểu thuyết', 'thành công']) {
         if (urlsToVisit.size >= (targetCount || 10) * 3) break
@@ -1147,7 +1426,7 @@ export async function crawlUnified({
     bookFormat === 'AUDIO' ? 'Sách nói' : bookFormat === 'READ' ? 'Sách đọc (PDF/EPUB)' : 'Mọi định dạng'
   updateStatus(
     '',
-    `Đã phát hiện ${urlsToVisit.size} đầu sách. Đang tiến hành bóc tách và lọc định dạng [${formatText}]...`
+    `Đã phát hiện ${urlsToVisit.size} đầu sách. Đang tiến hành bóc tách, đối chiếu thư viện và lọc [${formatText}]...`
   )
 
   // 2. DUYỆT TỪNG SÁCH ĐẾN KHI ĐỦ SỐ LƯỢNG HOẶC HẾT NGUỒN
@@ -1184,14 +1463,14 @@ export async function crawlUnified({
     }
 
     if (!isMatchFormat) {
-      // Sách không khớp định dạng yêu cầu -> bỏ qua không tính vào target
       continue
     }
 
     if (detail.source === 'Dilib') dilibCount++
     else dtvCount++
 
-    const saveResult = await saveDilibBook(detail, bookFormat)
+    // Lưu sách với cơ chế đối chiếu thông minh
+    const saveResult = await saveDilibBook(detail, bookFormat, libraryMap)
     if (saveResult.addedAudio) {
       addedAudio++
       totalAudioFiles += detail.audioTracks.length
@@ -1200,7 +1479,18 @@ export async function crawlUnified({
       addedPdf++
     }
 
-    matched++
+    if (saveResult.addedAudio || saveResult.addedPdf) {
+      matched++
+    } else {
+      alreadyExistedCount++
+    }
+
+    if (
+      saveResult.action === 'ADDED_AUDIO_TO_EXISTING_PDF' ||
+      saveResult.action === 'ADDED_PDF_TO_EXISTING_AUDIO'
+    ) {
+      smartIncrementalCount++
+    }
 
     itemsReport.push({
       title: detail.title,
@@ -1210,13 +1500,18 @@ export async function crawlUnified({
       hasPdf: detail.hasPdf,
       audioCount: detail.audioTracks.length,
       readbookUrl: detail.readbookUrl,
+      pdfUrl: detail.pdfUrl,
       cover: detail.cover,
+      addedAudio: saveResult.addedAudio,
+      addedPdf: saveResult.addedPdf,
+      action: saveResult.action,
+      actionLabel: saveResult.actionLabel,
     })
 
     const targetProgressText = hasTargetLimit ? ` (Mục tiêu: ${matched}/${targetCount} cuốn)` : ''
     updateStatus(
       detail.title,
-      `[${detail.source}] Đã lưu: "${detail.title}"${targetProgressText} (Audio: ${detail.hasAudio ? 'Có' : 'Không'}, PDF: ${detail.hasPdf ? 'Có' : 'Không'})`
+      `[${detail.source}] ${saveResult.actionLabel}: "${detail.title}"${targetProgressText}`
     )
 
     if (hasTargetLimit && matched >= targetCount) {
@@ -1234,6 +1529,8 @@ export async function crawlUnified({
     matchedCount: matched,
     audiobooksAdded: addedAudio,
     booksPdfAdded: addedPdf,
+    smartIncrementalCount,
+    alreadyExistedCount,
     totalAudioFiles,
     durationSeconds: durationSec,
     dilibCount,
