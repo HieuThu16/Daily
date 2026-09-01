@@ -22,28 +22,36 @@ import { Memory3DCard } from './daily/Memory3DCard'
 
 export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = []
 
+export function formatDisplayContent(content: string): string {
+  if (!content) return ''
+  return content.replace(/^\[([^\]]+)\]\s*/, '')
+}
+
 export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]): DailyCategoryItem | null {
+  // 1. Kiểm tra nếu có category trực tiếp
   if (entry.category) {
-    const found = allCategories.find((c) => c.label === entry.category || c.id === entry.category)
+    const found = allCategories.find((c) => c.label.toLowerCase() === entry.category?.toLowerCase() || c.id === entry.category)
     if (found) return found
     return { id: entry.category, label: entry.category, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
   }
-  if (entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0) {
-    const specialTags = new Set(['FIRST_TIME', 'SPECIAL', 'Lần đầu', 'lan_dau', 'Đặc biệt', 'dac_biet', 'is_first_time', 'is_special'])
-    const nonSpecialTag = entry.tags.find((t) => !specialTags.has(t))
-    if (nonSpecialTag) {
-      const found = allCategories.find((c) => c.label === nonSpecialTag || c.id === nonSpecialTag)
-      if (found) return found
-      return { id: nonSpecialTag, label: nonSpecialTag, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
-    }
-  }
-  // Fallback: Kiểm tra nếu nội dung có gắn [Thể loại]
+  // 2. Kiểm tra nếu nội dung có gắn [Thể loại] (ví dụ: [Sức khỏe] Đi chạy bộ)
   if (entry.content) {
     const match = entry.content.match(/^\[([^\]]+)\]/)
     if (match && match[1]) {
       const catLabel = match[1].trim()
       const found = allCategories.find((c) => c.label.toLowerCase() === catLabel.toLowerCase() || c.id === catLabel)
       if (found) return found
+      return { id: catLabel, label: catLabel, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
+    }
+  }
+  // 3. Kiểm tra tags
+  if (entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0) {
+    const specialTags = new Set(['FIRST_TIME', 'SPECIAL', 'Lần đầu', 'lan_dau', 'Đặc biệt', 'dac_biet', 'is_first_time', 'is_special'])
+    const nonSpecialTag = entry.tags.find((t) => !specialTags.has(t))
+    if (nonSpecialTag) {
+      const found = allCategories.find((c) => c.label.toLowerCase() === nonSpecialTag.toLowerCase() || c.id === nonSpecialTag)
+      if (found) return found
+      return { id: nonSpecialTag, label: nonSpecialTag, icon: '🏷️', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.15)' }
     }
   }
   return null
@@ -203,6 +211,36 @@ export function DailyPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Tự động phát hiện & bảo lưu thể loại từ danh sách nhật ký nếu có thể loại mới
+  useEffect(() => {
+    if (!items || items.length === 0) return
+    let hasNew = false
+    const currentLabels = new Set(dailyCategories.map((c) => c.label.toLowerCase()))
+    const newCats: DailyCategoryItem[] = [...dailyCategories]
+
+    items.forEach((item) => {
+      const match = item.content?.match(/^\[([^\]]+)\]/)
+      const tag = match?.[1]?.trim() || item.category
+      if (tag && !currentLabels.has(tag.toLowerCase())) {
+        currentLabels.add(tag.toLowerCase())
+        newCats.push({
+          id: `cat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          label: tag,
+          icon: '🏷️',
+          color: '#8b5cf6',
+          bg: 'rgba(139, 92, 246, 0.15)',
+        })
+        hasNew = true
+      }
+    })
+
+    if (hasNew) {
+      setDailyCategories(newCats)
+      saveLocal('daily_custom_categories', newCats)
+      void saveAppSetting('daily_custom_categories', newCats)
+    }
+  }, [items])
 
   // Write tab state
   const [content, setContent] = useState('')
@@ -576,11 +614,20 @@ export function DailyPage() {
     // Luôn dùng entry_type chuẩn của database ('FEELING' / 'NEW_THING') để không bao giờ bị dính lỗi check constraint của PostgreSQL
     const safeEntryType: DailyType = isFirstTime ? 'NEW_THING' : 'FEELING'
 
+    // Encode category into line if selected so it persists everywhere (both locally & in database)
+    const formattedLines = lines.map((lineText) => {
+      if (selectedCategory && !lineText.startsWith(`[${selectedCategory}]`)) {
+        return `[${selectedCategory}] ${lineText}`
+      }
+      return lineText
+    })
+
     // Tạo payload chuẩn xác với is_first_time, is_special, category, tags và ảnh/video đính kèm
-    const payload = lines.map((lineText, idx) => ({
+    const payload = formattedLines.map((lineText, idx) => ({
       content: lineText,
       entry_date: date,
       entry_type: safeEntryType,
+      category: selectedCategory || null,
       entry_time: currentTimeString,
       is_first_time: Boolean(isFirstTime),
       is_special: Boolean(isSpecial),
@@ -594,7 +641,7 @@ export function DailyPage() {
 
     try {
       if (supabase) {
-        // Tier 1: Insert đầy đủ is_first_time, is_special, tags
+        // Tier 1: Insert đầy đủ is_first_time, is_special, tags, category
         const { data, error } = await supabase.from('daily_entries').insert(payload).select()
         if (!error && data && data.length > 0) {
           savedToSupabase = true
@@ -608,7 +655,7 @@ export function DailyPage() {
         } else if (error) {
           console.warn('Lỗi Supabase Tier 1, thử lại phương án Tier 2 (bảo lưu tags):', error)
           // Tier 2: Thử lại nếu DB chưa chạy migration is_first_time/is_special nhưng có tags
-          const tier2Payload = lines.map((lineText, idx) => ({
+          const tier2Payload = formattedLines.map((lineText, idx) => ({
             content: lineText,
             entry_date: date,
             entry_type: safeEntryType,
@@ -634,7 +681,7 @@ export function DailyPage() {
           } else if (retryErr) {
             console.warn('Lỗi Supabase Tier 2, thử lại Tier 3 (cột cơ bản nhất):', retryErr)
             // Tier 3: Thử lại với schema cơ bản nhất (không có cột mới)
-            const tier3Payload = lines.map((lineText, idx) => ({
+            const tier3Payload = formattedLines.map((lineText, idx) => ({
               content: lineText,
               entry_date: date,
               entry_type: safeEntryType,
@@ -776,10 +823,16 @@ export function DailyPage() {
 
     const safeEditEntryType: DailyType = editIsFirstTime ? 'NEW_THING' : 'FEELING'
 
+    let formattedContent = editText.trim()
+    if (editCategory && !formattedContent.startsWith(`[${editCategory}]`)) {
+      formattedContent = `[${editCategory}] ${formattedContent}`
+    }
+
     const patch = {
-      content: editText.trim(),
+      content: formattedContent,
       entry_date: date,
       entry_type: safeEditEntryType,
+      category: editCategory || null,
       entry_time: finalTime || null,
       is_first_time: Boolean(editIsFirstTime),
       is_special: Boolean(editIsSpecial),
@@ -795,7 +848,7 @@ export function DailyPage() {
         } else {
           // Thử lại nếu DB chưa có cột is_first_time/is_special
           const simplePatch = {
-            content: editText.trim(),
+            content: formattedContent,
             entry_date: date,
             entry_type: safeEditEntryType,
             entry_time: finalTime || null,
@@ -807,7 +860,7 @@ export function DailyPage() {
           } else {
             // Thử lại với payload cơ bản nhất
             const basicPatch = {
-              content: editText.trim(),
+              content: formattedContent,
               entry_date: date,
               entry_type: safeEditEntryType,
               entry_time: finalTime || null,
@@ -833,7 +886,7 @@ export function DailyPage() {
 
   const openEntry = (entry: Entry) => {
     setEditing(entry)
-    setEditText(entry.content)
+    setEditText(formatDisplayContent(entry.content))
     setDate(entry.entry_date)
     setEditIsFirstTime(isEntryFirstTime(entry))
     setEditIsSpecial(isEntrySpecial(entry))
@@ -1779,7 +1832,7 @@ export function DailyPage() {
                           </span>
                         )}
                         <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {entry.content}
+                          {formatDisplayContent(entry.content)}
                         </span>
                       </button>
 

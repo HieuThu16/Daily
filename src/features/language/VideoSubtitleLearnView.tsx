@@ -5,17 +5,15 @@ import {
   Volume2,
   BookmarkPlus,
   Sparkles,
-  Loader2,
-  CheckCircle2,
-  Tv,
+  RefreshCw,
   Languages,
-  BookOpen,
   Repeat,
   Search,
-  X,
   ArrowLeft,
   Eye,
   EyeOff,
+  Youtube,
+  Video,
 } from 'lucide-react'
 import { InteractiveSentence } from './InteractiveSentence'
 import { QuickWordLookupModal } from './QuickWordLookupModal'
@@ -38,16 +36,23 @@ declare global {
 type VideoSubtitleLearnViewProps = {
   onSaveWordToVault?: (term: string, meaning: string, details?: LanguageDetail) => void
   onSearchWordGlobal?: (word: string) => void
+  onStudyModeChange?: (isStudying: boolean) => void
 }
 
 export function VideoSubtitleLearnView({
   onSaveWordToVault,
   onSearchWordGlobal,
+  onStudyModeChange,
 }: VideoSubtitleLearnViewProps) {
   const { showToast } = useToast()
 
   // Navigation: null = Gallery View; VideoLesson = Study Room View
   const [activeLesson, setActiveLesson] = useState<VideoLesson | null>(null)
+
+  // Notify parent component about study mode state
+  useEffect(() => {
+    onStudyModeChange?.(Boolean(activeLesson))
+  }, [activeLesson, onStudyModeChange])
 
   // Gallery Filters State
   const [activeLangFilter, setActiveLangFilter] = useState<'ALL' | 'en' | 'zh'>('ALL')
@@ -72,7 +77,6 @@ export function VideoSubtitleLearnView({
   const playerRef = useRef<any>(null)
   const playerContainerId = 'yt-study-room-iframe'
   const activeCueRef = useRef<HTMLDivElement | null>(null)
-  const isPlayerReadyRef = useRef(false)
 
   // Filter lessons for Gallery View
   const filteredLessons = useMemo(() => {
@@ -99,7 +103,7 @@ export function VideoSubtitleLearnView({
     })
   }, [activeLangFilter, activeCategoryFilter, searchQuery])
 
-  // Subtitle cue index matching current video time with smooth boundary bridging
+  // Subtitle cue index matching current video time
   const currentCues = activeLesson?.cues || []
   const activeCueIndex = useMemo(() => {
     if (!currentCues.length) return -1
@@ -110,28 +114,9 @@ export function VideoSubtitleLearnView({
     })
   }, [currentCues, currentTime])
 
-  // Load YouTube IFrame API script once
+  // Initialize YouTube Player
   useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement('script')
-      tag.src = 'https://www.youtube.com/iframe_api'
-      const firstScriptTag = document.getElementsByTagName('script')[0]
-      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag)
-    }
-  }, [])
-
-  // Initialize YouTube Player when entering Study Room
-  useEffect(() => {
-    if (!activeLesson) {
-      if (playerRef.current) {
-        try {
-          playerRef.current.destroy()
-        } catch {}
-        playerRef.current = null
-      }
-      isPlayerReadyRef.current = false
-      return
-    }
+    if (!activeLesson) return
 
     let isMounted = true
     let pollInterval: any = null
@@ -139,69 +124,60 @@ export function VideoSubtitleLearnView({
     const initPlayer = () => {
       if (!isMounted || !document.getElementById(playerContainerId)) return
 
-      if (playerRef.current) {
+      if (window.YT && window.YT.Player) {
         try {
-          playerRef.current.destroy()
-        } catch {}
-      }
-
-      try {
-        playerRef.current = new window.YT.Player(playerContainerId, {
-          videoId: activeLesson.videoId,
-          playerVars: {
-            autoplay: 1,
-            enablejsapi: 1,
-            rel: 0,
-            modestbranding: 1,
-            playsinline: 1,
-          },
-          events: {
-            onReady: () => {
-              if (!isMounted) return
-              isPlayerReadyRef.current = true
-              setIsPlaying(true)
+          playerRef.current = new window.YT.Player(playerContainerId, {
+            videoId: activeLesson.videoId,
+            playerVars: {
+              autoplay: 1,
+              controls: 1,
+              rel: 0,
+              modestbranding: 1,
+              playsinline: 1,
+              enablejsapi: 1,
+              origin: window.location.origin,
             },
-            onStateChange: (event: any) => {
-              if (!isMounted) return
-              // 1 = PLAYING, 2 = PAUSED, 0 = ENDED, 3 = BUFFERING
-              if (event.data === 1) {
+            events: {
+              onReady: () => {
+                if (!isMounted) return
+                playerRef.current?.setPlaybackRate(playbackSpeed)
                 setIsPlaying(true)
-              } else if (event.data === 2 || event.data === 0) {
-                setIsPlaying(false)
-              }
+              },
+              onStateChange: (event: any) => {
+                if (!isMounted) return
+                if (event.data === 1) {
+                  setIsPlaying(true)
+                } else if (event.data === 2 || event.data === 0) {
+                  setIsPlaying(false)
+                }
+              },
             },
-          },
-        })
-      } catch (err) {
-        console.warn('YT Player init fallback:', err)
-      }
-    }
+          })
 
-    if (window.YT && window.YT.Player) {
-      setTimeout(initPlayer, 50)
-    } else {
-      window.onYouTubeIframeAPIReady = () => {
-        initPlayer()
-      }
-    }
+          pollInterval = setInterval(() => {
+            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+              try {
+                const time = playerRef.current.getCurrentTime() || 0
+                setCurrentTime(time)
 
-    // High frequency time sync poller (every 200ms)
-    pollInterval = setInterval(() => {
-      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-        try {
-          const t = playerRef.current.getCurrentTime() || 0
-          setCurrentTime(t)
-
-          // Check if looping a specific sentence
-          if (loopingCueIndex !== null && currentCues[loopingCueIndex]) {
-            const cue = currentCues[loopingCueIndex]
-            if (t >= cue.end) {
-              playerRef.current.seekTo(cue.start, true)
+                if (loopingCueIndex !== null && currentCues[loopingCueIndex]) {
+                  const targetCue = currentCues[loopingCueIndex]
+                  if (time >= targetCue.end) {
+                    playerRef.current.seekTo(targetCue.start, true)
+                  }
+                }
+              } catch {}
             }
-          }
-        } catch {}
+          }, 200)
+        } catch (e) {
+          console.warn('Lỗi khởi tạo YouTube Player:', e)
+        }
+      } else {
+        setTimeout(initPlayer, 250)
       }
-    }, 200)
+    }
+
+    initPlayer()
 
     return () => {
       isMounted = false
@@ -212,26 +188,87 @@ export function VideoSubtitleLearnView({
         } catch {}
         playerRef.current = null
       }
-      isPlayerReadyRef.current = false
     }
-  }, [activeLesson, loopingCueIndex])
+  }, [activeLesson?.videoId, loopingCueIndex])
 
-  // Auto-scroll to active subtitle cue
+  // Auto-scroll subtitle card
   useEffect(() => {
     if (autoScroll && activeCueRef.current) {
-      activeCueRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      activeCueRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
     }
   }, [activeCueIndex, autoScroll])
 
-  // Extract YouTube ID
-  const extractVideoId = (url: string) => {
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
-    return match ? match[1] : null
+  // Seek to cue start time
+  const handleSeekToCue = (startTime: number, cueIndex?: number) => {
+    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+      playerRef.current.seekTo(startTime, true)
+      playerRef.current.playVideo()
+      setIsPlaying(true)
+      if (cueIndex !== undefined && loopingCueIndex !== null && loopingCueIndex !== cueIndex) {
+        setLoopingCueIndex(null)
+      }
+    }
   }
 
-  // Handle Custom YouTube Link Submission
-  const handleFetchCustomYoutube = async () => {
-    const vid = extractVideoId(customYoutubeUrl.trim())
+  // Toggle playback play/pause
+  const handleTogglePlay = () => {
+    if (!playerRef.current) return
+    try {
+      if (isPlaying) {
+        playerRef.current.pauseVideo()
+        setIsPlaying(false)
+      } else {
+        playerRef.current.playVideo()
+        setIsPlaying(true)
+      }
+    } catch {}
+  }
+
+  // Change playback speed
+  const handleChangeSpeed = () => {
+    const speeds = [0.75, 1, 1.25, 1.5]
+    const nextIdx = (speeds.indexOf(playbackSpeed) + 1) % speeds.length
+    const nextSpeed = speeds[nextIdx]
+    setPlaybackSpeed(nextSpeed)
+    if (playerRef.current && typeof playerRef.current.setPlaybackRate === 'function') {
+      playerRef.current.setPlaybackRate(nextSpeed)
+    }
+    showToast(`⚡ Tốc độ phát: ${nextSpeed}x`)
+  }
+
+  // Toggle single cue loop
+  const handleToggleLoop = (cueIndex: number) => {
+    if (loopingCueIndex === cueIndex) {
+      setLoopingCueIndex(null)
+      showToast('Đã tắt lặp câu')
+    } else {
+      setLoopingCueIndex(cueIndex)
+      const cue = currentCues[cueIndex]
+      if (cue) {
+        handleSeekToCue(cue.start)
+        showToast(`🔁 Đang lặp câu #${cueIndex + 1}`)
+      }
+    }
+  }
+
+  // Handle custom YouTube URL
+  const handleLoadCustomUrl = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const url = customYoutubeUrl.trim()
+    if (!url) return
+
+    let vid = ''
+    const match1 = url.match(/[?&]v=([^&#]+)/)
+    const match2 = url.match(/youtu\.be\/([^?&#]+)/)
+    const match3 = url.match(/youtube\.com\/embed\/([^?&#]+)/)
+    if (match1) vid = match1[1]
+    else if (match2) vid = match2[1]
+    else if (match3) vid = match3[1]
+    else if (/^[a-zA-Z0-9_-]{11}$/.test(url)) vid = url
+
     if (!vid) {
       showToast('⚠️ Vui lòng nhập đường link YouTube hợp lệ!', 'info')
       return
@@ -270,182 +307,119 @@ export function VideoSubtitleLearnView({
     }
   }
 
-  // Seek video on user tap
-  const handleSeekToCue = (timeSec: number, index?: number) => {
-    setCurrentTime(timeSec)
-    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-      try {
-        playerRef.current.seekTo(timeSec, true)
-        playerRef.current.playVideo()
-      } catch {}
-    }
-    if (index !== undefined && loopingCueIndex === index) {
-      setLoopingCueIndex(null)
-    }
-  }
-
-  // Toggle Play / Pause
-  const handleTogglePlay = () => {
-    if (playerRef.current) {
-      try {
-        if (isPlaying) {
-          playerRef.current.pauseVideo()
-        } else {
-          playerRef.current.playVideo()
-        }
-      } catch {}
-    }
-    setIsPlaying(!isPlaying)
-  }
-
-  // Change Playback Speed
-  const handleChangeSpeed = () => {
-    const nextSpeed = playbackSpeed === 1 ? 0.75 : playbackSpeed === 0.75 ? 1.25 : 1
-    setPlaybackSpeed(nextSpeed)
-    if (playerRef.current && typeof playerRef.current.setPlaybackRate === 'function') {
-      try {
-        playerRef.current.setPlaybackRate(nextSpeed)
-      } catch {}
-    }
-    showToast(`Tốc độ: ${nextSpeed}x`, 'info')
-  }
-
-  // Toggle Looping Cue
-  const handleToggleLoop = (index: number) => {
-    if (loopingCueIndex === index) {
-      setLoopingCueIndex(null)
-      showToast('Đã tắt lặp câu', 'info')
-    } else {
-      setLoopingCueIndex(index)
-      handleSeekToCue(currentCues[index].start)
-      showToast(`Đang lặp câu #${index + 1} để luyện nói`, 'success')
-    }
-  }
-
   // =========================================================================
-  // VIEW 1: DISCOVERY / GALLERY VIEW
+  // VIEW 1: GALLERY & BROWSE LESSONS
   // =========================================================================
   if (!activeLesson) {
     return (
-      <div className="video-gallery-container">
-        {/* 1. Header Hero / Stats Banner */}
-        <div className="video-gallery-hero">
-          <div className="video-gallery-hero-text">
-            <h2 className="video-gallery-title">
-              <Sparkles size={20} color="#ec4899" />
-              <span>Học Ngoại Ngữ Qua Video</span>
-            </h2>
-            <p className="video-gallery-desc">
-              Phát video khớp lời từng giây · Tra cứu từ vựng tức thì · Luyện phát âm cùng người bản xứ
-            </p>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="video-gallery-stats">
-            <span className="gallery-stat-badge">
-              <strong>{VIDEO_LESSONS_DATABASE.length}</strong> bài học mẫu
-            </span>
-            <span className="gallery-stat-badge">
-              <strong>8</strong> chủ đề
-            </span>
-          </div>
-        </div>
-
-        {/* 2. Custom YouTube Link Input */}
-        <div className="video-custom-input-card">
-          <div className="video-custom-input-inner">
-            <Tv size={18} color="#a855f7" />
+      <div className="video-learn-container">
+        <form onSubmit={handleLoadCustomUrl} className="video-custom-url-bar">
+          <div className="video-custom-url-input-wrap">
+            <Youtube size={18} className="video-custom-url-icon" />
             <input
               type="text"
               value={customYoutubeUrl}
               onChange={(e) => setCustomYoutubeUrl(e.target.value)}
-              placeholder="Dán link YouTube (Anh/Trung) để tạo bài học riêng…"
+              placeholder="Dán link YouTube (https://youtube.com/watch?v=...) để học video bất kỳ..."
               className="video-custom-url-input"
             />
-            <button
-              type="button"
-              className="video-custom-submit-btn"
-              onClick={handleFetchCustomYoutube}
-              disabled={isLoadingCustomUrl || !customYoutubeUrl.trim()}
-            >
-              {isLoadingCustomUrl ? <Loader2 size={14} className="tv-spin" /> : <Sparkles size={14} />}
-              <span>Nạp Video</span>
-            </button>
+            {customYoutubeUrl && (
+              <button
+                type="button"
+                className="video-custom-url-clear"
+                onClick={() => setCustomYoutubeUrl('')}
+              >
+                ✕
+              </button>
+            )}
           </div>
-        </div>
+          <button
+            type="submit"
+            className="video-custom-url-btn"
+            disabled={isLoadingCustomUrl || !customYoutubeUrl.trim()}
+          >
+            {isLoadingCustomUrl ? <RefreshCw size={14} className="spin-slow" /> : <Sparkles size={14} />}
+            <span>{isLoadingCustomUrl ? 'Đang nạp...' : 'Tải phụ đề AI'}</span>
+          </button>
+        </form>
 
-        {/* 3. Language Selector & Search Box */}
-        <div className="video-filter-toolbar">
-          {/* Language Selector */}
-          <div className="video-lang-toggle-group">
+        <div className="video-filter-section">
+          <div className="video-lang-filter-pills">
             <button
               type="button"
-              className={`video-lang-btn ${activeLangFilter === 'ALL' ? 'active' : ''}`}
+              className={`video-lang-pill ${activeLangFilter === 'ALL' ? 'active' : ''}`}
               onClick={() => setActiveLangFilter('ALL')}
             >
-              Tất cả ({VIDEO_LESSONS_DATABASE.length})
+              🌟 Tất cả ({VIDEO_LESSONS_DATABASE.length})
             </button>
             <button
               type="button"
-              className={`video-lang-btn ${activeLangFilter === 'en' ? 'active' : ''}`}
+              className={`video-lang-pill ${activeLangFilter === 'en' ? 'active' : ''}`}
               onClick={() => setActiveLangFilter('en')}
             >
-              🇺🇸 Tiếng Anh
+              🇺🇸 Tiếng Anh ({VIDEO_LESSONS_DATABASE.filter((x) => x.lang === 'en').length})
             </button>
             <button
               type="button"
-              className={`video-lang-btn ${activeLangFilter === 'zh' ? 'active' : ''}`}
+              className={`video-lang-pill ${activeLangFilter === 'zh' ? 'active' : ''}`}
               onClick={() => setActiveLangFilter('zh')}
             >
-              🇨🇳 Tiếng Trung
+              🇨🇳 Tiếng Trung ({VIDEO_LESSONS_DATABASE.filter((x) => x.lang === 'zh').length})
             </button>
           </div>
 
-          {/* Search Box */}
-          <div className="video-gallery-search-box">
-            <Search size={15} color="var(--text-muted)" />
+          <div className="video-search-wrap">
+            <Search size={15} className="video-search-icon" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm theo chủ đề, tiêu đề, từ khóa..."
-              className="video-gallery-search-input"
+              placeholder="Tìm kiếm chủ đề, lời thoại, bài học..."
+              className="video-search-input"
             />
             {searchQuery && (
               <button
                 type="button"
-                className="video-gallery-search-clear"
+                className="video-search-clear"
                 onClick={() => setSearchQuery('')}
               >
-                <X size={13} />
+                ✕
               </button>
             )}
           </div>
         </div>
 
-        {/* 4. Horizontal Category Filter Pills */}
-        <div className="video-category-scroll-bar">
+        <div className="video-category-scroll-wrap">
           {VIDEO_CATEGORIES.map((cat) => {
-            const isCatActive = activeCategoryFilter === cat.id
+            const isSelected = activeCategoryFilter === cat.id
+            const count =
+              cat.id === 'ALL'
+                ? VIDEO_LESSONS_DATABASE.length
+                : VIDEO_LESSONS_DATABASE.filter((v) => v.category === cat.label).length
+
+            if (count === 0 && cat.id !== 'ALL') return null
+
             return (
               <button
                 key={cat.id}
                 type="button"
-                className={`video-category-pill ${isCatActive ? 'active' : ''}`}
+                className={`video-category-chip ${isSelected ? 'active' : ''}`}
                 onClick={() => setActiveCategoryFilter(cat.id)}
               >
-                {cat.label}
+                <span className="cat-icon">{cat.icon}</span>
+                <span className="cat-label">{cat.label}</span>
+                <span className="cat-count">({count})</span>
               </button>
             )
           })}
         </div>
 
-        {/* 5. Video Lessons Grid Gallery */}
         <div className="video-gallery-grid">
           {filteredLessons.length === 0 ? (
             <div className="video-empty-state">
-              <BookOpen size={36} color="var(--text-muted)" />
-              <p>Không tìm thấy bài học nào phù hợp với bộ lọc hiện tại.</p>
+              <Video size={44} color="#8b5cf6" style={{ margin: '0 auto 12px' }} />
+              <h3>Không tìm thấy bài học nào phù hợp</h3>
+              <p>Hãy thử tìm từ khóa khác hoặc xóa bộ lọc thể loại.</p>
               <button
                 type="button"
                 className="video-reset-filter-btn"
@@ -470,53 +444,26 @@ export function VideoSubtitleLearnView({
                   setLoopingCueIndex(null)
                   setCurrentTime(0)
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setActiveLesson(lesson)
-                    setLoopingCueIndex(null)
-                    setCurrentTime(0)
-                  }
-                }}
               >
-                {/* Thumbnail & Badges */}
                 <div className="video-card-thumb-wrap">
                   <img
                     src={`https://img.youtube.com/vi/${lesson.videoId}/mqdefault.jpg`}
                     alt={lesson.title}
                     className="video-card-thumb-img"
-                    loading="lazy"
-                    onError={(e) => {
-                      ;(e.target as HTMLElement).style.display = 'none'
-                    }}
                   />
                   <div className="video-card-thumb-overlay">
                     <div className="video-card-play-icon">
                       <Play size={22} fill="#ffffff" color="#ffffff" />
                     </div>
                   </div>
-                  <span className="video-card-lang-badge">
-                    {lesson.lang === 'zh' ? '🇨🇳 Tiếng Trung' : '🇺🇸 Tiếng Anh'}
-                  </span>
-                  {lesson.duration && (
-                    <span className="video-card-duration-badge">{lesson.duration}</span>
-                  )}
                 </div>
 
-                {/* Card Content */}
                 <div className="video-card-content">
-                  <div className="video-card-meta-row">
-                    <span className="video-card-category-tag">{lesson.category}</span>
-                    <span className="video-card-level-tag">{lesson.level}</span>
-                  </div>
-
                   <h3 className="video-card-title">{lesson.title}</h3>
-
-                  <div className="video-card-footer">
+                  <div className="video-card-meta">
+                    <span className="video-card-category-tag">{lesson.category}</span>
                     <span className="video-card-cues-count">
-                      <Languages size={13} /> {lesson.cues.length} câu song ngữ
-                    </span>
-                    <span className="video-card-action-btn">
-                      Học ngay <span style={{ marginLeft: 2 }}>→</span>
+                      <Languages size={13} /> {lesson.cues.length} câu
                     </span>
                   </div>
                 </div>
@@ -533,7 +480,6 @@ export function VideoSubtitleLearnView({
   // =========================================================================
   return (
     <div className="video-study-room-container">
-      {/* 1. Sticky Navigation Topbar */}
       <div className="video-study-topbar">
         <button
           type="button"
@@ -543,57 +489,49 @@ export function VideoSubtitleLearnView({
             setLoopingCueIndex(null)
           }}
         >
-          <ArrowLeft size={16} />
-          <span>Danh sách bài học</span>
+          <ArrowLeft size={15} />
+          <span>Quay lại</span>
         </button>
 
         <div className="video-study-title-group">
           <span className="video-study-cat-badge">{activeLesson.category}</span>
-          <h3 className="video-study-lesson-title">{activeLesson.title}</h3>
+          <span className="video-study-lesson-title" title={activeLesson.title}>{activeLesson.title}</span>
         </div>
 
-        {/* Subtitle Display Toggles */}
         <div className="video-study-toggles">
           <button
             type="button"
             className={`study-toggle-btn ${showVietnamese ? 'active' : ''}`}
             onClick={() => setShowVietnamese(!showVietnamese)}
-            title="Bật/tắt dịch tiếng Việt"
           >
             {showVietnamese ? <Eye size={13} /> : <EyeOff size={13} />}
-            <span>Dịch TV</span>
           </button>
           {activeLesson.lang === 'zh' && (
             <button
               type="button"
               className={`study-toggle-btn ${showPinyin ? 'active' : ''}`}
               onClick={() => setShowPinyin(!showPinyin)}
-              title="Bật/tắt phiên âm Pinyin"
             >
               {showPinyin ? <Eye size={13} /> : <EyeOff size={13} />}
-              <span>Pinyin</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. Main Player & Subtitle Script Split Screen */}
       <div className="video-study-split-grid">
-        {/* Left/Top: YouTube Player Container */}
         <div className="video-study-player-column">
           <div className="video-study-player-box">
             <div className="video-study-aspect">
               <div id={playerContainerId} className="yt-iframe-instance" />
             </div>
 
-            {/* Playback Control Bar */}
             <div className="video-study-control-bar">
               <button
                 type="button"
                 className="study-play-btn"
                 onClick={handleTogglePlay}
               >
-                {isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                {isPlaying ? <Pause size={14} /> : <Play size={14} />}
                 <span>{isPlaying ? 'Tạm dừng' : 'Phát tiếp'}</span>
               </button>
 
@@ -605,6 +543,17 @@ export function VideoSubtitleLearnView({
                 ⚡ {playbackSpeed}x
               </button>
 
+              {loopingCueIndex !== null && (
+                <button
+                  type="button"
+                  className="study-loop-active-badge"
+                  onClick={() => setLoopingCueIndex(null)}
+                  title="Tắt lặp câu"
+                >
+                  <Repeat size={11} /> Đang lặp #{loopingCueIndex + 1} ✕
+                </button>
+              )}
+
               <label className="study-autoscroll-label">
                 <input
                   type="checkbox"
@@ -613,53 +562,24 @@ export function VideoSubtitleLearnView({
                 />
                 <span>Tự cuộn</span>
               </label>
-
-              {loopingCueIndex !== null && (
-                <button
-                  type="button"
-                  className="study-loop-active-badge"
-                  onClick={() => setLoopingCueIndex(null)}
-                  title="Tắt chế độ lặp câu"
-                >
-                  <Repeat size={12} /> Đang lặp #{loopingCueIndex + 1} ✕
-                </button>
-              )}
-            </div>
-
-            {/* Subtitle Quality Notice */}
-            <div className="video-study-quality-note">
-              {activeLesson.isOfficial ? (
-                <span className="quality-pill official">
-                  <CheckCircle2 size={13} /> Phụ đề chuẩn gốc từ Video
-                </span>
-              ) : (
-                <span className="quality-pill ai">
-                  <Sparkles size={13} /> Phụ đề song ngữ thông minh AI
-                </span>
-              )}
-              <span className="quality-hint">💡 Chạm vào từng từ để tra nghĩa nhanh</span>
             </div>
           </div>
         </div>
 
-        {/* Right/Bottom: Synchronized Subtitle Script Stream */}
         <div className="video-study-script-column">
           <div className="video-study-script-card">
             <div className="video-study-script-header">
               <span className="study-script-header-title">
-                <Languages size={15} color="#ec4899" />
-                <span>Kịch Bản Lời Thoại Song Ngữ ({currentCues.length})</span>
+                <Languages size={14} color="#ec4899" />
+                <span>Lời thoại ({currentCues.length} câu)</span>
               </span>
-              <span className="study-script-hint">Bấm câu để nhảy tới đoạn nói</span>
+              <span className="study-script-hint">Chạm từ để tra • Chạm câu để nghe</span>
             </div>
 
             <div className="video-study-script-list">
               {currentCues.map((cue, index) => {
                 const isActive = index === activeCueIndex
                 const isLooping = index === loopingCueIndex
-                const min = Math.floor(cue.start / 60)
-                const sec = Math.floor(cue.start % 60)
-                const timeStr = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
 
                 return (
                   <div
@@ -668,37 +588,33 @@ export function VideoSubtitleLearnView({
                     className={`study-script-item ${isActive ? 'is-active' : ''} ${isLooping ? 'is-looping' : ''}`}
                     onClick={() => handleSeekToCue(cue.start, index)}
                   >
-                    {/* Timestamp & Per-line Action Toolbar */}
                     <div className="study-script-item-top">
-                      <span className="study-script-time">{timeStr}</span>
+                      <span className="study-script-time">
+                        {Math.floor(cue.start / 60)}:{(Math.floor(cue.start % 60)).toString().padStart(2, '0')}
+                      </span>
                       <div className="study-script-actions" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           className={`study-cue-btn ${isLooping ? 'active' : ''}`}
                           onClick={() => handleToggleLoop(index)}
-                          title="Lặp lại câu này để luyện nói"
                         >
                           <Repeat size={12} />
                         </button>
-
                         <button
                           type="button"
                           className="study-cue-btn"
                           onClick={() => playLanguageSpeech(cue.text, activeLesson.lang)}
-                          title="Nghe phát âm chuẩn"
                         >
                           <Volume2 size={12} />
                         </button>
-
                         {onSaveWordToVault && (
                           <button
                             type="button"
                             className="study-cue-btn"
                             onClick={() => {
                               onSaveWordToVault(cue.vi || cue.text, cue.text)
-                              showToast('Đã lưu câu vào Sổ tay!', 'success')
+                              showToast('Đã lưu!', 'success')
                             }}
-                            title="Lưu câu này vào Sổ tay"
                           >
                             <BookmarkPlus size={12} />
                           </button>
@@ -706,7 +622,6 @@ export function VideoSubtitleLearnView({
                       </div>
                     </div>
 
-                    {/* Interactive Text with Clickable Tokens */}
                     <div className="study-script-orig-text">
                       <InteractiveSentence
                         text={cue.text}
@@ -714,16 +629,8 @@ export function VideoSubtitleLearnView({
                         onWordClick={(w, l) => setLookupWord({ word: w, lang: l })}
                       />
                     </div>
-
-                    {/* Pinyin (For Chinese) */}
-                    {showPinyin && cue.pinyin && (
-                      <div className="study-script-pinyin-text">{cue.pinyin}</div>
-                    )}
-
-                    {/* Vietnamese Translation */}
-                    {showVietnamese && cue.vi && (
-                      <div className="study-script-vi-text">{cue.vi}</div>
-                    )}
+                    {showPinyin && cue.pinyin && <div className="study-script-pinyin-text">{cue.pinyin}</div>}
+                    {showVietnamese && cue.vi && <div className="study-script-vi-text">{cue.vi}</div>}
                   </div>
                 )
               })}
@@ -732,7 +639,6 @@ export function VideoSubtitleLearnView({
         </div>
       </div>
 
-      {/* Floating Interactive Quick Word Lookup Modal Popup */}
       {lookupWord && (
         <QuickWordLookupModal
           word={lookupWord.word}

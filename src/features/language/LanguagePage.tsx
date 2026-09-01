@@ -49,6 +49,7 @@ export function LanguagePage() {
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<'TRANSLATE' | 'VIDEO_LEARN' | 'VAULT' | 'PRACTICE'>('TRANSLATE')
+  const [isStudyingVideo, setIsStudyingVideo] = useState(false)
 
   // Search & Generator State
   const [inputText, setInputText] = useState('')
@@ -265,69 +266,73 @@ export function LanguagePage() {
 
   return (
     <div className="lang-page-container">
-      {/* 1. Header Banner (Compact Mobile) */}
-      <div className="lang-compact-header">
-        <div className="lang-compact-brand">
-          <div className="lang-hero-icon-wrap" style={{ width: 36, height: 36, borderRadius: 10 }}>
-            <Languages size={18} />
+      {/* 1. Header Banner (Compact Mobile) - Hidden when studying a video for maximum screen space */}
+      {(!isStudyingVideo || activeTab !== 'VIDEO_LEARN') && (
+        <div className="lang-compact-header">
+          <div className="lang-compact-brand">
+            <div className="lang-hero-icon-wrap" style={{ width: 36, height: 36, borderRadius: 10 }}>
+              <Languages size={18} />
+            </div>
+            <div>
+              <h1 className="lang-compact-title">Ngôn ngữ Song ngữ (Anh - Trung)</h1>
+              <p className="lang-compact-desc">Dịch ngữ cảnh & xem video người bản xứ phát âm câu thực tế</p>
+            </div>
           </div>
-          <div>
-            <h1 className="lang-compact-title">Ngôn ngữ Song ngữ (Anh - Trung)</h1>
-            <p className="lang-compact-desc">Dịch ngữ cảnh & xem video người bản xứ phát âm câu thực tế</p>
-          </div>
-        </div>
 
-        <div className="lang-compact-stats">
-          <span className="lang-compact-badge" title="Đã lưu vào sổ tay">
-            <BookOpen size={13} color="#8b5cf6" /> <b>{savedCards.length}</b> thẻ
-          </span>
-          <span className="lang-compact-badge" title="Đã thuộc">
-            <CheckCircle2 size={13} color="#10b981" /> <b>{learnedCount}</b> thuộc
-          </span>
-          {unlearnedCount > 0 && (
-            <span className="lang-compact-badge" title="Cần ôn tập">
-              <Circle size={13} color="#f59e0b" /> <b>{unlearnedCount}</b> ôn
+          <div className="lang-compact-stats">
+            <span className="lang-compact-badge" title="Đã lưu vào sổ tay">
+              <BookOpen size={13} color="#8b5cf6" /> <b>{savedCards.length}</b> thẻ
             </span>
-          )}
+            <span className="lang-compact-badge" title="Đã thuộc">
+              <CheckCircle2 size={13} color="#10b981" /> <b>{learnedCount}</b> thuộc
+            </span>
+            {unlearnedCount > 0 && (
+              <span className="lang-compact-badge" title="Cần ôn tập">
+                <Circle size={13} color="#f59e0b" /> <b>{unlearnedCount}</b> ôn
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 2. Navigation Tabs (Compact Segment Bar) */}
-      <div className="lang-nav-tabs">
-        <button
-          type="button"
-          className={`lang-nav-tab-btn ${activeTab === 'TRANSLATE' ? 'active' : ''}`}
-          onClick={() => setActiveTab('TRANSLATE')}
-        >
-          <Sparkles size={14} /> <span>Tra Cứu</span>
-        </button>
-        <button
-          type="button"
-          className={`lang-nav-tab-btn ${activeTab === 'VIDEO_LEARN' ? 'active' : ''}`}
-          onClick={() => setActiveTab('VIDEO_LEARN')}
-        >
-          <Video size={14} /> <span>Học Qua Video</span>
-        </button>
-        <button
-          type="button"
-          className={`lang-nav-tab-btn ${activeTab === 'VAULT' ? 'active' : ''}`}
-          onClick={() => setActiveTab('VAULT')}
-        >
-          <BookOpen size={14} /> <span>Sổ Tay ({savedCards.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`lang-nav-tab-btn ${activeTab === 'PRACTICE' ? 'active' : ''}`}
-          onClick={() => {
-            setActiveTab('PRACTICE')
-            setIsPracticeFlipped(false)
-            setPracticeIndex(0)
-          }}
-          disabled={savedCards.length === 0}
-        >
-          <Shuffle size={14} /> <span>Flashcard</span>
-        </button>
-      </div>
+      {/* 2. Navigation Tabs (Compact Segment Bar) - Hidden when studying a video */}
+      {(!isStudyingVideo || activeTab !== 'VIDEO_LEARN') && (
+        <div className="lang-nav-tabs">
+          <button
+            type="button"
+            className={`lang-nav-tab-btn ${activeTab === 'TRANSLATE' ? 'active' : ''}`}
+            onClick={() => setActiveTab('TRANSLATE')}
+          >
+            <Sparkles size={14} /> <span>Tra Cứu</span>
+          </button>
+          <button
+            type="button"
+            className={`lang-nav-tab-btn ${activeTab === 'VIDEO_LEARN' ? 'active' : ''}`}
+            onClick={() => setActiveTab('VIDEO_LEARN')}
+          >
+            <Video size={14} /> <span>Học Qua Video</span>
+          </button>
+          <button
+            type="button"
+            className={`lang-nav-tab-btn ${activeTab === 'VAULT' ? 'active' : ''}`}
+            onClick={() => setActiveTab('VAULT')}
+          >
+            <BookOpen size={14} /> <span>Sổ Tay ({savedCards.length})</span>
+          </button>
+          <button
+            type="button"
+            className={`lang-nav-tab-btn ${activeTab === 'PRACTICE' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('PRACTICE')
+              setIsPracticeFlipped(false)
+              setPracticeIndex(0)
+            }}
+            disabled={savedCards.length === 0}
+          >
+            <Shuffle size={14} /> <span>Flashcard</span>
+          </button>
+        </div>
+      )}
 
       {/* 3. TAB 1: TRA CỨU & TẠO CÂU MẪU + VIDEO NGƯỜI BẢN XỨ */}
       {activeTab === 'TRANSLATE' && (
@@ -691,6 +696,7 @@ export function LanguagePage() {
       {/* 4. TAB 2: HỌC QUA VIDEO CÓ PHỤ ĐỀ SONG NGỮ KHỚP LỜI */}
       {activeTab === 'VIDEO_LEARN' && (
         <VideoSubtitleLearnView
+          onStudyModeChange={setIsStudyingVideo}
           onSaveWordToVault={(term, meaning, details) => {
             const newCard: SavedLanguageCard = {
               id: Math.random().toString(36).slice(2, 10),
