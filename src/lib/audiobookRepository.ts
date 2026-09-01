@@ -163,3 +163,58 @@ export async function deleteAudiobook(bookId: string): Promise<void> {
     }
   }
 }
+
+/**
+ * Quét toàn bộ thư viện sách nói và tự động xóa các cuốn sách không có âm thanh / link rác (dẫn tới trang HTML)
+ */
+export async function cleanUnplayableAudiobooks(): Promise<{ removedCount: number; remaining: Audiobook[] }> {
+  const currentList = await loadAudiobooks()
+  const toKeep: Audiobook[] = []
+  const toRemoveIds: string[] = []
+
+  for (const book of currentList) {
+    const tracks = book.tracks || []
+    // Kiểm tra xem có track nào là audio thật không (không phải HTML page URL, không rỗng)
+    const validTracks = tracks.filter((t) => {
+      const u = (t.url || '').trim().toLowerCase()
+      if (!u.startsWith('http')) return false
+      // Nếu URL dẫn tới trang web HTML (vd: dilib.vn/cong-vien-trung-tam/ hoặc .html) và không có đuôi/param audio
+      if (
+        (u.includes('dilib.vn') || u.includes('thuviensach.vn') || u.includes('dtv-ebook.com.vn')) &&
+        !u.includes('.mp3') &&
+        !u.includes('.m4a') &&
+        !u.includes('.aac') &&
+        !u.includes('.wav') &&
+        !u.includes('.ogg') &&
+        !u.includes('audio') &&
+        !u.includes('stream')
+      ) {
+        return false
+      }
+      return true
+    })
+
+    if (validTracks.length === 0) {
+      toRemoveIds.push(book.id)
+    } else {
+      toKeep.push({ ...book, tracks: validTracks })
+    }
+  }
+
+  if (toRemoveIds.length > 0) {
+    saveLocalAudiobooks(toKeep)
+    if (supabase) {
+      try {
+        await supabase
+          .from('media_items')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', toRemoveIds)
+      } catch (err) {
+        console.warn('[audiobookRepository] Lỗi xóa sách lỗi trên Supabase:', err)
+      }
+    }
+  }
+
+  return { removedCount: toRemoveIds.length, remaining: toKeep }
+}
+

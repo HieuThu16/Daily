@@ -911,6 +911,21 @@ export async function probeAudioTrackUrl(audioUrl: string): Promise<boolean> {
   const trimmed = audioUrl.trim()
   if (!trimmed || trimmed.length < 8) return false
 
+  const lower = trimmed.toLowerCase()
+  // Loại trừ ngay lập tức các link trang web HTML
+  if (
+    (lower.includes('dilib.vn') || lower.includes('thuviensach.vn') || lower.includes('dtv-ebook.com.vn')) &&
+    !lower.includes('.mp3') &&
+    !lower.includes('.m4a') &&
+    !lower.includes('.aac') &&
+    !lower.includes('.wav') &&
+    !lower.includes('.ogg') &&
+    !lower.includes('audio') &&
+    !lower.includes('stream')
+  ) {
+    return false
+  }
+
   // Chuẩn hóa giao thức HTTPS
   let probeUrl = trimmed
   if (probeUrl.startsWith('http://')) {
@@ -931,9 +946,9 @@ export async function probeAudioTrackUrl(audioUrl: string): Promise<boolean> {
       signal: controller.signal,
     })
     clearTimeout(timeout)
-    if (res.ok || res.status === 206 || res.status === 302 || res.status === 301) {
-      const cType = res.headers.get('content-type') || ''
-      if (!cType.includes('text/html') || res.status === 206) {
+    if (res.ok || res.status === 206) {
+      const cType = (res.headers.get('content-type') || '').toLowerCase()
+      if (cType.includes('audio') || cType.includes('octet-stream') || res.status === 206) {
         return true
       }
     }
@@ -941,7 +956,7 @@ export async function probeAudioTrackUrl(audioUrl: string): Promise<boolean> {
 
   // 2. Thử qua backend audio proxy
   try {
-    const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(probeUrl)}`
+    const proxyUrl = `/api/link-preview?audio=1&url=${encodeURIComponent(probeUrl)}`
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 4000)
     const res = await apiFetch(proxyUrl, {
@@ -951,12 +966,15 @@ export async function probeAudioTrackUrl(audioUrl: string): Promise<boolean> {
     })
     clearTimeout(timeout)
     if (res.ok || res.status === 206) {
-      return true
+      const cType = (res.headers.get('content-type') || '').toLowerCase()
+      if (cType.includes('audio') || cType.includes('octet-stream') || res.status === 206) {
+        return true
+      }
     }
   } catch {}
 
-  // 3. Fallback: Nếu URL có đuôi mp3 / m4a rõ ràng trên domain tin cậy thì chấp nhận
-  if (probeUrl.match(/\.(mp3|m4a|aac|wav|ogg)(?:\?.*)?$/i) && (probeUrl.includes('dilib') || probeUrl.includes('dtv-ebook') || probeUrl.includes('google') || probeUrl.includes('cdn'))) {
+  // 3. Fallback: Nếu URL có đuôi mp3 / m4a rõ ràng
+  if (probeUrl.match(/\.(mp3|m4a|aac|wav|ogg)(?:\?.*)?$/i)) {
     return true
   }
 

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { Audiobook, AudiobookTrack } from '../../types/audiobook'
 import { updateAudiobookProgress, getAudiobookProgress } from '../../lib/audiobookProgress'
+import { deleteAudiobook } from '../../lib/audiobookRepository'
 import { formatDurationHuman } from '../../lib/dilibCrawler'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { useToast } from '../ToastContext'
@@ -38,7 +39,7 @@ export function getPlayableAudioUrl(rawUrl: string, forceProxy: boolean = false)
     u = u.replace('http://', 'https://')
   }
   if (forceProxy || u.includes('dtv-ebook.com.vn') || u.includes('dilib.vn')) {
-    return `/api/audio-proxy?url=${encodeURIComponent(u)}`
+    return `/api/link-preview?audio=1&url=${encodeURIComponent(u)}`
   }
   return u
 }
@@ -48,17 +49,20 @@ export function AudiobookPlayerModal({
   initialTrackIndex = 0,
   isOpen,
   onClose,
+  onDeleted,
 }: {
   audiobook: Audiobook | null
   initialTrackIndex?: number
   isOpen: boolean
   onClose: () => void
+  onDeleted?: (id: string) => void
 }) {
   const { showToast } = useToast()
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const [currentTrackIndex, setCurrentTrackIndex] = useState(initialTrackIndex)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [hasPlaybackError, setHasPlaybackError] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [playbackRate, setPlaybackRate] = useState(1)
@@ -89,6 +93,7 @@ export function AudiobookPlayerModal({
   useEffect(() => {
     if (!audioRef.current || !currentTrack) return
     setUseProxyFallback(false)
+    setHasPlaybackError(false)
     const playUrl = getPlayableAudioUrl(currentTrack.url, false)
     audioRef.current.src = playUrl
     audioRef.current.load()
@@ -99,9 +104,13 @@ export function AudiobookPlayerModal({
         if (audioRef.current && audioRef.current.src !== proxyUrl) {
           audioRef.current.src = proxyUrl
           audioRef.current.load()
-          void audioRef.current.play().catch(() => setIsPlaying(false))
+          void audioRef.current.play().catch(() => {
+            setIsPlaying(false)
+            setHasPlaybackError(true)
+          })
         } else {
           setIsPlaying(false)
+          setHasPlaybackError(true)
         }
       })
     }
@@ -110,12 +119,13 @@ export function AudiobookPlayerModal({
   // Xử lý lỗi phát audio: Tự động chuyển sang audio proxy
   const handleAudioError = () => {
     if (!currentTrack || useProxyFallback) {
+      setHasPlaybackError(true)
       showToast('⚠️ Không thể tải file âm thanh này.', 'error')
       setIsPlaying(false)
       return
     }
 
-    console.warn('[AudiobookPlayer] Direct play error, switching to /api/audio-proxy...')
+    console.warn('[AudiobookPlayer] Direct play error, switching to /api/link-preview proxy...')
     setUseProxyFallback(true)
     const proxyUrl = getPlayableAudioUrl(currentTrack.url, true)
     if (audioRef.current) {
@@ -125,7 +135,10 @@ export function AudiobookPlayerModal({
         audioRef.current
           .play()
           .then(() => setIsPlaying(true))
-          .catch(() => setIsPlaying(false))
+          .catch(() => {
+            setIsPlaying(false)
+            setHasPlaybackError(true)
+          })
       }
     }
   }
@@ -133,6 +146,7 @@ export function AudiobookPlayerModal({
   // Play / Pause
   const togglePlay = () => {
     if (!audioRef.current) return
+    setHasPlaybackError(false)
     if (isPlaying) {
       audioRef.current.pause()
       setIsPlaying(false)
@@ -154,11 +168,13 @@ export function AudiobookPlayerModal({
                 .then(() => setIsPlaying(true))
                 .catch(() => {
                   setIsPlaying(false)
+                  setHasPlaybackError(true)
                   showToast('Không thể phát file âm thanh này.', 'error')
                 })
             }
           } else {
             setIsPlaying(false)
+            setHasPlaybackError(true)
             showToast('Không thể phát audio này.', 'info')
           }
         })
@@ -424,6 +440,50 @@ export function AudiobookPlayerModal({
               </span>
             )}
           </div>
+
+          {hasPlaybackError && (
+            <div
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 12,
+                padding: '8px 12px',
+                margin: '10px 0 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                fontSize: '0.78rem',
+                color: '#fca5a5',
+              }}
+            >
+              <span>⚠️ Link audio bị hỏng hoặc không tồn tại.</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm(`Bạn có muốn xóa cuốn "${audiobook.title}" khỏi thư viện không?`)) {
+                    await deleteAudiobook(audiobook.id)
+                    showToast(`Đã xóa cuốn "${audiobook.title}" khỏi thư viện`)
+                    onClose()
+                    if (onDeleted) onDeleted(audiobook.id)
+                  }
+                }}
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontSize: '0.72rem',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                🗑️ Xóa sách hỏng
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Interactive Seek Bar */}

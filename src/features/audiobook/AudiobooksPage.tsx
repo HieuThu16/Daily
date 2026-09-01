@@ -9,11 +9,12 @@ import {
   BarChart3,
 } from 'lucide-react'
 import type { Audiobook } from '../../types/audiobook'
-import { loadAudiobooks, deleteAudiobook } from '../../lib/audiobookRepository'
+import { loadAudiobooks, deleteAudiobook, cleanUnplayableAudiobooks } from '../../lib/audiobookRepository'
 import { useAudiobookProgressMap } from '../../lib/audiobookProgress'
 import { formatDurationHuman } from '../../lib/dilibCrawler'
 import { DilibCrawlerModal } from './DilibCrawlerModal'
 import { AudiobookPlayerModal } from './AudiobookPlayerModal'
+import { InAppBookReaderModal } from './InAppBookReaderModal'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { useToast } from '../ToastContext'
 import './audiobook.css'
@@ -24,6 +25,7 @@ export function AudiobooksPage() {
 
   const [audiobooks, setAudiobooks] = useState<Audiobook[]>([])
   const [loading, setLoading] = useState(true)
+  const [cleaning, setCleaning] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedGenre, setSelectedGenre] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'IN_PROGRESS' | 'PLANNED' | 'COMPLETED'>('ALL')
@@ -32,12 +34,32 @@ export function AudiobooksPage() {
   const [showCrawlerModal, setShowCrawlerModal] = useState(false)
   const [crawlerInitialTab, setCrawlerInitialTab] = useState<'COUNT' | 'CATEGORY' | 'AUTHOR' | 'SEARCH' | 'HISTORY'>('COUNT')
   const [activePlayerBook, setActivePlayerBook] = useState<Audiobook | null>(null)
+  const [activeReaderBook, setActiveReaderBook] = useState<Audiobook | null>(null)
 
   const reload = async () => {
     setLoading(true)
     const list = await loadAudiobooks()
     setAudiobooks(list)
     setLoading(false)
+  }
+
+  const handleCleanBrokenBooks = async () => {
+    if (cleaning) return
+    if (!window.confirm('Bạn có chắc chắn muốn quét và xóa toàn bộ các cuốn sách không phát được âm thanh?')) return
+    setCleaning(true)
+    try {
+      const res = await cleanUnplayableAudiobooks()
+      setAudiobooks(res.remaining)
+      if (res.removedCount > 0) {
+        showToast(`🧹 Đã xóa thành công ${res.removedCount} cuốn sách không có âm thanh!`)
+      } else {
+        showToast('✨ Thư viện sạch sẽ! Không phát hiện sách nào bị lỗi âm thanh.', 'info')
+      }
+    } catch (err) {
+      showToast('Lỗi khi dọn dẹp sách: ' + String(err), 'error')
+    } finally {
+      setCleaning(false)
+    }
   }
 
   useEffect(() => {
@@ -234,6 +256,17 @@ export function AudiobooksPage() {
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          className="audiobooks-clean-btn"
+          onClick={handleCleanBrokenBooks}
+          disabled={cleaning}
+          title="Tự động quét và xóa tất cả sách nói không phát được âm thanh trong thư viện"
+        >
+          <Trash2 size={14} />
+          <span>{cleaning ? 'Đang quét...' : 'Dọn sách lỗi'}</span>
+        </button>
       </div>
 
       {/* Filter Chips Thể Loại */}
@@ -359,16 +392,15 @@ export function AudiobooksPage() {
                       title="Xem chung cùng người thân"
                     />
 
-                    {book.readbookUrl && (
-                      <a
-                        href={book.readbookUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    {(book.readbookUrl || book.pdfUrl) && (
+                      <button
+                        type="button"
                         className="audiobook-btn-sub"
-                        title="Đọc sách PDF online"
+                        onClick={() => setActiveReaderBook(book)}
+                        title="Đọc sách PDF trực tiếp trong app"
                       >
                         <BookOpen size={15} />
-                      </a>
+                      </button>
                     )}
 
                     <button
@@ -400,6 +432,14 @@ export function AudiobooksPage() {
         audiobook={activePlayerBook}
         isOpen={Boolean(activePlayerBook)}
         onClose={() => setActivePlayerBook(null)}
+        onDeleted={(id) => setAudiobooks((prev) => prev.filter((b) => b.id !== id))}
+      />
+
+      {/* In-App Book & PDF Reader Modal (Đọc sách trực tiếp trong app không chuyển ra web ngoài) */}
+      <InAppBookReaderModal
+        book={activeReaderBook}
+        isOpen={Boolean(activeReaderBook)}
+        onClose={() => setActiveReaderBook(null)}
       />
     </div>
   )
