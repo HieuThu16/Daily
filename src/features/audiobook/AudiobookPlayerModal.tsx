@@ -12,6 +12,7 @@ import {
   ChevronDown,
   X,
   Sparkles,
+  Trash2,
 } from 'lucide-react'
 import type { Audiobook, AudiobookTrack } from '../../types/audiobook'
 import { updateAudiobookProgress, getAudiobookProgress } from '../../lib/audiobookProgress'
