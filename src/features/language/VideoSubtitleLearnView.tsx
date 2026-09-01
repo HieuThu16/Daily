@@ -11,99 +11,19 @@ import {
   Languages,
   BookOpen,
   Repeat,
+  Search,
+  X,
 } from 'lucide-react'
 import { InteractiveSentence } from './InteractiveSentence'
 import { QuickWordLookupModal } from './QuickWordLookupModal'
 import { useToast } from '../ToastContext'
 import { playLanguageSpeech, type LanguageDetail } from '../../lib/languageAI'
-
-export type SubtitleCue = {
-  start: number
-  end: number
-  text: string
-  vi?: string
-  pinyin?: string
-}
-
-export type CuratedLesson = {
-  id: string
-  title: string
-  videoId: string
-  lang: 'en' | 'zh'
-  level: 'Cơ bản' | 'Trung cấp' | 'Nâng cao'
-  category: string
-  thumbnail?: string
-  isOfficial?: boolean
-  cues: SubtitleCue[]
-}
-
-const CURATED_LESSONS: CuratedLesson[] = [
-  {
-    id: 'en-coffee-order',
-    title: 'Giao tiếp gọi đồ uống tại quán Cafe (Coffee Shop English)',
-    videoId: '2e_xH0e1-v8',
-    lang: 'en',
-    level: 'Cơ bản',
-    category: 'Giao tiếp đời sống',
-    isOfficial: true,
-    cues: [
-      { start: 0, end: 4.5, text: 'Hi there! What can I get started for you today?', vi: 'Xin chào! Hôm nay tôi có thể lấy món gì cho bạn?' },
-      { start: 4.5, end: 9.0, text: 'Could I please get a medium iced caramel latte with oat milk?', vi: 'Cho tôi một ly latte caramel đá cỡ vừa với sữa yến mạch được không?' },
-      { start: 9.0, end: 13.5, text: 'Sure thing! Would you like any extra syrup or whipped cream on top?', vi: 'Chắc chắn rồi! Bạn có muốn thêm si-rô hay kem tươi ở trên không?' },
-      { start: 13.5, end: 18.0, text: 'No, thank you. Just the standard sweetness is perfect.', vi: 'Dạ không, cảm ơn. Độ ngọt tiêu chuẩn là hoàn hảo rồi.' },
-      { start: 18.0, end: 23.0, text: 'Great! Is that for here or to go? Your total comes to four fifty.', vi: 'Tuyệt! Bạn dùng ở đây hay mang đi? Tổng cộng của bạn là 4 đô 50.' },
-      { start: 23.0, end: 28.0, text: 'To go, please. Can I pay with Apple Pay or credit card?', vi: 'Mang đi giúp tôi nhé. Tôi có thể thanh toán bằng Apple Pay hoặc thẻ tín dụng không?' },
-      { start: 28.0, end: 34.0, text: 'Of course! Just tap your card right here. It will be ready in a minute.', vi: 'Tất nhiên rồi! Bạn cứ chạm thẻ vào đây. Đồ uống sẽ xong ngay sau một phút.' },
-    ],
-  },
-  {
-    id: 'zh-restaurant-order',
-    title: 'Giao tiếp gọi món tại nhà hàng Trung Quốc (餐厅点餐口语)',
-    videoId: 'v1y87n9KzY0',
-    lang: 'zh',
-    level: 'Cơ bản',
-    category: 'Ẩm thực & Mua sắm',
-    isOfficial: true,
-    cues: [
-      { start: 0, end: 4.0, text: '服务员，请问可以看一下菜单吗？', pinyin: 'Fú wù yuán, qǐng wèn kě yǐ kàn yī xià cài dān ma?', vi: 'Phục vụ ơi, tôi có thể xem qua thực đơn một chút được không?' },
-      { start: 4.0, end: 8.5, text: '好的，这是我们的特色菜单，请问您几位？', pinyin: 'Hǎo de, zhè shì wǒ men de tè sè cài dān, qǐng wèn nín jǐ wèi?', vi: 'Dạ được, đây là thực đơn đặc biệt của chúng tôi, xin hỏi anh chị đi mấy người ạ?' },
-      { start: 8.5, end: 13.0, text: '我们两位。请问有什么推荐的招牌菜吗？', pinyin: 'Wǒ men liǎng wèi. Qǐng wèn yǒu shén me tuī jiàn de zhāo pái cài ma?', vi: 'Chúng tôi có hai người. Cho hỏi quán có món đặc trưng nào gợi ý không?' },
-      { start: 13.0, end: 18.0, text: '我们的宫保鸡丁和麻婆豆腐都很受欢迎。', pinyin: 'Wǒ men de gōng bǎo jī dīng hé má pó dòu fu dōu hěn shòu huān yíng.', vi: 'Món Gà xào Cung Bảo và Đậu phụ Ma Bà của chúng tôi rất được ưa chuộng.' },
-      { start: 18.0, end: 23.5, text: '那就要一份麻婆豆腐，少放点辣椒，谢谢！', pinyin: 'Nà jiù yào yī fèn má pó dòu fu, shǎo fàng diǎn là jiāo, xiè xie!', vi: 'Vậy cho một phần Đậu phụ Ma Bà, ít cay một chút nhé, cảm ơn!' },
-      { start: 23.5, end: 29.0, text: '好的，没问题！主食需要米饭还是面条？', pinyin: 'Hǎo de, méi wèn tí! Zhǔ shí xū yào mǐ fàn hái shì miàn tiáo?', vi: 'Dạ vâng không vấn đề! Món chính anh chị dùng cơm hay mì ạ?' },
-    ],
-  },
-  {
-    id: 'en-ted-habit',
-    title: 'Bí quyết rèn luyện thói quen mỗi ngày (Atomic Habits & Success)',
-    videoId: 'AdKUJxjn-R8',
-    lang: 'en',
-    level: 'Trung cấp',
-    category: 'Phát triển bản thân',
-    isOfficial: true,
-    cues: [
-      { start: 0, end: 5.0, text: 'Small habits don’t add up, they compound over time.', vi: 'Những thói quen nhỏ không chỉ cộng dồn, chúng tạo nên cấp số nhân theo thời gian.' },
-      { start: 5.0, end: 10.5, text: 'If you can get 1% better each day for one year, you’ll end up 37 times better.', vi: 'Nếu bạn có thể tiến bộ 1% mỗi ngày trong một năm, bạn sẽ giỏi hơn gấp 37 lần.' },
-      { start: 10.5, end: 16.0, text: 'The most effective way to change your habits is to focus on who you wish to become.', vi: 'Cách hiệu quả nhất để thay đổi thói quen là tập trung vào hình mẫu bạn muốn trở thành.' },
-      { start: 16.0, end: 22.0, text: 'Your identity emerges out of your habits. Every action is a vote for the type of person you want to be.', vi: 'Bản sắc của bạn nảy sinh từ thói quen. Mỗi hành động là một lá phiếu bầu cho con người bạn muốn trở thành.' },
-    ],
-  },
-  {
-    id: 'zh-travel-taxi',
-    title: 'Bắt xe taxi & hỏi đường tại Bắc Kinh (北京打车与问路)',
-    videoId: '3JZ_D3ELwOQ',
-    lang: 'zh',
-    level: 'Cơ bản',
-    category: 'Du lịch & Di chuyển',
-    isOfficial: true,
-    cues: [
-      { start: 0, end: 4.5, text: '师傅，您好！去三里屯大概需要多长时间？', pinyin: 'Shī fu, nín hǎo! Qù Sān lǐ tún dà gài xū yào duō cháng shí jiān?', vi: 'Bác tài ơi, đi Tam Lý Đồn mất khoảng bao lâu ạ?' },
-      { start: 4.5, end: 9.0, text: '现在有点堵车，大概需要二十多分钟吧。', pinyin: 'Xiàn zài yǒu diǎn dǔ chē, dà gài xū yào èr shí duō fēn zhōng ba.', vi: 'Bây giờ hơi kẹt xe một chút, mất khoảng hơn 20 phút nhé.' },
-      { start: 9.0, end: 14.0, text: '好的，请打表计费，到路口请靠边停一下。', pinyin: 'Hǎo de, qǐng dǎ biǎo jì fèi, dào lù kǒu qǐng kào biān tíng yī xià.', vi: 'Dạ được, bác bật đồng hồ tính cước giúp cháu, đến ngã tư cho cháu tấp lề đỗ lại nhé.' },
-      { start: 14.0, end: 19.5, text: '到了，一共三十五块钱。微信还是支付宝？', pinyin: 'Dào le, yī gòng sān shí wǔ kuài qián. Wēi xìn hái shì Zhī fù bǎo?', vi: 'Đến nơi rồi, tổng cộng 35 tệ. Cháu trả qua WeChat hay Alipay?' },
-    ],
-  },
-]
+import {
+  VIDEO_LESSONS_DATABASE,
+  VIDEO_CATEGORIES,
+  type VideoLesson,
+  type SubtitleCue,
+} from './videoLessonsData'
 
 type VideoSubtitleLearnViewProps = {
   onSaveWordToVault?: (term: string, meaning: string, details?: LanguageDetail) => void
@@ -116,11 +36,13 @@ export function VideoSubtitleLearnView({
 }: VideoSubtitleLearnViewProps) {
   const { showToast } = useToast()
 
-  // Selected Lesson
-  const [selectedLesson, setSelectedLesson] = useState<CuratedLesson>(CURATED_LESSONS[0])
+  // Video & Filter State
+  const [selectedLesson, setSelectedLesson] = useState<VideoLesson>(VIDEO_LESSONS_DATABASE[0])
   const [youtubeInputUrl, setYoutubeInputUrl] = useState('')
   const [isLoadingCues, setIsLoadingCues] = useState(false)
   const [activeLangFilter, setActiveLangFilter] = useState<'ALL' | 'en' | 'zh'>('ALL')
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('ALL')
+  const [videoSearchQuery, setVideoSearchQuery] = useState('')
 
   // Playback & Subtitle State
   const [currentTime, setCurrentTime] = useState(0)
@@ -185,7 +107,7 @@ export function VideoSubtitleLearnView({
     return match ? match[1] : null
   }
 
-  // Handle Fetching Subtitles from YouTube URL
+  // Handle Fetching Subtitles from custom YouTube URL
   const handleFetchYoutubeSubs = async () => {
     const vid = extractVideoId(youtubeInputUrl.trim())
     if (!vid) {
@@ -201,13 +123,13 @@ export function VideoSubtitleLearnView({
       }
       const data = await res.json()
       if (Array.isArray(data.cues) && data.cues.length > 0) {
-        const customLesson: CuratedLesson = {
+        const customLesson: VideoLesson = {
           id: `custom-${vid}`,
           title: `Video YouTube (${vid})`,
           videoId: vid,
           lang: data.sourceLang?.startsWith('zh') ? 'zh' : 'en',
           level: 'Trung cấp',
-          category: 'Video Tự Chọn',
+          category: '🗣️ Giao tiếp đời sống',
           isOfficial: Boolean(data.isOfficial),
           cues: data.cues,
         }
@@ -217,7 +139,7 @@ export function VideoSubtitleLearnView({
         showToast('Video này không có sẵn phụ đề văn bản.', 'info')
       }
     } catch {
-      showToast('Không lấy được phụ đề tự động. Bạn thử các video mẫu có sẵn nhé!', 'info')
+      showToast('Không lấy được phụ đề tự động. Bạn hãy chọn các bài học mẫu có sẵn nhé!', 'info')
     } finally {
       setIsLoadingCues(false)
     }
@@ -245,15 +167,40 @@ export function VideoSubtitleLearnView({
     }
   }
 
-  // Filter lessons
+  // Filter lessons based on language, category, and search query
   const filteredLessons = useMemo(() => {
-    if (activeLangFilter === 'ALL') return CURATED_LESSONS
-    return CURATED_LESSONS.filter((l) => l.lang === activeLangFilter)
-  }, [activeLangFilter])
+    return VIDEO_LESSONS_DATABASE.filter((lesson) => {
+      // 1. Language Filter
+      if (activeLangFilter !== 'ALL' && lesson.lang !== activeLangFilter) {
+        return false
+      }
+
+      // 2. Category Filter
+      if (activeCategoryFilter !== 'ALL') {
+        const catObj = VIDEO_CATEGORIES.find((c) => c.id === activeCategoryFilter)
+        if (catObj && lesson.category !== catObj.label) {
+          return false
+        }
+      }
+
+      // 3. Search Query
+      if (videoSearchQuery.trim()) {
+        const q = videoSearchQuery.toLowerCase()
+        const matchTitle = lesson.title.toLowerCase().includes(q)
+        const matchCategory = lesson.category.toLowerCase().includes(q)
+        const matchCue = lesson.cues.some(
+          (c) => c.text.toLowerCase().includes(q) || (c.vi && c.vi.toLowerCase().includes(q))
+        )
+        return matchTitle || matchCategory || matchCue
+      }
+
+      return true
+    })
+  }, [activeLangFilter, activeCategoryFilter, videoSearchQuery])
 
   return (
     <div className="video-learn-container">
-      {/* 1. Header Toolbar & YouTube Link Input Bar */}
+      {/* 1. Header Search & Custom YouTube Link Input Bar */}
       <div className="video-learn-toolbar">
         <div className="video-learn-input-wrap">
           <Tv size={16} color="var(--purple, #a855f7)" />
@@ -262,7 +209,7 @@ export function VideoSubtitleLearnView({
             className="video-learn-input"
             value={youtubeInputUrl}
             onChange={(e) => setYoutubeInputUrl(e.target.value)}
-            placeholder="Dán link YouTube (Anh/Trung) để lấy phụ đề song ngữ…"
+            placeholder="Dán link YouTube (Anh/Trung) để nạp phụ đề…"
           />
           <button
             type="button"
@@ -276,14 +223,16 @@ export function VideoSubtitleLearnView({
         </div>
       </div>
 
-      {/* 2. Curated Lesson Selector Pills */}
+      {/* 2. Category Filter Pills & Language Toggles */}
       <div className="video-preset-section">
+        {/* Top Header: Title & Language Toggle */}
         <div className="video-preset-header">
           <span className="video-preset-title">
-            <BookOpen size={13} color="#ec4899" />
-            <span>Bài Học Video Mẫu ({filteredLessons.length})</span>
+            <BookOpen size={14} color="#ec4899" />
+            <span>Kho Bài Học Tuyển Chọn ({filteredLessons.length})</span>
           </span>
 
+          {/* Language Selector */}
           <div className="video-lang-filter-group">
             <button
               type="button"
@@ -309,27 +258,96 @@ export function VideoSubtitleLearnView({
           </div>
         </div>
 
+        {/* Search Bar for Lessons */}
+        <div className="video-lesson-search-row">
+          <div className="video-lesson-search-box">
+            <Search size={14} className="video-lesson-search-icon" />
+            <input
+              type="text"
+              value={videoSearchQuery}
+              onChange={(e) => setVideoSearchQuery(e.target.value)}
+              placeholder="Tìm theo chủ đề, tiêu đề hoặc từ khóa câu nói..."
+              className="video-lesson-search-input"
+            />
+            {videoSearchQuery && (
+              <button
+                type="button"
+                className="video-lesson-search-clear"
+                onClick={() => setVideoSearchQuery('')}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Category Horizontal Scrollable Bar */}
+        <div className="video-category-pills-bar">
+          {VIDEO_CATEGORIES.map((cat) => {
+            const isCatActive = activeCategoryFilter === cat.id
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                className={`video-category-chip ${isCatActive ? 'active' : ''}`}
+                onClick={() => setActiveCategoryFilter(cat.id)}
+              >
+                {cat.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Horizontal Lesson Cards Carousel */}
         <div className="video-preset-carousel">
-          {filteredLessons.map((lesson) => (
-            <button
-              key={lesson.id}
-              type="button"
-              className={`video-preset-card ${selectedLesson.id === lesson.id ? 'is-active' : ''}`}
-              onClick={() => setSelectedLesson(lesson)}
-            >
-              <div className="video-preset-meta">
-                <span className="video-preset-tag">{lesson.category}</span>
-                <span className="video-preset-badge">
-                  {lesson.lang === 'zh' ? '🇨🇳 Trung' : '🇺🇸 Anh'}
-                </span>
-              </div>
-              <h4 className="video-preset-name">{lesson.title}</h4>
-              <div className="video-preset-footer">
-                <span>{lesson.cues.length} câu phụ đề</span>
-                <span className="video-preset-level">{lesson.level}</span>
-              </div>
-            </button>
-          ))}
+          {filteredLessons.length === 0 ? (
+            <div className="video-empty-notice">
+              <span>Không tìm thấy bài học nào phù hợp với bộ lọc hiện tại.</span>
+            </div>
+          ) : (
+            filteredLessons.map((lesson) => (
+              <button
+                key={lesson.id}
+                type="button"
+                className={`video-preset-card ${selectedLesson.id === lesson.id ? 'is-active' : ''}`}
+                onClick={() => setSelectedLesson(lesson)}
+              >
+                {/* Video Thumbnail Preview */}
+                <div className="video-preset-thumb-wrap">
+                  <img
+                    src={`https://img.youtube.com/vi/${lesson.videoId}/mqdefault.jpg`}
+                    alt={lesson.title}
+                    className="video-preset-thumb"
+                    loading="lazy"
+                    onError={(e) => {
+                      // Fallback if image load fails
+                      ;(e.target as HTMLElement).style.display = 'none'
+                    }}
+                  />
+                  <span className="video-preset-thumb-badge">
+                    {lesson.lang === 'zh' ? '🇨🇳 Trung' : '🇺🇸 Anh'}
+                  </span>
+                  {lesson.duration && (
+                    <span className="video-preset-duration">{lesson.duration}</span>
+                  )}
+                </div>
+
+                <div className="video-preset-meta">
+                  <span className="video-preset-tag">{lesson.category}</span>
+                  <span className="video-preset-level">{lesson.level}</span>
+                </div>
+
+                <h4 className="video-preset-name">{lesson.title}</h4>
+
+                <div className="video-preset-footer">
+                  <span>{lesson.cues.length} câu song ngữ</span>
+                  <span className="video-preset-select-hint">
+                    {selectedLesson.id === lesson.id ? '▶ Đang học' : 'Chọn học'}
+                  </span>
+                </div>
+              </button>
+            ))
+          )}
         </div>
       </div>
 
@@ -339,6 +357,7 @@ export function VideoSubtitleLearnView({
         <div className="video-player-frame-box">
           <div className="video-aspect-wrapper">
             <iframe
+              key={selectedLesson.videoId}
               ref={playerIframeRef}
               src={`https://www.youtube.com/embed/${selectedLesson.videoId}?enablejsapi=1&autoplay=0&rel=0`}
               title={selectedLesson.title}

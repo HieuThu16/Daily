@@ -1395,42 +1395,177 @@
   font-weight: 700;
 }
 
-.video-preset-carousel {
+/* Search row for video lessons */
+.video-lesson-search-row {
   display: flex;
+  margin-top: 2px;
+}
+
+.video-lesson-search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
   gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 6px 12px;
+}
+
+.video-lesson-search-icon {
+  color: var(--text-muted);
+}
+
+.video-lesson-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.video-lesson-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* Category Filter Bar */
+.video-category-pills-bar {
+  display: flex;
+  gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
+  padding: 2px 0;
+}
+
+.video-category-pills-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.video-category-chip {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.video-category-chip.active {
+  border-color: #8b5cf6;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.35), rgba(236, 72, 153, 0.25));
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+}
+
+.video-preset-carousel {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
 }
 
 .video-preset-carousel::-webkit-scrollbar {
   display: none;
 }
 
+.video-empty-notice {
+  padding: 20px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  width: 100%;
+}
+
 .video-preset-card {
   flex: 0 0 220px;
-  background: var(--bg-card, rgba(30, 30, 35, 0.7));
-  border: 1.5px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 10px 12px;
+  background: var(--bg-card, rgba(24, 24, 30, 0.8));
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   text-align: left;
   cursor: pointer;
   transition: all 0.18s ease;
+  overflow: hidden;
 }
 
 .video-preset-card:hover {
-  border-color: rgba(139, 92, 246, 0.4);
+  border-color: rgba(139, 92, 246, 0.45);
   transform: translateY(-2px);
 }
 
 .video-preset-card.is-active {
   border-color: #ec4899;
   background: rgba(236, 72, 153, 0.12);
-  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.2);
+  box-shadow: 0 4px 18px rgba(236, 72, 153, 0.25);
+}
+
+/* Video Thumbnail Wrap */
+.video-preset-thumb-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000000;
+}
+
+.video-preset-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.video-preset-card:hover .video-preset-thumb {
+  transform: scale(1.05);
+}
+
+.video-preset-thumb-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.video-preset-duration {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
 }
 
 .video-preset-meta {
@@ -1445,19 +1580,11 @@
   color: #38bdf8;
 }
 
-.video-preset-badge {
-  font-size: 0.68rem;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1px 6px;
-  border-radius: 6px;
-}
-
 .video-preset-name {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--text-main);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1472,10 +1599,17 @@
   font-size: 0.68rem;
   color: var(--text-muted);
   margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 6px;
 }
 
 .video-preset-level {
   color: #10b981;
+  font-weight: 700;
+}
+
+.video-preset-select-hint {
+  color: #c084fc;
   font-weight: 700;
 }
 
