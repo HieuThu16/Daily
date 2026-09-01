@@ -42,6 +42,8 @@ export async function loadAudiobooks(): Promise<Audiobook[]> {
       let dilibUrl: string | undefined
       let readbookUrl: string | undefined
       let pdfUrl: string | undefined
+      let totalDuration: number | undefined
+      let durationFormatted: string | undefined
 
       if (row.notes) {
         try {
@@ -50,6 +52,8 @@ export async function loadAudiobooks(): Promise<Audiobook[]> {
           if (parsed.dilibUrl) dilibUrl = parsed.dilibUrl
           if (parsed.readbookUrl) readbookUrl = parsed.readbookUrl
           if (parsed.pdfUrl) pdfUrl = parsed.pdfUrl
+          if (parsed.totalDuration) totalDuration = parsed.totalDuration
+          if (parsed.durationFormatted) durationFormatted = parsed.durationFormatted
         } catch {
           // Ghi chú dạng text thông thường
         }
@@ -63,6 +67,8 @@ export async function loadAudiobooks(): Promise<Audiobook[]> {
         cover: row.cover_url || '',
         description: row.description || '',
         tracks,
+        totalDuration,
+        durationFormatted,
         dilibUrl,
         hasPdf: Boolean(readbookUrl || pdfUrl),
         readbookUrl,
@@ -106,6 +112,8 @@ export async function saveAudiobook(book: Audiobook): Promise<Audiobook> {
     try {
       const notesPayload = JSON.stringify({
         tracks: savedBook.tracks,
+        totalDuration: savedBook.totalDuration,
+        durationFormatted: savedBook.durationFormatted,
         dilibUrl: savedBook.dilibUrl,
         readbookUrl: savedBook.readbookUrl,
         pdfUrl: savedBook.pdfUrl,

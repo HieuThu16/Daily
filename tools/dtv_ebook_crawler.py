@@ -95,7 +95,7 @@ def check_book_exists(title: str) -> bool:
     try:
         result = supabase_get("media_items", {
             "type": "eq.BOOK",
-            "name": f"eq.{title}",
+            "title": f"eq.{title}",
             "select": "id",
             "limit": "1",
         })
@@ -331,9 +331,19 @@ def import_book_to_daily(book: dict, dry_run: bool = False) -> str:
     # Import vào Supabase
     try:
         from datetime import date
+        has_audio = bool(book.get("audio_tracks") and len(book["audio_tracks"]) > 0)
+        notes_dict = {
+            "source": "DTV eBook",
+            "source_url": book.get("source_url"),
+            "pdfUrl": book.get("pdf_url"),
+            "tracks": book.get("audio_tracks", []),
+            "totalDuration": book.get("total_duration"),
+            "durationFormatted": book.get("duration_formatted"),
+        }
+
         payload = {
             "type": "BOOK",
-            "name": title,
+            "title": title,
             "author": book.get("author"),
             "genre": book.get("genre"),
             "cover_url": book.get("cover_url"),
@@ -341,10 +351,9 @@ def import_book_to_daily(book: dict, dry_run: bool = False) -> str:
             "status": "PLANNED",
             "is_favorite": False,
             "log_date": date.today().isoformat(),
-            "book_format": "READ",
-            # Lưu PDF URL vào youtube_url (field dạng URL dùng chung)
-            # Sau này có thể thêm cột riêng cho PDF URL
-            "youtube_url": book.get("pdf_url"),
+            "book_format": "LISTEN" if has_audio else "READ",
+            "url": (book.get("audio_tracks", [{}])[0].get("url") if has_audio else book.get("pdf_url")),
+            "notes": json.dumps(notes_dict, ensure_ascii=False),
         }
         # Xóa None values để không ghi null không cần thiết
         payload = {k: v for k, v in payload.items() if v is not None}
@@ -355,9 +364,11 @@ def import_book_to_daily(book: dict, dry_run: bool = False) -> str:
             print(f"   ⏭ Bỏ qua (trùng): {title}")
             return "skipped"
 
-        print(f"   ✅ Đã import: {title}")
+        print(f"   ✅ Đã import: {title} ({'Sách nói' if has_audio else 'Sách đọc PDF'})")
         if book.get("pdf_url"):
             print(f"      PDF: {book['pdf_url'][:80]}...")
+        if has_audio:
+            print(f"      Audio: {len(book['audio_tracks'])} phần ({book.get('duration_formatted', '')})")
         return "imported"
 
     except Exception as e:

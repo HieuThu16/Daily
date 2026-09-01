@@ -3,6 +3,7 @@ export type AudiobookTrack = {
   title: string
   url: string
   duration?: number
+  durationFormatted?: string
 }
 
 export type Audiobook = {
@@ -13,6 +14,8 @@ export type Audiobook = {
   cover: string
   description: string
   tracks: AudiobookTrack[]
+  totalDuration?: number
+  durationFormatted?: string
   dilibUrl?: string
   hasPdf?: boolean
   readbookUrl?: string

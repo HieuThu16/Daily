@@ -19,6 +19,7 @@ export type CrawledBookHistoryItem = {
   hasAudio: boolean
   hasPdf: boolean
   audioCount: number
+  durationFormatted?: string
   addedAudio: boolean
   addedPdf: boolean
   action: CrawlHistoryAction

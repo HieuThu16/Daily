@@ -11,6 +11,7 @@ import {
 import type { Audiobook } from '../../types/audiobook'
 import { loadAudiobooks, deleteAudiobook } from '../../lib/audiobookRepository'
 import { useAudiobookProgressMap } from '../../lib/audiobookProgress'
+import { formatDurationHuman } from '../../lib/dilibCrawler'
 import { DilibCrawlerModal } from './DilibCrawlerModal'
 import { AudiobookPlayerModal } from './AudiobookPlayerModal'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
@@ -185,6 +186,9 @@ export function AudiobooksPage() {
             <p className="audiobooks-continue-sub">
               {continueListeningBook.book.author} · Phần {continueListeningBook.progress.trackIndex + 1} /{' '}
               {continueListeningBook.book.tracks.length}
+              {(continueListeningBook.book.durationFormatted || continueListeningBook.book.totalDuration) && (
+                <> · ⏱️ {continueListeningBook.book.durationFormatted || formatDurationHuman(continueListeningBook.book.totalDuration)}</>
+              )}
             </p>
 
             <div className="audiobooks-continue-bar-wrap">
@@ -300,6 +304,11 @@ export function AudiobooksPage() {
 
                   <div className="audiobook-card-badge-top">
                     <span className="audiobook-parts-chip">🎧 {book.tracks.length} phần</span>
+                    {(book.durationFormatted || (book.totalDuration && book.totalDuration > 0)) && (
+                      <span className="audiobook-duration-chip">
+                        ⏱️ {book.durationFormatted || formatDurationHuman(book.totalDuration)}
+                      </span>
+                    )}
                     {book.hasPdf && <span className="audiobook-pdf-chip">📖 PDF</span>}
                   </div>
                 </div>

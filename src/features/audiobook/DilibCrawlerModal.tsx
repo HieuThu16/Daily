@@ -642,7 +642,7 @@ export function DilibCrawlerModal({
                             fontWeight: 700,
                           }}
                         >
-                          🎧 {item.audioCount} audio
+                          🎧 {item.audioCount} audio {item.durationFormatted ? `· ⏱️ ${item.durationFormatted}` : ''}
                         </span>
                       )}
                       {item.hasPdf && (
@@ -1896,7 +1896,7 @@ export function DilibCrawlerModal({
                               }}
                               title={`${item.audioCount} phần audio`}
                             >
-                              🎧 {item.audioCount} MP3
+                              🎧 {item.audioCount} MP3 {item.durationFormatted ? `· ⏱️ ${item.durationFormatted}` : ''}
                             </span>
                           )}
                           {item.addedPdf && (

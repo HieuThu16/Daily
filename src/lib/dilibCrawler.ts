@@ -401,7 +401,9 @@ export type UnifiedBookDetail = {
   description: string
   hasAudio: boolean
   hasPdf: boolean
-  audioTracks: Array<{ id: string; title: string; url: string; duration?: number }>
+  totalDuration?: number
+  durationFormatted?: string
+  audioTracks: Array<{ id: string; title: string; url: string; duration?: number; durationFormatted?: string }>
   readbookUrl: string | null
   pdfUrl: string | null
   epubUrl?: string | null
@@ -430,6 +432,7 @@ export type CrawlReport = {
     hasAudio: boolean
     hasPdf: boolean
     audioCount: number
+    durationFormatted?: string
     readbookUrl?: string | null
     pdfUrl?: string | null
     cover?: string
@@ -728,6 +731,319 @@ export function getSuggestedAuthors(input: string): string[] {
   return DILIB_POPULAR_AUTHORS.filter((a) => a.toLowerCase().includes(q))
 }
 
+/** Định dạng số giây sang chuỗi thời lượng thân thiện tiếng Việt (vd: '4h 15m', '4h', '45 phút') */
+export function formatDurationHuman(seconds?: number): string {
+  if (!seconds || seconds <= 0 || isNaN(seconds)) return ''
+  const s = Math.round(seconds)
+  const hours = Math.floor(s / 3600)
+  const minutes = Math.floor((s % 3600) / 60)
+  if (hours > 0 && minutes > 0) {
+    return `${hours}h ${minutes}m`
+  } else if (hours > 0) {
+    return `${hours}h`
+  } else if (minutes > 0) {
+    return `${minutes} phút`
+  }
+  return `${s}s`
+}
+
+/** Bóc tách thời lượng sách từ văn bản mô tả hoặc HTML */
+export function parseDurationFromText(text: string): { seconds: number; formatted: string } | null {
+  if (!text) return null
+
+  // Pattern 1: "Thời lượng: 4 giờ 30 phút" hoặc "4 tiếng 15 phút" hoặc "4h30p"
+  const m1 = text.match(/(?:thời\s*lượng|thời\s*gian|thời\s*lượng\s*nghe|tổng\s*thời\s*lượng)[^:\n<]*:\s*([^\n<,]+)/i)
+  const durationStr = m1 ? m1[1].trim() : text
+
+  // Giờ + Phút (vd: 4 giờ 15 phút, 4h 30m, 4 tiếng 20 phút)
+  const hmMatch = durationStr.match(/(\d+)\s*(?:giờ|tiếng|h)\s*(\d+)?\s*(?:phút|p|m)?/i)
+  if (hmMatch) {
+    const h = parseInt(hmMatch[1], 10) || 0
+    const m = parseInt(hmMatch[2] || '0', 10) || 0
+    const totalSec = h * 3600 + m * 60
+    if (totalSec > 0) {
+      return {
+        seconds: totalSec,
+        formatted: formatDurationHuman(totalSec),
+      }
+    }
+  }
+
+  // Chỉ có phút (vd: 45 phút, 90 phút)
+  const minMatch = durationStr.match(/(\d+)\s*(?:phút|p)\b/i)
+  if (minMatch) {
+    const m = parseInt(minMatch[1], 10) || 0
+    const totalSec = m * 60
+    if (totalSec > 0) {
+      return {
+        seconds: totalSec,
+        formatted: formatDurationHuman(totalSec),
+      }
+    }
+  }
+
+  // Định dạng HH:MM:SS (vd: 04:30:15 hoặc 01:45:00)
+  const timeCodeMatch = durationStr.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/)
+  if (timeCodeMatch) {
+    if (timeCodeMatch[3]) {
+      const h = parseInt(timeCodeMatch[1], 10)
+      const m = parseInt(timeCodeMatch[2], 10)
+      const s = parseInt(timeCodeMatch[3], 10)
+      const totalSec = h * 3600 + m * 60 + s
+      return { seconds: totalSec, formatted: formatDurationHuman(totalSec) }
+    } else {
+      const m = parseInt(timeCodeMatch[1], 10)
+      const s = parseInt(timeCodeMatch[2], 10)
+      const totalSec = m * 60 + s
+      return { seconds: totalSec, formatted: formatDurationHuman(totalSec) }
+    }
+  }
+
+  return null
+}
+
+/** Chuẩn hóa và làm sạch tên tác giả */
+export function cleanAuthorName(rawAuthor: string, title?: string, description?: string): string {
+  let author = (rawAuthor || '').trim()
+
+  // Bỏ các tiền tố phổ biến
+  author = author
+    .replace(/^(?:tác\s*giả|tác\s*giả\s*\/\s*nhóm\s*tác\s*giả|biên\s*soạn|biên\s*dịch|dịch\s*giả|chủ\s*biên|by|author)\s*[:：\-–—\.]\s*/gi, '')
+    .replace(/\s*-\s*DTV.*$/gi, '')
+    .replace(/\.(?:pdf|epub|mobi|mp3|azw3).*$/gi, '')
+    .replace(/\s*\(\s*(?:full|audiobook|ebook|trọn\s*bộ|tập\s*\d+)\s*\)/gi, '')
+    .replace(/\[.*?\]/g, '')
+    .trim()
+
+  if (author.toLowerCase().includes('định dạng') || author.length > 60) {
+    author = author.split(/[.,;\n]/)[0].trim()
+  }
+
+  // Nếu tác giả rỗng hoặc không rõ, thử tìm trong danh sách tác giả phổ biến
+  if (!author || author.toLowerCase().includes('chưa rõ') || author.toLowerCase().includes('unknown') || author.toLowerCase() === 'nhiều tác giả') {
+    const combinedText = `${title || ''} ${description || ''}`
+    for (const popAuthor of DILIB_POPULAR_AUTHORS) {
+      if (combinedText.toLowerCase().includes(popAuthor.toLowerCase())) {
+        return popAuthor
+      }
+    }
+    return author || 'Chưa rõ tác giả'
+  }
+
+  // Viết hoa chữ cái đầu từng từ
+  return author
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+/** Phân loại thể loại và tác giả chính xác theo danh mục hợp nhất */
+export function classifyBookGenreAndAuthor(
+  title: string,
+  rawGenre: string,
+  rawAuthor: string,
+  description: string,
+  url: string,
+  isAudio: boolean
+): { genre: string; author: string } {
+  const author = cleanAuthorName(rawAuthor, title, description)
+
+  const titleNorm = title.toLowerCase()
+  const rawGenreNorm = (rawGenre || '').toLowerCase()
+  const descNorm = (description || '').slice(0, 1000).toLowerCase()
+  const urlNorm = url.toLowerCase()
+
+  let bestCat: UnifiedBookCategory | null = null
+  let maxScore = 0
+
+  for (const cat of UNIFIED_CATEGORIES) {
+    if (cat.id === 'sach-noi') continue // Bỏ qua vì đây là định dạng chung
+
+    let score = 0
+    // Khớp tên danh mục
+    const catNameLower = cat.name.toLowerCase()
+    if (rawGenreNorm.includes(catNameLower) || catNameLower.includes(rawGenreNorm)) {
+      score += 8
+    }
+    if (urlNorm.includes(cat.id)) {
+      score += 6
+    }
+
+    // Khớp từ khóa
+    for (const kw of cat.keywords) {
+      const kwLower = kw.toLowerCase()
+      if (titleNorm.includes(kwLower)) score += 5
+      if (rawGenreNorm.includes(kwLower)) score += 4
+      if (urlNorm.includes(kwLower.replace(/\s+/g, '-'))) score += 3
+      if (descNorm.includes(kwLower)) score += 1
+    }
+
+    if (score > maxScore) {
+      maxScore = score
+      bestCat = cat
+    }
+  }
+
+  let finalGenre = ''
+  if (bestCat && maxScore >= 2) {
+    finalGenre = bestCat.name
+  } else if (rawGenre && !rawGenre.toLowerCase().includes('tổng hợp') && rawGenre.length > 2) {
+    finalGenre = rawGenre.trim()
+  } else {
+    finalGenre = 'Sách Tổng Hợp'
+  }
+
+  // Đối với Sách Nói, luôn gắn nhãn Sách Nói kèm thể loại chuyên mục
+  if (isAudio) {
+    if (!finalGenre.toLowerCase().includes('sách nói')) {
+      finalGenre = `Sách Nói, ${finalGenre}`
+    }
+  }
+
+  return {
+    genre: finalGenre,
+    author,
+  }
+}
+
+/** Kiểm tra đường dẫn audio có hợp lệ và phát được không */
+export async function probeAudioTrackUrl(audioUrl: string): Promise<boolean> {
+  const trimmed = audioUrl.trim()
+  if (!trimmed || trimmed.length < 8) return false
+
+  // Chuẩn hóa giao thức HTTPS
+  let probeUrl = trimmed
+  if (probeUrl.startsWith('http://')) {
+    probeUrl = probeUrl.replace('http://', 'https://')
+  }
+
+  // 1. Thử fetch byte range trực tiếp
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3500)
+    const res = await fetch(probeUrl, {
+      method: 'GET',
+      headers: {
+        Range: 'bytes=0-128',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    if (res.ok || res.status === 206 || res.status === 302 || res.status === 301) {
+      const cType = res.headers.get('content-type') || ''
+      if (!cType.includes('text/html') || res.status === 206) {
+        return true
+      }
+    }
+  } catch {}
+
+  // 2. Thử qua backend audio proxy
+  try {
+    const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(probeUrl)}`
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000)
+    const res = await apiFetch(proxyUrl, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-64' },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    if (res.ok || res.status === 206) {
+      return true
+    }
+  } catch {}
+
+  // 3. Fallback: Nếu URL có đuôi mp3 / m4a rõ ràng trên domain tin cậy thì chấp nhận
+  if (probeUrl.match(/\.(mp3|m4a|aac|wav|ogg)(?:\?.*)?$/i) && (probeUrl.includes('dilib') || probeUrl.includes('dtv-ebook') || probeUrl.includes('google') || probeUrl.includes('cdn'))) {
+    return true
+  }
+
+  return false
+}
+
+/** Xác thực toàn bộ danh sách track audio, lọc bỏ link hỏng và tính toán thời lượng */
+export async function validateAndProbeAudioTracks(
+  tracks: Array<{ id: string; title: string; url: string; duration?: number; durationFormatted?: string }>,
+  bookTitle: string,
+  fullHtml: string,
+  description: string
+): Promise<{
+  validTracks: Array<{ id: string; title: string; url: string; duration?: number; durationFormatted?: string }>
+  totalDuration?: number
+  durationFormatted?: string
+  hasAudio: boolean
+}> {
+  if (!tracks || tracks.length === 0) {
+    return { validTracks: [], hasAudio: false }
+  }
+
+  // Lọc và làm sạch URL các track
+  const cleanedTracks = tracks
+    .map((t, idx) => {
+      let u = t.url.trim()
+      if (u.startsWith('http://')) u = u.replace('http://', 'https://')
+      // Mã hóa ký tự đặc biệt / dấu cách trong URL nếu có
+      try {
+        u = encodeURI(decodeURI(u))
+      } catch {}
+      return {
+        ...t,
+        id: t.id || `track-${idx + 1}`,
+        title: t.title || `${bookTitle} - Phần ${idx + 1}`,
+        url: u,
+      }
+    })
+    .filter((t) => Boolean(t.url && t.url.startsWith('http')))
+
+  if (cleanedTracks.length === 0) {
+    return { validTracks: [], hasAudio: false }
+  }
+
+  // Kiểm tra tối đa 3 track đầu tiên để xác thực audio khả dụng mà không làm chậm quá mức
+  const probeLimit = Math.min(3, cleanedTracks.length)
+  const probeResults = await Promise.all(
+    cleanedTracks.slice(0, probeLimit).map((t) => probeAudioTrackUrl(t.url))
+  )
+
+  const hasAtLeastOnePlayable = probeResults.some((ok) => ok)
+  if (!hasAtLeastOnePlayable && probeLimit > 0) {
+    console.warn(`[dilibCrawler] Bỏ qua sách nói "${bookTitle}" do link audio không thể truy cập hoặc bị hỏng.`)
+    return { validTracks: [], hasAudio: false }
+  }
+
+  // Bóc tách thời lượng từ trang
+  const parsedDur = parseDurationFromText(`${fullHtml} ${description}`)
+  let totalDuration: number | undefined
+  let durationFormatted: string | undefined
+
+  if (parsedDur && parsedDur.seconds > 0) {
+    totalDuration = parsedDur.seconds
+    durationFormatted = parsedDur.formatted
+  } else {
+    // Ước tính thời lượng dựa trên số phần (mỗi phần sách nói thông thường khoảng 25 phút)
+    const estimatedSec = cleanedTracks.length * 25 * 60
+    totalDuration = estimatedSec
+    durationFormatted = formatDurationHuman(estimatedSec)
+  }
+
+  // Gán thời lượng ước tính cho từng track nếu chưa có
+  const perTrackSec = totalDuration ? Math.round(totalDuration / cleanedTracks.length) : undefined
+  const finalTracks = cleanedTracks.map((t) => ({
+    ...t,
+    duration: t.duration || perTrackSec,
+    durationFormatted: t.durationFormatted || (perTrackSec ? formatDurationHuman(perTrackSec) : undefined),
+  }))
+
+  return {
+    validTracks: finalTracks,
+    totalDuration,
+    durationFormatted,
+    hasAudio: true,
+  }
+}
+
 /** 4. BÓC TÁCH CHI TIẾT SÁCH DILIB.VN */
 export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail | null> {
   try {
@@ -736,18 +1052,16 @@ export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail |
 
     // Title
     const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
-    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Sách chưa có tiêu đề'
+    let title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Sách chưa có tiêu đề'
+    title = title.replace(/^Tải\s+(?:ebook|sách|truyện|audiobook)\s+/i, '').trim()
 
     // Author
     const authorMatch = html.match(/Tác giả:\s*<[^>]+>([^<]+)<\/a>/i) || html.match(/Tác giả:\s*([^<\n.]+)/i)
-    let author = authorMatch ? authorMatch[1].replace(/<[^>]+>/g, '').trim() : 'Chưa rõ tác giả'
-    if (author.toLowerCase().includes('định dạng') || author.length > 50) {
-      author = author.split('.')[0].trim()
-    }
+    let rawAuthor = authorMatch ? authorMatch[1].replace(/<[^>]+>/g, '').trim() : 'Chưa rõ tác giả'
 
     // Genre
     const genreMatches = [...html.matchAll(/Thể loại:\s*<[^>]+>([^<]+)<\/a>/gi)].map((m) => m[1].trim())
-    const genre = genreMatches.join(', ') || 'Sách tổng hợp'
+    const rawGenre = genreMatches.join(', ') || ''
 
     // Cover
     const imgMatch =
@@ -770,16 +1084,16 @@ export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail |
           .trim()
       : ''
 
-    // Audio tracks
-    const audioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
+    // Audio tracks raw extraction
+    const rawAudioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
     const audioRegex = /<audio[^>]*src="([^"]+)"/gi
     let am: RegExpExecArray | null
     while ((am = audioRegex.exec(html)) !== null) {
       let aUrl = am[1]
       if (!aUrl.startsWith('http')) aUrl = 'https://dilib.vn' + (aUrl.startsWith('/') ? '' : '/') + aUrl
-      audioTracks.push({
-        id: `track-${audioTracks.length + 1}`,
-        title: `${title} - Phần ${audioTracks.length + 1}`,
+      rawAudioTracks.push({
+        id: `track-${rawAudioTracks.length + 1}`,
+        title: `${title} - Phần ${rawAudioTracks.length + 1}`,
         url: aUrl,
       })
     }
@@ -787,10 +1101,10 @@ export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail |
     for (const pm of playlistMatches) {
       let aUrl = pm[1]
       if (!aUrl.startsWith('http')) aUrl = 'https://dilib.vn' + (aUrl.startsWith('/') ? '' : '/') + aUrl
-      if (!audioTracks.some((t) => t.url === aUrl)) {
-        audioTracks.push({
-          id: `track-${audioTracks.length + 1}`,
-          title: `${title} - Phần ${audioTracks.length + 1}`,
+      if (!rawAudioTracks.some((t) => t.url === aUrl)) {
+        rawAudioTracks.push({
+          id: `track-${rawAudioTracks.length + 1}`,
+          title: `${title} - Phần ${rawAudioTracks.length + 1}`,
           url: aUrl,
         })
       }
@@ -809,8 +1123,13 @@ export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail |
       pdfUrl = 'https://dilib.vn' + (pdfUrl.startsWith('/') ? '' : '/') + pdfUrl
     }
 
-    const hasAudio = audioTracks.length > 0
+    // Xác thực và kiểm tra âm thanh sách nói
+    const audioValidation = await validateAndProbeAudioTracks(rawAudioTracks, title, html, description)
+    const hasAudio = audioValidation.hasAudio
     const hasPdf = Boolean(readbookUrl || pdfUrl)
+
+    // Phân loại thể loại và làm sạch tác giả chuẩn hóa
+    const { genre, author } = classifyBookGenreAndAuthor(title, rawGenre, rawAuthor, description, url, hasAudio)
 
     return {
       url,
@@ -822,7 +1141,9 @@ export async function fetchDilibDetail(url: string): Promise<UnifiedBookDetail |
       description,
       hasAudio,
       hasPdf,
-      audioTracks,
+      totalDuration: audioValidation.totalDuration,
+      durationFormatted: audioValidation.durationFormatted,
+      audioTracks: audioValidation.validTracks,
       readbookUrl,
       pdfUrl,
     }
@@ -841,20 +1162,20 @@ export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | n
     // Title, Author, Genre from Title Tag
     const rawTitle = html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() || ''
     let title = rawTitle.replace(/^Tải\s+(?:ebook|sách|truyện|audiobook)\s+/i, '')
-    let genre = ''
+    let rawGenre = ''
     const genreMatch = title.match(/\[([^\]]+)\]$/)
     if (genreMatch) {
-      genre = genreMatch[1].trim()
+      rawGenre = genreMatch[1].trim()
       title = title.replace(/\[[^\]]+\]$/, '').trim()
     }
     title = title.replace(/\s+full\s+(?:mobi|pdf|epub|azw3|audio|truyện|mp3|prc).*$/i, '').trim()
     title = title.replace(/\s*-\s*DTV\s*eBook.*$/i, '').trim()
 
-    let author = 'Chưa rõ tác giả'
+    let rawAuthor = 'Chưa rõ tác giả'
     if (title.includes(' - ')) {
       const parts = title.split(' - ')
       title = parts[0].trim()
-      author = parts.slice(1).join(' - ').trim()
+      rawAuthor = parts.slice(1).join(' - ').trim()
     }
 
     // Cover image
@@ -895,35 +1216,42 @@ export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | n
       downloadBtns.find((b) => (b.text.includes('MOBI') || b.text.includes('AZW3')) && b.href.includes('google'))
         ?.href || null
 
-    // Audio tracks
-    const audioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
+    // Audio tracks raw extraction
+    const rawAudioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
     const mp3Matches = [...html.matchAll(/(?:src|data-src|href)="([^"]+\.mp3[^"]*)"/gi)].map((m) => m[1])
     for (const mp3 of mp3Matches) {
       let mp3Url = mp3
       if (!mp3Url.startsWith('http')) mp3Url = 'https://dtv-ebook.com.vn/' + mp3Url.replace(/^\//, '')
-      if (!audioTracks.some((t) => t.url === mp3Url)) {
-        audioTracks.push({
-          id: `track-${audioTracks.length + 1}`,
-          title: `${title} - Phần ${audioTracks.length + 1}`,
+      if (!rawAudioTracks.some((t) => t.url === mp3Url)) {
+        rawAudioTracks.push({
+          id: `track-${rawAudioTracks.length + 1}`,
+          title: `${title} - Phần ${rawAudioTracks.length + 1}`,
           url: mp3Url,
         })
       }
     }
 
-    const hasAudio = audioTracks.length > 0
+    // Xác thực và kiểm tra âm thanh sách nói
+    const audioValidation = await validateAndProbeAudioTracks(rawAudioTracks, title, html, metaDesc)
+    const hasAudio = audioValidation.hasAudio
     const hasPdf = Boolean(readbookUrl || pdfUrl || epubUrl)
+
+    // Phân loại thể loại và làm sạch tác giả chuẩn hóa
+    const { genre, author } = classifyBookGenreAndAuthor(title, rawGenre, rawAuthor, metaDesc, url, hasAudio)
 
     return {
       url,
       source: 'DTV eBook',
       title,
       author,
-      genre: genre || 'Sách tổng hợp',
+      genre,
       cover,
       description: metaDesc,
       hasAudio,
       hasPdf,
-      audioTracks,
+      totalDuration: audioValidation.totalDuration,
+      durationFormatted: audioValidation.durationFormatted,
+      audioTracks: audioValidation.validTracks,
       readbookUrl,
       pdfUrl: pdfUrl || readbookUrl,
       epubUrl,
@@ -952,7 +1280,7 @@ export function normalizeBookTitle(title: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // Bỏ dấu tiếng Việt
-    .replace(/\b(full|audiobook|sach noi|ebook|pdf|epub|mobi|azw3|prc|doc sach|online|tap \d+|trọn bo|tron bo|phan \d+)\b/gi, '')
+    .replace(/\b(sach noi|audiobook|ebook|pdf|epub|mobi|azw3|prc|doc sach|online|tap \d+|trọn bo|tron bo|phan \d+|tai sach|tai ebook|full)\b/gi, '')
     .replace(/[^\w\s]/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -1149,6 +1477,8 @@ export async function saveDilibBook(
       cover: detail.cover,
       description: detail.description,
       tracks: detail.audioTracks,
+      totalDuration: detail.totalDuration,
+      durationFormatted: detail.durationFormatted,
       dilibUrl: detail.url,
       hasPdf: detail.hasPdf,
       readbookUrl: detail.readbookUrl ?? undefined,
@@ -1257,6 +1587,7 @@ export async function saveDilibBook(
       hasAudio: detail.hasAudio,
       hasPdf: detail.hasPdf,
       audioCount: detail.audioTracks.length,
+      durationFormatted: detail.durationFormatted,
       addedAudio,
       addedPdf,
       action,
@@ -1499,6 +1830,7 @@ export async function crawlUnified({
       hasAudio: detail.hasAudio,
       hasPdf: detail.hasPdf,
       audioCount: detail.audioTracks.length,
+      durationFormatted: detail.durationFormatted,
       readbookUrl: detail.readbookUrl,
       pdfUrl: detail.pdfUrl,
       cover: detail.cover,

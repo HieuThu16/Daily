@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Play,
   Pause,
@@ -11,9 +11,11 @@ import {
   ListMusic,
   ChevronDown,
   X,
+  Sparkles,
 } from 'lucide-react'
 import type { Audiobook, AudiobookTrack } from '../../types/audiobook'
 import { updateAudiobookProgress, getAudiobookProgress } from '../../lib/audiobookProgress'
+import { formatDurationHuman } from '../../lib/dilibCrawler'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { useToast } from '../ToastContext'
 
@@ -26,6 +28,19 @@ export function formatTime(seconds: number): string {
     return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+/** Chuyển đổi URL audio sang link phát được (nâng cấp HTTPS và hỗ trợ qua proxy) */
+export function getPlayableAudioUrl(rawUrl: string, forceProxy: boolean = false): string {
+  if (!rawUrl) return ''
+  let u = rawUrl.trim()
+  if (u.startsWith('http://')) {
+    u = u.replace('http://', 'https://')
+  }
+  if (forceProxy || u.includes('dtv-ebook.com.vn') || u.includes('dilib.vn')) {
+    return `/api/audio-proxy?url=${encodeURIComponent(u)}`
+  }
+  return u
 }
 
 export function AudiobookPlayerModal({
@@ -50,6 +65,7 @@ export function AudiobookPlayerModal({
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null)
   const [showPlaylist, setShowPlaylist] = useState(false)
+  const [useProxyFallback, setUseProxyFallback] = useState(false)
 
   // Khôi phục tiến độ đã nghe từ trước
   useEffect(() => {
@@ -69,15 +85,50 @@ export function AudiobookPlayerModal({
 
   const currentTrack: AudiobookTrack | undefined = audiobook?.tracks[currentTrackIndex]
 
-  // Đổi track và nạp audio
+  // Đổi track và nạp audio với cơ chế fallback thông minh
   useEffect(() => {
     if (!audioRef.current || !currentTrack) return
-    audioRef.current.src = currentTrack.url
+    setUseProxyFallback(false)
+    const playUrl = getPlayableAudioUrl(currentTrack.url, false)
+    audioRef.current.src = playUrl
     audioRef.current.load()
     if (isPlaying) {
-      void audioRef.current.play().catch(() => setIsPlaying(false))
+      void audioRef.current.play().catch(() => {
+        // Tự động thử qua proxy nếu direct play bị chặn
+        const proxyUrl = getPlayableAudioUrl(currentTrack.url, true)
+        if (audioRef.current && audioRef.current.src !== proxyUrl) {
+          audioRef.current.src = proxyUrl
+          audioRef.current.load()
+          void audioRef.current.play().catch(() => setIsPlaying(false))
+        } else {
+          setIsPlaying(false)
+        }
+      })
     }
   }, [currentTrack])
+
+  // Xử lý lỗi phát audio: Tự động chuyển sang audio proxy
+  const handleAudioError = () => {
+    if (!currentTrack || useProxyFallback) {
+      showToast('⚠️ Không thể tải file âm thanh này.', 'error')
+      setIsPlaying(false)
+      return
+    }
+
+    console.warn('[AudiobookPlayer] Direct play error, switching to /api/audio-proxy...')
+    setUseProxyFallback(true)
+    const proxyUrl = getPlayableAudioUrl(currentTrack.url, true)
+    if (audioRef.current) {
+      audioRef.current.src = proxyUrl
+      audioRef.current.load()
+      if (isPlaying) {
+        audioRef.current
+          .play()
+          .then(() => setIsPlaying(true))
+          .catch(() => setIsPlaying(false))
+      }
+    }
+  }
 
   // Play / Pause
   const togglePlay = () => {
@@ -90,11 +141,53 @@ export function AudiobookPlayerModal({
         .play()
         .then(() => setIsPlaying(true))
         .catch((err) => {
-          console.warn('Lỗi phát audio:', err)
-          showToast('Không phát được audio này. Đang thử lại...', 'info')
+          console.warn('Lỗi phát audio trực tiếp:', err)
+          // Thử lại qua proxy
+          if (!useProxyFallback && currentTrack) {
+            setUseProxyFallback(true)
+            const proxyUrl = getPlayableAudioUrl(currentTrack.url, true)
+            if (audioRef.current) {
+              audioRef.current.src = proxyUrl
+              audioRef.current.load()
+              audioRef.current
+                .play()
+                .then(() => setIsPlaying(true))
+                .catch(() => {
+                  setIsPlaying(false)
+                  showToast('Không thể phát file âm thanh này.', 'error')
+                })
+            }
+          } else {
+            setIsPlaying(false)
+            showToast('Không thể phát audio này.', 'info')
+          }
         })
     }
   }
+
+  // Chuyển bài trước / sau
+  const handlePrevTrack = useCallback(() => {
+    if (currentTrackIndex > 0) {
+      setCurrentTrackIndex((prev) => prev - 1)
+      setIsPlaying(true)
+    }
+  }, [currentTrackIndex])
+
+  const handleNextTrack = useCallback(() => {
+    if (audiobook && currentTrackIndex < audiobook.tracks.length - 1) {
+      setCurrentTrackIndex((prev) => prev + 1)
+      setIsPlaying(true)
+    }
+  }, [audiobook, currentTrackIndex])
+
+  // Tua tới / lui 15 giây
+  const skip = useCallback(
+    (seconds: number) => {
+      if (!audioRef.current) return
+      audioRef.current.currentTime = Math.max(0, Math.min(duration || 10000, audioRef.current.currentTime + seconds))
+    },
+    [duration]
+  )
 
   // Cập nhật tiến độ liên tục và lưu Supabase
   const handleTimeUpdate = () => {
@@ -103,6 +196,17 @@ export function AudiobookPlayerModal({
     const dur = audioRef.current.duration || 0
     setCurrentTime(cur)
     if (dur > 0) setDuration(dur)
+
+    // Cập nhật trạng thái vị trí trên Media Session API (Background playback)
+    if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && dur > 0) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: Math.max(0, dur),
+          playbackRate: playbackRate || 1,
+          position: Math.min(Math.max(0, cur), dur),
+        })
+      } catch {}
+    }
 
     // Lưu tiến độ định kỳ mỗi 5s hoặc khi kết thúc
     if (Math.floor(cur) % 5 === 0 && dur > 0) {
@@ -141,17 +245,74 @@ export function AudiobookPlayerModal({
     }
   }
 
-  // Tua tới / lui 15 giây
-  const skip = (seconds: number) => {
-    if (!audioRef.current) return
-    audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds))
-  }
-
   // Đổi tốc độ phát
   const changePlaybackRate = (rate: number) => {
     setPlaybackRate(rate)
     if (audioRef.current) audioRef.current.playbackRate = rate
   }
+
+  // TÍCH HỢP MEDIA SESSION API CHO PHÁT NỀN VÀ TẮT MÀN HÌNH (BACKGROUND AUDIO)
+  useEffect(() => {
+    if (!audiobook || !currentTrack || !('mediaSession' in navigator)) return
+
+    const artworkList = audiobook.cover
+      ? [
+          { src: audiobook.cover, sizes: '96x96', type: 'image/png' },
+          { src: audiobook.cover, sizes: '128x128', type: 'image/png' },
+          { src: audiobook.cover, sizes: '256x256', type: 'image/png' },
+          { src: audiobook.cover, sizes: '512x512', type: 'image/png' },
+        ]
+      : []
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.title || audiobook.title,
+      artist: audiobook.author || 'Thư Viện Sách Nói',
+      album: audiobook.title,
+      artwork: artworkList,
+    })
+
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
+
+    navigator.mediaSession.setActionHandler('play', () => {
+      audioRef.current?.play()
+      setIsPlaying(true)
+    })
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audioRef.current?.pause()
+      setIsPlaying(false)
+    })
+
+    navigator.mediaSession.setActionHandler('previoustrack', handlePrevTrack)
+    navigator.mediaSession.setActionHandler('nexttrack', handleNextTrack)
+
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      skip(-(details.seekOffset || 15))
+    })
+
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      skip(details.seekOffset || 15)
+    })
+
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      if (details.seekTime !== undefined && audioRef.current) {
+        audioRef.current.currentTime = details.seekTime
+        setCurrentTime(details.seekTime)
+      }
+    })
+
+    return () => {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', null)
+        navigator.mediaSession.setActionHandler('pause', null)
+        navigator.mediaSession.setActionHandler('previoustrack', null)
+        navigator.mediaSession.setActionHandler('nexttrack', null)
+        navigator.mediaSession.setActionHandler('seekbackward', null)
+        navigator.mediaSession.setActionHandler('seekforward', null)
+        navigator.mediaSession.setActionHandler('seekto', null)
+      }
+    }
+  }, [audiobook, currentTrack, isPlaying, handlePrevTrack, handleNextTrack, skip])
 
   // Hẹn giờ tắt (Sleep Timer)
   useEffect(() => {
@@ -171,14 +332,18 @@ export function AudiobookPlayerModal({
         audioRef.current?.pause()
         setIsPlaying(false)
         setSleepTimerMinutes(null)
-        showToast('💤 Đã đến giờ tắt nhạc hẹn trước.')
+        showToast('💤 Đã đến giờ tắt audio hẹn trước.')
       }
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [sleepTimerMinutes])
+  }, [sleepTimerMinutes, showToast])
 
   if (!isOpen || !audiobook) return null
+
+  const displayTotalDuration =
+    audiobook.durationFormatted ||
+    (audiobook.totalDuration ? formatDurationHuman(audiobook.totalDuration) : null)
 
   return (
     <div className="audiobook-player-overlay" onClick={onClose}>
@@ -186,7 +351,10 @@ export function AudiobookPlayerModal({
         {/* Hidden HTML5 Audio Element */}
         <audio
           ref={audioRef}
+          playsInline
+          preload="auto"
           onTimeUpdate={handleTimeUpdate}
+          onError={handleAudioError}
           onLoadedMetadata={() => {
             if (audioRef.current) {
               setDuration(audioRef.current.duration || 0)
@@ -235,13 +403,27 @@ export function AudiobookPlayerModal({
           </div>
         </div>
 
-        {/* Title & Author */}
+        {/* Title, Author & Total Duration Badge */}
         <div className="audiobook-track-info">
           <h2 className="audiobook-track-name">{currentTrack?.title || audiobook.title}</h2>
           <p className="audiobook-track-author">{audiobook.author}</p>
-          <span className="audiobook-part-badge">
-            Phần {currentTrackIndex + 1} / {audiobook.tracks.length}
-          </span>
+          <div className="audiobook-badges-row">
+            <span className="audiobook-part-badge">
+              Phần {currentTrackIndex + 1} / {audiobook.tracks.length}
+            </span>
+            {displayTotalDuration && (
+              <span className="audiobook-total-dur-badge">
+                <Clock size={12} style={{ display: 'inline', marginRight: 3 }} />
+                Tổng {displayTotalDuration}
+              </span>
+            )}
+            {useProxyFallback && (
+              <span className="audiobook-proxy-badge" title="Đang truyền âm thanh qua server proxy an toàn">
+                <Sparkles size={11} style={{ display: 'inline', marginRight: 2 }} />
+                Proxy Stream
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Interactive Seek Bar */}
@@ -271,7 +453,7 @@ export function AudiobookPlayerModal({
           <button
             type="button"
             className="audiobook-ctrl-btn sec"
-            onClick={() => setCurrentTrackIndex((prev) => Math.max(0, prev - 1))}
+            onClick={handlePrevTrack}
             disabled={currentTrackIndex === 0}
             title="Phần trước"
           >
@@ -295,7 +477,7 @@ export function AudiobookPlayerModal({
           <button
             type="button"
             className="audiobook-ctrl-btn sec"
-            onClick={() => setCurrentTrackIndex((prev) => Math.min(audiobook.tracks.length - 1, prev + 1))}
+            onClick={handleNextTrack}
             disabled={currentTrackIndex >= audiobook.tracks.length - 1}
             title="Phần tiếp theo"
           >
@@ -353,7 +535,10 @@ export function AudiobookPlayerModal({
         {showPlaylist && (
           <div className="audiobook-playlist-drawer">
             <div className="audiobook-playlist-header">
-              <h3>Danh sách các phần ({audiobook.tracks.length})</h3>
+              <h3>
+                Danh sách các phần ({audiobook.tracks.length})
+                {displayTotalDuration && <span style={{ fontSize: '0.8rem', opacity: 0.8, marginLeft: 6 }}>· {displayTotalDuration}</span>}
+              </h3>
               <button type="button" onClick={() => setShowPlaylist(false)}>
                 <X size={16} />
               </button>
@@ -372,6 +557,9 @@ export function AudiobookPlayerModal({
                   >
                     <span className="audiobook-playlist-num">{idx + 1}</span>
                     <span className="audiobook-playlist-title">{t.title}</span>
+                    {t.durationFormatted && (
+                      <span className="audiobook-playlist-dur">{t.durationFormatted}</span>
+                    )}
                     {isCurrent && isPlaying && <Volume2 size={15} className="audiobook-playing-icon" />}
                   </div>
                 )
