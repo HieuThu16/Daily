@@ -2756,3 +2756,13 @@
   font-weight: 800;
   color: #10b981;
 }
+
+/* --- Nút xóa kênh (hiện khi hover) ------------------------------------ */
+.channel-card-deletable:hover .channel-delete-btn {
+  opacity: 1 !important;
+}
+
+.channel-delete-btn:hover {
+  background: rgba(185, 28, 28, 0.95) !important;
+  transform: scale(1.1);
+}

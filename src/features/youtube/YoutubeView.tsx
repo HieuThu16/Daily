@@ -571,6 +571,56 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     showToast(`Đã xoá thể loại "${deletedLabel}"`, 'info')
   }
 
+  // Xóa kênh (soft-delete bằng deleted_at trong Supabase)
+  const handleDeleteChannel = async (channel: ChannelItem) => {
+    const confirmed = window.confirm(`Bạn có chắc muốn xóa kênh "${channel.creator_name}"?\nTất cả video của kênh sẽ không còn hiển thị nữa.`)
+    if (!confirmed) return
+
+    if (!supabase) {
+      showToast('Lỗi: Không kết nối được Supabase', 'error')
+      return
+    }
+
+    const now = new Date().toISOString()
+    const table = channel.sourceTable === 'review' ? 'review_creators' : 'tvshow_creators'
+
+    // Soft-delete: set deleted_at
+    const { error } = await supabase
+      .from(table)
+      .update({ deleted_at: now })
+      .eq('id', channel.id)
+
+    if (error) {
+      showToast(`Xóa kênh thất bại: ${error.message}`, 'error')
+      return
+    }
+
+    // Cập nhật state ngay lập tức
+    setChannels((prev) => prev.filter((c) => c.id !== channel.id))
+    setAllVideos((prev) => prev.filter((v) => {
+      if (channel.creator_id) return v.creator_id !== channel.creator_id
+      return v.creator_name !== channel.creator_name
+    }))
+
+    if (selectedChannel && selectedChannel.id === channel.id) {
+      setSelectedChannel(null)
+    }
+
+    // Xóa khỏi channelCategoryMap
+    const newCatMap = { ...channelCategoryMap }
+    const keysToDelete = Object.keys(newCatMap).filter((k) => {
+      const norm = normalizeChannelKey(k)
+      return norm === normalizeChannelKey(channel.creator_name) || norm === normalizeChannelKey(channel.creator_id)
+    })
+    keysToDelete.forEach((k) => delete newCatMap[k])
+    if (keysToDelete.length > 0) {
+      setChannelCategoryMap(newCatMap)
+      void saveAppSetting('youtube_channel_categories', newCatMap)
+    }
+
+    showToast(`Đã xóa kênh "${channel.creator_name}"`, 'success')
+  }
+
   // 1. Thêm Tag vào một thể loại
   const handleAddTagToCategory = async (category: string, tag: string): Promise<string | undefined> => {
     const trimmedTag = tag.trim().replace(/^#+/, '')
@@ -2272,7 +2322,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                   return (
                     <div
                       key={channel.id}
-                      className="tv-creator-card"
+                      className="tv-creator-card channel-card-deletable"
                       onClick={() => setSelectedChannel(channel)}
                       style={{
                         position: 'relative',
@@ -2325,6 +2375,38 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                         >
                           <span>{channel.category || 'Khác'}</span>
                           <Edit3 size={10} style={{ opacity: 0.8 }} />
+                        </button>
+
+                        {/* Nút xóa kênh */}
+                        <button
+                          type="button"
+                          className="channel-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleDeleteChannel(channel)
+                          }}
+                          title="Xóa kênh này"
+                          style={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 10,
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            background: 'rgba(220, 38, 38, 0.85)',
+                            color: '#ffffff',
+                            backdropFilter: 'blur(8px)',
+                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 3,
+                            opacity: 0,
+                            transition: 'opacity 0.2s ease',
+                          }}
+                        >
+                          <Trash2 size={14} />
                         </button>
 
                         <div
