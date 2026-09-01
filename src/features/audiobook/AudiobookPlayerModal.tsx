@@ -446,24 +446,11 @@ export function AudiobookPlayerModal({
           </div>
 
           {hasPlaybackError && (
-            <div
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 12,
-                padding: '8px 12px',
-                margin: '10px 0 0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                fontSize: '0.78rem',
-                color: '#fca5a5',
-              }}
-            >
+            <div className="audiobook-error-banner">
               <span>⚠️ Link audio bị hỏng hoặc không tồn tại.</span>
               <button
                 type="button"
+                className="audiobook-error-del-btn"
                 onClick={async () => {
                   if (window.confirm(`Bạn có muốn xóa cuốn "${audiobook.title}" khỏi thư viện không?`)) {
                     await deleteAudiobook(audiobook.id)
@@ -472,19 +459,9 @@ export function AudiobookPlayerModal({
                     if (onDeleted) onDeleted(audiobook.id)
                   }
                 }}
-                style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '4px 8px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  fontSize: '0.72rem',
-                  whiteSpace: 'nowrap',
-                }}
               >
-                🗑️ Xóa sách hỏng
+                <Trash2 size={13} />
+                <span>Xóa sách hỏng</span>
               </button>
             </div>
           )}

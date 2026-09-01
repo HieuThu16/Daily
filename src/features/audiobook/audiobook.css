@@ -1324,5 +1324,49 @@
   box-shadow: 0 3px 8px rgba(16, 185, 129, 0.3);
 }
 
+/* Playback Error Banner & Delete Action */
+.audiobook-error-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+[data-theme="dark"] .audiobook-error-banner {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.audiobook-error-del-btn {
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.audiobook-error-del-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+}
+
 
 
