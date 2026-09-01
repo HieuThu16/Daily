@@ -584,6 +584,7 @@ export async function searchDtvEbook(keyword: string, page: number = 1): Promise
       if (!rawHref.startsWith('http')) {
         rawHref = 'https://dtv-ebook.com.vn/' + rawHref.replace(/^\//, '')
       }
+      rawHref = rawHref.replace(/^(?:https?:\/\/dtv-ebook\.com\.vn\/)+/, 'https://dtv-ebook.com.vn/')
 
       if (
         rawHref.includes('ung-ho') ||
@@ -1177,8 +1178,11 @@ export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | n
     const html = await fetchHtml(url)
     if (!html) return null
 
-    // Title, Author, Genre from Title Tag
-    const rawTitle = html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() || ''
+    // Title, Author, Genre: Ưu tiên thẻ h1, og:title rồi mới đến title tag
+    const h1Text = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim()
+    const ogTitle = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i)?.[1]?.trim()
+    const rawTitle = h1Text || ogTitle || html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() || ''
+
     let title = rawTitle.replace(/^Tải\s+(?:ebook|sách|truyện|audiobook)\s+/i, '')
     let rawGenre = ''
     const genreMatch = title.match(/\[([^\]]+)\]$/)
@@ -1234,19 +1238,30 @@ export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | n
       downloadBtns.find((b) => (b.text.includes('MOBI') || b.text.includes('AZW3')) && b.href.includes('google'))
         ?.href || null
 
-    // Audio tracks raw extraction
+    // Audio tracks raw extraction: Tìm mọi định dạng mp3/m4a/aac từ thẻ và link trực tiếp
     const rawAudioTracks: Array<{ id: string; title: string; url: string; duration?: number }> = []
-    const mp3Matches = [...html.matchAll(/(?:src|data-src|href)="([^"]+\.mp3[^"]*)"/gi)].map((m) => m[1])
-    for (const mp3 of mp3Matches) {
-      let mp3Url = mp3
-      if (!mp3Url.startsWith('http')) mp3Url = 'https://dtv-ebook.com.vn/' + mp3Url.replace(/^\//, '')
-      if (!rawAudioTracks.some((t) => t.url === mp3Url)) {
-        rawAudioTracks.push({
-          id: `track-${rawAudioTracks.length + 1}`,
-          title: `${title} - Phần ${rawAudioTracks.length + 1}`,
-          url: mp3Url,
-        })
-      }
+    const mp3Urls = new Set<string>()
+
+    const regexDirect = /https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|wav|ogg)[^"'\s<>]*/gi
+    let dm: RegExpExecArray | null
+    while ((dm = regexDirect.exec(html)) !== null) {
+      mp3Urls.add(dm[0])
+    }
+
+    const regexAttr = /(?:src|data-src|data-audio|data-mp3|href)=["']([^"']+\.(?:mp3|m4a|aac|wav|ogg)[^"']*)["']/gi
+    let am: RegExpExecArray | null
+    while ((am = regexAttr.exec(html)) !== null) {
+      let u = am[1]
+      if (!u.startsWith('http')) u = 'https://dtv-ebook.com.vn/' + u.replace(/^\//, '')
+      mp3Urls.add(u)
+    }
+
+    for (const mp3Url of mp3Urls) {
+      rawAudioTracks.push({
+        id: `track-${rawAudioTracks.length + 1}`,
+        title: `${title} - Phần ${rawAudioTracks.length + 1}`,
+        url: mp3Url,
+      })
     }
 
     // Xác thực và kiểm tra âm thanh sách nói
@@ -1501,7 +1516,8 @@ export async function saveDilibBook(
       hasPdf: detail.hasPdf,
       readbookUrl: detail.readbookUrl ?? undefined,
       pdfUrl: detail.pdfUrl ?? undefined,
-      status: 'PLANNED',
+      isDraft: true,
+      status: 'DRAFT',
       created_at: new Date().toISOString(),
     }
     await saveAudiobook(audiobook)
@@ -1532,8 +1548,9 @@ export async function saveDilibBook(
           pdfUrl: detail.pdfUrl,
           epubUrl: detail.epubUrl,
           hasAudio: detail.hasAudio,
+          isDraft: true,
         }),
-        status: 'PLANNED',
+        status: 'DRAFT',
         updated_at: new Date().toISOString(),
       }
 

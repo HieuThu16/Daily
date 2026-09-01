@@ -224,8 +224,9 @@ export function AudiobookPlayerModal({
       } catch {}
     }
 
-    // Lưu tiến độ định kỳ mỗi 5s hoặc khi kết thúc
-    if (Math.floor(cur) % 5 === 0 && dur > 0) {
+    // Lưu tiến độ định kỳ mỗi 5s (chỉ lưu cho sách chính thức đã duyệt, bỏ qua bản nháp)
+    const isDraft = audiobook.isDraft || audiobook.status === 'DRAFT'
+    if (!isDraft && Math.floor(cur) % 5 === 0 && dur > 0) {
       void updateAudiobookProgress(audiobook.id, {
         trackIndex: currentTrackIndex,
         trackTitle: currentTrack?.title,
@@ -241,16 +242,19 @@ export function AudiobookPlayerModal({
   // Kết thúc track -> tự chuyển bài tiếp
   const handleEnded = () => {
     if (!audiobook) return
-    // Đánh dấu hoàn thành track này
-    void updateAudiobookProgress(audiobook.id, {
-      trackIndex: currentTrackIndex,
-      trackTitle: currentTrack?.title,
-      currentSeconds: duration || 1,
-      durationSeconds: duration || 1,
-      bookTitle: audiobook.title,
-      author: audiobook.author,
-      coverUrl: audiobook.cover,
-    })
+    const isDraft = audiobook.isDraft || audiobook.status === 'DRAFT'
+    // Đánh dấu hoàn thành track này (chỉ ghi nhận cho sách chính thức)
+    if (!isDraft) {
+      void updateAudiobookProgress(audiobook.id, {
+        trackIndex: currentTrackIndex,
+        trackTitle: currentTrack?.title,
+        currentSeconds: duration || 1,
+        durationSeconds: duration || 1,
+        bookTitle: audiobook.title,
+        author: audiobook.author,
+        coverUrl: audiobook.cover,
+      })
+    }
 
     if (currentTrackIndex < audiobook.tracks.length - 1) {
       setCurrentTrackIndex((prev) => prev + 1)

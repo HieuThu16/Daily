@@ -44,6 +44,7 @@ export async function loadAudiobooks(): Promise<Audiobook[]> {
       let pdfUrl: string | undefined
       let totalDuration: number | undefined
       let durationFormatted: string | undefined
+      let isDraft = row.status === 'DRAFT'
 
       if (row.notes) {
         try {
@@ -54,6 +55,7 @@ export async function loadAudiobooks(): Promise<Audiobook[]> {
           if (parsed.pdfUrl) pdfUrl = parsed.pdfUrl
           if (parsed.totalDuration) totalDuration = parsed.totalDuration
           if (parsed.durationFormatted) durationFormatted = parsed.durationFormatted
+          if (parsed.isDraft !== undefined) isDraft = Boolean(parsed.isDraft)
         } catch {
           // Ghi chú dạng text thông thường
         }
@@ -73,7 +75,8 @@ export async function loadAudiobooks(): Promise<Audiobook[]> {
         hasPdf: Boolean(readbookUrl || pdfUrl),
         readbookUrl,
         pdfUrl,
-        status: row.status || 'PLANNED',
+        isDraft,
+        status: isDraft ? 'DRAFT' : row.status || 'PLANNED',
         created_at: row.created_at,
         updated_at: row.updated_at,
       }
@@ -117,6 +120,7 @@ export async function saveAudiobook(book: Audiobook): Promise<Audiobook> {
         dilibUrl: savedBook.dilibUrl,
         readbookUrl: savedBook.readbookUrl,
         pdfUrl: savedBook.pdfUrl,
+        isDraft: savedBook.isDraft ?? false,
       })
 
       const payload = {
@@ -129,7 +133,7 @@ export async function saveAudiobook(book: Audiobook): Promise<Audiobook> {
         description: savedBook.description,
         notes: notesPayload,
         url: savedBook.tracks[0]?.url || savedBook.dilibUrl || null,
-        status: savedBook.status || 'PLANNED',
+        status: savedBook.isDraft ? 'DRAFT' : savedBook.status || 'PLANNED',
         updated_at: new Date().toISOString(),
       }
 
@@ -148,6 +152,72 @@ export async function saveAudiobook(book: Audiobook): Promise<Audiobook> {
   }
 
   return savedBook
+}
+
+/** Duyệt một cuốn sách bản nháp vào danh sách sách chính thức */
+export async function approveDraftAudiobook(bookId: string): Promise<void> {
+  const localList = getLocalAudiobooks().map((b) => {
+    if (b.id === bookId) {
+      return { ...b, isDraft: false, status: 'PLANNED' as const, updated_at: new Date().toISOString() }
+    }
+    return b
+  })
+  saveLocalAudiobooks(localList)
+
+  if (supabase) {
+    try {
+      const target = localList.find((b) => b.id === bookId)
+      const notesPayload = target
+        ? JSON.stringify({
+            tracks: target.tracks,
+            totalDuration: target.totalDuration,
+            durationFormatted: target.durationFormatted,
+            dilibUrl: target.dilibUrl,
+            readbookUrl: target.readbookUrl,
+            pdfUrl: target.pdfUrl,
+            isDraft: false,
+          })
+        : undefined
+
+      const updateData: any = {
+        status: 'PLANNED',
+        updated_at: new Date().toISOString(),
+      }
+      if (notesPayload) updateData.notes = notesPayload
+
+      await supabase.from('media_items').update(updateData).eq('id', bookId)
+    } catch (err) {
+      console.warn('[audiobookRepository] Lỗi duyệt bản nháp:', err)
+    }
+  }
+}
+
+/** Duyệt tất cả bản nháp vào danh sách sách chính thức */
+export async function approveAllDraftAudiobooks(): Promise<number> {
+  const localList = getLocalAudiobooks()
+  const draftIds = localList.filter((b) => b.isDraft || b.status === 'DRAFT').map((b) => b.id)
+  if (draftIds.length === 0) return 0
+
+  const updatedList = localList.map((b) => {
+    if (b.isDraft || b.status === 'DRAFT') {
+      return { ...b, isDraft: false, status: 'PLANNED' as const, updated_at: new Date().toISOString() }
+    }
+    return b
+  })
+  saveLocalAudiobooks(updatedList)
+
+  if (supabase) {
+    try {
+      await supabase
+        .from('media_items')
+        .update({ status: 'PLANNED', updated_at: new Date().toISOString() })
+        .in('id', draftIds)
+    } catch (err) {
+      console.warn('[audiobookRepository] Lỗi duyệt tất cả bản nháp:', err)
+    }
+  }
+
+  return draftIds.length
 }
 
 /** Xóa sách nói */

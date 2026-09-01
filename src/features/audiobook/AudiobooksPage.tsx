@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Headphones,
   Search,
@@ -7,9 +8,19 @@ import {
   BookOpen,
   Trash2,
   BarChart3,
+  CheckCircle2,
+  Check,
+  Loader2,
 } from 'lucide-react'
 import type { Audiobook } from '../../types/audiobook'
-import { loadAudiobooks, deleteAudiobook, cleanUnplayableAudiobooks } from '../../lib/audiobookRepository'
+import {
+  loadAudiobooks,
+  deleteAudiobook,
+  cleanUnplayableAudiobooks,
+  approveDraftAudiobook,
+  approveAllDraftAudiobooks,
+} from '../../lib/audiobookRepository'
+import { downloadAndImportPdfBook } from '../../lib/book/pdfImporter'
 import { useAudiobookProgressMap } from '../../lib/audiobookProgress'
 import { formatDurationHuman } from '../../lib/dilibCrawler'
 import { DilibCrawlerModal } from './DilibCrawlerModal'
@@ -20,15 +31,17 @@ import { useToast } from '../ToastContext'
 import './audiobook.css'
 
 export function AudiobooksPage() {
+  const navigate = useNavigate()
   const { showToast } = useToast()
   const progressMap = useAudiobookProgressMap()
 
   const [audiobooks, setAudiobooks] = useState<Audiobook[]>([])
   const [loading, setLoading] = useState(true)
   const [cleaning, setCleaning] = useState(false)
+  const [convertingBookId, setConvertingBookId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [selectedGenre, setSelectedGenre] = useState('ALL')
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'IN_PROGRESS' | 'PLANNED' | 'COMPLETED'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'IN_PROGRESS' | 'PLANNED' | 'COMPLETED' | 'DRAFT'>('ALL')
 
   // Modals
   const [showCrawlerModal, setShowCrawlerModal] = useState(false)
@@ -62,9 +75,77 @@ export function AudiobooksPage() {
     }
   }
 
+  const handleApproveOneDraft = async (bookId: string) => {
+    await approveDraftAudiobook(bookId)
+    setAudiobooks((prev) =>
+      prev.map((b) => (b.id === bookId ? { ...b, isDraft: false, status: 'PLANNED' } : b))
+    )
+    showToast('✅ Đã duyệt cuốn sách vào Thư viện chính thức!')
+  }
+
+  const handleApproveAllDrafts = async () => {
+    const count = await approveAllDraftAudiobooks()
+    if (count > 0) {
+      setAudiobooks((prev) =>
+        prev.map((b) => ({
+          ...b,
+          isDraft: false,
+          status: b.status === 'DRAFT' || b.isDraft ? 'PLANNED' : b.status,
+        }))
+      )
+      showToast(`🎉 Đã duyệt toàn bộ ${count} cuốn vào Thư viện chính thức!`)
+    }
+  }
+
+  const handleDeleteAllDrafts = async () => {
+    const drafts = audiobooks.filter((b) => b.isDraft || b.status === 'DRAFT')
+    if (drafts.length === 0) return
+    if (!window.confirm(`Bạn có chắc muốn xóa tất cả ${drafts.length} bản nháp này?`)) return
+
+    for (const d of drafts) {
+      await deleteAudiobook(d.id)
+    }
+    setAudiobooks((prev) => prev.filter((b) => !b.isDraft && b.status !== 'DRAFT'))
+    showToast(`🗑️ Đã xóa toàn bộ ${drafts.length} bản nháp.`)
+  }
+
+  const handleReadBook = async (book: Audiobook) => {
+    if (book.pdfUrl) {
+      setConvertingBookId(book.id)
+      try {
+        showToast('⏳ Đang tải và bóc tách PDF sang nội dung sách đọc app...')
+        const ok = await downloadAndImportPdfBook(book.id, book.title, book.pdfUrl)
+        if (ok) {
+          navigate(`/read/${book.id}`)
+          return
+        }
+      } catch (err: any) {
+        console.warn('Lỗi bóc tách PDF native:', err)
+        showToast('Không thể chuyển đổi text từ PDF này, mở chế độ đọc nhúng...', 'info')
+      } finally {
+        setConvertingBookId(null)
+      }
+    }
+
+    if (book.readbookUrl || book.pdfUrl) {
+      setActiveReaderBook(book)
+    } else {
+      showToast('Sách này chưa có bản đọc.', 'info')
+    }
+  }
+
   useEffect(() => {
     void reload()
   }, [])
+
+  const draftBooks = useMemo(
+    () => audiobooks.filter((b) => b.isDraft || b.status === 'DRAFT'),
+    [audiobooks]
+  )
+  const officialBooks = useMemo(
+    () => audiobooks.filter((b) => !b.isDraft && b.status !== 'DRAFT'),
+    [audiobooks]
+  )
 
   // Cuốn sách được nghe gần đây nhất
   const continueListeningBook = useMemo(() => {
@@ -99,14 +180,24 @@ export function AudiobooksPage() {
   // Lọc danh sách sách nói
   const filteredBooks = useMemo(() => {
     return audiobooks.filter((b) => {
-      const p = progressMap[b.id]
-      const isCompleted = p?.completed || b.status === 'COMPLETED'
-      const isInProgress = (p?.percent || 0) > 0 && !isCompleted
+      const isDraft = b.isDraft || b.status === 'DRAFT'
 
-      // Lọc status
-      if (statusFilter === 'IN_PROGRESS' && !isInProgress) return false
-      if (statusFilter === 'COMPLETED' && !isCompleted) return false
-      if (statusFilter === 'PLANNED' && (isInProgress || isCompleted)) return false
+      // Nếu đang chọn tab Bản nháp: chỉ hiện sách nháp
+      if (statusFilter === 'DRAFT') {
+        if (!isDraft) return false
+      } else {
+        // Các tab khác: mặc định chỉ hiện sách chính thức đã duyệt
+        if (isDraft) return false
+
+        const p = progressMap[b.id]
+        const isCompleted = p?.completed || b.status === 'COMPLETED'
+        const isInProgress = (p?.percent || 0) > 0 && !isCompleted
+
+        // Lọc status
+        if (statusFilter === 'IN_PROGRESS' && !isInProgress) return false
+        if (statusFilter === 'COMPLETED' && !isCompleted) return false
+        if (statusFilter === 'PLANNED' && (isInProgress || isCompleted)) return false
+      }
 
       // Lọc thể loại
       if (selectedGenre !== 'ALL' && !b.genre?.toLowerCase().includes(selectedGenre.toLowerCase())) return false
@@ -184,8 +275,8 @@ export function AudiobooksPage() {
         </div>
       </div>
 
-      {/* 2. Hero Card: Tiếp tục nghe gần nhất */}
-      {continueListeningBook && (
+      {/* 2. Hero Card: Tiếp tục nghe gần nhất (Chỉ tính sách chính thức) */}
+      {continueListeningBook && statusFilter !== 'DRAFT' && (
         <div
           className="audiobooks-continue-card"
           onClick={() => setActivePlayerBook(continueListeningBook.book)}
@@ -241,10 +332,11 @@ export function AudiobooksPage() {
 
         <div className="audiobooks-status-segmented">
           {[
-            { id: 'ALL', label: 'Tất cả' },
+            { id: 'ALL', label: `Tất cả (${officialBooks.length})` },
             { id: 'IN_PROGRESS', label: '⏳ Đang nghe' },
             { id: 'PLANNED', label: '📌 Sẽ nghe' },
             { id: 'COMPLETED', label: '✅ Đã nghe' },
+            { id: 'DRAFT', label: `📝 Bản nháp ${draftBooks.length > 0 ? `(${draftBooks.length})` : ''}` },
           ].map((s) => (
             <button
               key={s.id}
@@ -292,7 +384,39 @@ export function AudiobooksPage() {
         </div>
       )}
 
-      {/* 4. Grid Danh Sách Sách Nói */}
+      {/* 4. Banner Hàng Đợi Bản Nháp (DRAFT BANNER) */}
+      {statusFilter === 'DRAFT' && (
+        <div className="audiobooks-draft-banner">
+          <div className="audiobooks-draft-info">
+            <h4>📝 Hàng đợi kiểm duyệt bản nháp ({draftBooks.length} cuốn)</h4>
+            <p>
+              Các cuốn sách vừa cào về được lưu ở chế độ Bản nháp. Bạn có thể bấm nghe thử hoặc đọc thử. Khi thấy ưng ý, nhấn <b>Duyệt</b> để đưa vào thư viện chính thức và bắt đầu lưu tiến độ đọc/nghe!
+            </p>
+          </div>
+          {draftBooks.length > 0 && (
+            <div className="audiobooks-draft-batch-actions">
+              <button
+                type="button"
+                className="audiobooks-btn-approve-all"
+                onClick={handleApproveAllDrafts}
+                title="Duyệt tất cả các cuốn bản nháp vào thư viện chính thức"
+              >
+                <CheckCircle2 size={15} /> <span>Duyệt tất cả ({draftBooks.length})</span>
+              </button>
+              <button
+                type="button"
+                className="audiobooks-btn-del-all"
+                onClick={handleDeleteAllDrafts}
+                title="Xóa tất cả các cuốn bản nháp"
+              >
+                <Trash2 size={15} /> <span>Xóa tất cả nháp</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 5. Grid Danh Sách Sách Nói */}
       {loading ? (
         <div className="audiobooks-grid">
           {[1, 2, 3, 4].map((i) => (
@@ -302,8 +426,12 @@ export function AudiobooksPage() {
       ) : filteredBooks.length === 0 ? (
         <div className="audiobooks-empty-state">
           <Headphones size={48} color="var(--primary, #8b5cf6)" />
-          <h3>Chưa có sách nói nào trong thư viện</h3>
-          <p>Nhấn nút “Cào Sách Đa Nguồn” để tìm kiếm và thêm hàng ngàn sách & sách nói miễn phí từ Dilib và DTV eBook!</p>
+          <h3>{statusFilter === 'DRAFT' ? 'Không có bản nháp nào cần duyệt' : 'Chưa có sách nói nào trong thư viện'}</h3>
+          <p>
+            {statusFilter === 'DRAFT'
+              ? 'Nhấn nút "Cào Sách Đa Nguồn" để cào thêm sách mới về hàng đợi kiểm duyệt.'
+              : 'Nhấn nút "Cào Sách Đa Nguồn" để tìm kiếm và thêm hàng ngàn sách & sách nói miễn phí từ Dilib và DTV eBook!'}
+          </p>
           <button type="button" className="audiobooks-crawl-btn" onClick={() => setShowCrawlerModal(true)}>
             <Sparkles size={16} /> Cào Sách Đa Nguồn
           </button>
@@ -311,6 +439,7 @@ export function AudiobooksPage() {
       ) : (
         <div className="audiobooks-grid">
           {filteredBooks.map((book) => {
+            const isDraft = book.isDraft || book.status === 'DRAFT'
             const p = progressMap[book.id]
             const percent = p?.percent || 0
             const isDone = p?.completed
@@ -336,6 +465,7 @@ export function AudiobooksPage() {
                   </div>
 
                   <div className="audiobook-card-badge-top">
+                    {isDraft && <span className="audiobook-draft-chip">📝 Bản nháp</span>}
                     <span className="audiobook-parts-chip">🎧 {book.tracks.length} phần</span>
                     {(book.durationFormatted || (book.totalDuration && book.totalDuration > 0)) && (
                       <span className="audiobook-duration-chip">
@@ -353,8 +483,8 @@ export function AudiobooksPage() {
                   </h4>
                   <p className="audiobook-card-author">{book.author}</p>
 
-                  {/* Progress Bar */}
-                  {percent > 0 && (
+                  {/* Progress Bar (Chỉ hiển thị cho sách chính thức) */}
+                  {!isDraft && percent > 0 && (
                     <div className="audiobook-card-prog-wrap">
                       <div className="audiobook-card-prog-bar">
                         <div
@@ -374,8 +504,19 @@ export function AudiobooksPage() {
                       onClick={() => setActivePlayerBook(book)}
                       title="Nghe sách nói"
                     >
-                      <Play size={14} /> <span>Nghe</span>
+                      <Play size={14} /> <span>{isDraft ? 'Nghe thử' : 'Nghe'}</span>
                     </button>
+
+                    {isDraft && (
+                      <button
+                        type="button"
+                        className="audiobook-btn-approve"
+                        onClick={() => void handleApproveOneDraft(book.id)}
+                        title="Duyệt cuốn sách này vào thư viện chính thức"
+                      >
+                        <Check size={14} /> <span>Duyệt</span>
+                      </button>
+                    )}
 
                     <WatchTogetherButton
                       item={{
@@ -396,10 +537,15 @@ export function AudiobooksPage() {
                       <button
                         type="button"
                         className="audiobook-btn-sub"
-                        onClick={() => setActiveReaderBook(book)}
-                        title="Đọc sách PDF trực tiếp trong app"
+                        onClick={() => void handleReadBook(book)}
+                        disabled={convertingBookId === book.id}
+                        title="Đọc sách trực tiếp trong app"
                       >
-                        <BookOpen size={15} />
+                        {convertingBookId === book.id ? (
+                          <Loader2 size={15} className="tv-spin" />
+                        ) : (
+                          <BookOpen size={15} />
+                        )}
                       </button>
                     )}
 

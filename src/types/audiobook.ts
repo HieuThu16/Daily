@@ -20,7 +20,8 @@ export type Audiobook = {
   hasPdf?: boolean
   readbookUrl?: string
   pdfUrl?: string
-  status?: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
+  isDraft?: boolean
+  status?: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'DRAFT'
   created_at?: string
   updated_at?: string
 }
