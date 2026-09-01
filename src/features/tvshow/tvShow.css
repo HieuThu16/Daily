@@ -2264,14 +2264,68 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.35);
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  z-index: 2;
 }
 
 .yt-seen-bar i {
   display: block;
   height: 100%;
   background: #ff0000;
+  border-radius: 0 2px 2px 0;
+}
+
+/* Badge tiến độ trên thumbnail */
+.yt-progress-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.yt-progress-badge.in-progress {
+  background: rgba(37, 99, 235, 0.88);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+.yt-progress-badge.completed {
+  background: rgba(16, 185, 129, 0.88);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+/* Thanh tiến độ bên dưới thumbnail */
+.yt-progress-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  z-index: 2;
+}
+
+.yt-progress-fill {
+  height: 100%;
+  background: #f43f5e;
+  border-radius: 0 2px 2px 0;
+}
+
+.yt-progress-fill.completed {
+  background: #10b981;
 }
 
 .yt-body {
@@ -2311,6 +2365,44 @@
   margin: 3px 0 0;
   font-size: 0.76rem;
   color: var(--text-muted);
+}
+
+/* Hàng tiến độ hiển thị phần trăm rõ ràng */
+.yt-card-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.yt-card-progress-track {
+  flex: 1;
+  height: 5px;
+  background: var(--card-border, rgba(0, 0, 0, 0.08));
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.yt-card-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #f43f5e, #e11d48);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.yt-card-progress-bar.is-complete {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.yt-card-progress-text {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--rose, #f43f5e);
+  white-space: nowrap;
+}
+
+.yt-card-progress-text.is-complete {
+  color: #10b981;
 }
 
 .yt-status {

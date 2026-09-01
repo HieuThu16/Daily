@@ -59,16 +59,101 @@ function writeLocal(map: Record<string, VideoProgress>) {
   window.dispatchEvent(new CustomEvent(EVENT_NAME))
 }
 
-/** Xóa 1 video khỏi lịch sử xem */
-export function removeVideoProgress(videoId: string) {
+/** Xóa 1 video khỏi lịch sử xem (cả local và Supabase) */
+export async function removeVideoProgress(videoId: string) {
   const map = getLocalProgress()
   delete map[videoId]
   writeLocal(map)
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser()
+      const user = data?.user
+      if (user) {
+        await supabase.from('video_watch_progress').delete().eq('user_id', user.id).eq('video_id', videoId)
+      }
+    } catch {}
+  }
 }
 
-/** Xóa toàn bộ lịch sử xem */
-export function clearAllVideoProgress() {
+/** Xóa toàn bộ lịch sử xem (cả local và Supabase) */
+export async function clearAllVideoProgress() {
   writeLocal({})
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser()
+      const user = data?.user
+      if (user) {
+        await supabase.from('video_watch_progress').delete().eq('user_id', user.id)
+      }
+    } catch {}
+  }
+}
+
+/** Đồng bộ toàn bộ lịch sử & tiến độ xem từ Supabase về LocalStorage */
+export async function syncVideoProgressFromSupabase(): Promise<Record<string, VideoProgress>> {
+  if (!supabase) return getLocalProgress()
+  try {
+    const { data: authData } = await supabase.auth.getUser()
+    const user = authData?.user
+    if (!user) return getLocalProgress()
+
+    const { data: rows, error } = await supabase
+      .from('video_watch_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+
+    if (error || !rows) return getLocalProgress()
+
+    const localMap = getLocalProgress()
+    let hasChange = false
+
+    for (const r of rows) {
+      if (!r.video_id) continue
+      const local = localMap[r.video_id]
+      const cloudPercent = typeof r.percent === 'number' ? r.percent : percentOf(r.seconds ?? 0, r.duration_seconds)
+      const cloudUpdated = r.updated_at ? new Date(r.updated_at).getTime() : 0
+      const localUpdated = local?.updatedAt ? new Date(local.updatedAt).getTime() : 0
+
+      const cloudRow: VideoProgress = {
+        videoId: r.video_id,
+        title: r.title ?? local?.title,
+        channelName: r.channel_name ?? local?.channelName,
+        thumbnail: r.thumbnail ?? local?.thumbnail ?? null,
+        seconds: r.seconds ?? 0,
+        durationSeconds: r.duration_seconds ?? null,
+        percent: cloudPercent,
+        status: r.status || statusOfPercent(cloudPercent),
+        updatedAt: r.updated_at || new Date().toISOString(),
+      }
+
+      if (!local || cloudPercent > local.percent || cloudUpdated > localUpdated) {
+        localMap[r.video_id] = cloudRow
+        hasChange = true
+      } else if (local && local.percent > cloudPercent && localUpdated > cloudUpdated) {
+        void upsertRemote([local])
+      }
+
+      // Đảm bảo trạng thái videoStatus cũng đồng bộ
+      const targetStatus = cloudRow.status === 'COMPLETED' ? 'COMPLETED' : cloudRow.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'UNWATCHED'
+      void setVideoStatus(r.video_id, 'tvshow', targetStatus, {
+        title: cloudRow.title,
+        channel_name: cloudRow.channelName,
+      })
+      void setVideoStatus(r.video_id, 'review', targetStatus, {
+        title: cloudRow.title,
+        channel_name: cloudRow.channelName,
+      })
+    }
+
+    if (hasChange) {
+      writeLocal(localMap)
+    }
+    return localMap
+  } catch (err) {
+    console.warn('[videoProgress] Không tải được từ Supabase:', err)
+    return getLocalProgress()
+  }
 }
 
 async function upsertRemote(rows: VideoProgress[]) {
@@ -169,6 +254,9 @@ export function useVideoProgressMap(): Record<string, VideoProgress> {
     const update = () => setMap(getLocalProgress())
     window.addEventListener(EVENT_NAME, update)
     window.addEventListener('storage', update)
+    void syncVideoProgressFromSupabase().then((merged) => {
+      setMap(merged)
+    })
     return () => {
       window.removeEventListener(EVENT_NAME, update)
       window.removeEventListener('storage', update)

@@ -32,11 +32,13 @@ import {
   type VideoStatus
 } from '../../lib/videoStatus'
 import {
+  percentOf,
   progressLabel,
   useVideoProgressMap,
   useYouTubeProgress,
   removeVideoProgress,
   clearAllVideoProgress,
+  syncVideoProgressFromSupabase,
 } from '../../lib/videoProgress'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { AddYoutubeModal } from './AddYoutubeModal'
@@ -835,6 +837,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         fetchAllTableRows<{ video_id: string }>('review_watched', 'video_id'),
         getRemoteAppSetting<ChannelCategoryMap>('youtube_channel_categories', {}),
         getRemoteAppSetting<ChannelTagMap>('youtube_channel_tags', {}),
+        syncVideoProgressFromSupabase(),
       ])
 
       const tvCreators = tvCreatorsRaw ?? []
@@ -4060,7 +4063,15 @@ function YoutubeVideoCard({
           <Play size={24} fill="#fff" />
         </span>
         {video.duration ? <span className="yt-duration">{formatVideoDuration(video.duration)}</span> : null}
-        {percent > 0 && <span className="yt-seen-bar"><i style={{ width: `${Math.min(100, percent)}%` }} /></span>}
+
+        {/* Badge tiến độ % nổi bật */}
+        {(percent > 0 || watched) && (
+          <div className={`yt-progress-badge ${percent >= 90 || watched ? 'completed' : 'in-progress'}`}>
+            {percent >= 90 || watched ? '✅ Đã xem' : `⏱️ ${percent}%`}
+          </div>
+        )}
+
+        {percent > 0 && <span className="yt-seen-bar"><i style={{ width: `${Math.min(100, Math.max(5, percent))}%` }} /></span>}
       </div>
 
       <div className="yt-body">
@@ -4071,9 +4082,17 @@ function YoutubeVideoCard({
           </h3>
           <p className="yt-meta">{meta}</p>
           {(watched || inProgress || (progress && progress.percent > 0)) && (
-            <p className={`yt-status ${watched || progress?.status === 'COMPLETED' ? 'done' : ''}`}>
-              {progress ? progressLabel(progress) : watched ? 'Đã xem hết' : 'Đang xem'}
-            </p>
+            <div className="yt-card-progress-row">
+              <div className="yt-card-progress-track">
+                <div
+                  className={`yt-card-progress-bar ${percent >= 90 || watched ? 'is-complete' : ''}`}
+                  style={{ width: `${Math.min(100, Math.max(5, percent))}%` }}
+                />
+              </div>
+              <span className={`yt-card-progress-text ${percent >= 90 || watched ? 'is-complete' : ''}`}>
+                {percent >= 90 || watched ? 'Đã xem 100%' : `Đang xem ${percent}%`}
+              </span>
+            </div>
           )}
           <div className="yt-actions">
             <button
@@ -4156,7 +4175,9 @@ function HistoryVideoCard({
   onPlayMini: () => void
   onRemove: () => void
 }) {
-  const { video, percent, updatedAt } = item
+  const { video, updatedAt } = item
+  const percent = item.percent > 0 ? item.percent : percentOf(item.seconds, video.duration)
+  const isComplete = percent >= 90 || item.status === 'COMPLETED'
   const meta = [video.creator_name || 'YouTube', timeAgo(updatedAt)].filter(Boolean).join(' · ')
   const audioPlayer = useOptionalAudioPlayer()
   const { isSaved: isAudioSaved, sizeLabel: audioSizeLabel } = useOfflineAudioState(video.video_id)
@@ -4207,7 +4228,7 @@ function HistoryVideoCard({
   }
 
   return (
-    <article className="yt-card">
+    <article className="yt-card" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 16, padding: 10, overflow: 'hidden' }}>
       <div
         className="yt-thumb"
         role="button"
@@ -4233,7 +4254,7 @@ function HistoryVideoCard({
             onOpen()
           }}
         >
-          <Play size={26} />
+          <Play size={26} fill="#fff" />
         </button>
 
         {/* Nút xóa khỏi lịch sử */}
@@ -4251,33 +4272,37 @@ function HistoryVideoCard({
             width: 28,
             height: 28,
             borderRadius: 8,
-            background: 'rgba(0, 0, 0, 0.7)',
+            background: 'rgba(0, 0, 0, 0.75)',
             color: '#fff',
             border: 'none',
             display: 'grid',
             placeItems: 'center',
             cursor: 'pointer',
             zIndex: 3,
+            transition: 'all 0.15s ease',
           }}
         >
           <Trash2 size={13} />
         </button>
 
-        {/* Badge tiến độ */}
-        <div className="yt-progress-badge">
-          {percent >= 90 ? 'Đã xem hết' : `Đang xem ${percent}%`}
+        {/* Badge tiến độ % nổi bật */}
+        <div className={`yt-progress-badge ${isComplete ? 'completed' : 'in-progress'}`}>
+          {isComplete ? '✅ Đã xem' : `⏱️ Đang xem ${percent}%`}
         </div>
 
-        {/* Thanh tiến độ */}
+        {/* Thời lượng video */}
+        {video.duration ? <span className="yt-duration">{formatVideoDuration(video.duration)}</span> : null}
+
+        {/* Thanh tiến độ chân ảnh */}
         <div className="yt-progress-bar">
           <div
-            className={`yt-progress-fill ${percent >= 90 ? 'completed' : ''}`}
-            style={{ width: `${percent}%` }}
+            className={`yt-progress-fill ${isComplete ? 'completed' : ''}`}
+            style={{ width: `${Math.min(100, Math.max(percent > 0 ? 5 : 0, percent))}%` }}
           />
         </div>
       </div>
 
-      <div className="yt-info">
+      <div className="yt-info" style={{ marginTop: 8 }}>
         <h3
           className="yt-title"
           title={video.title}
@@ -4285,18 +4310,45 @@ function HistoryVideoCard({
           tabIndex={0}
           onClick={onOpen}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}
+          style={{ cursor: 'pointer' }}
         >
           {video.title}
         </h3>
         <p className="yt-meta">{meta}</p>
 
-        <div className="yt-card-actions">
+        {/* Hàng thanh tiến độ % chi tiết */}
+        <div className="yt-card-progress-row">
+          <div className="yt-card-progress-track">
+            <div
+              className={`yt-card-progress-bar ${isComplete ? 'is-complete' : ''}`}
+              style={{ width: `${Math.min(100, Math.max(percent > 0 ? 5 : 0, percent))}%` }}
+            />
+          </div>
+          <span className={`yt-card-progress-text ${isComplete ? 'is-complete' : ''}`}>
+            {isComplete ? '100%' : `${percent}%`}
+          </span>
+        </div>
+
+        <div className="yt-card-actions" style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
           <button
             type="button"
             className="yt-card-btn primary"
             onClick={onOpen}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 10,
+              background: 'var(--primary)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
           >
-            <Play size={13} /> Xem tiếp
+            <Play size={13} fill="#fff" /> Xem tiếp
           </button>
 
           <button
@@ -4305,6 +4357,19 @@ function HistoryVideoCard({
             disabled={audioLoading}
             onClick={handleAudioAction}
             title={isAudioSaved ? `Phát audio offline (${audioSizeLabel})` : 'Tải & Nghe YouTube Audio'}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 10,
+              background: isAudioSaved ? 'rgba(6, 182, 212, 0.15)' : 'var(--card-bg)',
+              color: isAudioSaved ? '#06b6d4' : 'var(--text-main)',
+              border: isAudioSaved ? '1px solid rgba(6, 182, 212, 0.4)' : '1px solid var(--card-border)',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
           >
             {audioLoading ? (
               <Loader2 size={13} className="tv-spin" />
