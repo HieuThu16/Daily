@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, CheckCircle2, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { Award, BarChart3, BookMarked, BookOpen, CheckCircle2, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -28,7 +28,8 @@ import { VideoDetailView } from './library/VideoDetailView'
 import { BookImportModal, type ImportResult } from './library/BookImportModal'
 import { BookStatsModal } from './library/BookStatsModal'
 import { ContinueReadingHero } from './library/ContinueReadingHero'
-import { BookAdaptationsAndNobelView } from './library/BookAdaptationsAndNobelView'
+import { BookAdaptationsView } from './library/BookAdaptationsView'
+import { NobelLaureatesView } from './library/NobelLaureatesView'
 import { useLastReadBook, getBookReadingSessionLogs } from '../lib/bookReadingLog'
 import { SkeletonGrid } from './Skeleton'
 import { DilibCrawlerModal } from './audiobook/DilibCrawlerModal'
@@ -84,7 +85,7 @@ const STATUS_TONE: Record<Media['status'], string> = {
 const COVER_BUCKET = 'media-covers'
 
 export type Kind = (typeof categories)[number]['id']
-type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats' | 'curated'
+type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats' | 'adaptations' | 'nobel'
 type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'DRAFT'
 
 function getCurrentTimeString() {
@@ -1444,15 +1445,26 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             <span className="library-stat-link">Xem series ›</span>
           </button>
         )}
+        {(selectedType === 'BOOK' || selectedType === 'MOVIE') && (
+          <button
+            role="tab"
+            aria-selected={subView === 'adaptations'}
+            className={subView === 'adaptations' ? 'active' : ''}
+            onClick={() => setSubView('adaptations')}
+          >
+            <span className="library-stat-head"><Clapperboard size={13} /> Chuyển thể</span>
+            <span className="library-stat-link">Sách & Phim ›</span>
+          </button>
+        )}
         {selectedType === 'BOOK' && (
           <button
             role="tab"
-            aria-selected={subView === 'curated'}
-            className={subView === 'curated' ? 'active' : ''}
-            onClick={() => setSubView('curated')}
+            aria-selected={subView === 'nobel'}
+            className={subView === 'nobel' ? 'active' : ''}
+            onClick={() => setSubView('nobel')}
           >
-            <span className="library-stat-head"><Sparkles size={13} style={{ color: '#f59e0b' }} /> Phim & Nobel</span>
-            <span className="library-stat-link">Tuyển chọn ›</span>
+            <span className="library-stat-head"><Award size={13} /> Nobel</span>
+            <span className="library-stat-link">Các năm ›</span>
           </button>
         )}
         <button
@@ -1479,10 +1491,18 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           <button
             type="button"
             className="library-action-btn-secondary"
-            onClick={() => setSubView('curated')}
-            title="Tuyển tập sách chuyển thể thành phim & tác giả giải Nobel văn học"
+            onClick={() => setSubView('adaptations')}
+            title="Tuyển tập sách chuyển thể thành phim"
           >
-            <Clapperboard size={13} /> <span>Sách Phim & Nobel</span>
+            <Clapperboard size={13} /> <span>Sách Chuyển Thể</span>
+          </button>
+          <button
+            type="button"
+            className="library-action-btn-secondary"
+            onClick={() => setSubView('nobel')}
+            title="Tác giả và tác phẩm đoạt giải Nobel văn học các năm"
+          >
+            <Award size={13} /> <span>Nobel Văn Học</span>
           </button>
           <button
             type="button"
@@ -2053,9 +2073,17 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         </div>
       )}
 
-      {/* VIEW 5: SÁCH CHUYỂN THỂ PHIM & NOBEL VĂN HỌC */}
-      {subView === 'curated' && (
-        <BookAdaptationsAndNobelView
+      {/* VIEW 5a: SÁCH CHUYỂN THỂ THÀNH PHIM */}
+      {subView === 'adaptations' && (
+        <BookAdaptationsView
+          existingBooks={items.filter((i) => i.type === 'BOOK')}
+          onAdded={() => {}}
+        />
+      )}
+
+      {/* VIEW 5b: TÁC GIẢ & TÁC PHẨM ĐOẠT GIẢI NOBEL VĂN HỌC */}
+      {subView === 'nobel' && (
+        <NobelLaureatesView
           existingBooks={items.filter((i) => i.type === 'BOOK')}
           onAdded={() => {}}
         />
