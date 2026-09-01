@@ -119,6 +119,7 @@ const statusLabels: Record<Media['status'], string> = {
   PLANNED: 'Sẽ nghe',
   IN_PROGRESS: 'Đang nghe',
   COMPLETED: 'Đã nghe',
+  DRAFT: 'Bản nháp',
 }
 
 function formatTime(seconds: number): string {

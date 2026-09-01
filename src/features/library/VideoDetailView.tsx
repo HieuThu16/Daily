@@ -15,6 +15,7 @@ const STATUS_LABELS: Record<Media['status'], string> = {
   PLANNED: 'Sẽ xem',
   IN_PROGRESS: 'Đang xem',
   COMPLETED: 'Đã xem',
+  DRAFT: 'Bản nháp',
 }
 
 const STATUS_ORDER: Media['status'][] = ['PLANNED', 'IN_PROGRESS', 'COMPLETED']

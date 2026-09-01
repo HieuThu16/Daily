@@ -24,6 +24,7 @@ const STATUS_LABEL: Record<Media['status'], [string, string]> = {
   PLANNED: ['Sẽ đọc', 'Sẽ nghe'],
   IN_PROGRESS: ['Đang đọc', 'Đang nghe'],
   COMPLETED: ['Đã đọc', 'Đã nghe'],
+  DRAFT: ['Bản nháp', 'Bản nháp'],
 }
 
 function chapterPages(chapter: BookChapterMeta, document: BookDocument): number {

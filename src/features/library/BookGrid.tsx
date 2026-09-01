@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Heart } from 'lucide-react'
+import { CheckCircle2, Heart, Sparkles, Trash2 } from 'lucide-react'
 import type { Media } from '../../types'
 import { BookCover } from './BookCover'
 import { getBookReadingSessionLogs, getLastReadBook } from '../../lib/bookReadingLog'
@@ -8,6 +8,8 @@ type BookGridProps = {
   items: Media[]
   onOpen: (item: Media) => void
   onToggleFavorite: (item: Media) => void
+  onApproveDraft?: (id: string) => void
+  onDeleteDraft?: (id: string) => void
 }
 
 /** Nhãn chữ của trạng thái, cặp [đọc, nghe] theo `book_format`. */
@@ -15,6 +17,7 @@ const STATUS_LABEL: Record<Media['status'], [string, string]> = {
   PLANNED: ['sẽ đọc', 'sẽ nghe'],
   IN_PROGRESS: ['đang đọc', 'đang nghe'],
   COMPLETED: ['đã đọc', 'đã nghe'],
+  DRAFT: ['bản nháp', 'bản nháp'],
 }
 
 import { supabase } from '../../lib/supabase'
@@ -132,7 +135,7 @@ function useBookProgressMap(): Map<string, BookProgressInfo> {
   return progressMap
 }
 
-export function BookGrid({ items, onOpen, onToggleFavorite }: BookGridProps) {
+export function BookGrid({ items, onOpen, onToggleFavorite, onApproveDraft, onDeleteDraft }: BookGridProps) {
   const progressMap = useBookProgressMap()
 
   return (
@@ -271,6 +274,50 @@ export function BookGrid({ items, onOpen, onToggleFavorite }: BookGridProps) {
                   <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
                     {percent > 0 ? `${percent}%` : 'Đang đọc'}
                   </span>
+                </div>
+              </div>
+            )}
+
+            {/* Thao tác cho Sách Bản Nháp */}
+            {((item.status as string) === 'DRAFT' || item.notes?.includes('"isDraft":true')) && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span className="audiobook-draft-chip" style={{ alignSelf: 'flex-start', fontSize: '0.68rem', padding: '2px 8px' }}>
+                  <Sparkles size={11} /> Bản nháp
+                </span>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {onApproveDraft && (
+                    <button
+                      type="button"
+                      className="audiobook-btn-approve"
+                      style={{ padding: '4px 8px', fontSize: '0.74rem', flex: 1 }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onApproveDraft(item.id)
+                      }}
+                    >
+                      <CheckCircle2 size={13} /> Duyệt
+                    </button>
+                  )}
+                  {onDeleteDraft && (
+                    <button
+                      type="button"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#ef4444',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDeleteDraft(item.id)
+                      }}
+                      title="Xóa bản nháp"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             )}

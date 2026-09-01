@@ -140,7 +140,7 @@ export type Media = {
   log_date?: string | null
   log_time?: string | null
   created_at?: string | null
-  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
+  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'DRAFT'
   is_favorite: boolean
   book_format?: BookFormat | null
   cover_url?: string | null
@@ -148,6 +148,8 @@ export type Media = {
   is_public?: boolean
   /** Tên người đã chia sẻ sách này cho mình; null nếu tự thêm. */
   shared_by?: string | null
+  notes?: string | null
+  isDraft?: boolean
 }
 
 export type BookReadingLog = {

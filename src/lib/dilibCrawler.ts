@@ -377,7 +377,7 @@ export const DILIB_POPULAR_AUTHORS: string[] = [
   'Inamori Kazuo',
 ]
 
-export type CrawlerSource = 'ALL' | 'DILIB' | 'DTV'
+export type CrawlerSource = 'ALL' | 'DILIB' | 'DTV' | 'EBOOKNHANH' | 'SACHHAY'
 export type CrawlerBookFormat = 'ALL' | 'AUDIO' | 'READ'
 export type CrawlerScope = 'ALL_LIBRARY' | 'CATEGORY' | 'AUTHOR' | 'SEARCH'
 
@@ -385,7 +385,7 @@ export type UnifiedSearchResult = {
   url: string
   title: string
   thumbnail: string
-  source: 'Dilib' | 'DTV eBook'
+  source: 'Dilib' | 'DTV eBook' | 'EbookNhanh' | 'SachHayMienPhi'
   author?: string
 }
 
@@ -393,7 +393,7 @@ export type DilibSearchResult = UnifiedSearchResult
 
 export type UnifiedBookDetail = {
   url: string
-  source: 'Dilib' | 'DTV eBook'
+  source: 'Dilib' | 'DTV eBook' | 'EbookNhanh' | 'SachHayMienPhi'
   title: string
   author: string
   genre: string
@@ -428,7 +428,7 @@ export type CrawlReport = {
   items: Array<{
     title: string
     author: string
-    source: 'Dilib' | 'DTV eBook'
+    source: 'Dilib' | 'DTV eBook' | 'EbookNhanh' | 'SachHayMienPhi' | string
     hasAudio: boolean
     hasPdf: boolean
     audioCount: number
@@ -615,7 +615,95 @@ export async function searchDtvEbook(keyword: string, page: number = 1): Promise
   }
 }
 
-/** 3. TÌM KIẾM HỢP NHẤT SONG SONG CẢ 2 NGUỒN */
+/** TÌM KIẾM SÁCH TỪ EBOOKNHANH.COM */
+export async function searchEbookNhanh(keyword: string, _page: number = 1): Promise<UnifiedSearchResult[]> {
+  const q = keyword.trim().toLowerCase()
+  if (!q) return []
+  try {
+    let fetchUrl = 'https://ebooknhanh.com/sach'
+    if (q.includes('kinh doanh') || q.includes('kinh te')) {
+      fetchUrl = 'https://ebooknhanh.com/category/kinh-te-quan-ly'
+    } else if (q.includes('trinh tham') || q.includes('hinh su')) {
+      fetchUrl = 'https://ebooknhanh.com/category/trinh-tham-hinh-su'
+    } else if (q.includes('tam ly') || q.includes('ky nang')) {
+      fetchUrl = 'https://ebooknhanh.com/category/tam-ly-ky-nang-song'
+    } else if (q.includes('tieu thuyet')) {
+      fetchUrl = 'https://ebooknhanh.com/category/tieu-thuyet'
+    }
+
+    const html = await fetchHtml(fetchUrl)
+    if (!html) return []
+
+    const matches = [...html.matchAll(/<a[^>]+href="(\/sach\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
+    const results: UnifiedSearchResult[] = []
+    const seen = new Set<string>()
+
+    for (const m of matches) {
+      const u = 'https://ebooknhanh.com' + m[1]
+      if (seen.has(u)) continue
+      seen.add(u)
+
+      const title = m[2].replace(/<[^>]+>/g, '').trim().split('\n')[0]
+      results.push({
+        url: u,
+        title,
+        thumbnail: '',
+        source: 'EbookNhanh',
+      })
+    }
+    return results
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi tìm kiếm EbookNhanh:', err)
+    return []
+  }
+}
+
+/** TÌM KIẾM SÁCH TỪ SACHHAYMIENPHI.COM */
+export async function searchSachHayMienPhi(keyword: string, _page: number = 1, isAudio: boolean = false): Promise<UnifiedSearchResult[]> {
+  const q = keyword.trim()
+  if (!q && !isAudio) return []
+  try {
+    const searchUrl = isAudio
+      ? 'https://sachhaymienphi.com/sach-noi'
+      : `https://sachhaymienphi.com/tim-kiem?search=${encodeURIComponent(q)}`
+
+    const html = await fetchHtml(searchUrl)
+    if (!html) return []
+
+    const matches = [...html.matchAll(/<a[^>]+href="(https:\/\/sachhaymienphi\.com\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
+    const results: UnifiedSearchResult[] = []
+    const seen = new Set<string>()
+
+    for (const m of matches) {
+      const u = m[1]
+      const title = m[2].replace(/<[^>]+>/g, '').trim()
+      if (
+        !u.includes('/category/') &&
+        !u.includes('/tag/') &&
+        !u.includes('/the-loai/') &&
+        !u.includes('/page/') &&
+        !u.includes('login') &&
+        !u.includes('register') &&
+        title.length > 2 &&
+        !seen.has(u)
+      ) {
+        seen.add(u)
+        results.push({
+          url: u,
+          title,
+          thumbnail: '',
+          source: 'SachHayMienPhi',
+        })
+      }
+    }
+    return results
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi tìm kiếm SachHayMienPhi:', err)
+    return []
+  }
+}
+
+/** 3. TÌM KIẾM HỢP NHẤT SONG SONG TẤT CẢ CÁC NGUỒN */
 export async function searchMultiSource(
   keyword: string,
   source: CrawlerSource = 'ALL',
@@ -630,6 +718,12 @@ export async function searchMultiSource(
   }
   if (source === 'ALL' || source === 'DTV') {
     promises.push(searchDtvEbook(q, page))
+  }
+  if (source === 'ALL' || source === 'EBOOKNHANH') {
+    promises.push(searchEbookNhanh(q, page))
+  }
+  if (source === 'ALL' || source === 'SACHHAY') {
+    promises.push(searchSachHayMienPhi(q, page))
   }
 
   const results = await Promise.allSettled(promises)
@@ -1296,10 +1390,128 @@ export async function fetchDtvDetail(url: string): Promise<UnifiedBookDetail | n
   }
 }
 
+/** BÓC TÁCH CHI TIẾT SÁCH TỪ EBOOKNHANH.COM */
+export async function fetchEbookNhanhDetail(url: string): Promise<UnifiedBookDetail | null> {
+  try {
+    const html = await fetchHtml(url)
+    if (!html) return null
+
+    const title =
+      html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() ||
+      html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() ||
+      'Sách'
+    const cover = html.match(/<meta property="og:image" content="([^"]+)"/i)?.[1] || ''
+    const desc = html.match(/<meta\s+(?:name|property)="(?:description|og:description)"\s+content="([^"]+)"/i)?.[1] || ''
+    const author =
+      html.match(/Tác giả:[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() ||
+      html.match(/Tác giả:\s*([^<\n]+)/i)?.[1]?.trim() ||
+      'Chưa rõ tác giả'
+
+    const slug = url.split('/').pop()?.replace('.html', '') || ''
+
+    // Gọi API của EbookNhanh để lấy link tải Google Drive PDF trực tiếp
+    let pdfUrl: string | null = null
+    try {
+      const apiRes = await fetch('https://ebooknhanh.com/api/get-download-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookSlug: slug, format: 'PDF' }),
+      })
+      if (apiRes.ok) {
+        const data = await apiRes.json()
+        if (data && data.success && data.url) {
+          pdfUrl = data.url
+        }
+      }
+    } catch {}
+
+    const hasPdf = Boolean(pdfUrl || url)
+    const { genre } = classifyBookGenreAndAuthor(title, '', author, desc, url, false)
+
+    return {
+      url,
+      source: 'EbookNhanh',
+      title,
+      author,
+      genre,
+      cover,
+      description: desc,
+      hasAudio: false,
+      hasPdf,
+      pdfUrl: pdfUrl || null,
+      readbookUrl: pdfUrl || null,
+      audioTracks: [],
+    }
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi fetch detail EbookNhanh:', err)
+    return null
+  }
+}
+
+/** BÓC TÁCH CHI TIẾT SÁCH TỪ SACHHAYMIENPHI.COM */
+export async function fetchSachHayMienPhiDetail(url: string): Promise<UnifiedBookDetail | null> {
+  try {
+    const html = await fetchHtml(url)
+    if (!html) return null
+
+    const title =
+      html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() ||
+      html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() ||
+      'Sách'
+    const cover = html.match(/<meta property="og:image" content="([^"]+)"/i)?.[1] || ''
+    const desc = html.match(/<meta\s+(?:name|property)="(?:description|og:description)"\s+content="([^"]+)"/i)?.[1] || ''
+    const author =
+      html.match(/Tác giả:[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i)?.[1]?.replace(/<[^>]+>/g, '').trim() ||
+      'Chưa rõ tác giả'
+
+    const slug = url.split('/').pop()?.replace('.html', '') || ''
+    const pdfUrl = `https://sachhaymienphi.com/tai-pdf/${slug}`
+
+    // Direct MP3s nếu có
+    const mp3s = [...new Set([...html.matchAll(/https?:\/\/[^"'\s<>]+\.(?:mp3|m4a|aac|wav)[^"'\s<>]*/gi)].map((m) => m[0]))]
+    const rawAudioTracks: Array<{ id: string; title: string; url: string }> = mp3s.map((t, idx) => ({
+      id: `sh-track-${idx + 1}`,
+      title: `${title} - Phần ${idx + 1}`,
+      url: t,
+    }))
+
+    const audioValidation = await validateAndProbeAudioTracks(rawAudioTracks, title, html, desc)
+    const hasAudio = audioValidation.hasAudio
+    const hasPdf = true
+    const { genre } = classifyBookGenreAndAuthor(title, '', author, desc, url, hasAudio)
+
+    return {
+      url,
+      source: 'SachHayMienPhi',
+      title,
+      author,
+      genre,
+      cover,
+      description: desc,
+      hasAudio,
+      hasPdf,
+      pdfUrl,
+      readbookUrl: pdfUrl,
+      totalDuration: audioValidation.totalDuration,
+      durationFormatted: audioValidation.durationFormatted,
+      audioTracks: audioValidation.validTracks,
+    }
+  } catch (err) {
+    console.warn('[dilibCrawler] Lỗi fetch detail SachHayMienPhi:', err)
+    return null
+  }
+}
+
 /** 6. BÓC TÁCH CHI TIẾT TỔNG HỢP TỪ BẤT KỲ NGUỒN NÀO */
 export async function fetchUnifiedDetail(url: string): Promise<UnifiedBookDetail | null> {
   if (url.includes('dtv-ebook.com.vn')) {
     return fetchDtvDetail(url)
+  }
+  if (url.includes('ebooknhanh.com')) {
+    return fetchEbookNhanhDetail(url)
+  }
+  if (url.includes('sachhaymienphi.com')) {
+    return fetchSachHayMienPhiDetail(url)
   }
   return fetchDilibDetail(url)
 }

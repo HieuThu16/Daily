@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, BookMarked, BookOpen, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { BarChart3, BookMarked, BookOpen, CheckCircle2, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -44,6 +44,7 @@ const STATUS_FILTERS = [
   { key: 'PLANNED', label: 'Sẽ', icon: '📌', color: 'var(--primary)', bg: 'var(--primary-light)' },
   { key: 'IN_PROGRESS', label: 'Đang', icon: '⏳', color: 'var(--amber)', bg: 'var(--amber-bg)' },
   { key: 'COMPLETED', label: 'Đã', icon: '✅', color: 'var(--emerald)', bg: 'var(--emerald-bg)' },
+  { key: 'DRAFT', label: 'Bản nháp', icon: '📝', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
 ] as const satisfies readonly { key: StatusFilter; label: string; icon: string; color: string; bg: string }[]
 
 /**
@@ -75,19 +76,14 @@ const STATUS_TONE: Record<Media['status'], string> = {
   PLANNED: 'var(--text-muted)',
   IN_PROGRESS: 'var(--amber)',
   COMPLETED: 'var(--emerald)',
+  DRAFT: '#f59e0b',
 }
 
 const COVER_BUCKET = 'media-covers'
 
-/**
- * Ô "ảnh bìa" gradient của mỗi mục. Màu suy ra từ id nên một mục luôn giữ đúng
- * một màu qua mọi lần tải, và danh sách nhìn có nhịp màu thay vì một khối xám.
- */
-
-
 export type Kind = (typeof categories)[number]['id']
 type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats'
-type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'
+type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'DRAFT'
 
 function getCurrentTimeString() {
   const now = new Date()
@@ -934,7 +930,22 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const filteredOverviewItems = useMemo(() => {
     return items.filter((i) => {
       if (selectedType !== 'ALL' && i.type !== selectedType) return false
-      if (statusFilter !== 'ALL' && i.status !== statusFilter) return false
+
+      let isDraft = (i.status as string) === 'DRAFT'
+      if (i.notes) {
+        try {
+          const p = JSON.parse(i.notes)
+          if (p.isDraft === true) isDraft = true
+        } catch {}
+      }
+
+      if (statusFilter === 'DRAFT') {
+        if (!isDraft) return false
+      } else {
+        if (isDraft) return false
+        if (statusFilter !== 'ALL' && i.status !== statusFilter) return false
+      }
+
       if (selectedType === 'MUSIC' && musicGenreFilter !== 'ALL' && (i.music_genre ?? 'Chưa phân loại') !== musicGenreFilter) return false
       if (selectedType === 'BOOK') {
         if (bookGenreFilter !== 'ALL' && (i.genre ?? 'Chưa phân loại') !== bookGenreFilter) return false
@@ -945,6 +956,105 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       return i.name.toLowerCase().includes(q) || (i.author && i.author.toLowerCase().includes(q)) || (i.genre && i.genre.toLowerCase().includes(q))
     })
   }, [items, selectedType, statusFilter, musicGenreFilter, bookGenreFilter, bookAuthorFilter, search])
+
+  // Count draft books
+  const draftBookCount = useMemo(() => {
+    return items.filter((i) => {
+      if (selectedType !== 'ALL' && i.type !== selectedType) return false
+      let isDraft = (i.status as string) === 'DRAFT'
+      if (i.notes) {
+        try {
+          const p = JSON.parse(i.notes)
+          if (p.isDraft === true) isDraft = true
+        } catch {}
+      }
+      return isDraft
+    }).length
+  }, [items, selectedType])
+
+  // Duyệt tất cả bản nháp
+  const handleApproveAllDrafts = async () => {
+    const draftIds: string[] = []
+    const updated = items.map((i) => {
+      let isDraft = (i.status as string) === 'DRAFT'
+      let cleanNotes = i.notes
+      if (i.notes) {
+        try {
+          const p = JSON.parse(i.notes)
+          if (p.isDraft === true) {
+            isDraft = true
+            delete p.isDraft
+            cleanNotes = JSON.stringify(p)
+          }
+        } catch {}
+      }
+      if (isDraft && (selectedType === 'ALL' || i.type === selectedType)) {
+        draftIds.push(i.id)
+        return { ...i, status: 'PLANNED' as Media['status'], notes: cleanNotes }
+      }
+      return i
+    })
+
+    setItems(updated)
+    if (supabase && draftIds.length > 0) {
+      for (const id of draftIds) {
+        await supabase.from('media_items').update({ status: 'PLANNED' }).eq('id', id)
+      }
+    }
+    showToast(`🎉 Đã duyệt tất cả ${draftIds.length} cuốn sách vào thư viện chính thức!`)
+    setStatusFilter('ALL')
+  }
+
+  // Xóa tất cả bản nháp
+  const handleDeleteAllDrafts = async () => {
+    if (!window.confirm('Bạn có chắc muốn xóa tất cả sách trong bản nháp không?')) return
+    const draftIds: string[] = []
+    const updated = items.filter((i) => {
+      let isDraft = (i.status as string) === 'DRAFT'
+      if (i.notes) {
+        try {
+          const p = JSON.parse(i.notes)
+          if (p.isDraft === true) isDraft = true
+        } catch {}
+      }
+      if (isDraft && (selectedType === 'ALL' || i.type === selectedType)) {
+        draftIds.push(i.id)
+        return false
+      }
+      return true
+    })
+
+    setItems(updated)
+    if (supabase && draftIds.length > 0) {
+      for (const id of draftIds) {
+        await supabase.from('media_items').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+      }
+    }
+    showToast(`🗑️ Đã xóa ${draftIds.length} cuốn bản nháp`)
+  }
+
+  // Duyệt từng cuốn sách bản nháp
+  const handleApproveDraft = async (id: string) => {
+    let cleanNotes: string | null = null
+    const updated = items.map((i) => {
+      if (i.id === id) {
+        if (i.notes) {
+          try {
+            const p = JSON.parse(i.notes)
+            delete p.isDraft
+            cleanNotes = JSON.stringify(p)
+          } catch {}
+        }
+        return { ...i, status: 'PLANNED' as Media['status'], notes: cleanNotes || i.notes }
+      }
+      return i
+    })
+    setItems(updated)
+    if (supabase) {
+      await supabase.from('media_items').update({ status: 'PLANNED', notes: cleanNotes }).eq('id', id)
+    }
+    showToast('✅ Đã duyệt sách vào thư viện chính thức!')
+  }
 
   /** Các mục đã gắn MP3 — nguồn cho mục "Nghe liên tục". */
   const audioItems = useMemo(() => {
@@ -1081,7 +1191,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             {/* Trạng thái nằm sau một mũi tên để nhường chỗ cho tên bài; màu của
                 mũi tên vẫn lộ ra đang ở trạng thái nào, khỏi phải mở menu ra xem. */}
             <RowMenu
-              label={`Trạng thái: ${cat.labels[STATUS_ORDER.indexOf(item.status)]}`}
+              label={`Trạng thái: ${item.status === 'DRAFT' ? 'Bản nháp' : (cat.labels[STATUS_ORDER.indexOf(item.status as (typeof STATUS_ORDER)[number])] ?? cat.labels[0])}`}
               icon={<ChevronDown size={16} />}
               tone={STATUS_TONE[item.status]}
               items={STATUS_ORDER.map((value, i) => ({
@@ -1395,10 +1505,23 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
         <div className="card" style={{ padding: 10, margin: 0 }}>
           {/* SEARCH & STATUS SEGMENT BAR */}
           <div className="library-controls">
-            {/* Status Segmented Control (Sẽ / Đang / Đã) */}
-            <div className="form-row-4 library-status-bar">
+            {/* Status Segmented Control (Sẽ / Đang / Đã / Bản nháp) */}
+            <div className="form-row-4 library-status-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {STATUS_FILTERS.map((f) => {
-                const count = items.filter((i) => i.type === selectedType && i.status === f.key).length
+                const count = items.filter((i) => {
+                  if (i.type !== selectedType) return false
+                  let isDraft = (i.status as string) === 'DRAFT'
+                  if (i.notes) {
+                    try {
+                      const p = JSON.parse(i.notes)
+                      if (p.isDraft === true) isDraft = true
+                    } catch {}
+                  }
+                  if (f.key === 'DRAFT') return isDraft
+                  if (isDraft) return false
+                  return f.key === 'ALL' || i.status === f.key
+                }).length
+
                 return (
                   <button
                     key={f.key}
@@ -1559,7 +1682,52 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             )}
           </div>
 
-          {selectedType === 'BOOK' && <ContinueReadingHero />}
+          {/* Draft Review Banner */}
+          {statusFilter === 'DRAFT' && (
+            <div className="audiobooks-draft-banner" style={{ margin: '12px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="audiobook-draft-chip">
+                  <Sparkles size={13} />
+                  Hàng đợi bản nháp ({draftBookCount} cuốn)
+                </span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Sách vừa cào về sẽ nằm ở đây để bạn đọc thử. Sau khi duyệt, sách sẽ chính thức chuyển vào thư viện chính!
+                </span>
+              </div>
+              {draftBookCount > 0 && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="audiobook-btn-approve"
+                    onClick={() => void handleApproveAllDrafts()}
+                  >
+                    <CheckCircle2 size={14} /> Duyệt tất cả ({draftBookCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteAllDrafts()}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      color: '#ef4444',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Trash2 size={13} /> Xóa tất cả nháp
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedType === 'BOOK' && statusFilter !== 'DRAFT' && <ContinueReadingHero />}
 
           {loading ? (
             <SkeletonGrid items={8} />
@@ -1572,6 +1740,8 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
                   onToggleFavorite={(item) =>
                     patchStatusOrFavorite(item.id, { is_favorite: !item.is_favorite })
                   }
+                  onApproveDraft={handleApproveDraft}
+                  onDeleteDraft={removeMediaItem}
                 />
               ) : (
                 filteredOverviewItems.map(renderMediaRow)

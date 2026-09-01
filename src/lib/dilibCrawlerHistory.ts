@@ -11,7 +11,7 @@ export type CrawledBookHistoryItem = {
   id: string
   title: string
   author: string
-  source: 'Dilib' | 'DTV eBook'
+  source: 'Dilib' | 'DTV eBook' | 'EbookNhanh' | 'SachHayMienPhi' | string
   cover?: string
   url?: string
   readbookUrl?: string | null

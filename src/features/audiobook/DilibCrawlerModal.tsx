@@ -719,19 +719,28 @@ export function DilibCrawlerModal({
               }}
             >
               {/* Nguồn */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.72rem', fontWeight: 750, color: 'var(--text-muted)' }}>
                   Nguồn:
                 </span>
-                {([
-                  { id: 'ALL', label: '⚡ Cả 2 nguồn' },
-                  { id: 'DILIB', label: '🌐 Dilib' },
-                  { id: 'DTV', label: '📗 DTV eBook' },
-                ] as const).map((s) => (
+                {(selectedFormat === 'AUDIO'
+                  ? ([
+                      { id: 'ALL', label: '⚡ Cả 2 nguồn' },
+                      { id: 'DILIB', label: '🌐 Dilib.vn' },
+                      { id: 'DTV', label: '📗 DTV / SachHay' },
+                    ] as const)
+                  : ([
+                      { id: 'ALL', label: '⚡ Tất cả 4 nguồn' },
+                      { id: 'DILIB', label: '🌐 Dilib' },
+                      { id: 'DTV', label: '📗 DTV eBook' },
+                      { id: 'EBOOKNHANH', label: '⚡ EbookNhanh' },
+                      { id: 'SACHHAY', label: '📚 Sách Hay' },
+                    ] as const)
+                ).map((s) => (
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => setSelectedSource(s.id)}
+                    onClick={() => setSelectedSource(s.id as CrawlerSource)}
                     style={{
                       padding: '3px 7px',
                       borderRadius: 6,
