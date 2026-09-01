@@ -11,6 +11,7 @@ import type { MangaChapter } from '../../types/manga';
 import type { HManga } from './hMangaService';
 import { 
   fetchHMangaList,
+  fetchSingleHManga,
   getHMangaFavorites, toggleHMangaFavorite, 
   getHMangaHistory, getHMangaProgress,
   getHMangaFollows, toggleHMangaFollow,
@@ -80,6 +81,12 @@ Truyện sẽ biến mất khỏi kho trên mọi máy và không khôi phục l
     const loadMangaDetail = async () => {
       setLoading(true);
       try {
+        if (slug) {
+          const single = await fetchSingleHManga(slug);
+          if (isMounted && single) {
+            setManga(single);
+          }
+        }
         const list = await fetchHMangaList();
         if (isMounted && slug) {
           const found = list.find((m) => m.slug === slug);

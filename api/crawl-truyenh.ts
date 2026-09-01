@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from './_auth.js'
 
 export const config = { maxDuration: 60 };
@@ -528,6 +529,72 @@ export default async function handler(req: any, res: any) {
       : isSayHentai
         ? await crawlSayHentaiStory(url, existingChapters)
         : await crawlMetruyen18Story(url, existingChapters);
+
+    // Tự động lưu trực tiếp vào Supabase trên backend bằng SERVICE_ROLE_KEY để đồng bộ ngay lập tức cho điện thoại & laptop
+    const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+
+    if (VITE_SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY && manga?.slug) {
+      try {
+        const db = createClient(VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+        const { data: existing } = await db
+          .from('media_items')
+          .select('id, description')
+          .eq('channel', manga.slug)
+          .in('type', ['STORY', 'MANGA'])
+          .limit(1);
+
+        let finalManga = manga;
+        if (existing && existing.length > 0) {
+          if (existing[0].description && existing[0].description.startsWith('{')) {
+            try {
+              const old = JSON.parse(existing[0].description);
+              const oldChaps = Array.isArray(old?.chapters) ? old.chapters : [];
+              const newChaps = Array.isArray(manga?.chapters) ? manga.chapters : [];
+              if (oldChaps.length > newChaps.length) {
+                finalManga = { ...manga, chapters: oldChaps, totalChapters: oldChaps.length };
+              } else if (oldChaps.length > 0) {
+                const oldMap = new Map<number, any>(oldChaps.map((c: any) => [c.number, c]));
+                const merged = newChaps.map((ch: any) => {
+                  const o: any = oldMap.get(ch.number);
+                  if (o && (!ch.images || ch.images.length === 0) && (o.images && o.images.length > 0)) {
+                    return o;
+                  }
+                  return ch;
+                });
+                finalManga = { ...manga, chapters: merged, totalChapters: Math.max(newChaps.length, merged.length) };
+              }
+            } catch {}
+          }
+
+          await db.from('media_items').update({
+            name: finalManga.title,
+            author: finalManga.author || null,
+            genre: 'H_MANGA',
+            cover_url: finalManga.cover || null,
+            channel: finalManga.slug,
+            description: JSON.stringify(finalManga),
+            is_public: true,
+            updated_at: new Date().toISOString(),
+          }).eq('id', existing[0].id);
+        } else {
+          await db.from('media_items').insert({
+            type: 'STORY',
+            name: finalManga.title,
+            author: finalManga.author || null,
+            genre: 'H_MANGA',
+            cover_url: finalManga.cover || null,
+            channel: finalManga.slug,
+            description: JSON.stringify(finalManga),
+            is_public: true,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Backend could not auto-save HManga to Supabase:', dbErr);
+      }
+    }
+
     return res.status(200).json({ success: true, manga });
   } catch (err: any) {
     console.error('Error crawling manga:', err);

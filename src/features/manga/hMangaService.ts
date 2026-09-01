@@ -50,13 +50,27 @@ export function saveCustomHManga(manga: HManga): void {
   let updated: HManga[];
   if (idx >= 0) {
     const existing = current[idx];
-    const existingCount = Array.isArray(existing.chapters) ? existing.chapters.length : (existing.totalChapters || 0);
-    const newCount = Array.isArray(cleanManga.chapters) ? cleanManga.chapters.length : (cleanManga.totalChapters || 0);
-    // Nếu bản mới ít chapter hơn bản cũ (do cào lỗi/chưa đầy đủ), giữ lại chapters của bản cũ
-    if (existingCount > newCount && existing.chapters && existing.chapters.length > 0) {
-      cleanManga.chapters = existing.chapters;
-      cleanManga.totalChapters = existingCount;
+    const existingChapters = Array.isArray(existing.chapters) ? existing.chapters : [];
+    const newChapters = Array.isArray(cleanManga.chapters) ? cleanManga.chapters : [];
+
+    // Gộp chapter thông minh: nếu chapter cũ đã có ảnh mà chapter mới rỗng thì giữ ảnh cũ
+    const existingChMap = new Map(existingChapters.map(c => [c.number, c]));
+    const mergedChaps = newChapters.map(ch => {
+      const oldCh = existingChMap.get(ch.number);
+      if (oldCh && (!ch.images || ch.images.length === 0) && (oldCh.images && oldCh.images.length > 0)) {
+        return { ...ch, images: oldCh.images };
+      }
+      return ch;
+    });
+    for (const oldCh of existingChapters) {
+      if (!mergedChaps.some(c => c.number === oldCh.number)) {
+        mergedChaps.push(oldCh);
+      }
     }
+    mergedChaps.sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+    cleanManga.chapters = mergedChaps;
+    cleanManga.totalChapters = Math.max(cleanManga.totalChapters || 0, existingChapters.length, mergedChaps.length);
+
     updated = [...current];
     updated[idx] = cleanManga;
   } else {
@@ -74,7 +88,7 @@ export function saveCustomHManga(manga: HManga): void {
     void (async () => {
       try {
         const user = (await supabase.auth.getUser())?.data?.user;
-        if (!user) return;
+        const userId = user?.id || null;
 
         let finalCover = cleanManga.cover || null;
         if (finalCover && !finalCover.includes('supabase.co/storage/v1/object/public/')) {
@@ -94,7 +108,7 @@ export function saveCustomHManga(manga: HManga): void {
         }
 
         const payload = {
-          user_id: user.id,
+          user_id: userId,
           type: 'STORY',
           name: cleanManga.title,
           author: cleanManga.author || null,
@@ -108,16 +122,15 @@ export function saveCustomHManga(manga: HManga): void {
 
         const { data: existing } = await supabase
           .from('media_items')
-          .select('id, description')
+          .select('id, description, user_id')
           .eq('channel', cleanManga.slug)
-          .eq('type', 'STORY')
+          .in('type', ['STORY', 'MANGA'])
           .neq('genre', 'H_PROGRESS')
           .neq('genre', 'H_SCREENSHOT')
           .neq('genre', 'H_USER_PREF')
           .limit(1);
 
         if (existing && existing.length > 0) {
-          // Nếu Supabase đã có nhiều chapter hơn bản chuẩn bị lưu, gộp lại để không làm mất chapter
           if (existing[0].description && existing[0].description.startsWith('{')) {
             try {
               const cloudObj = JSON.parse(existing[0].description) as HManga;
@@ -130,7 +143,13 @@ export function saveCustomHManga(manga: HManga): void {
               }
             } catch {}
           }
-          await supabase.from('media_items').update(payload).eq('id', existing[0].id);
+          if (existing[0].user_id) {
+            payload.user_id = existing[0].user_id;
+          }
+          const { error: updateErr } = await supabase.from('media_items').update(payload).eq('id', existing[0].id);
+          if (updateErr) {
+            await supabase.from('media_items').upsert(payload, { onConflict: 'id' });
+          }
         } else {
           await supabase.from('media_items').insert(payload);
         }
@@ -369,6 +388,51 @@ export async function fetchHMangaList(): Promise<HManga[]> {
   const deleted = await fetchDeletedHMangaSlugs();
   const allList = [...mangaMap.values()];
   return deleted.size > 0 ? allList.filter((m) => !deleted.has(m.slug)) : allList;
+}
+
+/**
+ * Lấy chi tiết 1 truyện H trực tiếp từ Supabase và LocalStorage, đồng bộ ngay lập tức 2 chiều
+ */
+export async function fetchSingleHManga(slug: string): Promise<HManga | null> {
+  if (!slug) return null;
+  const currentList = getCustomHMangaList();
+  let localFound = currentList.find((m) => m.slug === slug) || null;
+
+  if (supabase) {
+    try {
+      const { data: rows } = await supabase
+        .from('media_items')
+        .select('*')
+        .eq('channel', slug)
+        .in('type', ['STORY', 'MANGA'])
+        .neq('genre', 'H_PROGRESS')
+        .neq('genre', 'H_SCREENSHOT')
+        .neq('genre', 'H_USER_PREF')
+        .is('deleted_at', null)
+        .limit(1);
+
+      if (rows && rows.length > 0 && rows[0].description && rows[0].description.startsWith('{')) {
+        const cloudManga = sanitizeHManga(JSON.parse(rows[0].description) as HManga);
+        if (cloudManga?.slug) {
+          const cloudCount = Array.isArray(cloudManga.chapters) ? cloudManga.chapters.length : (cloudManga.totalChapters || 0);
+          const localCount = localFound ? (Array.isArray(localFound.chapters) ? localFound.chapters.length : (localFound.totalChapters || 0)) : 0;
+
+          if (!localFound || cloudCount > localCount) {
+            saveCustomHManga(cloudManga);
+            return cloudManga;
+          } else if (localFound && localCount > cloudCount) {
+            saveCustomHManga(localFound);
+            return localFound;
+          }
+          return cloudManga;
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch single HManga from Supabase:', err);
+    }
+  }
+
+  return localFound;
 }
 
 export async function crawlAndSaveStory(url: string, onProgress?: (msg: string) => void): Promise<HManga> {
