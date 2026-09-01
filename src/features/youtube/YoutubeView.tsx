@@ -524,19 +524,51 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const handleDeleteCustomCategory = async (catId: string) => {
     const target = customCategories.find((c) => c.id === catId)
     if (!target) return
+    const deletedLabel = target.label
     const updated = customCategories.filter((c) => c.id !== catId)
     setCustomCategories(updated)
     await saveAppSetting('youtube_custom_categories', updated)
 
     // Xóa tags của thể loại này
-    if (categoryTagMap[target.label]) {
+    if (categoryTagMap[deletedLabel]) {
       const updatedCatTags = { ...categoryTagMap }
-      delete updatedCatTags[target.label]
+      delete updatedCatTags[deletedLabel]
       setCategoryTagMap(updatedCatTags)
       void saveAppSetting('youtube_category_tags', updatedCatTags)
     }
 
-    showToast(`Đã xoá thể loại "${target.label}"`, 'info')
+    // Remap các kênh đang gán thể loại bị xóa sang 'Khác'
+    const updatedMap: ChannelCategoryMap = { ...channelCategoryMap }
+    let hasMapChange = false
+    Object.entries(updatedMap).forEach(([k, v]) => {
+      if (v === deletedLabel) {
+        updatedMap[k] = 'Khác'
+        hasMapChange = true
+      }
+    })
+    if (hasMapChange) {
+      setChannelCategoryMap(updatedMap)
+      await saveAppSetting('youtube_channel_categories', updatedMap)
+    }
+
+    // Cập nhật state channels & allVideos ngay lập tức
+    setChannels((prev) =>
+      prev.map((c) => (c.category === deletedLabel ? { ...c, category: 'Khác', tag: undefined } : c))
+    )
+    setAllVideos((prev) =>
+      prev.map((v) => (v.channel_category === deletedLabel ? { ...v, channel_category: 'Khác', channel_tag: undefined } : v))
+    )
+
+    if (selectedChannel && selectedChannel.category === deletedLabel) {
+      setSelectedChannel({ ...selectedChannel, category: 'Khác', tag: undefined })
+    }
+
+    if (activeCategoryTab === deletedLabel) {
+      setActiveCategoryTab('ALL')
+      setActiveTagTab('ALL')
+    }
+
+    showToast(`Đã xoá thể loại "${deletedLabel}"`, 'info')
   }
 
   // 1. Thêm Tag vào một thể loại
@@ -1136,6 +1168,11 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     }
   }
 
+  // Tập hợp các tên thể loại hợp lệ đang hoạt động
+  const validCategoryLabels = useMemo(() => {
+    return new Set(customCategories.map((c) => c.label))
+  }, [customCategories])
+
   // Tính số lượng video & kênh cho từng tab thể loại (Đo đạc 100% chuẩn xác theo dữ liệu thực tế)
   const categoryTabStats = useMemo(() => {
     const counts: Record<string, { channels: number; videos: number }> = {}
@@ -1144,17 +1181,22 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     customCategories.forEach((cat) => {
       counts[cat.label] = { channels: 0, videos: 0 }
     })
+    if (!counts['Khác']) {
+      counts['Khác'] = { channels: 0, videos: 0 }
+    }
 
-    // 2. Đếm số kênh thuộc từng thể loại
+    const validLabels = new Set(customCategories.map((c) => c.label))
+
+    // 2. Đếm số kênh thuộc từng thể loại (nếu category không có trong customCategories thì gộp vào 'Khác')
     channels.forEach((c) => {
-      const cat = c.category || 'Khác'
+      const cat = c.category && validLabels.has(c.category) ? c.category : 'Khác'
       if (!counts[cat]) counts[cat] = { channels: 0, videos: 0 }
       counts[cat].channels += 1
     })
 
-    // 3. Đếm số video TRỰC TIẾP từ allVideos (Khớp 100% với danh sách hiển thị khi chọn tab)
+    // 3. Đếm số video TRỰC TIẾP từ allVideos (nếu channel_category không có trong customCategories thì gộp vào 'Khác')
     allVideos.forEach((v) => {
-      const cat = v.channel_category || 'Khác'
+      const cat = v.channel_category && validLabels.has(v.channel_category) ? v.channel_category : 'Khác'
       if (!counts[cat]) counts[cat] = { channels: 0, videos: 0 }
       counts[cat].videos += 1
     })
@@ -1162,7 +1204,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     return counts
   }, [channels, allVideos, customCategories])
 
-  // Danh sách các tab hiển thị trên thanh cuộn ngang
+  // Danh sách các tab hiển thị trên thanh cuộn ngang: Tất cả + Các thể loại của người dùng + 1 Tab "Khác" cố định
   const dynamicCategoryTabs = useMemo(() => {
     const isChannelView = viewMode === 'channel'
 
@@ -1175,7 +1217,9 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       },
     ]
 
+    // 1. Chỉ hiển thị các thể loại do người dùng cấu hình (bỏ qua 'Khác' nếu có để xếp ở cuối)
     customCategories.forEach((c) => {
+      if (c.label === 'Khác') return
       const stat = categoryTabStats[c.label] || { channels: 0, videos: 0 }
       tabs.push({
         id: c.label,
@@ -1185,22 +1229,14 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       })
     })
 
-    // Các thể loại khác đã gán vào kênh nhưng chưa có trong danh mục (nếu có)
-    Object.keys(categoryTabStats).forEach((catName) => {
-      if (
-        !customCategories.some((c) => c.label === catName) &&
-        catName !== 'ALL'
-      ) {
-        const stat = categoryTabStats[catName]
-        if (stat.videos > 0 || stat.channels > 0) {
-          tabs.push({
-            id: catName,
-            label: catName,
-            icon: '🏷️',
-            count: isChannelView ? stat.channels : stat.videos,
-          })
-        }
-      }
+    // 2. Tab 'Khác' cố định ở cuối cùng chứa toàn bộ kênh/video chưa phân loại hoặc thuộc thể loại đã xóa
+    const otherStat = categoryTabStats['Khác'] || { channels: 0, videos: 0 }
+    const customOther = customCategories.find((c) => c.label === 'Khác')
+    tabs.push({
+      id: 'Khác',
+      label: 'Khác',
+      icon: customOther?.icon || '📦',
+      count: isChannelView ? otherStat.channels : otherStat.videos,
     })
 
     return tabs
@@ -1213,12 +1249,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     const tags = categoryTagMap[activeCategoryTab] || []
     tags.forEach((t) => { counts[t] = 0 })
     allVideos.forEach((v) => {
-      if (v.channel_category === activeCategoryTab && v.channel_tag && counts[v.channel_tag] !== undefined) {
+      const isMatch = activeCategoryTab === 'Khác'
+        ? (!v.channel_category || v.channel_category === 'Khác' || !validCategoryLabels.has(v.channel_category))
+        : (v.channel_category === activeCategoryTab)
+      if (isMatch && v.channel_tag && counts[v.channel_tag] !== undefined) {
         counts[v.channel_tag]++
       }
     })
     return counts
-  }, [allVideos, activeCategoryTab, categoryTagMap])
+  }, [allVideos, activeCategoryTab, categoryTagMap, validCategoryLabels])
 
   // Lọc Kênh theo Tab Thể Loại, Tag con và Ô Tìm Kiếm
   const filteredChannels = useMemo(() => {
@@ -1226,7 +1265,11 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
     // Lọc theo Tab thể loại đang chọn
     if (activeCategoryTab !== 'ALL') {
-      result = result.filter((c) => c.category === activeCategoryTab)
+      if (activeCategoryTab === 'Khác') {
+        result = result.filter((c) => !c.category || c.category === 'Khác' || !validCategoryLabels.has(c.category))
+      } else {
+        result = result.filter((c) => c.category === activeCategoryTab)
+      }
       // Lọc theo Tag con nếu có chọn
       if (activeTagTab !== 'ALL') {
         result = result.filter((c) => c.tag === activeTagTab)
@@ -1245,13 +1288,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     }
 
     return result
-  }, [channels, activeCategoryTab, activeTagTab, search])
+  }, [channels, activeCategoryTab, activeTagTab, search, validCategoryLabels])
 
   // Tính số lượng video theo từng trạng thái xem trong tab hiện tại
   const watchStatusCounts = useMemo(() => {
     let base = activeCategoryTab === 'ALL'
       ? allVideos
-      : allVideos.filter((v) => v.channel_category === activeCategoryTab)
+      : activeCategoryTab === 'Khác'
+        ? allVideos.filter((v) => !v.channel_category || v.channel_category === 'Khác' || !validCategoryLabels.has(v.channel_category))
+        : allVideos.filter((v) => v.channel_category === activeCategoryTab)
 
     if (activeCategoryTab !== 'ALL' && activeTagTab !== 'ALL') {
       base = base.filter((v) => v.channel_tag === activeTagTab)
@@ -1279,7 +1324,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       watched,
       unwatched,
     }
-  }, [allVideos, activeCategoryTab, activeTagTab, watchedSet, inProgressSet, progressMap])
+  }, [allVideos, activeCategoryTab, activeTagTab, watchedSet, inProgressSet, progressMap, validCategoryLabels])
 
   // Lọc Video ĐÃ CÓ trong App theo Tab Thể Loại & Tag con của Kênh
   const filteredSavedVideos = useMemo(() => {
@@ -1287,7 +1332,11 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
     // Lọc theo Tab thể loại của kênh
     if (activeCategoryTab !== 'ALL') {
-      result = result.filter((v) => v.channel_category === activeCategoryTab)
+      if (activeCategoryTab === 'Khác') {
+        result = result.filter((v) => !v.channel_category || v.channel_category === 'Khác' || !validCategoryLabels.has(v.channel_category))
+      } else {
+        result = result.filter((v) => v.channel_category === activeCategoryTab)
+      }
       // Lọc theo Tag con nếu có chọn
       if (activeTagTab !== 'ALL') {
         result = result.filter((v) => v.channel_tag === activeTagTab)
@@ -1345,7 +1394,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
     })
 
     return result
-  }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap])
+  }, [allVideos, activeCategoryTab, activeTagTab, watchFilter, search, watchedSet, inProgressSet, shuffleSeed, sortMode, progressMap, validCategoryLabels])
 
   // Danh sách video trong Lịch sử xem (kết hợp videoProgress và videoStatus)
   const historyVideos = useMemo(() => {
