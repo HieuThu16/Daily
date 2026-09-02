@@ -44,13 +44,20 @@ export function PersonDetail({
   // Ẩn Header chung của App khi xem chi tiết người thân, nhấn quay lại sẽ hiện lại
   useHideHeader(true)
 
-  const isLove = Boolean(person.is_partner || person.room_code)
+  const isLove = Boolean(
+    person.is_partner ||
+    person.room_code ||
+    person.name.trim().toLowerCase() === 'kim ý' ||
+    person.name.trim().toLowerCase() === 'kim y' ||
+    person.name.trim().toLowerCase() === 'vợ' ||
+    person.name.trim().toLowerCase() === 'vo'
+  )
 
   const availableTabs = [
     ...(isLove ? [
       { key: 'location' as const, label: 'Vị trí' },
     ] : []),
-    { key: 'events' as const, label: 'Kỷ niệm' },
+    { key: 'events' as const, label: isLove ? 'Kỷ niệm chung' : 'Kỷ niệm' },
     { key: 'info' as const, label: 'Thông tin' },
     { key: 'occasions' as const, label: 'Dịp' },
     { key: 'journal' as const, label: 'Nhật ký' },
@@ -228,9 +235,9 @@ export function PersonDetail({
         <SharedEventsView
           personId={person.id}
           personName={person.name}
-          isPartner={!!person.is_partner}
-          roomCode={person.room_code ?? 'HIEU-Y-2026'}
-          onSendInvite={onSendInvite ? () => setInviteModal(true) : undefined}
+          isPartner={isLove}
+          roomCode={isLove ? (person.room_code || 'HIEU-Y-2026') : null}
+          onSendInvite={isLove && onSendInvite ? () => setInviteModal(true) : undefined}
         />
       )}
 

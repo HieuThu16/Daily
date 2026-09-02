@@ -38,7 +38,49 @@ export const SPECIAL_TAG_LABELS = new Set([
 
 export function formatDisplayContent(content: string): string {
   if (!content) return ''
-  return content.replace(/^(\[[^\]]+\]\s*)+/, '')
+  return content.replace(/^(\[[^\]]+\]\s*)+/, '').trim()
+}
+
+/** Trích xuất danh sách người thân được gắn trong bài nhật ký (từ tags, brackets hoặc nội dung) */
+export function getAttachedPeople(entry: Entry | null | undefined, allPeople: Person[]): Person[] {
+  if (!allPeople || allPeople.length === 0 || !entry) return []
+  const found = new Map<string, Person>()
+
+  const contentLower = (entry.content || '').toLowerCase()
+  const tagsList = (entry.tags || []).map((t) => t.toLowerCase())
+
+  for (const person of allPeople) {
+    const pName = person.name.trim().toLowerCase()
+    if (!pName) continue
+
+    // 1. Kiểm tra tags
+    if (tagsList.includes(pName) || tagsList.includes(`@${pName}`) || tagsList.includes(person.id.toLowerCase())) {
+      found.set(person.id, person)
+      continue
+    }
+
+    // 2. Kiểm tra tag trong ngoặc vuông hoặc @[Tên]
+    if (
+      contentLower.includes(`[@${pName}]`) ||
+      contentLower.includes(`[${pName}]`) ||
+      contentLower.includes(`[👤 ${pName}]`) ||
+      contentLower.includes(`@${pName}`)
+    ) {
+      found.set(person.id, person)
+      continue
+    }
+
+    // 3. Kiểm tra nếu trong nội dung có nhắc tên tự nhiên với ranh giới từ (ví dụ: "Nay mua cho mẹ...", "đi với Ái Vy")
+    if (pName.length >= 2) {
+      const escaped = pName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(^|[^\\p{L}\\p{N}_])${escaped}([^\\p{L}\\p{N}_]|$)`, 'iu')
+      if (regex.test(contentLower)) {
+        found.set(person.id, person)
+      }
+    }
+  }
+
+  return Array.from(found.values())
 }
 
 export function getCategoryInfo(entry: Entry, allCategories: DailyCategoryItem[]): DailyCategoryItem | null {
@@ -633,17 +675,24 @@ export function DailyPage() {
     if (selectedCategory) tagsList.push(selectedCategory)
     if (isFirstTime) tagsList.push('FIRST_TIME', 'Lần đầu', 'lan_dau')
     if (isSpecial) tagsList.push('SPECIAL', 'Đặc biệt', 'dac_biet')
+    if (selectedPeople.length > 0) {
+      selectedPeople.forEach((p) => {
+        tagsList.push(`@${p.name}`, p.name)
+      })
+    }
 
     // Luôn dùng entry_type chuẩn của database ('FEELING' / 'NEW_THING') để không bao giờ bị dính lỗi check constraint của PostgreSQL
     const safeEntryType: DailyType = isFirstTime ? 'NEW_THING' : 'FEELING'
 
-    // Encode category, first time and special into line so they persist 100% everywhere (both locally & in database across reloads)
+    // Encode category, first time, special, and tagged people into line so they persist 100% everywhere (both locally & in database across reloads)
+    const peoplePrefix = selectedPeople.length > 0 ? selectedPeople.map((p) => `[@${p.name}]`).join(' ') : ''
     const formattedLines = lines.map((lineText) => {
       let l = lineText.trim().replace(/^(\[[^\]]+\]\s*)+/, '')
       let prefix = ''
       if (selectedCategory) prefix += `[${selectedCategory}]`
       if (isFirstTime) prefix += `[Lần đầu]`
       if (isSpecial) prefix += `[Đặc biệt]`
+      if (peoplePrefix) prefix += (prefix ? ` ${peoplePrefix}` : peoplePrefix)
       return prefix ? `${prefix} ${l}` : l
     })
 
@@ -1011,6 +1060,11 @@ export function DailyPage() {
       if (filterType === 'FAV') return Boolean(i.is_favorite)
       if (filterType === 'FIRST_TIME') return isEntryFirstTime(i)
       if (filterType === 'SPECIAL') return isEntrySpecial(i)
+      if (filterType === 'PEOPLE') return getAttachedPeople(i, peopleQuery.items).length > 0
+      if (filterType.startsWith('PERSON:')) {
+        const targetPid = filterType.replace('PERSON:', '')
+        return getAttachedPeople(i, peopleQuery.items).some((p) => p.id === targetPid)
+      }
       if (filterType === 'NONE') {
         const catInfo = getCategoryInfo(i, dailyCategories)
         return !catInfo
@@ -1793,6 +1847,12 @@ export function DailyPage() {
                   🌟 Đặc biệt
                 </button>
                 <button
+                  onClick={() => setFilterType('PEOPLE')}
+                  style={{ border: 0, background: filterType === 'PEOPLE' ? 'rgba(168, 85, 247, 0.18)' : 'transparent', color: filterType === 'PEOPLE' ? '#c084fc' : 'var(--text-muted)', fontWeight: filterType === 'PEOPLE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+                >
+                  <Users size={11} /> 👤 Có người
+                </button>
+                <button
                   onClick={() => setFilterType('NONE')}
                   style={{ border: 0, background: filterType === 'NONE' ? 'var(--card-bg)' : 'transparent', color: filterType === 'NONE' ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: filterType === 'NONE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
                 >
@@ -1824,9 +1884,30 @@ export function DailyPage() {
               <div style={{ display: 'grid', gap: 8, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
                 {todayEntries.map((entry) => {
                   const catInfo = getCategoryInfo(entry, dailyCategories)
+                  const attachedPeople = getAttachedPeople(entry, peopleQuery.items)
+                  const hasAttachedPeople = attachedPeople.length > 0
                   const isVideo = entry.image_url && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entry.image_url)
                   return (
-                    <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-main)', borderRadius: 12, padding: '4px 6px', border: '1px solid var(--card-border)' }}>
+                    <div
+                      key={entry.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: hasAttachedPeople
+                          ? 'linear-gradient(90deg, rgba(168, 85, 247, 0.08), var(--bg-main) 45%)'
+                          : 'var(--bg-main)',
+                        borderRadius: 12,
+                        padding: '4px 6px',
+                        border: hasAttachedPeople
+                          ? '1px solid rgba(168, 85, 247, 0.38)'
+                          : '1px solid var(--card-border)',
+                        boxShadow: hasAttachedPeople
+                          ? '0 2px 8px rgba(168, 85, 247, 0.12)'
+                          : 'none',
+                        transition: 'all 0.18s ease',
+                      }}
+                    >
                       <button
                         type="button"
                         aria-label={`Xem chi tiết: ${entry.content}`}
@@ -1858,6 +1939,28 @@ export function DailyPage() {
                             🌟 Đặc biệt
                           </span>
                         )}
+                        {attachedPeople.map((p) => (
+                          <span
+                            key={p.id}
+                            style={{
+                              fontSize: '0.66rem',
+                              fontWeight: 800,
+                              color: '#c084fc',
+                              background: 'rgba(168, 85, 247, 0.18)',
+                              border: '1px solid rgba(168, 85, 247, 0.45)',
+                              padding: '1px 6px',
+                              borderRadius: 6,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              flexShrink: 0,
+                              boxShadow: '0 1px 4px rgba(168, 85, 247, 0.18)',
+                            }}
+                            title={`Gắn với ${p.name}`}
+                          >
+                            <span>👤</span> {p.name}
+                          </span>
+                        ))}
                         <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {formatDisplayContent(entry.content)}
                         </span>
@@ -2546,6 +2649,45 @@ export function DailyPage() {
               <span>🌟 Đặc biệt</span>
             </button>
           </div>
+
+          {/* Hiển thị người thân được gắn trong bài nhật ký */}
+          {editing && getAttachedPeople(editing, peopleQuery.items).length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                flexWrap: 'wrap',
+                padding: '7px 10px',
+                background: 'rgba(168, 85, 247, 0.1)',
+                borderRadius: 12,
+                border: '1px solid rgba(168, 85, 247, 0.25)',
+              }}
+            >
+              <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#c084fc', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Users size={13} /> Gắn với:
+              </span>
+              {getAttachedPeople(editing, peopleQuery.items).map((p) => (
+                <span
+                  key={p.id}
+                  style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 8,
+                    background: 'var(--card-bg)',
+                    color: '#c084fc',
+                    border: '1px solid rgba(192, 132, 252, 0.4)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  👤 {p.name}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="modal-actions">
             <DeleteButton onDelete={() => removeEntry(editing.id)} />

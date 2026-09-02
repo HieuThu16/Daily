@@ -59,13 +59,14 @@ function warnMissingImagesColumn(showToast: (msg: string, type?: any) => void) {
 export function SharedEventsView({
   personId,
   personName,
-  roomCode = 'HIEU-Y-2026',
+  isPartner = false,
+  roomCode,
   onSendInvite,
 }: {
   personId: string
   personName?: string
   isPartner?: boolean
-  roomCode?: string
+  roomCode?: string | null
   onSendInvite?: () => void
 }) {
   const { showToast } = useToast()
@@ -144,12 +145,19 @@ export function SharedEventsView({
     }
   }, [])
 
-  // Kỷ niệm chung của phòng (roomCode), hoặc gắn theo personId, hoặc do đối tác chia sẻ sang
+  // Kỷ niệm chung của phòng (roomCode nếu là partner), hoặc kỷ niệm cá nhân gắn theo personId
   const sorted = useMemo(() => {
-    // 1. Lọc theo roomCode hoặc personId hoặc owner
-    const matched = events.items.filter(
-      (e) => (roomCode && e.room_code === roomCode) || e.person_id === personId || (myId != null && e.owner_id !== myId),
-    )
+    // 1. Lọc theo roomCode (khi là partner) hoặc personId
+    const matched = events.items.filter((e) => {
+      if (isPartner && roomCode) {
+        return e.room_code === roomCode || e.person_id === personId
+      }
+      if (roomCode) {
+        return e.room_code === roomCode || e.person_id === personId
+      }
+      // Người thân thông thường (không liên kết phòng): Chỉ lấy kỷ niệm gắn đúng người này
+      return e.person_id === personId
+    })
 
     // 2. Loại bỏ hoàn toàn bản ghi trùng lặp (theo id hoặc theo title + date + room_code)
     const seenIds = new Set<string>()
@@ -231,7 +239,7 @@ export function SharedEventsView({
 
   const payload = () => ({
     person_id: personId,
-    room_code: roomCode || 'HIEU-Y-2026',
+    room_code: isPartner && roomCode ? roomCode : null,
     title: title.trim(),
     note: note.trim() || null,
     event_date: eventDate,
@@ -784,21 +792,23 @@ export function SharedEventsView({
           <Plus size={15} /> Thêm kỷ niệm
         </button>
 
-        {onSendInvite ? (
-          <button
-            onClick={onSendInvite}
-            className="memory-invite"
-            title="Gửi lời mời kết nối kỷ niệm"
-          >
-            <Mail size={15} /> Mời kết nối
-          </button>
-        ) : (
-          <button
-            onClick={() => setManagePartners(true)}
-            className="memory-invite"
-          >
-            <UserPlus size={15} /> Người chung ({partners.items.length})
-          </button>
+        {isPartner && (
+          onSendInvite ? (
+            <button
+              onClick={onSendInvite}
+              className="memory-invite"
+              title="Gửi lời mời kết nối kỷ niệm"
+            >
+              <Mail size={15} /> Mời kết nối
+            </button>
+          ) : (
+            <button
+              onClick={() => setManagePartners(true)}
+              className="memory-invite"
+            >
+              <UserPlus size={15} /> Người chung ({partners.items.length})
+            </button>
+          )
         )}
       </div>
 
@@ -826,9 +836,9 @@ export function SharedEventsView({
         </div>
       )}
 
-      {roomCode && (
+      {isPartner && roomCode && (
         <div className="memory-room">
-          <span>Phòng kỷ niệm</span>
+          <span>Phòng kỷ niệm chung</span>
           <strong>{roomCode}</strong>
         </div>
       )}
@@ -880,7 +890,9 @@ export function SharedEventsView({
         <p className="muted" style={{ fontSize: '0.8rem' }}>Đang tải sự kiện…</p>
       ) : !sorted.length ? (
         <Empty icon={CalendarHeart} colorClass="icon-box-rose">
-          Chưa có sự kiện chung nào. Thêm kỷ niệm đầu tiên nhé!
+          {isPartner
+            ? 'Chưa có sự kiện chung nào trong phòng. Thêm kỷ niệm đầu tiên nhé!'
+            : `Chưa có kỷ niệm nào với ${partnerDisplayName}. Thêm kỷ niệm đầu tiên nhé!`}
         </Empty>
       ) : !filtered.length ? (
         <Empty icon={Filter} colorClass="icon-box-amber">
