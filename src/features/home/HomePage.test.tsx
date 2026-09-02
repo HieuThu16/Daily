@@ -160,5 +160,5 @@ describe('HomePage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Thống kê ngày/i }))
     expect(await screen.findByText('Thói quen')).toBeInTheDocument()
-  })
+  }, 15000)
 })

@@ -1,4 +1,32 @@
-export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'collection' | 'youtube' | 'youtubeshorts' | 'music' | 'tvshow' | 'books' | 'audiobooks' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'truyenh' | 'english' | 'knowledge' | 'reviews' | 'tiktok' | 'money' | 'calendar' | 'people' | 'watch' | 'nutrition' | 'sleep' | 'usage' | 'settings'
+export type Tab = 'home' | 'habit' | 'daily' | 'tasks' | 'goals' | 'collection' | 'youtube' | 'youtubeshorts' | 'music' | 'tvshow' | 'books' | 'audiobooks' | 'movies' | 'manga' | 'bl' | 'ngontinh' | 'truyenh' | 'english' | 'knowledge' | 'reviews' | 'tiktok' | 'money' | 'calendar' | 'people' | 'watch' | 'nutrition' | 'sleep' | 'usage' | 'settings'
+
+/** Một nấc thang nhỏ để chinh phục mục tiêu */
+export type GoalMilestone = {
+  id: string
+  title: string
+  completed: boolean
+  completed_at?: string | null
+}
+
+/** Một mục tiêu cuộc đời với lộ trình từng bước lên trời */
+export type GoalItem = {
+  id: string
+  title: string
+  description?: string | null
+  category: 'SHORT_TERM' | 'MID_TERM' | 'LONG_TERM' | 'CAREER' | 'HEALTH' | 'GROWTH' | 'WEALTH' | 'CUSTOM'
+  category_label?: string
+  target_date?: string | null
+  current_value: number
+  target_value: number
+  unit: string
+  milestones: GoalMilestone[]
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
+  altitude_meters: number // Độ cao nấc thang trên mây (0m - 10000m)
+  color?: string
+  icon?: string
+  created_at: string
+  completed_at?: string | null
+}
 
 /** Một thẻ kiến thức: câu hỏi, câu trả lời và thể loại. */
 export type KnowledgeItem = {

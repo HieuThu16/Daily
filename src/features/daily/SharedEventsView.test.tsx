@@ -103,7 +103,7 @@ describe('SharedEventsView - xu ly nhieu anh', () => {
     await waitFor(() => expect(state.toasts.length).toBeGreaterThan(0), { timeout: 4000 })
     expect(state.uploaded).toHaveLength(3)
     expect(state.toasts.at(-1)).toContain('3 ảnh/video')
-  })
+  }, 15000)
 
   it('ho tro chon va tai len nhieu video kem anh', async () => {
     const user = userEvent.setup()

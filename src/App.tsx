@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Headphones, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Moon, Music, NotebookPen, Pin, PinOff, Plus, Radio, Search, Settings, BarChart3, Sparkles, UserRound, UtensilsCrossed, Video, Wallet, X, Youtube } from 'lucide-react'
+import { BookMarked, BookOpen, CalendarDays, ChevronRight, CheckSquare, Download, Film, Flame, Headphones, Heart, HeartHandshake, Home, Languages, Lightbulb, Menu, MonitorPlay, Moon, Music, NotebookPen, Pin, PinOff, Plus, Radio, Search, Settings, BarChart3, Sparkles, Target, UserRound, UtensilsCrossed, Video, Wallet, X, Youtube } from 'lucide-react'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { localDate } from './lib/date'
 import type { Tab } from './types'
@@ -75,6 +75,7 @@ const YoutubeWatchPage = lazy(() => import('./features/youtube/YoutubeWatchPage'
 const YoutubeShortsPage = lazy(() => import('./features/youtube/YoutubeShortsPage').then((m) => ({ default: m.YoutubeShortsPage })))
 const ShareTarget = lazy(() => import('./features/ShareTarget').then((m) => ({ default: m.ShareTarget })))
 const CollectionPage = lazy(() => import('./features/collection/CollectionPage').then((m) => ({ default: m.CollectionPage })))
+const GoalsPage = lazy(() => import('./features/goals/GoalsPage').then((m) => ({ default: m.GoalsPage })))
 
 
 const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -82,6 +83,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'habit', label: 'Habits', icon: Flame, colorClass: 'icon-box-amber' },
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
+  { id: 'goals', label: 'Mục tiêu', icon: Target, colorClass: 'icon-box-cyan' },
   { id: 'collection', label: 'Sưu tầm', icon: Sparkles, colorClass: 'icon-box-purple' },
   { id: 'youtube', label: 'YouTube', icon: Youtube, colorClass: 'icon-box-rose' },
   { id: 'youtubeshorts', label: 'YouTube Shorts', icon: Video, colorClass: 'icon-box-rose' },
@@ -288,7 +290,7 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
-    { title: 'Nhịp ngày & Sưu tập', ids: ['habit', 'daily', 'tasks', 'collection'] as Tab[] },
+    { title: 'Nhịp ngày & Sưu tập', ids: ['habit', 'daily', 'tasks', 'goals', 'collection'] as Tab[] },
     { title: 'Giải trí & Video', ids: ['youtube', 'youtubeshorts', 'tiktok', 'music'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'audiobooks', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition', 'sleep'] as Tab[] },
@@ -607,6 +609,8 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/habit" element={<HabitsPage />} />
                       <Route path="/daily" element={<DailyPage />} />
                       <Route path="/tasks" element={<TasksPage />} />
+                      <Route path="/goals" element={<GoalsPage />} />
+                      <Route path="/muc-tieu" element={<Navigate to="/goals" replace />} />
                       <Route path="/collection" element={<CollectionPage />} />
                       <Route path="/share" element={<ShareTarget />} />
                       <Route path="/youtube" element={<YoutubeView />} />
