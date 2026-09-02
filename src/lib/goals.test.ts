@@ -6,7 +6,7 @@ import {
   getStoredGoals,
   saveGoals,
   toggleGoalMilestone,
-  INITIAL_SAMPLE_GOALS,
+  addGoalMilestone,
 } from './goals'
 import type { GoalItem } from '../types'
 
@@ -15,10 +15,9 @@ describe('goals library module', () => {
     localStorage.clear()
   })
 
-  it('trả về danh sách mẫu khi chưa có dữ liệu', () => {
+  it('trả về danh sách rỗng khi chưa có dữ liệu (không set cứng)', () => {
     const goals = getStoredGoals()
-    expect(goals.length).toBeGreaterThan(0)
-    expect(goals[0].title).toBe(INITIAL_SAMPLE_GOALS[0].title)
+    expect(goals).toEqual([])
   })
 
   it('thêm mục tiêu mới thành công', async () => {
@@ -67,6 +66,26 @@ describe('goals library module', () => {
     expect(completed?.status).toBe('COMPLETED')
   })
 
+  it('thêm milestone vào mục tiêu', async () => {
+    const goal: GoalItem = {
+      id: 'g_add_m',
+      title: 'Học ngoại ngữ',
+      category: 'GROWTH',
+      current_value: 0,
+      target_value: 10,
+      unit: 'bài',
+      status: 'NOT_STARTED',
+      altitude_meters: 1500,
+      created_at: new Date().toISOString(),
+      milestones: [],
+    }
+    await saveGoals([goal])
+
+    const updated = await addGoalMilestone('g_add_m', 'Học bảng chữ cái')
+    expect(updated?.milestones.length).toBe(1)
+    expect(updated?.milestones[0].title).toBe('Học bảng chữ cái')
+  })
+
   it('xóa mục tiêu khỏi danh sách', async () => {
     const goal: GoalItem = {
       id: 'g_del_1',
@@ -107,7 +126,7 @@ describe('goals library module', () => {
         category: 'HEALTH',
         current_value: 0,
         target_value: 10,
-        unit: 'bước',
+        unit: 'km',
         status: 'NOT_STARTED',
         altitude_meters: 5000,
         created_at: new Date().toISOString(),
@@ -115,11 +134,11 @@ describe('goals library module', () => {
       },
     ]
 
-    const progress = calculateAscensionProgress(goals)
-    expect(progress.currentAltitude).toBe(5000)
-    expect(progress.percent).toBe(50)
-    expect(progress.completedGoalsCount).toBe(1)
-    expect(progress.totalGoalsCount).toBe(2)
-    expect(progress.tierName).toBe('Tầng Đỉnh Núi Mây Mù')
+    const stats = calculateAscensionProgress(goals)
+    expect(stats.currentAltitude).toBe(5000)
+    expect(stats.targetAltitude).toBe(10000)
+    expect(stats.percent).toBe(50)
+    expect(stats.completedGoalsCount).toBe(1)
+    expect(stats.totalGoalsCount).toBe(2)
   })
 })

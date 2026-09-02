@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react'
 import {
-  Calendar, CheckCircle2, Edit3,
-  Layers, Mountain, Plus, Trash2, Trophy
+  Calendar, CheckCircle2, ChevronDown, ChevronUp, Edit3,
+  Flame,
+  Mountain, Plus, Trash2, Trophy, X
 } from 'lucide-react'
 import { useGoals, calculateAscensionProgress } from '../../lib/goals'
 import { GoalModal } from './GoalModal'
 import { useHeaderActions } from '../HeaderAction'
 import { useToast } from '../ToastContext'
-import type { GoalItem } from '../../types'
+import { useQuery } from '../shared'
+import { supabase } from '../../lib/supabase'
+import { localDate } from '../../lib/date'
+import { notifyTasksChanged } from '../useUncompletedTasks'
+import type { GoalItem, Todo } from '../../types'
 import './goals.css'
 
 // 3 tầng mây SVG vẽ vector mềm mại cho hiệu ứng bồng bềnh
@@ -81,14 +86,17 @@ function SkyAtmosphereScene() {
 
 export function GoalsPage() {
   const { showToast } = useToast()
-  const { goals, addGoal, updateGoal, toggleMilestone, deleteGoal } = useGoals()
+  const { goals, addGoal, updateGoal, deleteGoal } = useGoals()
+  const todos = useQuery<Todo>('todos')
 
-  const [activeTab, setActiveTab] = useState<'stairway' | 'matrix' | 'hall'>('stairway')
-  const [filterCategory, setFilterCategory] = useState<string>('ALL')
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'IN_PROGRESS' | 'COMPLETED'>('ALL')
-
+  const [activeTab, setActiveTab] = useState<'stairway' | 'hall'>('stairway')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<GoalItem | null>(null)
+
+  // State nhập task nhanh cho từng goal: { [goalId]: string }
+  const [quickTaskInputs, setQuickTaskInputs] = useState<Record<string, string>>({})
+  // State thu gọn/mở rộng checklist công việc của từng goal: { [goalId]: boolean }
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({})
 
   // Nút Header action thêm mục tiêu
   useHeaderActions([
@@ -110,22 +118,14 @@ export function GoalsPage() {
     return [...goals].sort((a, b) => (a.altitude_meters || 0) - (b.altitude_meters || 0))
   }, [goals])
 
-  // Danh sách mục tiêu cho chế độ lưới lọc
-  const filteredMatrixGoals = useMemo(() => {
-    let result = [...goals]
-    if (filterCategory !== 'ALL') {
-      result = result.filter((g) => g.category === filterCategory)
-    }
-    if (filterStatus !== 'ALL') {
-      result = result.filter((g) => g.status === filterStatus)
-    }
-    return result
-  }, [goals, filterCategory, filterStatus])
-
   // Danh sách mục tiêu đã hoàn thành (Đền vinh quang)
   const completedGoals = useMemo(() => {
-    return goals.filter((g) => g.status === 'COMPLETED' || g.current_value >= g.target_value)
-  }, [goals])
+    return goals.filter((g) => {
+      const linked = todos.items.filter((t) => t.goal_id === g.id && !t.deleted_at)
+      const allTasksDone = linked.length > 0 && linked.every((t) => t.completed)
+      return g.status === 'COMPLETED' || g.current_value >= g.target_value || allTasksDone
+    })
+  }, [goals, todos.items])
 
   const handleSaveGoal = async (goalData: Omit<GoalItem, 'id' | 'created_at'>) => {
     if (editingGoal) {
@@ -134,13 +134,6 @@ export function GoalsPage() {
     } else {
       await addGoal(goalData)
       showToast('🎉 Đã khởi tạo hành trình mục tiêu mới!', 'success')
-    }
-  }
-
-  const handleToggleMilestone = async (goalId: string, milestoneId: string) => {
-    const updated = await toggleMilestone(goalId, milestoneId)
-    if (updated?.status === 'COMPLETED') {
-      showToast(`🏆 Chúc mừng! Bạn đã chinh phục xong "${updated.title}"!`, 'success')
     }
   }
 
@@ -159,6 +152,82 @@ export function GoalsPage() {
     }
   }
 
+  /** Tạo task thực thi trực tiếp trong mục tiêu = tạo task trong bảng todos */
+  const handleCreateTaskForGoal = async (goal: GoalItem, e?: React.FormEvent) => {
+    e?.preventDefault()
+    const taskTitle = (quickTaskInputs[goal.id] || '').trim()
+    if (!taskTitle) return
+
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      title: taskTitle,
+      completed: false,
+      goal_id: goal.id,
+      due_date: goal.target_date || localDate(),
+      priority: 'NORMAL',
+      difficulty: 'NORMAL',
+      created_at: new Date().toISOString(),
+    }
+
+    todos.setItems((prev) => [newTodo, ...prev])
+    setQuickTaskInputs((prev) => ({ ...prev, [goal.id]: '' }))
+
+    if (supabase) {
+      try {
+        await supabase.from('todos').insert(newTodo)
+      } catch (err) {
+        console.warn('Lỗi lưu task vào Supabase:', err)
+      }
+    }
+
+    notifyTasksChanged()
+    showToast(`✅ Đã thêm việc "${taskTitle}" vào mục tiêu!`, 'success')
+  }
+
+  /** Bật/tắt trạng thái hoàn thành của task trong mục tiêu */
+  const handleToggleTask = async (todo: Todo, goal: GoalItem) => {
+    const nextCompleted = !todo.completed
+    const now = nextCompleted ? new Date().toISOString() : null
+
+    todos.setItems((prev) =>
+      prev.map((t) => (t.id === todo.id ? { ...t, completed: nextCompleted, completed_at: now } : t)),
+    )
+
+    if (supabase) {
+      try {
+        await supabase.from('todos').update({ completed: nextCompleted, completed_at: now }).eq('id', todo.id)
+      } catch (err) {
+        console.warn('Lỗi cập nhật task trên Supabase:', err)
+      }
+    }
+
+    notifyTasksChanged()
+
+    // Kiểm tra xem tất cả các việc trong mục tiêu đã xong chưa
+    const otherTasks = todos.items.filter((t) => t.goal_id === goal.id && t.id !== todo.id && !t.deleted_at)
+    const allOthersDone = otherTasks.every((t) => t.completed)
+    if (nextCompleted && allOthersDone) {
+      await updateGoal(goal.id, { status: 'COMPLETED', current_value: goal.target_value })
+      showToast(`🏆 Chúc mừng! Bạn đã hoàn thành toàn bộ công việc của "${goal.title}"!`, 'success')
+    } else {
+      showToast(nextCompleted ? '✨ Đã hoàn thành công việc!' : 'Đã mở lại công việc')
+    }
+  }
+
+  /** Xoá một task khỏi mục tiêu */
+  const handleDeleteTask = async (todoId: string) => {
+    todos.setItems((prev) => prev.filter((t) => t.id !== todoId))
+    if (supabase) {
+      try {
+        await supabase.from('todos').update({ deleted_at: new Date().toISOString() }).eq('id', todoId)
+      } catch (err) {
+        console.warn('Lỗi xoá task trên Supabase:', err)
+      }
+    }
+    notifyTasksChanged()
+    showToast('🗑️ Đã xoá công việc khỏi mục tiêu')
+  }
+
   return (
     <div className="goals-page-container">
       {/* 1. NỀN TRỜI & MÂY 3D / 2D PARALLAX */}
@@ -166,7 +235,7 @@ export function GoalsPage() {
 
       {/* 2. HERO DASHBOARD — ĐỘ CAO LEO TRỜI & TẦNG MÂY HIỆN TẠI */}
       <section className="sky-altitude-hero">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div className="hero-stats-badge">
               <span>{ascension.tierIcon}</span>
@@ -175,28 +244,26 @@ export function GoalsPage() {
 
             <div className="hero-altitude-number">
               <span>{ascension.currentAltitude.toLocaleString()}m</span>
-              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                 / {ascension.targetAltitude.toLocaleString()}m độ cao
               </span>
             </div>
-            <p style={{ margin: '4px 0 0', fontSize: '0.86rem', color: 'var(--text-muted)', maxWidth: 520, lineHeight: 1.4 }}>
+            <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 500, lineHeight: 1.35 }}>
               {ascension.tierDescription}
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button
-              type="button"
-              className="tv-btn primary"
-              onClick={() => {
-                setEditingGoal(null)
-                setIsModalOpen(true)
-              }}
-              style={{ padding: '10px 18px', fontSize: '0.86rem', borderRadius: 14 }}
-            >
-              <Plus size={16} /> Thêm Mục Tiêu Lên Trời
-            </button>
-          </div>
+          <button
+            type="button"
+            className="tv-btn primary"
+            onClick={() => {
+              setEditingGoal(null)
+              setIsModalOpen(true)
+            }}
+            style={{ padding: '9px 16px', fontSize: '0.84rem', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Plus size={16} /> Thêm Mục Tiêu Lên Trời
+          </button>
         </div>
 
         {/* Thanh tiến độ leo mây */}
@@ -204,15 +271,15 @@ export function GoalsPage() {
           <div className="hero-progress-fill" style={{ width: `${Math.max(5, ascension.percent)}%` }} />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)' }}>
           <span>🌱 0m Mặt Đất</span>
           <span style={{ color: 'var(--primary)', fontWeight: 800 }}>Chinh phục: {ascension.percent}% • {ascension.completedGoalsCount}/{ascension.totalGoalsCount} Mục tiêu đỉnh</span>
           <span>👑 10,000m+ Bầu Trời Sao</span>
         </div>
       </section>
 
-      {/* 3. THANH ĐIỀU HƯỚNG CHẾ ĐỘ XEM */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, position: 'relative', zIndex: 10 }}>
+      {/* 3. THANH ĐIỀU HƯỚNG CHẾ ĐỘ XEM (BẬC THANG LÊN TRỜI / ĐỀN VINH QUANG) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, position: 'relative', zIndex: 10 }}>
         <div className="goals-view-selector">
           <button
             type="button"
@@ -220,13 +287,6 @@ export function GoalsPage() {
             onClick={() => setActiveTab('stairway')}
           >
             <Mountain size={14} /> Bậc Thang Lên Trời ({goals.length})
-          </button>
-          <button
-            type="button"
-            className={`goals-view-btn ${activeTab === 'matrix' ? 'active' : ''}`}
-            onClick={() => setActiveTab('matrix')}
-          >
-            <Layers size={14} /> Lưới Mục Tiêu
           </button>
           <button
             type="button"
@@ -238,8 +298,34 @@ export function GoalsPage() {
         </div>
       </div>
 
-      {/* 4.1. CHẾ ĐỘ 1: BẬC THANG LÊN TRỜI (SKY STAIRWAY JOURNEY) */}
-      {activeTab === 'stairway' && (
+      {/* 4. TRƯỜNG HỢP CHƯA CÓ MỤC TIÊU NÀO (EMPTY STATE 3D) */}
+      {goals.length === 0 && (
+        <div className="sky-apex-heaven" style={{ margin: '20px 0', border: '1px dashed rgba(56, 189, 248, 0.35)' }}>
+          <div className="apex-portal-icon">
+            ✨
+          </div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 6px', color: '#ffffff' }}>
+            Bầu trời xanh đang chờ ước mơ của bạn
+          </h3>
+          <p style={{ margin: '0 auto 16px', fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: 460 }}>
+            Chưa có mục tiêu nào được tạo. Hãy khởi tạo nấc thang đầu tiên để bắt đầu hành trình vươn tới trời cao!
+          </p>
+          <button
+            type="button"
+            className="tv-btn primary"
+            onClick={() => {
+              setEditingGoal(null)
+              setIsModalOpen(true)
+            }}
+            style={{ padding: '10px 20px', fontSize: '0.88rem', borderRadius: 12 }}
+          >
+            <Plus size={16} /> Tạo Mục Tiêu Đầu Tiên
+          </button>
+        </div>
+      )}
+
+      {/* 5. CHẾ ĐỘ 1: BẬC THANG LÊN TRỜI (SKY STAIRWAY JOURNEY) */}
+      {activeTab === 'stairway' && goals.length > 0 && (
         <div className="sky-stairway-journey">
           {/* Cột sáng chiếu dọc nối các nấc mây */}
           <div className="stairway-beam-line" />
@@ -247,21 +333,33 @@ export function GoalsPage() {
           {/* Đỉnh trời vinh quang trên cùng */}
           <div className="sky-apex-heaven">
             <div className="apex-portal-icon">
-              ✨
+              👑
             </div>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 900, margin: '0 0 6px', color: '#ffffff' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 900, margin: '0 0 4px', color: '#ffffff' }}>
               Cổng Thiên Giới & Bầu Trời Bất Tận
             </h3>
-            <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: 460, marginInline: 'auto' }}>
-              Nơi mọi ước mơ và nỗ lực đều hội tụ thành những vì sao rực rỡ nhất.
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 440, marginInline: 'auto' }}>
+              Nơi mọi mục tiêu và công việc hoàn thành hội tụ thành những vì sao rực rỡ nhất.
             </p>
           </div>
 
           {/* Danh sách các nấc thang mục tiêu leo từ dưới lên */}
           {sortedStairwayGoals.map((goal, idx) => {
             const isEven = idx % 2 === 0
-            const percent = goal.target_value > 0 ? Math.min(100, Math.round((goal.current_value / goal.target_value) * 100)) : 0
+            const linkedTasks = todos.items.filter((t) => t.goal_id === goal.id && !t.deleted_at)
+            const completedTasksCount = linkedTasks.filter((t) => t.completed).length
+            const hasLinkedTasks = linkedTasks.length > 0
+
+            // Tính toán % tiến độ
+            let percent = 0
+            if (hasLinkedTasks) {
+              percent = Math.round((completedTasksCount / linkedTasks.length) * 100)
+            } else if (goal.target_value > 0) {
+              percent = Math.min(100, Math.round((goal.current_value / goal.target_value) * 100))
+            }
+
             const isCompleted = goal.status === 'COMPLETED' || percent >= 100
+            const isTasksExpanded = expandedTasks[goal.id] !== false // Mặc định mở rộng checklist
 
             return (
               <div
@@ -272,17 +370,17 @@ export function GoalsPage() {
                 <div
                   className={`stairway-cloud-station ${isCompleted ? 'completed' : ''}`}
                   onClick={() => handleQuickIncrement(goal, 1)}
-                  title={`Bậc thang ${goal.altitude_meters.toLocaleString()}m: Bấm để tăng tiến độ +1`}
+                  title={`Bậc thang ${goal.altitude_meters.toLocaleString()}m: Bấm để tăng +1`}
                 >
                   {isCompleted ? '⭐' : goal.icon || '☁️'}
                 </div>
 
-                {/* Thẻ mục tiêu bồng bềnh */}
+                {/* Thẻ mục tiêu bồng bềnh 3D */}
                 <div className={`goal-cloud-card ${isCompleted ? 'completed' : ''}`}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: `${goal.color || '#38bdf8'}22`, color: goal.color || '#38bdf8' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: `${goal.color || '#38bdf8'}22`, color: goal.color || '#38bdf8', border: `1px solid ${goal.color || '#38bdf8'}44` }}>
                           🏔️ {goal.altitude_meters?.toLocaleString()}m
                         </span>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
@@ -295,18 +393,18 @@ export function GoalsPage() {
                         )}
                       </div>
 
-                      <h4 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                      <h4 style={{ margin: '0 0 4px', fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-main)' }}>
                         {goal.title}
                       </h4>
 
                       {goal.description && (
-                        <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                        <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
                           {goal.description}
                         </p>
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -330,10 +428,12 @@ export function GoalsPage() {
                   </div>
 
                   {/* Tiến độ và thanh đo */}
-                  <div style={{ margin: '8px 0 12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, marginBottom: 4 }}>
+                  <div style={{ margin: '6px 0 10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', fontWeight: 700, marginBottom: 4 }}>
                       <span style={{ color: isCompleted ? '#10b981' : 'var(--text-main)' }}>
-                        {goal.current_value} / {goal.target_value} {goal.unit}
+                        {hasLinkedTasks
+                          ? `⚡ Đã xong ${completedTasksCount}/${linkedTasks.length} việc thực thi`
+                          : `${goal.current_value} / ${goal.target_value} ${goal.unit}`}
                       </span>
                       <span style={{ color: isCompleted ? '#10b981' : 'var(--primary)' }}>
                         {percent}%
@@ -352,28 +452,93 @@ export function GoalsPage() {
                     </div>
                   </div>
 
-                  {/* Nút cộng nhanh & Danh sách bậc thang con */}
-                  {goal.milestones && goal.milestones.length > 0 && (
-                    <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: 8 }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
-                        Nấc thang từng bước:
+                  {/* DANH SÁCH CÔNG VIỆC THỰC THI (LINKED TASKS TRONG TODOS TABLE) */}
+                  <div className="goal-task-section">
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        padding: '2px 0',
+                      }}
+                      onClick={() => setExpandedTasks((prev) => ({ ...prev, [goal.id]: !isTasksExpanded }))}
+                    >
+                      <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Flame size={12} color="#f59e0b" /> Công việc thực thi ({linkedTasks.length}):
                       </span>
-                      {goal.milestones.map((m) => (
-                        <div
-                          key={m.id}
-                          className={`goal-milestone-item ${m.completed ? 'done' : ''}`}
-                          onClick={() => handleToggleMilestone(goal.id, m.id)}
-                        >
-                          <div className={`cloud-checkbox ${m.completed ? 'checked' : ''}`}>
-                            {m.completed && <CheckCircle2 size={12} color="#ffffff" />}
-                          </div>
-                          <span style={{ fontSize: '0.78rem', color: m.completed ? 'var(--text-muted)' : 'var(--text-main)', flex: 1 }}>
-                            {m.title}
-                          </span>
-                        </div>
-                      ))}
+                      <button
+                        type="button"
+                        style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                      >
+                        {isTasksExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
                     </div>
-                  )}
+
+                    {isTasksExpanded && (
+                      <div style={{ marginTop: 4 }}>
+                        {/* Danh sách các task liên kết */}
+                        {linkedTasks.map((t) => (
+                          <div key={t.id} className={`goal-task-item ${t.completed ? 'done' : ''}`}>
+                            <div
+                              className={`cloud-checkbox ${t.completed ? 'checked' : ''}`}
+                              onClick={() => handleToggleTask(t, goal)}
+                              title={t.completed ? 'Đánh dấu chưa xong' : 'Đánh dấu đã hoàn thành'}
+                            >
+                              {t.completed && <CheckCircle2 size={11} color="#ffffff" />}
+                            </div>
+                            <span
+                              className="goal-task-title"
+                              onClick={() => handleToggleTask(t, goal)}
+                              style={{ flex: 1, fontSize: '0.78rem', cursor: 'pointer', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            >
+                              {t.title}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTask(t.id)}
+                              style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
+                              title="Xoá việc này"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Form thêm task nhanh cho mục tiêu */}
+                        <form
+                          className="goal-task-quick-input-form"
+                          onSubmit={(e) => handleCreateTaskForGoal(goal, e)}
+                        >
+                          <input
+                            type="text"
+                            className="goal-task-quick-input"
+                            value={quickTaskInputs[goal.id] || ''}
+                            onChange={(e) => setQuickTaskInputs((prev) => ({ ...prev, [goal.id]: e.target.value }))}
+                            placeholder="+ Thêm công việc thực thi cho mục tiêu..."
+                          />
+                          <button
+                            type="submit"
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: 8,
+                              border: 0,
+                              background: 'var(--primary)',
+                              color: '#fff',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <Plus size={12} /> Thêm
+                          </button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -381,220 +546,58 @@ export function GoalsPage() {
         </div>
       )}
 
-      {/* 4.2. CHẾ ĐỘ 2: LƯỚI MA TRẬN MỤC TIÊU (CARDS MATRIX) */}
-      {activeTab === 'matrix' && (
-        <div>
-          {/* Bộ lọc thể loại & trạng thái */}
-          <div className="chip-scroll-row" style={{ margin: '12px 0 20px', position: 'relative', zIndex: 10 }}>
-            {([
-              { id: 'ALL', label: 'Tất cả danh mục' },
-              { id: 'GROWTH', label: '🌱 Phát triển' },
-              { id: 'HEALTH', label: '🏃 Sức khỏe' },
-              { id: 'WEALTH', label: '💎 Tài chính' },
-              { id: 'CAREER', label: '🚀 Sự nghiệp' },
-              { id: 'SHORT_TERM', label: '⚡ Ngắn hạn' },
-              { id: 'LONG_TERM', label: '👑 Ước mơ lớn' },
-            ] as const).map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                className={`tv-filter-pill ${filterCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setFilterCategory(cat.id)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 10,
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  border: `1px solid ${filterCategory === cat.id ? 'var(--primary)' : 'var(--card-border)'}`,
-                  background: filterCategory === cat.id ? 'var(--primary)' : 'var(--card-bg)',
-                  color: filterCategory === cat.id ? '#ffffff' : 'var(--text-main)',
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Bộ lọc trạng thái */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-            {([
-              { id: 'ALL', label: 'Tất cả trạng thái' },
-              { id: 'IN_PROGRESS', label: '⚡ Đang leo' },
-              { id: 'COMPLETED', label: '✓ Đã chạm đỉnh' },
-            ] as const).map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                className={`goals-view-btn ${filterStatus === st.id ? 'active' : ''}`}
-                onClick={() => setFilterStatus(st.id)}
-                style={{ fontSize: '0.74rem', padding: '4px 10px' }}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="goals-matrix-grid">
-            {filteredMatrixGoals.map((goal) => {
-              const percent = goal.target_value > 0 ? Math.min(100, Math.round((goal.current_value / goal.target_value) * 100)) : 0
-              const isCompleted = goal.status === 'COMPLETED' || percent >= 100
-
-              return (
-                <div key={goal.id} className={`goal-cloud-card ${isCompleted ? 'completed' : ''}`}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: '1.5rem' }}>{goal.icon || '🌟'}</span>
-                    <span style={{ fontSize: '0.74rem', fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: `${goal.color || '#38bdf8'}22`, color: goal.color || '#38bdf8' }}>
-                      {goal.altitude_meters?.toLocaleString()}m
-                    </span>
-                  </div>
-
-                  <h4 style={{ margin: '0 0 6px', fontSize: '1.02rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    {goal.title}
-                  </h4>
-
-                  {goal.description && (
-                    <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-                      {goal.description}
-                    </p>
-                  )}
-
-                  {/* Tiến độ */}
-                  <div style={{ margin: '10px 0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: 4 }}>
-                      <span>{goal.current_value} / {goal.target_value} {goal.unit}</span>
-                      <span style={{ color: isCompleted ? '#10b981' : 'var(--primary)' }}>{percent}%</span>
-                    </div>
-                    <div style={{ width: '100%', height: 7, background: 'rgba(255, 255, 255, 0.1)', borderRadius: 99, overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          height: '100%',
-                          width: `${percent}%`,
-                          background: isCompleted ? 'linear-gradient(90deg, #10b981, #059669)' : `linear-gradient(90deg, ${goal.color || '#38bdf8'}, #818cf8)`,
-                          borderRadius: 99,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Milestones checklist */}
-                  {goal.milestones && goal.milestones.length > 0 && (
-                    <div style={{ marginTop: 10 }}>
-                      {goal.milestones.map((m) => (
-                        <div
-                          key={m.id}
-                          className={`goal-milestone-item ${m.completed ? 'done' : ''}`}
-                          onClick={() => handleToggleMilestone(goal.id, m.id)}
-                        >
-                          <div className={`cloud-checkbox ${m.completed ? 'checked' : ''}`}>
-                            {m.completed && <CheckCircle2 size={12} color="#ffffff" />}
-                          </div>
-                          <span style={{ fontSize: '0.78rem', color: m.completed ? 'var(--text-muted)' : 'var(--text-main)', flex: 1 }}>
-                            {m.title}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Quick increment buttons */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickIncrement(goal, 1)}
-                        className="tv-btn"
-                        style={{ padding: '3px 8px', fontSize: '0.74rem' }}
-                      >
-                        +1 {goal.unit}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickIncrement(goal, 5)}
-                        className="tv-btn"
-                        style={{ padding: '3px 8px', fontSize: '0.74rem' }}
-                      >
-                        +5
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 2 }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingGoal(goal)
-                          setIsModalOpen(true)
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
-                      >
-                        <Edit3 size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(goal.id, goal.title)}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 4.3. CHẾ ĐỘ 3: ĐỀN VINH QUANG (HALL OF FAME) */}
+      {/* 6. CHẾ ĐỘ 2: ĐỀN VINH QUANG (COMPLETED CELESTIAL GOALS) */}
       {activeTab === 'hall' && (
-        <div style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '20px 0' }}>
-          <div style={{ fontSize: '3rem', marginBottom: 8 }}>👑</div>
-          <h3 style={{ fontSize: '1.3rem', fontWeight: 900, margin: '0 0 6px', color: '#ffffff' }}>
-            Đền Vinh Quang & Những Mục Tiêu Đã Chạm Đỉnh
-          </h3>
-          <p style={{ margin: '0 0 24px', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-            Nơi ghi nhận những cột mốc rạng rỡ bạn đã kiên trì bước từng bậc để chạm tới bầu trời.
-          </p>
-
+        <div style={{ position: 'relative', zIndex: 10, padding: '20px 0' }}>
           {completedGoals.length === 0 ? (
-            <div style={{ padding: '40px 20px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: 20, maxWidth: 480, margin: '0 auto' }}>
-              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                Chưa có mục tiêu nào chạm đỉnh. Hãy kiên trì leo từng nấc thang mỗi ngày nhé!
+            <div className="sky-apex-heaven">
+              <div className="apex-portal-icon">
+                🏛️
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0 0 6px', color: '#ffffff' }}>
+                Đền Vinh Quang Đang Chờ Đón
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 440, marginInline: 'auto' }}>
+                Khi bạn hoàn thành 100% mục tiêu, ngôi đền này sẽ lưu danh những chiến tích vĩ đại của bạn.
               </p>
             </div>
           ) : (
-            <div className="goals-matrix-grid">
-              {completedGoals.map((goal) => (
-                <div key={goal.id} className="goal-cloud-card completed" style={{ textAlign: 'left' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: '1.6rem' }}>{goal.icon || '🏆'}</span>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: 99 }}>
-                      ✓ ĐÃ CHẠM ĐỈNH
-                    </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+              {completedGoals.map((goal) => {
+                const linkedTasks = todos.items.filter((t) => t.goal_id === goal.id && !t.deleted_at)
+                return (
+                  <div key={goal.id} className="goal-cloud-card completed">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: '1.6rem' }}>👑</span>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#10b981' }}>
+                          {goal.title}
+                        </h4>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          🏔️ {goal.altitude_meters?.toLocaleString()}m • Chinh phục thành công
+                        </span>
+                      </div>
+                    </div>
+                    {goal.description && (
+                      <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        {goal.description}
+                      </p>
+                    )}
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      Hoàn thành {linkedTasks.length > 0 ? `${linkedTasks.length}/${linkedTasks.length} việc` : `${goal.target_value} ${goal.unit}`}
+                    </div>
                   </div>
-                  <h4 style={{ margin: '0 0 6px', fontSize: '1.02rem', fontWeight: 800, color: '#10b981' }}>
-                    {goal.title}
-                  </h4>
-                  <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    {goal.description || `Đã hoàn thành trọn vẹn ${goal.target_value} ${goal.unit}.`}
-                  </p>
-                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    🏔️ Độ cao: {goal.altitude_meters?.toLocaleString()}m • Danh mục: {goal.category_label || 'Mục tiêu'}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* 5. MODAL TẠO / SỬA MỤC TIÊU */}
+      {/* 7. MODAL THÊM / SỬA MỤC TIÊU */}
       <GoalModal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          setEditingGoal(null)
-        }}
+        onClose={() => setIsModalOpen(false)}
         onSave={handleSaveGoal}
         initialGoal={editingGoal}
       />

@@ -28,21 +28,20 @@ describe('GoalsPage', () => {
 
   it('hiển thị bảng điều khiển độ cao và danh hiệu tầng mây', () => {
     renderGoalsPage()
-    expect(screen.getAllByText(/Tầng/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Mặt Đất/i).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: /Thêm Mục Tiêu Lên Trời/i })[0]).toBeInTheDocument()
   }, 15000)
 
-  it('chuyển đổi qua lại giữa các chế độ xem: Bậc thang, Lưới, Đền vinh quang', () => {
+  it('chuyển đổi qua lại giữa Bậc thang lên trời và Đền vinh quang', () => {
     renderGoalsPage()
-    expect(screen.getByText(/Cổng Thiên Giới/i)).toBeInTheDocument()
-
-    const matrixBtn = screen.getByRole('button', { name: /Lưới Mục Tiêu/i })
-    fireEvent.click(matrixBtn)
-    expect(screen.getByText('Tất cả danh mục')).toBeInTheDocument()
 
     const hallBtn = screen.getByRole('button', { name: /Đền Vinh Quang/i })
     fireEvent.click(hallBtn)
-    expect(screen.getByText(/Đền Vinh Quang & Những Mục Tiêu Đã Chạm Đỉnh/i)).toBeInTheDocument()
+    expect(screen.getByText(/Đền Vinh Quang Đang Chờ Đón/i)).toBeInTheDocument()
+
+    const stairwayBtn = screen.getByRole('button', { name: /Bậc Thang Lên Trời/i })
+    fireEvent.click(stairwayBtn)
+    expect(screen.getByText(/Bầu trời xanh đang chờ ước mơ/i)).toBeInTheDocument()
   }, 15000)
 
   it('mở modal tạo mục tiêu mới', () => {

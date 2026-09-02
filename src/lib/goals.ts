@@ -1,100 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
-import type { GoalItem } from '../types'
+import type { GoalItem, GoalMilestone } from '../types'
 import { getRemoteAppSetting, saveAppSetting } from './userAppSettings'
+import { supabase } from './supabase'
 
 const STORAGE_KEY = 'daily_life_goals'
 const EVENT_NAME = 'daily_life_goals_changed'
-
-export const INITIAL_SAMPLE_GOALS: GoalItem[] = [
-  {
-    id: 'goal_sample_1',
-    title: 'Đọc 20 cuốn sách tinh hoa & phát triển bản thân',
-    description: 'Nâng cao tư duy, mở rộng nhân sinh quan và tích lũy tri thức mỗi tuần.',
-    category: 'GROWTH',
-    category_label: 'Phát triển bản thân',
-    target_date: '2026-12-31',
-    current_value: 6,
-    target_value: 20,
-    unit: 'cuốn sách',
-    altitude_meters: 2200,
-    color: '#38bdf8',
-    icon: '📚',
-    status: 'IN_PROGRESS',
-    created_at: new Date().toISOString(),
-    milestones: [
-      { id: 'm1', title: 'Hoàn thành 5 cuốn sách đầu tiên (Xây dựng thói quen)', completed: true, completed_at: new Date().toISOString() },
-      { id: 'm2', title: 'Đọc 10 cuốn sách về tư duy tài chính & tâm lý', completed: false },
-      { id: 'm3', title: 'Đọc 15 cuốn sách & ghi chép nhật ký bài học', completed: false },
-      { id: 'm4', title: 'Chạm mốc 20 cuốn sách & tổng kết năm', completed: false },
-    ],
-  },
-  {
-    id: 'goal_sample_2',
-    title: 'Chạy bộ 300km & Chinh phục cự ly 21km Half-Marathon',
-    description: 'Rèn luyện sức bền, sự kiên trì và kỷ luật thép qua từng bước chân.',
-    category: 'HEALTH',
-    category_label: 'Sức khỏe & Thể chất',
-    target_date: '2026-10-30',
-    current_value: 120,
-    target_value: 300,
-    unit: 'km',
-    altitude_meters: 3500,
-    color: '#34d399',
-    icon: '🏃',
-    status: 'IN_PROGRESS',
-    created_at: new Date().toISOString(),
-    milestones: [
-      { id: 'm1', title: 'Chạy liên tục 5km không nghỉ', completed: true, completed_at: new Date().toISOString() },
-      { id: 'm2', title: 'Chinh phục cự ly 10km đường dài', completed: true, completed_at: new Date().toISOString() },
-      { id: 'm3', title: 'Hoàn thành bài chạy thử 15km', completed: false },
-      { id: 'm4', title: 'Chạy đủ 21.1km Half-Marathon về đích', completed: false },
-    ],
-  },
-  {
-    id: 'goal_sample_3',
-    title: 'Xây dựng Quỹ Tự Do Tài Chính 100 Triệu',
-    description: 'Tạo lập nền tảng an tâm tài chính và dòng tiền đầu tư dài hạn.',
-    category: 'WEALTH',
-    category_label: 'Tài chính & Thịnh vượng',
-    target_date: '2026-12-31',
-    current_value: 45,
-    target_value: 100,
-    unit: 'triệu VNĐ',
-    altitude_meters: 5000,
-    color: '#fbbf24',
-    icon: '💎',
-    status: 'IN_PROGRESS',
-    created_at: new Date().toISOString(),
-    milestones: [
-      { id: 'm1', title: 'Tích lũy 25 triệu quỹ khẩn cấp đầu tiên', completed: true, completed_at: new Date().toISOString() },
-      { id: 'm2', title: 'Đạt mốc 50 triệu & mở tài khoản tích lũy sinh lời', completed: false },
-      { id: 'm3', title: 'Đạt mốc 75 triệu', completed: false },
-      { id: 'm4', title: 'Chạm mốc 100 triệu tròn vẹn', completed: false },
-    ],
-  },
-  {
-    id: 'goal_sample_4',
-    title: 'Giao tiếp Tiếng Anh tự tin & Học 1000 từ vựng cốt lõi',
-    description: 'Làm chủ ngôn ngữ toàn cầu, sẵn sàng kết nối và làm việc quốc tế.',
-    category: 'GROWTH',
-    category_label: 'Ngôn ngữ & Kiến thức',
-    target_date: '2026-11-15',
-    current_value: 450,
-    target_value: 1000,
-    unit: 'từ vựng',
-    altitude_meters: 4200,
-    color: '#818cf8',
-    icon: '🌍',
-    status: 'IN_PROGRESS',
-    created_at: new Date().toISOString(),
-    milestones: [
-      { id: 'm1', title: 'Học chắc 300 từ vựng thông dụng nhất', completed: true, completed_at: new Date().toISOString() },
-      { id: 'm2', title: 'Luyện phản xạ nghe nói hằng ngày 30 ngày liên tục', completed: false },
-      { id: 'm3', title: 'Hoàn thành 700 từ vựng và xem phim không cần sub', completed: false },
-      { id: 'm4', title: 'Chinh phục 1000 từ vựng & tự tin trò chuyện', completed: false },
-    ],
-  },
-]
 
 /**
  * Đọc danh sách mục tiêu từ LocalStorage
@@ -102,15 +12,15 @@ export const INITIAL_SAMPLE_GOALS: GoalItem[] = [
 export function getStoredGoals(): GoalItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return INITIAL_SAMPLE_GOALS
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       return parsed
     }
-    return INITIAL_SAMPLE_GOALS
+    return []
   } catch (err) {
     console.warn('Lỗi đọc danh sách mục tiêu:', err)
-    return INITIAL_SAMPLE_GOALS
+    return []
   }
 }
 
@@ -132,17 +42,33 @@ export async function saveGoals(goals: GoalItem[]): Promise<void> {
 }
 
 /**
- * Thêm mục tiêu mới
+ * Thêm mục tiêu mới và đồng bộ sang bảng goals của Supabase
  */
 export async function addGoal(input: Omit<GoalItem, 'id' | 'created_at'>): Promise<GoalItem> {
   const current = getStoredGoals()
+  const newId = `goal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
   const newGoal: GoalItem = {
     ...input,
-    id: `goal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: newId,
     created_at: new Date().toISOString(),
   }
   const updated = [newGoal, ...current]
   await saveGoals(updated)
+
+  // Đồng bộ bảng goals của Supabase để liên kết khóa ngoại với tasks/todos
+  if (supabase) {
+    try {
+      await supabase.from('goals').insert({
+        id: newGoal.id,
+        name: newGoal.title,
+        note: newGoal.description || null,
+        due_date: newGoal.target_date || null,
+      })
+    } catch (e) {
+      console.warn('Đồng bộ sang bảng goals thất bại:', e)
+    }
+  }
+
   return newGoal
 }
 
@@ -165,9 +91,25 @@ export async function updateGoal(id: string, updates: Partial<GoalItem>): Promis
     }
     return g
   })
+
   if (targetGoal) {
     await saveGoals(updated)
+
+    if (supabase) {
+      try {
+        const payload: Record<string, unknown> = {}
+        if (updates.title) payload.name = updates.title
+        if (updates.description !== undefined) payload.note = updates.description
+        if (updates.target_date !== undefined) payload.due_date = updates.target_date
+        if (Object.keys(payload).length > 0) {
+          await supabase.from('goals').update(payload).eq('id', id)
+        }
+      } catch (e) {
+        console.warn('Cập nhật bảng goals thất bại:', e)
+      }
+    }
   }
+
   return targetGoal
 }
 
@@ -180,7 +122,7 @@ export async function toggleGoalMilestone(goalId: string, milestoneId: string): 
 
   const updated = current.map((g) => {
     if (g.id === goalId) {
-      const newMilestones = g.milestones.map((m) => {
+      const newMilestones = (g.milestones || []).map((m) => {
         if (m.id === milestoneId) {
           const nextCompleted = !m.completed
           return {
@@ -195,7 +137,6 @@ export async function toggleGoalMilestone(goalId: string, milestoneId: string): 
       const completedCount = newMilestones.filter((m) => m.completed).length
       const totalMilestones = newMilestones.length
 
-      // Cập nhật giá trị tiến độ tỉ lệ theo milestone nếu có
       let nextValue = g.current_value
       if (totalMilestones > 0) {
         nextValue = Math.round((completedCount / totalMilestones) * g.target_value)
@@ -224,12 +165,55 @@ export async function toggleGoalMilestone(goalId: string, milestoneId: string): 
 }
 
 /**
- * Xóa một mục tiêu
+ * Thêm milestone trực tiếp vào mục tiêu
+ */
+export async function addGoalMilestone(goalId: string, title: string): Promise<GoalItem | null> {
+  const text = title.trim()
+  if (!text) return null
+  const current = getStoredGoals()
+  let targetGoal: GoalItem | null = null
+
+  const updated = current.map((g) => {
+    if (g.id === goalId) {
+      const newMilestone: GoalMilestone = {
+        id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title: text,
+        completed: false,
+      }
+      const newMilestones = [...(g.milestones || []), newMilestone]
+      const merged: GoalItem = {
+        ...g,
+        milestones: newMilestones,
+      }
+      targetGoal = merged
+      return merged
+    }
+    return g
+  })
+
+  if (targetGoal) {
+    await saveGoals(updated)
+  }
+  return targetGoal
+}
+
+/**
+ * Xoá một mục tiêu và dọn dẹp liên kết
  */
 export async function deleteGoal(id: string): Promise<void> {
   const current = getStoredGoals()
   const filtered = current.filter((g) => g.id !== id)
   await saveGoals(filtered)
+
+  if (supabase) {
+    try {
+      const now = new Date().toISOString()
+      await supabase.from('goals').update({ deleted_at: now }).eq('id', id)
+      await supabase.from('todos').update({ goal_id: null }).eq('goal_id', id)
+    } catch (e) {
+      console.warn('Xóa mục tiêu trong database thất bại:', e)
+    }
+  }
 }
 
 /**
@@ -250,8 +234,8 @@ export function calculateAscensionProgress(goals: GoalItem[]): {
       currentAltitude: 0,
       targetAltitude: 10000,
       percent: 0,
-      tierName: 'Mặt đất yên bình',
-      tierDescription: 'Bắt đầu hành trình đặt những viên gạch đầu tiên vươn tới trời cao.',
+      tierName: 'Mặt Đất Yên Bình',
+      tierDescription: 'Hãy đặt viên gạch mục tiêu đầu tiên để bắt đầu hành trình vút bay lên trời cao.',
       tierIcon: '🌱',
       completedGoalsCount: 0,
       totalGoalsCount: 0,
@@ -319,6 +303,7 @@ export function calculateAscensionProgress(goals: GoalItem[]): {
  */
 export function useGoals() {
   const [goals, setGoals] = useState<GoalItem[]>(() => getStoredGoals())
+  const [loading, setLoading] = useState(true)
 
   const reload = useCallback(() => {
     setGoals(getStoredGoals())
@@ -326,13 +311,18 @@ export function useGoals() {
 
   useEffect(() => {
     let alive = true
-    void getRemoteAppSetting<GoalItem[]>(STORAGE_KEY, INITIAL_SAMPLE_GOALS).then((remote) => {
-      if (alive && Array.isArray(remote) && remote.length > 0) {
-        setGoals(remote)
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(remote))
-        } catch {}
+    void getRemoteAppSetting<GoalItem[]>(STORAGE_KEY, []).then((remote) => {
+      if (alive) {
+        setLoading(false)
+        if (Array.isArray(remote)) {
+          setGoals(remote)
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(remote))
+          } catch {}
+        }
       }
+    }).catch(() => {
+      if (alive) setLoading(false)
     })
 
     const handleUpdate = () => {
@@ -351,9 +341,11 @@ export function useGoals() {
 
   return {
     goals,
+    loading,
     addGoal,
     updateGoal,
     toggleMilestone: toggleGoalMilestone,
+    addMilestone: addGoalMilestone,
     deleteGoal,
     reload,
   }

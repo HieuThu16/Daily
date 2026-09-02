@@ -68,11 +68,7 @@ export function GoalModal({ isOpen, onClose, onSave, initialGoal }: GoalModalPro
       setAltitudeMeters(2500)
       setIcon('🌟')
       setColor('#38bdf8')
-      setMilestones([
-        { id: `m_${Date.now()}_1`, title: 'Bước 1: Lập kế hoạch hành động & chuẩn bị', completed: false },
-        { id: `m_${Date.now()}_2`, title: 'Bước 2: Chinh phục 50% chặng đường', completed: false },
-        { id: `m_${Date.now()}_3`, title: 'Bước 3: Về đích & tổng kết thành quả', completed: false },
-      ])
+      setMilestones([])
     }
     setNewMilestoneInput('')
   }, [initialGoal, isOpen])
