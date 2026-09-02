@@ -64,7 +64,12 @@ export type NutritionLog = {
   log_date: string
   /** Giờ ăn 'HH:MM'; null với bản ghi cũ. */
   log_time?: string | null
+  image_url?: string | null
+  image_path?: string | null
+  images?: string[]
+  image_paths?: string[]
   created_at?: string
+  deleted_at?: string | null
 }
 
 /** Một giấc ngủ đã ghi; giờ lưu dạng 'HH:MM'. */

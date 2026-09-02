@@ -125,9 +125,30 @@ export function FoodPeriodView({ logs, days, mealFilter, onMealFilter, onDelete,
           <header><strong>{fullDate(date)}</strong><span>{money(entries.reduce((sum, item) => sum + item.price, 0))}</span></header>
           {entries.map((entry) => {
             const meal = mealBySlot[entry.meal_slot]
+            const isVideo = entry.image_url && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entry.image_url)
             return (
               <div key={entry.id} className="nutrition-history-row">
                 <span className="nutrition-history-icon" style={{ color: meal.color }}>{meal.emoji}</span>
+                {entry.image_url && (
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                      background: '#000',
+                      flexShrink: 0,
+                      display: 'grid',
+                      placeItems: 'center',
+                    }}
+                  >
+                    {isVideo ? (
+                      <span style={{ fontSize: '0.7rem' }}>🎬</span>
+                    ) : (
+                      <img src={entry.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
+                  </div>
+                )}
                 <div><strong>{entry.food_name}</strong><small>{meal.label}{entry.log_time ? ` · ${entry.log_time}` : ''}</small></div>
                 <b style={{ color: meal.color }}>{money(entry.price)}</b>
                 <div className="nutrition-history-actions">

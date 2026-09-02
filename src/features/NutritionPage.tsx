@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, Trash2, UtensilsCrossed } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Camera, Loader2, Pencil, Plus, Trash2, UtensilsCrossed, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
+import { compressForUpload } from '../lib/photo'
 import { useToast } from './ToastContext'
 import { Modal } from './shared'
 import { FoodPeriodView, PeriodSelector } from './nutrition/NutritionPeriodViews'
@@ -19,6 +20,8 @@ import {
   removeRememberedFood,
 } from './nutrition/foodSuggestions'
 import { SkeletonList } from './Skeleton'
+
+const PHOTO_BUCKET = 'daily-photos'
 
 const MEALS: { slot: MealSlot; label: string; emoji: string; color: string; bg: string }[] = [
   { slot: 'MORNING', label: 'Sáng', emoji: '🌅', color: '#f59e0b', bg: 'rgba(245,185,11,.10)' },
@@ -61,6 +64,11 @@ export function NutritionPage() {
   const [foodPrice, setFoodPrice] = useState('')
   const [foodLogTime, setFoodLogTime] = useState(() => new Date().toTimeString().slice(0, 5))
   const [showFoodSuggestions, setShowFoodSuggestions] = useState(false)
+
+  const [foodMedia, setFoodMedia] = useState<{ url: string; path: string; type: 'image' | 'video' } | null>(null)
+  const [foodUploading, setFoodUploading] = useState(false)
+  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
+  const foodFileInputRef = useRef<HTMLInputElement>(null)
 
   const rememberedFoods = useRememberedFoods()
 
@@ -125,12 +133,59 @@ export function NutritionPage() {
     return map
   }, [logs])
 
+  const handleUploadFoodMedia = async (file: File) => {
+    if (!supabase) {
+      showToast('⚠️ Cần kết nối Supabase để lưu ảnh/video món ăn')
+      return
+    }
+    setFoodUploading(true)
+    try {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
+      let uploadBlob: Blob | File = file
+      let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
+
+      if (!isVideo) {
+        const compressed = await compressForUpload(file)
+        uploadBlob = compressed.blob
+        ext = compressed.ext
+      }
+
+      const path = `nutrition/${currentDate}/${crypto.randomUUID()}.${ext}`
+      const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+
+      const { error: uploadErr } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(path, uploadBlob, { contentType, upsert: true })
+
+      if (uploadErr) {
+        showToast('❌ Tải file lên thất bại: ' + uploadErr.message, 'delete')
+        setFoodUploading(false)
+        return
+      }
+
+      const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+      const publicUrl = pubData.publicUrl
+
+      setFoodMedia({
+        url: publicUrl,
+        path,
+        type: isVideo ? 'video' : 'image',
+      })
+      showToast(isVideo ? '🎬 Đã tải video món ăn' : '🖼️ Đã tải ảnh món ăn')
+    } catch (err: any) {
+      showToast('❌ Lỗi upload: ' + (err?.message || ''), 'delete')
+    } finally {
+      setFoodUploading(false)
+    }
+  }
+
   function openAddFoodModal(slot: MealSlot) {
     setEditingFood(null)
     setActiveMeal(slot)
     setFoodName('')
     setFoodPrice('')
     setFoodLogTime(new Date().toTimeString().slice(0, 5))
+    setFoodMedia(null)
     setShowFoodSuggestions(false)
     setFoodModal(true)
   }
@@ -141,6 +196,15 @@ export function NutritionPage() {
     setFoodName(log.food_name)
     setFoodPrice(String(log.price))
     setFoodLogTime(log.log_time || new Date().toTimeString().slice(0, 5))
+    setFoodMedia(
+      log.image_url
+        ? {
+            url: log.image_url,
+            path: log.image_path || '',
+            type: /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(log.image_url) ? 'video' : 'image',
+          }
+        : null,
+    )
     setShowFoodSuggestions(false)
     setFoodModal(true)
   }
@@ -168,33 +232,70 @@ export function NutritionPage() {
       food_name: name,
       price: parsedPrice,
       log_time: foodLogTime,
+      image_url: foodMedia?.url || null,
+      image_path: foodMedia?.path || null,
     }
 
     if (editingFood) {
       try {
-        const { data } = await supabase!
+        const { data, error } = await supabase!
           .from('nutrition_logs')
           .update(payload)
           .eq('id', editingFood.id)
           .select()
           .single()
-        if (data) {
+        if (!error && data) {
           setLogs((prev) => prev.map((item) => (item.id === editingFood.id ? (data as NutritionLog) : item)))
           setPeriodFoodLogs((prev) => prev.map((item) => (item.id === editingFood.id ? (data as NutritionLog) : item)))
+        } else {
+          // Thử lại nếu DB chưa chạy migration cột image_url
+          const simplePayload = {
+            log_date: currentDate,
+            meal_slot: activeMeal,
+            food_name: name,
+            price: parsedPrice,
+            log_time: foodLogTime,
+          }
+          const retry = await supabase!.from('nutrition_logs').update(simplePayload).eq('id', editingFood.id).select().single()
+          if (retry.data) {
+            const merged = { ...retry.data, ...payload } as NutritionLog
+            setLogs((prev) => prev.map((item) => (item.id === editingFood.id ? merged : item)))
+            setPeriodFoodLogs((prev) => prev.map((item) => (item.id === editingFood.id ? merged : item)))
+          }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Lỗi cập nhật món ăn:', err)
+      }
     } else {
       try {
-        const { data } = await supabase!.from('nutrition_logs').insert(payload).select().single()
-        if (data) {
+        const { data, error } = await supabase!.from('nutrition_logs').insert(payload).select().single()
+        if (!error && data) {
           setLogs((prev) => [...prev, data as NutritionLog])
           setPeriodFoodLogs((prev) => [...prev, data as NutritionLog])
+        } else {
+          // Thử lại nếu DB chưa có cột image_url
+          const simplePayload = {
+            log_date: currentDate,
+            meal_slot: activeMeal,
+            food_name: name,
+            price: parsedPrice,
+            log_time: foodLogTime,
+          }
+          const retry = await supabase!.from('nutrition_logs').insert(simplePayload).select().single()
+          if (retry.data) {
+            const merged = { ...retry.data, ...payload } as NutritionLog
+            setLogs((prev) => [...prev, merged])
+            setPeriodFoodLogs((prev) => [...prev, merged])
+          }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Lỗi lưu món ăn:', err)
+      }
     }
 
     setFoodModal(false)
     setEditingFood(null)
+    setFoodMedia(null)
     setShowFoodSuggestions(false)
     showToast('🍲 Đã lưu món ăn')
   }
@@ -316,46 +417,75 @@ export function NutritionPage() {
                       </span>
                     </div>
 
-                    {groupedFood[meal.slot].map((log) => (
-                      <div
-                        key={log.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          marginTop: 6,
-                          padding: '8px 10px',
-                          borderRadius: 10,
-                          background: meal.bg,
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <strong style={{ fontSize: '.82rem', color: 'var(--text-main)' }}>{log.food_name}</strong>
-                          <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 1 }}>
-                            {log.log_time || 'Chưa ghi giờ'}
-                          </small>
+                    {groupedFood[meal.slot].map((log) => {
+                      const isVideo = log.image_url && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(log.image_url)
+                      return (
+                        <div
+                          key={log.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            marginTop: 6,
+                            padding: '8px 10px',
+                            borderRadius: 10,
+                            background: meal.bg,
+                          }}
+                        >
+                          {/* Thumbnail ảnh / video món ăn */}
+                          {log.image_url && (
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                background: '#000',
+                                flexShrink: 0,
+                                cursor: 'pointer',
+                                display: 'grid',
+                                placeItems: 'center',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                              }}
+                              onClick={() => setPreviewMediaUrl(log.image_url!)}
+                              title="Bấm để xem ảnh / video món ăn"
+                            >
+                              {isVideo ? (
+                                <span style={{ fontSize: '0.75rem' }}>🎬</span>
+                              ) : (
+                                <img src={log.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              )}
+                            </div>
+                          )}
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <strong style={{ fontSize: '.82rem', color: 'var(--text-main)' }}>{log.food_name}</strong>
+                            <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 1 }}>
+                              {log.log_time || 'Chưa ghi giờ'}
+                            </small>
+                          </div>
+                          <b style={{ color: meal.color, fontSize: '.8rem' }}>{money(log.price)}</b>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <button
+                              type="button"
+                              aria-label={`Sửa ${log.food_name}`}
+                              onClick={() => openEditFoodModal(log)}
+                              style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Xóa ${log.food_name}`}
+                              onClick={() => deleteFood(log.id)}
+                              style={{ border: 0, background: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
-                        <b style={{ color: meal.color, fontSize: '.8rem' }}>{money(log.price)}</b>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <button
-                            type="button"
-                            aria-label={`Sửa ${log.food_name}`}
-                            onClick={() => openEditFoodModal(log)}
-                            style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Xóa ${log.food_name}`}
-                            onClick={() => deleteFood(log.id)}
-                            style={{ border: 0, background: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : null,
               )}
@@ -467,6 +597,88 @@ export function NutritionPage() {
               />
             </label>
 
+            {/* Đính kèm Ảnh & Video món ăn */}
+            <div>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                Ảnh & Video món ăn
+              </span>
+
+              <input
+                ref={foodFileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                hidden
+                aria-label="Chọn ảnh hoặc video món ăn"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (file) void handleUploadFoodMedia(file)
+                }}
+              />
+
+              {foodMedia ? (
+                <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#000', maxHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {foodMedia.type === 'video' ? (
+                    <video src={foodMedia.url} controls style={{ width: '100%', maxHeight: 200, objectFit: 'contain' }} />
+                  ) : (
+                    <img src={foodMedia.url} alt="Ảnh món ăn" style={{ width: '100%', maxHeight: 200, objectFit: 'contain' }} />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setFoodMedia(null)}
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      right: 6,
+                      background: 'rgba(0,0,0,0.65)',
+                      color: '#fff',
+                      border: 0,
+                      borderRadius: '50%',
+                      width: 26,
+                      height: 26,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                    title="Gỡ ảnh/video"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => foodFileInputRef.current?.click()}
+                    disabled={foodUploading}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px dashed #10b981',
+                      background: 'rgba(16, 185, 129, 0.08)',
+                      color: '#10b981',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    {foodUploading ? (
+                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Camera size={15} />
+                    )}
+                    <span>{foodUploading ? 'Đang tải…' : '📷 Thêm Ảnh / 🎬 Video'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               className="primary"
@@ -474,6 +686,27 @@ export function NutritionPage() {
               style={{ background: '#10b981', borderRadius: 10, padding: '10px 16px', fontWeight: 700 }}
             >
               {editingFood ? 'Lưu thay đổi' : 'Lưu món ăn'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL XEM CHI TIẾT ẢNH / VIDEO MÓN ĂN */}
+      {previewMediaUrl && (
+        <Modal onClose={() => setPreviewMediaUrl(null)} title="🔍 Chi tiết Món ăn">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            {/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(previewMediaUrl) ? (
+              <video src={previewMediaUrl} controls autoPlay style={{ width: '100%', maxHeight: '70vh', borderRadius: 12, background: '#000' }} />
+            ) : (
+              <img src={previewMediaUrl} alt="" style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 12 }} />
+            )}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setPreviewMediaUrl(null)}
+              style={{ padding: '8px 16px', fontSize: '0.84rem' }}
+            >
+              Đóng
             </button>
           </div>
         </Modal>

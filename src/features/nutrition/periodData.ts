@@ -10,8 +10,13 @@ export type NutritionLog = {
   food_name: string
   price: number
   log_date: string
-  log_time?: string
+  log_time?: string | null
+  image_url?: string | null
+  image_path?: string | null
+  images?: string[]
+  image_paths?: string[]
   created_at?: string
+  deleted_at?: string | null
 }
 
 export type SleepLog = {
