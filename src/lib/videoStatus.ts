@@ -110,6 +110,8 @@ export async function setVideoStatus(
     series_key?: string | null
     title?: string
     channel_name?: string
+    thumbnail?: string | null
+    duration?: number
   }
 ): Promise<void> {
   const records = getStoredVideoStatuses()
@@ -145,22 +147,56 @@ export async function setVideoStatus(
     })
   )
 
-  // Đồng bộ với bảng Supabase (review_watched hoặc tvshow_watched)
+  if (!supabase) return
+
+  // Đồng bộ với bảng Supabase (review_watched hoặc tvshow_watched và video_watch_progress)
   const watchedTable = type === 'review' ? 'review_watched' : 'tvshow_watched'
 
   try {
-    if (status === 'COMPLETED') {
-      await supabase?.from(watchedTable).upsert({
-        platform,
-        video_id: videoId,
-        series_key: meta?.series_key ?? null,
-        watched_at: now,
-      })
-    } else if (status === 'IN_PROGRESS') {
-      // Khi đang xem, xoá khỏi watched nếu đã từng xem xong
-      await supabase?.from(watchedTable).delete().eq('platform', platform).eq('video_id', videoId)
-    } else if (status === 'UNWATCHED') {
-      await supabase?.from(watchedTable).delete().eq('platform', platform).eq('video_id', videoId)
+    const authResult = await supabase?.auth?.getUser?.().catch(() => null)
+    const user = authResult?.data?.user
+
+    if (user) {
+      if (status === 'COMPLETED') {
+        const today = new Date().toLocaleDateString('sv-SE')
+
+        // 1. Lưu vào tvshow_watched / review_watched
+        await supabase.from(watchedTable).upsert(
+          {
+            user_id: user.id,
+            platform,
+            video_id: videoId,
+            series_key: meta?.series_key ?? null,
+            watched_at: now,
+          },
+          { onConflict: 'user_id,platform,video_id' },
+        )
+
+        // 2. Lưu vào video_watch_progress
+        await supabase.from('video_watch_progress').upsert(
+          {
+            id: `${user.id}:${videoId}`,
+            user_id: user.id,
+            user_email: user.email ?? null,
+            video_id: videoId,
+            title: meta?.title ?? null,
+            channel_name: meta?.channel_name ?? null,
+            thumbnail: meta?.thumbnail ?? null,
+            seconds: Math.round(meta?.duration || 100),
+            duration_seconds: meta?.duration || null,
+            percent: 100,
+            status: 'COMPLETED',
+            log_date: today,
+            updated_at: now,
+          },
+          { onConflict: 'id' },
+        )
+      } else if (status === 'IN_PROGRESS') {
+        await supabase.from(watchedTable).delete().eq('user_id', user.id).eq('platform', platform).eq('video_id', videoId)
+      } else if (status === 'UNWATCHED') {
+        await supabase.from(watchedTable).delete().eq('user_id', user.id).eq('platform', platform).eq('video_id', videoId)
+        await supabase.from('video_watch_progress').delete().eq('user_id', user.id).eq('video_id', videoId)
+      }
     }
   } catch (err) {
     console.warn('Supabase watched sync error (non-fatal):', err)

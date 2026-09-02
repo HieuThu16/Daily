@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -140,25 +140,25 @@ describe('HomePage', () => {
     expect(sleepBtn).toBeInTheDocument()
 
     // Bấm Thêm bữa ăn -> mở modal đầy đủ
-    await userEvent.click(foodBtn)
+    fireEvent.click(foodBtn)
     expect(await screen.findByPlaceholderText(/Gõ hoặc chọn món/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Lưu món ăn/i })).toBeInTheDocument()
 
     // Đóng modal
-    await userEvent.click(screen.getByRole('button', { name: /Đóng/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Đóng/i }))
 
     // Bấm Thêm giấc ngủ -> mở modal đầy đủ
-    await userEvent.click(sleepBtn)
+    fireEvent.click(sleepBtn)
     expect(await screen.findByText(/Ghi giấc ngủ & Giấc mơ/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Kể lại giấc mơ/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Lưu giấc ngủ/i })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /Đóng/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Đóng/i }))
 
-    await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
     expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: /Thống kê ngày/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /Thống kê ngày/i }))
     expect(await screen.findByText('Thói quen')).toBeInTheDocument()
   })
 })

@@ -40,9 +40,11 @@ import {
   progressLabel,
   useVideoProgressMap,
   useYouTubeProgress,
+  saveVideoProgress,
   removeVideoProgress,
   syncVideoProgressFromSupabase,
 } from '../../lib/videoProgress'
+import { useSearchHistory } from '../../lib/youtubeSearchHistory'
 import { WatchTogetherButton } from '../watch/WatchTogetherButton'
 import { AddYoutubeModal } from './AddYoutubeModal'
 import { YoutubeCrawlModal, GlobalYoutubeCrawlerWatcher } from './YoutubeCrawlModal'
@@ -269,6 +271,26 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [inProgressSet, setInProgressSet] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const { history: searchHistory, addHistory: addSearchKeyword, removeHistory: removeSearchKeyword, clearAll: clearSearchHistory } = useSearchHistory()
+  const [showSearchHistory, setShowSearchHistory] = useState(false)
+  const searchBoxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
+        setShowSearchHistory(false)
+      }
+    }
+    document.addEventListener('pointerdown', handleClickOutside)
+    return () => document.removeEventListener('pointerdown', handleClickOutside)
+  }, [])
+
+  const filteredSearchHistory = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return searchHistory.slice(0, 10)
+    return searchHistory.filter((item) => item.toLowerCase().includes(q)).slice(0, 10)
+  }, [searchHistory, search])
+
   const [viewMode, setViewMode] = useState<'channel' | 'video' | 'history' | 'audio'>('video')
   const [historyPeriod, setHistoryPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all')
   const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
@@ -971,6 +993,30 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
         }
       }
 
+      // Bổ sung các video đã có tiến độ xem hoặc đã đánh dấu xem xong từ progressMap vào rawCombinedVideos
+      // để bất kỳ video nào người dùng đã xem cũng hiển thị trong kho video và tab Đã xem
+      Object.values(progressMap).forEach((p) => {
+        if (!p || !p.videoId || seenVideoIds.has(p.videoId)) return
+        seenVideoIds.add(p.videoId)
+        rawCombinedVideos.push({
+          id: `watched-${p.videoId}`,
+          video_id: p.videoId,
+          series_key: null,
+          creator_id: null,
+          creator_name: p.channelName || 'YouTube',
+          title: p.title || 'Video YouTube',
+          canonical_url: `https://www.youtube.com/watch?v=${p.videoId}`,
+          embed_url: `https://www.youtube.com/embed/${p.videoId}`,
+          thumbnail: p.thumbnail || `https://i.ytimg.com/vi/${p.videoId}/hqdefault.jpg`,
+          part_number: null,
+          published_at: p.updatedAt || null,
+          unavailable_at: null,
+          duration: p.durationSeconds || null,
+          channel_category: 'Khác',
+          sourceType: 'tvshow',
+        })
+      })
+
       const combinedVideos = isShorts
         ? rawCombinedVideos.filter((v) => isShortVideo(v, progressMap))
         : rawCombinedVideos.filter((v) => !isShortVideo(v, progressMap))
@@ -1233,6 +1279,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const handlePerformYouTubeSearch = async (queryToSearch = search, order: SearchOrder = ytOrder) => {
     const q = queryToSearch.trim()
     if (!q) return
+    addSearchKeyword(q)
+    setShowSearchHistory(false)
     setYtOrder(order)
     setIsSearchingYouTube(true)
     try {
@@ -1273,6 +1321,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (search.trim()) {
+      addSearchKeyword(search.trim())
+      setShowSearchHistory(false)
       void handlePerformYouTubeSearch(search, sortMode === 'viewCount' ? 'viewCount' : 'date')
     }
   }
@@ -1749,11 +1799,30 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
       return nextSet
     })
 
+    const dur = video.duration || progressMap[video.video_id]?.durationSeconds || 100
+
     await updateVideoStatusRecord(video.video_id, video.sourceType || 'tvshow', next, {
       title: video.title,
       channel_name: video.creator_name || undefined,
       series_key: video.series_key,
+      thumbnail: video.thumbnail,
+      duration: dur,
     })
+
+    if (next === 'COMPLETED') {
+      await saveVideoProgress({
+        videoId: video.video_id,
+        seconds: dur,
+        durationSeconds: dur,
+        title: video.title,
+        channelName: video.creator_name || undefined,
+        thumbnail: video.thumbnail,
+        sourceType: video.sourceType,
+      })
+    } else {
+      await removeVideoProgress(video.video_id)
+    }
+
     showToast(next === 'COMPLETED' ? 'Đã đánh dấu xem xong' : 'Bỏ đánh dấu đã xem', 'info')
   }
 
@@ -1950,7 +2019,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
 
       {/* 2. THANH TÌM KIẾM THÔNG MINH (TÌM VIDEO ĐÃ CÓ & CHƯA CÓ TRÊN YOUTUBE) */}
       <form onSubmit={handleSearchSubmit} className="tv-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <div className="tv-search-box" style={{ flex: 1, minWidth: 260, position: 'relative' }}>
+        <div ref={searchBoxRef} className="tv-search-box" style={{ flex: 1, minWidth: 260, position: 'relative' }}>
           <Search size={16} color="var(--text-muted)" />
           <input
             type="text"
@@ -1958,6 +2027,8 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             placeholder="Tìm video, kênh đã có hoặc tìm mới từ YouTube API (Enter)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => setShowSearchHistory(true)}
+            onClick={() => setShowSearchHistory(true)}
           />
           {search && (
             <button
@@ -1991,6 +2062,120 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             {isSearchingYouTube ? <Loader2 size={13} className="tv-spin" /> : <Globe size={13} />}
             <span>Tìm YouTube</span>
           </button>
+
+          {/* DROPDOWN LỊCH SỬ TÌM KIẾM YOUTUBE */}
+          {showSearchHistory && filteredSearchHistory.length > 0 && (
+            <div
+              className="yt-search-history-dropdown"
+              onMouseDown={(e) => e.preventDefault()}
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                left: 0,
+                right: 0,
+                background: 'var(--card-bg, #1a1a24)',
+                border: '1px solid var(--card-border, rgba(255, 255, 255, 0.12))',
+                borderRadius: 12,
+                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.35)',
+                zIndex: 1000,
+                padding: '6px 4px',
+                maxHeight: 280,
+                overflowY: 'auto',
+                backdropFilter: 'blur(16px)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '4px 10px 6px',
+                  borderBottom: '1px solid var(--card-border, rgba(255, 255, 255, 0.08))',
+                  marginBottom: 4,
+                }}
+              >
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Clock size={13} /> Lịch sử tìm kiếm
+                </span>
+                <button
+                  type="button"
+                  onClick={() => clearSearchHistory()}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--rose, #ef4444)',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                  }}
+                >
+                  Xoá tất cả
+                </button>
+              </div>
+
+              {filteredSearchHistory.map((query) => (
+                <div
+                  key={query}
+                  className="yt-search-history-item"
+                  onClick={() => {
+                    setSearch(query)
+                    addSearchKeyword(query)
+                    setShowSearchHistory(false)
+                    void handlePerformYouTubeSearch(query)
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '7px 10px',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                    <History size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                    <span
+                      style={{
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        color: 'var(--text-main)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {query}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeSearchKeyword(query)
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 4,
+                      flexShrink: 0,
+                    }}
+                    title="Xoá khỏi lịch sử"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Phạm vi tìm kiếm khi đang có từ khóa hoặc xem danh mục */}

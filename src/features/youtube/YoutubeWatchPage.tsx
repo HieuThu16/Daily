@@ -18,7 +18,7 @@ import {
 } from '../../lib/youtubeAudioCache'
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
-  progressLabel, useVideoProgressMap, useYouTubeProgress, saveVideoProgress,
+  progressLabel, useVideoProgressMap, useYouTubeProgress, saveVideoProgress, removeVideoProgress,
 } from '../../lib/videoProgress'
 import {
   getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener, autoMarkVideoWatching,
@@ -404,14 +404,16 @@ export function YoutubeWatchPage() {
       else nextSet.delete(video.video_id)
       return nextSet
     })
+    const dur = video.duration || progressMap[video.video_id]?.durationSeconds || 100
     await updateVideoStatusRecord(video.video_id, video.sourceType, next, {
       title: video.title,
       channel_name: video.creator_name ?? undefined,
+      thumbnail: video.thumbnail,
+      duration: dur,
     })
 
     if (next === 'COMPLETED') {
-      const dur = video.duration || progressMap[video.video_id]?.durationSeconds || 100
-      void saveVideoProgress({
+      await saveVideoProgress({
         videoId: video.video_id,
         seconds: dur,
         durationSeconds: dur,
@@ -420,6 +422,8 @@ export function YoutubeWatchPage() {
         thumbnail: video.thumbnail,
         sourceType: video.sourceType,
       })
+    } else {
+      await removeVideoProgress(video.video_id)
     }
     showToast(next === 'COMPLETED' ? 'Đã đánh dấu xem xong' : 'Bỏ đánh dấu đã xem', 'info')
   }
