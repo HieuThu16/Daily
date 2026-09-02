@@ -229,7 +229,7 @@ export function ReportDay({
         </div>
       </div>
 
-      <button className="report-sleep" onClick={() => onOpen('/nutrition')}>
+      <button className="report-sleep" onClick={() => onOpen('/sleep')}>
         <span className="icon-box icon-box-sm" style={{ background: 'var(--purple-bg)', color: 'var(--purple)' }}>
           <Moon size={15} />
         </span>

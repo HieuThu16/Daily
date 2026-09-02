@@ -2,6 +2,7 @@ import type { Entry, Media, NutritionLog, SleepLog, Todo } from '../types'
 import { getMangaReadingLogs, type MangaReadingLog } from './mangaReadingLog'
 import { getVideoWatchLogs, type VideoWatchLog } from './videoWatchLog'
 import { getBookReadingSessionLogs, groupBookReadingLogs, type BookReadingSessionLog } from './bookReadingLog'
+import { shiftDate } from './sleep'
 
 /** Một mốc trong dòng thời gian của một ngày. `time` dạng 'HH:MM' hoặc 'HH:MM - HH:MM'. */
 export type DayEvent = {
@@ -146,14 +147,31 @@ export function groupMangaReadingLogs(logs: MangaReadingLog[]): DayEvent[] {
 }
 
 /** Gom mọi hoạt động đã có giờ của một ngày thành dòng thời gian tăng dần. */
-export function buildDayReview({ date, entries, meals, sleeps, todos, media, mangaLogs, bookReadingLogs, videoWatchLogs }: DayReviewInput): DayEvent[] {
+export function buildDayReview({ date, entries = [], meals = [], sleeps = [], todos = [], media = [], mangaLogs, bookReadingLogs, videoWatchLogs }: DayReviewInput): DayEvent[] {
   const events: DayEvent[] = []
 
-  sleeps.filter((s) => s.log_date === date && s.sleep_end).forEach((s) =>
-    events.push({ time: s.sleep_end, kind: 'WAKE', label: 'Thức dậy', detail: `Ngủ từ ${s.sleep_start}` }))
+  ;(sleeps || []).forEach((s) => {
+    if (!s || !s.sleep_end || !s.sleep_start) return
+    const isOvernight = s.sleep_end <= s.sleep_start
+    if (s.log_date === date) {
+      events.push({
+        time: s.sleep_end,
+        kind: 'WAKE',
+        label: 'Thức dậy',
+        detail: `Ngủ từ ${s.sleep_start}`,
+      })
+    } else if (isOvernight && date === shiftDate(s.log_date, 1)) {
+      events.push({
+        time: s.sleep_end,
+        kind: 'WAKE',
+        label: 'Thức dậy',
+        detail: `Ngủ từ ${s.sleep_start} hôm qua`,
+      })
+    }
+  })
 
-  meals.filter((m) => m.log_date === date).forEach((m) =>
-    events.push({ time: m.log_time || '', kind: 'MEAL', label: mealLabel[m.meal_slot], detail: m.food_name }))
+  ;(meals || []).filter((m) => m && m.log_date === date).forEach((m) =>
+    events.push({ time: m.log_time || '', kind: 'MEAL', label: mealLabel[m.meal_slot] || 'Ăn uống', detail: m.food_name || '' }))
 
   entries.filter((e) => e.entry_date === date).forEach((e) => {
     let displayTime = e.entry_time || clock(e.created_at)

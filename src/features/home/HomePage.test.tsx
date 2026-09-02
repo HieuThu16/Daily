@@ -134,8 +134,26 @@ describe('HomePage', () => {
   it('mở Home là vào thẳng Thống kê ngày, có nút ghi nhanh và bấm qua lại được', async () => {
     renderHome()
     // Mặc định đã là Thống kê ngày, kèm nút ghi nhanh ăn/ngủ.
-    expect(await screen.findByRole('button', { name: /Thêm bữa ăn/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Thêm giấc ngủ/i })).toBeInTheDocument()
+    const foodBtn = await screen.findByRole('button', { name: /Thêm bữa ăn/i })
+    const sleepBtn = screen.getByRole('button', { name: /Thêm giấc ngủ/i })
+    expect(foodBtn).toBeInTheDocument()
+    expect(sleepBtn).toBeInTheDocument()
+
+    // Bấm Thêm bữa ăn -> mở modal đầy đủ
+    await userEvent.click(foodBtn)
+    expect(await screen.findByPlaceholderText(/Gõ hoặc chọn món/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Lưu món ăn/i })).toBeInTheDocument()
+
+    // Đóng modal
+    await userEvent.click(screen.getByRole('button', { name: /Đóng/i }))
+
+    // Bấm Thêm giấc ngủ -> mở modal đầy đủ
+    await userEvent.click(sleepBtn)
+    expect(await screen.findByText(/Ghi giấc ngủ & Giấc mơ/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Kể lại giấc mơ/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Lưu giấc ngủ/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Đóng/i }))
 
     await userEvent.click(screen.getByRole('tab', { name: /Review ngày/i }))
     expect(await screen.findByText('Dòng thời gian cả ngày')).toBeInTheDocument()

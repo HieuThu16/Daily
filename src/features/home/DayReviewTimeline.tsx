@@ -10,7 +10,7 @@ type Props = {
 }
 
 const eventStyles: Record<DayEvent['kind'], { icon: any; color: string; bg: string; route?: string }> = {
-  WAKE:      { icon: Sunrise,         color: 'var(--amber)',   bg: 'var(--amber-bg)',      route: '/nutrition' },
+  WAKE:      { icon: Sunrise,         color: 'var(--amber)',   bg: 'var(--amber-bg)',      route: '/sleep' },
   MEAL:      { icon: UtensilsCrossed, color: 'var(--emerald)', bg: 'var(--emerald-bg)',    route: '/nutrition' },
   DIARY:     { icon: NotebookPen,     color: 'var(--purple)',  bg: 'var(--purple-bg)',     route: '/daily' },
   TASK_ADD:  { icon: ListPlus,        color: 'var(--blue)',    bg: 'var(--blue-bg)',       route: '/tasks' },
@@ -19,18 +19,22 @@ const eventStyles: Record<DayEvent['kind'], { icon: any; color: string; bg: stri
   MANGA:     { icon: Heart,           color: '#ec4899',        bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' },
 }
 
-function getMangaEventConfig(label: string) {
-  if (label.includes('H (18+)')) return { icon: Flame, color: '#e11d48', bg: 'rgba(225, 29, 72, 0.12)', route: '/truyenh' }
-  if (label.includes('BL')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
-  return { icon: Heart, color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.12)', route: '/ngontinh' }
+function getMangaEventConfig(label: string = '') {
+  const lbl = (label || '').toLowerCase()
+  if (lbl.includes('h (18+)') || lbl.includes('truyện h')) return { icon: Flame, color: '#e11d48', bg: 'rgba(225, 29, 72, 0.12)', route: '/truyenh' }
+  if (lbl.includes('bl')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
+  if (lbl.includes('ngôn tình')) return { icon: Heart, color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.12)', route: '/ngontinh' }
+  return { icon: Heart, color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', route: '/manga' }
 }
 
-function getMediaEventConfig(detail: string, label: string) {
-  if (label.includes('sách') || detail.includes('Sách')) return { icon: BookOpen, color: 'var(--purple)', bg: 'var(--purple-bg)', route: '/books' }
-  if (label.includes('Review')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/youtube' }
-  if (label.includes('YouTube') || label.includes('TV Show')) return { icon: Tv, color: 'var(--rose)', bg: 'rgba(244, 63, 94, 0.12)', route: '/youtube' }
-  if (label.includes('phim') || detail.includes('Phim')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/movies' }
-  if (label.includes('BL') || label.includes('truyện')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
+function getMediaEventConfig(detail: string = '', label: string = '') {
+  const d = (detail || '').toLowerCase()
+  const l = (label || '').toLowerCase()
+  if (l.includes('sách') || d.includes('sách')) return { icon: BookOpen, color: 'var(--purple)', bg: 'var(--purple-bg)', route: '/books' }
+  if (l.includes('review')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/youtube' }
+  if (l.includes('youtube') || l.includes('tv show') || d.includes('youtube')) return { icon: Tv, color: 'var(--rose)', bg: 'rgba(244, 63, 94, 0.12)', route: '/youtube' }
+  if (l.includes('phim') || d.includes('phim')) return { icon: Film, color: 'var(--rose)', bg: 'var(--rose-bg)', route: '/movies' }
+  if (l.includes('bl') || l.includes('truyện')) return { icon: Heart, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.12)', route: '/bl' }
   return { icon: Music, color: 'var(--cyan)', bg: 'var(--cyan-bg)', route: '/music' }
 }
 
