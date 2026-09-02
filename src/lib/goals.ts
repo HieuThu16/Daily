@@ -82,7 +82,7 @@ export async function updateGoal(id: string, updates: Partial<GoalItem>): Promis
     if (g.id === id) {
       const merged = { ...g, ...updates }
       // Tự động kiểm tra trạng thái hoàn thành
-      if (merged.current_value >= merged.target_value && merged.status !== 'COMPLETED') {
+      if ((merged.current_value ?? 0) >= (merged.target_value ?? 1) && merged.status !== 'COMPLETED') {
         merged.status = 'COMPLETED'
         merged.completed_at = new Date().toISOString()
       }
@@ -137,9 +137,9 @@ export async function toggleGoalMilestone(goalId: string, milestoneId: string): 
       const completedCount = newMilestones.filter((m) => m.completed).length
       const totalMilestones = newMilestones.length
 
-      let nextValue = g.current_value
+      let nextValue = g.current_value ?? 0
       if (totalMilestones > 0) {
-        nextValue = Math.round((completedCount / totalMilestones) * g.target_value)
+        nextValue = Math.round((completedCount / totalMilestones) * (g.target_value ?? 10))
       }
 
       const isAllDone = totalMilestones > 0 && completedCount === totalMilestones
@@ -168,19 +168,17 @@ export async function toggleGoalMilestone(goalId: string, milestoneId: string): 
  * Thêm milestone trực tiếp vào mục tiêu
  */
 export async function addGoalMilestone(goalId: string, title: string): Promise<GoalItem | null> {
-  const text = title.trim()
-  if (!text) return null
   const current = getStoredGoals()
   let targetGoal: GoalItem | null = null
 
   const updated = current.map((g) => {
     if (g.id === goalId) {
-      const newMilestone: GoalMilestone = {
+      const newM: GoalMilestone = {
         id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        title: text,
+        title: title.trim(),
         completed: false,
       }
-      const newMilestones = [...(g.milestones || []), newMilestone]
+      const newMilestones = [...(g.milestones || []), newM]
       const merged: GoalItem = {
         ...g,
         milestones: newMilestones,
@@ -198,12 +196,12 @@ export async function addGoalMilestone(goalId: string, title: string): Promise<G
 }
 
 /**
- * Xoá một mục tiêu và dọn dẹp liên kết
+ * Xóa một mục tiêu khỏi hệ thống
  */
 export async function deleteGoal(id: string): Promise<void> {
   const current = getStoredGoals()
-  const filtered = current.filter((g) => g.id !== id)
-  await saveGoals(filtered)
+  const updated = current.filter((g) => g.id !== id)
+  await saveGoals(updated)
 
   if (supabase) {
     try {
@@ -249,7 +247,9 @@ export function calculateAscensionProgress(goals: GoalItem[]): {
   goals.forEach((g) => {
     const goalAltitude = g.altitude_meters || 1000
     totalWeightedAltitude += goalAltitude
-    const progressFraction = g.target_value > 0 ? Math.min(1, Math.max(0, g.current_value / g.target_value)) : 0
+    const curVal = g.current_value ?? 0
+    const targetVal = g.target_value ?? 10
+    const progressFraction = targetVal > 0 ? Math.min(1, Math.max(0, curVal / targetVal)) : 0
     achievedAltitude += goalAltitude * progressFraction
     if (g.status === 'COMPLETED' || progressFraction >= 1) {
       completedCount++

@@ -56,12 +56,12 @@ describe('goals library module', () => {
     await saveGoals([goal])
 
     const updated = await toggleGoalMilestone('g_test_1', 'm1')
-    expect(updated?.milestones[0].completed).toBe(true)
+    expect(updated?.milestones?.[0].completed).toBe(true)
     expect(updated?.current_value).toBe(50) // 1/2 milestones = 50%
     expect(updated?.status).toBe('IN_PROGRESS')
 
     const completed = await toggleGoalMilestone('g_test_1', 'm2')
-    expect(completed?.milestones[1].completed).toBe(true)
+    expect(completed?.milestones?.[1].completed).toBe(true)
     expect(completed?.current_value).toBe(100)
     expect(completed?.status).toBe('COMPLETED')
   })
@@ -82,8 +82,8 @@ describe('goals library module', () => {
     await saveGoals([goal])
 
     const updated = await addGoalMilestone('g_add_m', 'Học bảng chữ cái')
-    expect(updated?.milestones.length).toBe(1)
-    expect(updated?.milestones[0].title).toBe('Học bảng chữ cái')
+    expect(updated?.milestones?.length).toBe(1)
+    expect(updated?.milestones?.[0].title).toBe('Học bảng chữ cái')
   })
 
   it('xóa mục tiêu khỏi danh sách', async () => {

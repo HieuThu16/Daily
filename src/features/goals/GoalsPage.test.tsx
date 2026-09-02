@@ -26,30 +26,30 @@ describe('GoalsPage', () => {
     cleanup()
   })
 
-  it('hiển thị bảng điều khiển độ cao và danh hiệu tầng mây', () => {
+  it('hiển thị bảng điều khiển mục tiêu và tầm nhìn', () => {
     renderGoalsPage()
-    expect(screen.getAllByText(/Mặt Đất/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: /Thêm Mục Tiêu Lên Trời/i })[0]).toBeInTheDocument()
+    expect(screen.getAllByText(/Bảng Tầm Nhìn & Mục Tiêu/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /Thêm Mục Tiêu Mới/i })[0]).toBeInTheDocument()
   }, 15000)
 
-  it('chuyển đổi qua lại giữa Bậc thang lên trời và Đền vinh quang', () => {
+  it('chuyển đổi qua lại giữa Đang theo đuổi và Đã hoàn thành', () => {
     renderGoalsPage()
 
-    const hallBtn = screen.getByRole('button', { name: /Đền Vinh Quang/i })
-    fireEvent.click(hallBtn)
-    expect(screen.getByText(/Đền Vinh Quang Đang Chờ Đón/i)).toBeInTheDocument()
+    const completedBtn = screen.getByRole('button', { name: /Đã Hoàn Thành/i })
+    fireEvent.click(completedBtn)
+    expect(screen.getByText(/Chưa có mục tiêu nào hoàn thành/i)).toBeInTheDocument()
 
-    const stairwayBtn = screen.getByRole('button', { name: /Bậc Thang Lên Trời/i })
-    fireEvent.click(stairwayBtn)
-    expect(screen.getByText(/Bầu trời xanh đang chờ ước mơ/i)).toBeInTheDocument()
+    const activeBtn = screen.getByRole('button', { name: /Đang Theo Đuổi/i })
+    fireEvent.click(activeBtn)
+    expect(screen.getByText(/Chưa có mục tiêu nào đang theo đuổi/i)).toBeInTheDocument()
   }, 15000)
 
   it('mở modal tạo mục tiêu mới', () => {
     renderGoalsPage()
-    const addBtn = screen.getAllByRole('button', { name: /Thêm Mục Tiêu Lên Trời/i })[0]
+    const addBtn = screen.getAllByRole('button', { name: /Thêm Mục Tiêu Mới/i })[0]
     fireEvent.click(addBtn)
 
-    expect(screen.getByText(/Tạo Mục tiêu Lên Trời Mới/i)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/VD: Đọc 20 cuốn sách/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Tạo Mục Tiêu Mới/i).length).toBeGreaterThan(0)
+    expect(screen.getByPlaceholderText(/VD: Mua nhà trước 30 tuổi/i)).toBeInTheDocument()
   }, 15000)
 })

@@ -84,7 +84,7 @@ const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: 
   { id: 'daily', label: 'Daily', icon: NotebookPen, colorClass: 'icon-box-emerald' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, colorClass: 'icon-box-purple' },
   { id: 'goals', label: 'Mục tiêu', icon: Target, colorClass: 'icon-box-cyan' },
-  { id: 'collection', label: 'Sưu tầm', icon: Sparkles, colorClass: 'icon-box-purple' },
+  { id: 'collection', label: 'Bộ sưu tập', icon: Sparkles, colorClass: 'icon-box-purple' },
   { id: 'youtube', label: 'YouTube', icon: Youtube, colorClass: 'icon-box-rose' },
   { id: 'youtubeshorts', label: 'YouTube Shorts', icon: Video, colorClass: 'icon-box-rose' },
   { id: 'tiktok', label: 'TikTok', icon: Flame, colorClass: 'icon-box-rose' },
@@ -290,13 +290,14 @@ function Shell({ children, user }: { children: React.ReactNode; user: unknown })
 
   const navGroups = useMemo(() => [
     { title: 'Tổng quan', ids: ['home', 'calendar'] as Tab[] },
-    { title: 'Nhịp ngày & Sưu tập', ids: ['habit', 'daily', 'tasks', 'goals', 'collection'] as Tab[] },
+    { title: 'Nhịp ngày & Mục tiêu', ids: ['habit', 'daily', 'tasks', 'goals'] as Tab[] },
     { title: 'Giải trí & Video', ids: ['youtube', 'youtubeshorts', 'tiktok', 'music'] as Tab[] },
     { title: 'Sách & Truyện online', ids: ['books', 'audiobooks', 'bl', 'ngontinh', 'truyenh'] as Tab[] },
     { title: 'Tiền & sức khoẻ', ids: ['money', 'nutrition', 'sleep'] as Tab[] },
     { title: 'Kiến thức', ids: ['knowledge', 'english'] as Tab[] },
     { title: 'Con người', ids: ['people', 'watch'] as Tab[] },
     { title: 'Đang phát triển', ids: ['manga', 'movies'] as Tab[] },
+    { title: 'Bộ sưu tập', ids: ['collection'] as Tab[] },
     { title: 'Hệ thống', ids: ['usage', 'settings'] as Tab[] },
   ], [])
 

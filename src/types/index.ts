@@ -8,24 +8,27 @@ export type GoalMilestone = {
   completed_at?: string | null
 }
 
-/** Một mục tiêu cuộc đời với lộ trình từng bước lên trời */
+/** Một mục tiêu cuộc đời & tầm nhìn tương lai */
 export type GoalItem = {
   id: string
   title: string
+  reason?: string | null // Lí do & Động lực thực hiện mục tiêu
   description?: string | null
-  category: 'SHORT_TERM' | 'MID_TERM' | 'LONG_TERM' | 'CAREER' | 'HEALTH' | 'GROWTH' | 'WEALTH' | 'CUSTOM'
+  category: 'FINANCE' | 'CAREER' | 'HEALTH' | 'GROWTH' | 'STUDY' | 'RELATIONSHIP' | 'TRAVEL' | 'CUSTOM' | string
   category_label?: string
-  target_date?: string | null
-  current_value: number
-  target_value: number
-  unit: string
-  milestones: GoalMilestone[]
-  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
-  altitude_meters: number // Độ cao nấc thang trên mây (0m - 10000m)
+  target_date?: string | null // Deadline đạt được 'YYYY-MM-DD'
+  image_url?: string | null // Ảnh mục tiêu (Vision Board)
+  image_path?: string | null
   color?: string
   icon?: string
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
   created_at: string
   completed_at?: string | null
+  current_value?: number
+  target_value?: number
+  unit?: string
+  milestones?: GoalMilestone[]
+  altitude_meters?: number
 }
 
 /** Một thẻ kiến thức: câu hỏi, câu trả lời và thể loại. */
@@ -93,6 +96,8 @@ export type Habit = {
   routine?: 'MORNING' | 'AFTERNOON' | 'EVENING'
   daily_target?: number
   position?: number
+  created_at?: string
+  deleted_at?: string | null
 }
 
 export type HabitCategory = { id: string; name: string; color: string }

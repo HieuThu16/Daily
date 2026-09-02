@@ -1,390 +1,282 @@
 /* =========================================================
- * GOALS / MỤC TIÊU CUỘC ĐỜI — HÀNH TRÌNH 3D BẬC THANG LÊN TRỜI
+ * GOALS / MỤC TIÊU & TẦM NHÌN TƯƠNG LAI (VISION BOARD & ACTION)
  * ======================================================= */
 
 .goals-page-container {
   position: relative;
   min-height: calc(100vh - 120px);
   width: 100%;
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 14px 12px 60px;
-  overflow: hidden;
-  border-radius: 24px;
 }
 
-/* --- Sky & Cloud Background Scene (Bầu trời & Mây 3D / 2D chuyển động mượt mà) --- */
-.sky-backdrop-wrapper {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 0;
-  overflow: hidden;
-  transition: background 0.8s ease;
-}
-
-/* Gradient nền trời biến đổi theo độ cao và theme */
-.sky-gradient-layer {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 15%, rgba(56, 189, 248, 0.22), transparent 65%),
-              linear-gradient(180deg, #090e24 0%, #111c44 30%, #1e1b4b 65%, #0b0f19 100%);
-}
-
-.light .sky-gradient-layer {
-  background: radial-gradient(circle at 50% 15%, rgba(186, 230, 253, 0.75), transparent 70%),
-              linear-gradient(180deg, #e0f2fe 0%, #bae6fd 30%, #f0f9ff 65%, #ffffff 100%);
-}
-
-/* Dải cực quang Aurora huyền ảo */
-.sky-aurora-glow {
-  position: absolute;
-  top: -10%;
-  left: -20%;
-  width: 140%;
-  height: 60%;
-  background: radial-gradient(ellipse at 50% 40%, rgba(99, 102, 241, 0.28), rgba(168, 85, 247, 0.18) 45%, transparent 70%);
-  filter: blur(50px);
-  animation: aurora-flow 18s ease-in-out infinite alternate;
-  transform-origin: center;
-}
-
-/* Các tầng mây bồng bềnh 2D & 3D Parallax */
-.cloud-layer {
-  position: absolute;
-  width: 250%;
-  height: auto;
-  pointer-events: none;
-  opacity: 0.65;
-}
-
-.cloud-layer-deep {
-  top: 6%;
-  left: 0;
-  animation: drift-clouds-slow 75s linear infinite;
-  filter: blur(3px);
-  opacity: 0.35;
-}
-
-.cloud-layer-mid {
-  top: 32%;
-  left: -20%;
-  animation: drift-clouds-mid 48s linear infinite;
-  opacity: 0.55;
-}
-
-.cloud-layer-front {
-  bottom: -5%;
-  left: -10%;
-  animation: drift-clouds-fast 32s linear infinite;
-  opacity: 0.75;
-  filter: blur(1px);
-}
-
-/* Ngôi sao & hạt ánh sáng bay ngược lên trời */
-.star-particle {
-  position: absolute;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 0 8px #ffffff, 0 0 16px #38bdf8;
-  animation: star-ascend linear infinite;
-}
-
-/* --- Hero Dashboard: Đồng hồ độ cao & Danh hiệu tầng mây --- */
-.sky-altitude-hero {
+/* --- Hero Dashboard Tổng quan Mục tiêu & Khát vọng --- */
+.goals-hero-dashboard {
   position: relative;
-  z-index: 10;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.88) 0%, rgba(30, 27, 75, 0.82) 50%, rgba(15, 23, 42, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 20px;
-  padding: 18px 16px;
+  padding: 20px;
   margin-bottom: 20px;
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(20px);
   overflow: hidden;
-  transform: perspective(1000px) rotateX(1deg);
-  transition: transform 0.3s ease;
 }
 
-.light .sky-altitude-hero {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 15px 35px rgba(56, 189, 248, 0.18), inset 0 1px 0 #ffffff;
+.light .goals-hero-dashboard {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(240, 249, 255, 0.88) 50%, rgba(255, 255, 255, 0.96) 100%);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 30px rgba(56, 189, 248, 0.15), inset 0 1px 0 #ffffff;
 }
 
-.hero-stats-badge {
+.goals-stat-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 5px 12px;
   border-radius: 99px;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(129, 140, 248, 0.25));
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  margin-bottom: 8px;
+  font-weight: 700;
+  color: var(--text-main);
 }
 
-.hero-altitude-number {
-  font-size: 2rem;
-  font-weight: 900;
-  line-height: 1.1;
-  background: linear-gradient(135deg, #ffffff 30%, #38bdf8 70%, #818cf8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+.light .goals-stat-pill {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
-.light .hero-altitude-number {
-  background: linear-gradient(135deg, #0f172a 30%, #0284c7 70%, #4f46e5 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.hero-progress-track {
-  width: 100%;
-  height: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 99px;
-  overflow: hidden;
-  position: relative;
-  margin: 12px 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.hero-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc, #f472b6);
-  border-radius: 99px;
-  transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative;
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.8);
-}
-
-.hero-progress-fill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
-  animation: shine-sweep 2.5s infinite;
-}
-
-/* --- Thanh điều hướng chế độ xem (Bậc thang vs Đền Vinh Quang) --- */
-.goals-view-selector {
-  display: inline-flex;
+/* --- Category Filter Bar --- */
+.goals-category-filter {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
-  padding: 4px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(12px);
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 2px 14px;
+  margin-bottom: 12px;
+  scrollbar-width: none;
 }
 
-.light .goals-view-selector {
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+.goals-category-filter::-webkit-scrollbar {
+  display: none;
 }
 
-.goals-view-btn {
+.goals-cat-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted, #94a3b8);
-  font-size: 0.8rem;
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--text-muted);
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
 }
 
-.goals-view-btn.active {
-  background: linear-gradient(135deg, #0284c7, #4f46e5);
+.light .goals-cat-btn {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: #cbd5e1;
+}
+
+.goals-cat-btn.active {
+  background: var(--primary);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+  border-color: var(--primary);
+  box-shadow: 0 3px 10px rgba(56, 189, 248, 0.35);
 }
 
-/* --- HÀNH TRÌNH 3D BẬC THANG LÊN TRỜI (Sky Stairway Vertical Journey) --- */
-.sky-stairway-journey {
+/* --- Grid danh sách Thẻ Mục Tiêu Vision Board --- */
+.goals-vision-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+@media (min-width: 700px) {
+  .goals-vision-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1050px) {
+  .goals-vision-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- Thẻ Mục Tiêu Vision Board 3D --- */
+.goal-vision-card {
   position: relative;
-  z-index: 10;
-  padding: 20px 0 40px;
-  display: flex;
-  flex-direction: column-reverse; /* Leo từ dưới lên đỉnh trời */
-  gap: 24px;
-}
-
-.stairway-beam-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 24px;
-  width: 3px;
-  background: linear-gradient(180deg, #c084fc 0%, #818cf8 35%, #38bdf8 70%, rgba(56, 189, 248, 0.1) 100%);
-  border-radius: 99px;
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.7);
-  z-index: 0;
-}
-
-@media (min-width: 860px) {
-  .stairway-beam-line {
-    left: 50%;
-    transform: translateX(-50%);
-  }
-}
-
-.stairway-step-container {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: flex-start;
-  width: 100%;
-  padding-left: 52px;
-}
-
-@media (min-width: 860px) {
-  .stairway-step-left {
-    justify-content: flex-end;
-    padding-right: 54%;
-    padding-left: 0;
-  }
-
-  .stairway-step-right {
-    justify-content: flex-start;
-    padding-left: 54%;
-    padding-right: 0;
-  }
-}
-
-.stairway-cloud-station {
-  position: absolute;
-  left: 24px;
-  top: 14px;
-  transform: translateX(-50%);
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #38bdf8 0%, #1e1b4b 100%);
-  border: 2.5px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.8), 0 0 28px rgba(129, 140, 248, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.15rem;
-  z-index: 5;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@media (min-width: 860px) {
-  .stairway-cloud-station {
-    left: 50%;
-    top: 18px;
-    width: 48px;
-    height: 48px;
-    font-size: 1.25rem;
-  }
-}
-
-.stairway-cloud-station:hover {
-  transform: translateX(-50%) scale(1.15);
-  box-shadow: 0 0 26px rgba(56, 189, 248, 1), 0 0 45px rgba(192, 132, 252, 0.8);
-}
-
-.stairway-cloud-station.completed {
-  background: linear-gradient(135deg, #10b981, #059669);
-  border-color: #6ee7b7;
-  box-shadow: 0 0 22px rgba(16, 185, 129, 0.85);
-}
-
-/* --- THẺ MỤC TIÊU 3D BỒNG BỀNH (Goal Cloud Card 3D) --- */
-.goal-cloud-card {
-  width: 100%;
-  background: rgba(15, 23, 42, 0.76);
+  background: rgba(15, 23, 42, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 18px;
-  padding: 14px 16px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(18px);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-  position: relative;
   overflow: hidden;
-  transform: perspective(1000px) translateZ(0);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
-.light .goal-cloud-card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 10px 25px rgba(56, 189, 248, 0.14), inset 0 1px 0 #ffffff;
+.light .goal-vision-card {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 25px rgba(56, 189, 248, 0.12), inset 0 1px 0 #ffffff;
 }
 
-.goal-cloud-card:hover {
-  transform: perspective(1000px) translateY(-3px) translateZ(8px);
+.goal-vision-card:hover {
+  transform: translateY(-4px);
   border-color: rgba(56, 189, 248, 0.55);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35), 0 0 22px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35), 0 0 20px rgba(56, 189, 248, 0.2);
 }
 
-.goal-cloud-card.completed {
+.goal-vision-card.completed {
   border-color: rgba(16, 185, 129, 0.55);
-  background: rgba(6, 78, 59, 0.28);
+  background: rgba(6, 78, 59, 0.25);
 }
 
-.light .goal-cloud-card.completed {
-  background: rgba(236, 253, 245, 0.88);
+.light .goal-vision-card.completed {
+  background: rgba(236, 253, 245, 0.9);
   border-color: rgba(16, 185, 129, 0.45);
 }
 
-/* Đỉnh trời cuối cùng (Top Sky Apex) */
-.sky-apex-heaven {
+/* Ảnh Vision Board của thẻ */
+.goal-vision-banner {
   position: relative;
-  z-index: 5;
-  text-align: center;
-  padding: 30px 16px;
-  margin-top: 10px;
-  background: radial-gradient(circle at center, rgba(192, 132, 252, 0.25), rgba(56, 189, 248, 0.1) 60%, transparent 80%);
-  border-radius: 24px;
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  background: #090e24;
 }
 
-.apex-portal-icon {
-  width: 76px;
-  height: 76px;
-  margin: 0 auto 12px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6);
-  box-shadow: 0 0 30px rgba(245, 158, 11, 0.8), 0 0 60px rgba(139, 92, 246, 0.5);
+.goal-vision-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.goal-vision-card:hover .goal-vision-banner-img {
+  transform: scale(1.06);
+}
+
+.goal-vision-banner-fallback {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.2rem;
-  animation: float-bob 4s ease-in-out infinite alternate;
+  font-size: 3rem;
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.35), rgba(15, 23, 42, 0.9));
 }
 
-/* --- Checklist công việc thực thi liên kết trong mục tiêu --- */
-.goal-task-section {
+/* Badge đè trên banner */
+.goal-banner-badges {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.goal-cat-pill {
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.goal-deadline-pill {
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffffff;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Nội dung thẻ mục tiêu */
+.goal-vision-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.goal-vision-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  margin: 0 0 8px;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+
+/* Khối Động lực / Lí do */
+.goal-reason-quote {
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 10px 10px 0;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.light .goal-reason-quote {
+  background: rgba(245, 158, 11, 0.08);
+  color: #475569;
+}
+
+/* Thanh tiến độ thực thi */
+.goal-progress-section {
+  margin: 4px 0 12px;
+}
+
+.goal-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.goal-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+/* Checklist công việc thực thi liên kết */
+.goal-action-tasks {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 10px;
-  margin-top: 10px;
+  margin-top: auto;
 }
 
-.light .goal-task-section {
+.light .goal-action-tasks {
   border-top-color: rgba(0, 0, 0, 0.06);
 }
 
-.goal-task-item {
+.goal-task-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -392,63 +284,27 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  margin-top: 5px;
+  margin-top: 4px;
   transition: all 0.15s ease;
 }
 
-.light .goal-task-item {
+.light .goal-task-row {
   background: rgba(241, 245, 249, 0.7);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-color: rgba(226, 232, 240, 0.8);
 }
 
-.goal-task-item:hover {
-  background: rgba(56, 189, 248, 0.1);
-  border-color: rgba(56, 189, 248, 0.3);
-}
-
-.goal-task-item.done {
-  opacity: 0.7;
+.goal-task-row.done {
+  opacity: 0.65;
   background: rgba(16, 185, 129, 0.06);
   border-color: rgba(16, 185, 129, 0.2);
 }
 
-.goal-task-item.done .goal-task-title {
+.goal-task-row.done span {
   text-decoration: line-through;
   color: var(--text-muted);
 }
 
-/* Input thêm việc nhanh trong mục tiêu */
-.goal-task-quick-input-form {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.goal-task-quick-input {
-  flex: 1;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 0.78rem;
-  color: var(--text-main);
-  outline: none;
-  transition: border-color 0.2s ease;
-}
-
-.light .goal-task-quick-input {
-  background: #ffffff;
-  border-color: #cbd5e1;
-}
-
-.goal-task-quick-input:focus {
-  border-color: #38bdf8;
-  border-style: solid;
-}
-
-/* Checkbox mây lấp lánh */
-.cloud-checkbox {
+.goal-checkbox {
   width: 17px;
   height: 17px;
   border-radius: 5px;
@@ -462,61 +318,12 @@
   transition: all 0.18s ease;
 }
 
-.light .cloud-checkbox {
+.light .goal-checkbox {
   border-color: #94a3b8;
 }
 
-.cloud-checkbox.checked {
+.goal-checkbox.checked {
   background: linear-gradient(135deg, #10b981, #059669);
   border-color: #10b981;
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
-}
-
-/* Animations */
-@keyframes drift-clouds-slow {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-@keyframes drift-clouds-mid {
-  0% { transform: translateX(-50%); }
-  100% { transform: translateX(0); }
-}
-
-@keyframes drift-clouds-fast {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-@keyframes aurora-flow {
-  0% { transform: rotate(0deg) scale(1); opacity: 0.25; }
-  50% { transform: rotate(6deg) scale(1.15); opacity: 0.45; }
-  100% { transform: rotate(-4deg) scale(1.05); opacity: 0.3; }
-}
-
-@keyframes star-ascend {
-  0% {
-    transform: translateY(100vh) scale(0.4);
-    opacity: 0;
-  }
-  20% {
-    opacity: 0.9;
-  }
-  80% {
-    opacity: 0.8;
-  }
-  100% {
-    transform: translateY(-10vh) scale(1.2);
-    opacity: 0;
-  }
-}
-
-@keyframes float-bob {
-  0% { transform: translateY(0) rotate(0deg); }
-  100% { transform: translateY(-10px) rotate(2deg); }
-}
-
-@keyframes shine-sweep {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(200%); }
 }

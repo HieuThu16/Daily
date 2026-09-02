@@ -37,7 +37,6 @@ export function OccasionsSection({
   const [target, setTarget] = useState(personId ?? '')
   const [yearly, setYearly] = useState(true)
   const [calendar, setCalendar] = useState<OccasionCalendar>('SOLAR')
-  const [isShared, setIsShared] = useState(true)
 
   const scoped = personId ? occasions.filter((o) => o.person_id === personId) : occasions
   const items = upcomingOccasions(scoped, people, new Date(), { withinDays, limit: 50 })
@@ -50,7 +49,6 @@ export function OccasionsSection({
     setTarget(personId ?? '')
     setYearly(true)
     setCalendar('SOLAR')
-    setIsShared(true)
     setOpen(true)
   }
 
@@ -62,7 +60,6 @@ export function OccasionsSection({
     setTarget(occ.person_id ?? '')
     setYearly(Boolean(occ.is_yearly))
     setCalendar(occ.calendar || 'SOLAR')
-    setIsShared(occ.is_shared ?? true)
     setOpen(true)
   }
 
@@ -75,7 +72,7 @@ export function OccasionsSection({
       occasion_date: date,
       is_yearly: yearly,
       calendar,
-      is_shared: isShared,
+      is_shared: true,
     }
 
     if (editingOccasion && onUpdate) {
@@ -90,7 +87,6 @@ export function OccasionsSection({
     setKind('BIRTHDAY')
     setYearly(true)
     setCalendar('SOLAR')
-    setIsShared(true)
     if (!personId) setTarget('')
     setOpen(false)
   }
@@ -127,11 +123,6 @@ export function OccasionsSection({
               </div>
               <span className="occasion-name">{name}</span>
               {isLunar(occasion) && <span className="lunar-chip">{lunarLabel(occasion)}</span>}
-              {occasion.is_shared === false && (
-                <span className="eyebrow" style={{ margin: 0, padding: '1px 6px', fontSize: '0.6rem' }}>
-                  🔒 Chỉ mình thấy
-                </span>
-              )}
               <span className={'countdown-badge' + (days <= 7 ? ' soon' : '')}>{countdownLabel(days)}</span>
               <time style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{shortDate(next)}</time>
 
@@ -208,11 +199,6 @@ export function OccasionsSection({
             <label className="check">
               <input type="checkbox" checked={yearly} onChange={(e) => setYearly(e.target.checked)} />
               Lặp lại hằng năm
-            </label>
-
-            <label className="check">
-              <input type="checkbox" checked={isShared} onChange={(e) => setIsShared(e.target.checked)} />
-              {isShared ? '👥 Cả 2 cùng thấy (chia sẻ dịp)' : '🔒 Chỉ riêng mình thấy (riêng tư)'}
             </label>
 
             <div className="modal-actions">
