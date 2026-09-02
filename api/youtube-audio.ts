@@ -32,7 +32,8 @@ const COBALT_INSTANCES = [
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization')
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
@@ -40,6 +41,7 @@ export default async function handler(req: any, res: any) {
 
   const videoId = (req.query?.videoId as string) || req.body?.videoId
   const streamMode = req.query?.stream === 'true' || req.body?.stream === true
+  const reqRange = (req.headers?.range as string) || undefined
 
   if (!videoId || typeof videoId !== 'string') {
     return res.status(400).json({ success: false, error: 'Thiếu videoId' })
@@ -135,7 +137,7 @@ export default async function handler(req: any, res: any) {
 
             if (best?.url) {
               if (streamMode) {
-                return proxyStream(best.url, res, best.mimeType || 'audio/mp4')
+                return proxyStream(best.url, res, best.mimeType || 'audio/mp4', reqRange)
               }
               return res.status(200).json({
                 success: true,
@@ -174,7 +176,7 @@ export default async function handler(req: any, res: any) {
 
           if (bestAudio?.url) {
             if (streamMode) {
-              return proxyStream(bestAudio.url, res, bestAudio.mimeType || 'audio/mp4')
+              return proxyStream(bestAudio.url, res, bestAudio.mimeType || 'audio/mp4', reqRange)
             }
 
             return res.status(200).json({
@@ -215,7 +217,7 @@ export default async function handler(req: any, res: any) {
 
           if (best?.url) {
             if (streamMode) {
-              return proxyStream(best.url, res, best.type || 'audio/mp4')
+              return proxyStream(best.url, res, best.type || 'audio/mp4', reqRange)
             }
 
             return res.status(200).json({
@@ -257,7 +259,7 @@ export default async function handler(req: any, res: any) {
           const cData: any = await cobaltRes.json()
           if (cData?.url) {
             if (streamMode) {
-              return proxyStream(cData.url, res, 'audio/mpeg')
+              return proxyStream(cData.url, res, 'audio/mpeg', reqRange)
             }
             return res.status(200).json({
               success: true,
@@ -303,25 +305,33 @@ export default async function handler(req: any, res: any) {
   }
 }
 
-async function proxyStream(url: string, res: any, contentType: string) {
+async function proxyStream(url: string, res: any, contentType: string, reqRange?: string) {
   try {
-    const audioRes = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        Range: 'bytes=0-',
-      },
-    })
+    const headers: Record<string, string> = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    }
+    if (reqRange) {
+      headers['Range'] = reqRange
+    } else {
+      headers['Range'] = 'bytes=0-'
+    }
 
-    if (!audioRes.ok) {
+    const audioRes = await fetch(url, { headers })
+
+    if (!audioRes.ok && audioRes.status !== 206) {
       return res.status(audioRes.status).send('Không thể truyền stream audio')
     }
 
+    res.status(audioRes.status)
     res.setHeader('Content-Type', contentType || 'audio/mp4')
     res.setHeader('Accept-Ranges', 'bytes')
 
     const length = audioRes.headers.get('content-length')
     if (length) res.setHeader('Content-Length', length)
+
+    const contentRange = audioRes.headers.get('content-range')
+    if (contentRange) res.setHeader('Content-Range', contentRange)
 
     if (audioRes.body) {
       const reader = audioRes.body.getReader()

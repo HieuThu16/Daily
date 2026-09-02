@@ -14,8 +14,7 @@ import { YoutubeChannelModal } from './YoutubeChannelModal'
 import { isItemInCollection, toggleSaveToCollection } from '../collection/collectionService'
 import {
   useOfflineAudioState,
-  downloadAndSaveYoutubeAudio,
-  getOfflineAudioPlayUrl,
+  playYoutubeAsAudio,
 } from '../../lib/youtubeAudioCache'
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
@@ -170,53 +169,24 @@ export function YoutubeWatchPage() {
   const [audioPercent, setAudioPercent] = useState(0)
 
   const handlePlayAudio = async () => {
-    if (!video) return
+    if (!video || !audioPlayer) return
+    setAudioLoading(true)
+    setAudioPercent(0)
     try {
-      setAudioLoading(true)
-      let playUrl: string | null = null
-
-      if (isAudioSaved) {
-        playUrl = await getOfflineAudioPlayUrl(video.video_id)
-      } else {
-        showToast('⏳ Đang tải và chuyển đổi video thành audio...', 'info')
-        await downloadAndSaveYoutubeAudio(
-          video.video_id,
-          {
-            title: video.title,
-            channelName: video.creator_name || undefined,
-            thumbnail: video.thumbnail || undefined,
-            durationSeconds: video.duration || undefined,
-          },
-          (pct) => setAudioPercent(pct)
-        )
-        playUrl = await getOfflineAudioPlayUrl(video.video_id)
-        showToast(`🎉 Đã lưu Audio (${audioSizeLabel || 'đã nén'}) vào máy!`)
-      }
-
-      if (playUrl && audioPlayer) {
-        audioPlayer.playTrack({
-          id: `yt-${video.video_id}`,
-          type: 'MUSIC',
-          name: video.title,
-          audio_url: playUrl,
-          cover_url: video.thumbnail,
-          artist: video.creator_name || 'YouTube Audio',
-          status: 'IN_PROGRESS',
-          is_favorite: false,
-          description: null,
-        })
-        showToast('🎧 Đang phát Audio (có thể tắt màn hình/chuyển tab vẫn nghe mượt mà)')
-      }
-    } catch (err: any) {
-      console.warn('Lỗi tải file audio offline, chuyển sang phát nền âm thanh:', err)
-      showToast('🎧 Đang phát chế độ Audio chạy nền (hỗ trợ tắt màn hình)...', 'info')
-      playInMini({
-        videoId: video.video_id,
-        title: video.title,
-        channelName: video.creator_name,
-        thumbnail: video.thumbnail,
-        startSeconds: progress?.seconds,
-      })
+      await playYoutubeAsAudio(
+        {
+          videoId: video.video_id,
+          title: video.title,
+          channelName: video.creator_name,
+          thumbnail: video.thumbnail,
+          duration: video.duration,
+        },
+        audioPlayer,
+        {
+          onProgress: (pct) => setAudioPercent(pct),
+          showToast: (msg, type) => showToast(msg, type),
+        }
+      )
     } finally {
       setAudioLoading(false)
       setAudioPercent(0)

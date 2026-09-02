@@ -19,6 +19,7 @@ import { cleanMovieTitle, fetchLinkPreview } from '../lib/linkPreview'
 import { normalizeStorageUrl } from '../lib/storageUrl'
 import { shareMusicToAll } from '../lib/musicShare'
 import { dedupeMusic } from '../lib/musicDedupe'
+import { fetchYoutubeAudioInfo } from '../lib/youtubeAudioCache'
 import { BookCover } from './library/BookCover'
 import { BookDetailView } from './library/BookDetailView'
 import { ReviewSeriesView } from './library/ReviewSeriesView'
@@ -573,57 +574,25 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
 
     const vId = videoIdMatch[1]
     setIsConverting(true)
-    if (supabase) {
-      const { data, error } = await supabase.functions.invoke('youtube-to-mp3', { body: { youtubeUrl: targetUrl } })
-      if (!error && data?.audioUrl) {
-        setAudioLoadError(false)
-        setAudioUrlVal(data.audioUrl)
-        showToast('Đã lưu MP3 vào Supabase Storage', 'success')
-        setIsConverting(false)
-        return
-      }
-      setAudioUrlVal('')
-      const reason = await (error as { context?: Response })?.context?.json?.().then((b) => b?.error).catch(() => null)
-      console.error('youtube-to-mp3 failed:', reason ?? error)
-      showToast(`Không chuyển đổi được MP3: ${reason ?? error?.message ?? 'lỗi không rõ'}`, 'delete')
-      setIsConverting(false)
-      return
-    }
     showToast('🔄 Đang kết nối API lấy file MP3 chất lượng cao...', 'info')
 
-    // Danh sách các Piped Instances đáng tin cậy
-    const pipedInstances = [
-      'https://pipedapi.kavin.rocks',
-      'https://api.piped.private.coffee',
-      'https://pipedapi.drgns.space'
-    ]
-
-    for (const instance of pipedInstances) {
-      try {
-        const res = await fetch(`${instance}/streams/${vId}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.audioStreams && data.audioStreams.length > 0) {
-            // Lấy stream MP4/M4A âm thanh trực tiếp từ YouTube CDN
-            const audioStream = data.audioStreams.find((s: any) => s.mimeType?.includes('audio/mp4')) || data.audioStreams[0]
-            if (audioStream?.url) {
-              setAudioLoadError(false)
-              setAudioUrlVal(audioStream.url)
-              showToast('🎉 Đã tải file MP3 đầy đủ thời lượng!', 'success')
-              setIsConverting(false)
-              return
-            }
-          }
-        }
-      } catch (e) {
-        console.warn(`[Piped instance ${instance} failed]`, e)
+    try {
+      const info = await fetchYoutubeAudioInfo(vId)
+      const playUrl = info.proxyUrl || info.audioUrl
+      if (playUrl) {
+        setAudioLoadError(false)
+        setAudioUrlVal(playUrl)
+        showToast('🎉 Đã trích xuất file Audio MP3 đầy đủ thời lượng!', 'success')
+      } else {
+        throw new Error('Không lấy được link stream audio')
       }
+    } catch (err: any) {
+      console.error('Lỗi chuyển đổi MP3:', err)
+      setAudioUrlVal('')
+      showToast(`Không chuyển đổi được MP3: ${err?.message || 'lỗi không rõ'}`, 'delete')
+    } finally {
+      setIsConverting(false)
     }
-
-    // Fallback sang Direct YouTube MP3 Proxy Stream
-    setAudioUrlVal('')
-    showToast('🎵 Đã trích xuất Audio MP3! Bấm "Lưu vào cơ sở dữ liệu" để lưu vĩnh viễn.', 'success')
-    setIsConverting(false)
   }
 
   const saveItem = async () => {

@@ -13,8 +13,7 @@ import {
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
   useOfflineAudioState,
-  downloadAndSaveYoutubeAudio,
-  getOfflineAudioPlayUrl,
+  playYoutubeAsAudio,
 } from '../../lib/youtubeAudioCache'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
@@ -316,6 +315,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   
   const progressMap = useVideoProgressMap()
   const { playInMini } = useVideoMiniPlayer()
+  const audioPlayer = useOptionalAudioPlayer()
   const [, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
 
   /**
@@ -2262,6 +2262,28 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                           </button>
                           <button
                             type="button"
+                            title="Chuyển video thành Audio & Nghe"
+                            aria-label="Nghe Audio"
+                            onClick={() => {
+                              if (audioPlayer) {
+                                void playYoutubeAsAudio(
+                                  {
+                                    videoId: item.videoId,
+                                    title: item.title,
+                                    channelName: item.channelTitle,
+                                    thumbnail: item.thumbnail,
+                                  },
+                                  audioPlayer,
+                                  { showToast }
+                                )
+                              }
+                            }}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--cyan, #06b6d4)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                          >
+                            <Headphones size={11} /> Audio
+                          </button>
+                          <button
+                            type="button"
                             title="Phát ở khung nhỏ, không rời trang"
                             aria-label="Phát ở khung nhỏ"
                             onClick={() => playInMini({ videoId: item.videoId, title: item.title, channelName: item.channelTitle, thumbnail: item.thumbnail })}
@@ -4112,42 +4134,22 @@ function YoutubeVideoCard({
 
   const handleAudioAction = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!audioPlayer) return
+    setAudioLoading(true)
     try {
-      setAudioLoading(true)
-      let playUrl: string | null = null
-
-      if (isAudioSaved) {
-        playUrl = await getOfflineAudioPlayUrl(video.video_id)
-      } else {
-        showToast('⏳ Đang tải và chuyển video thành Audio...', 'info')
-        await downloadAndSaveYoutubeAudio(video.video_id, {
+      await playYoutubeAsAudio(
+        {
+          videoId: video.video_id,
           title: video.title,
-          channelName: video.creator_name || undefined,
-          thumbnail: video.thumbnail || undefined,
-          durationSeconds: video.duration || undefined,
-        })
-        playUrl = await getOfflineAudioPlayUrl(video.video_id)
-        showToast(`🎉 Đã lưu Audio (${audioSizeLabel || 'đã nén'}) vào máy!`)
-      }
-
-      if (playUrl && audioPlayer) {
-        audioPlayer.playTrack({
-          id: `yt-${video.video_id}`,
-          type: 'MUSIC',
-          name: video.title,
-          audio_url: playUrl,
-          cover_url: video.thumbnail,
-          artist: video.creator_name || 'YouTube Audio',
-          status: 'IN_PROGRESS',
-          is_favorite: false,
-          description: null,
-        })
-        showToast('🎧 Đang phát Audio trên toàn hệ thống!')
-      }
-    } catch (err: any) {
-      console.warn('Chuyển sang phát audio nền:', err)
-      showToast('🎧 Đang phát chế độ Audio chạy nền...', 'info')
-      onPlayMini()
+          channelName: video.creator_name,
+          thumbnail: video.thumbnail,
+          duration: video.duration,
+        },
+        audioPlayer,
+        {
+          showToast: (msg, type) => showToast(msg, type),
+        }
+      )
     } finally {
       setAudioLoading(false)
     }
@@ -4296,42 +4298,22 @@ function HistoryVideoCard({
 
   const handleAudioAction = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!audioPlayer) return
+    setAudioLoading(true)
     try {
-      setAudioLoading(true)
-      let playUrl: string | null = null
-
-      if (isAudioSaved) {
-        playUrl = await getOfflineAudioPlayUrl(video.video_id)
-      } else {
-        showToast('⏳ Đang tải và chuyển video thành Audio...', 'info')
-        await downloadAndSaveYoutubeAudio(video.video_id, {
+      await playYoutubeAsAudio(
+        {
+          videoId: video.video_id,
           title: video.title,
-          channelName: video.creator_name || undefined,
-          thumbnail: video.thumbnail || undefined,
-          durationSeconds: video.duration || undefined,
-        })
-        playUrl = await getOfflineAudioPlayUrl(video.video_id)
-        showToast(`🎉 Đã lưu Audio (${audioSizeLabel || 'đã nén'}) vào máy!`)
-      }
-
-      if (playUrl && audioPlayer) {
-        audioPlayer.playTrack({
-          id: `yt-${video.video_id}`,
-          type: 'MUSIC',
-          name: video.title,
-          audio_url: playUrl,
-          cover_url: video.thumbnail,
-          artist: video.creator_name || 'YouTube Audio',
-          status: 'IN_PROGRESS',
-          is_favorite: false,
-          description: null,
-        })
-        showToast('🎧 Đang phát Audio trên toàn hệ thống!')
-      }
-    } catch (err: any) {
-      console.warn('Chuyển sang phát audio nền:', err)
-      showToast('🎧 Đang phát chế độ Audio chạy nền...', 'info')
-      onPlayMini()
+          channelName: video.creator_name,
+          thumbnail: video.thumbnail,
+          duration: video.duration,
+        },
+        audioPlayer,
+        {
+          showToast: (msg, type) => showToast(msg, type),
+        }
+      )
     } finally {
       setAudioLoading(false)
     }
@@ -4489,6 +4471,29 @@ function HistoryVideoCard({
               <Headphones size={13} />
             )}
             <span>{isAudioSaved ? 'Audio' : 'Nghe Audio'}</span>
+          </button>
+
+          <button
+            type="button"
+            className="yt-card-btn pip"
+            onClick={onPlayMini}
+            title="Phát ở khung nhỏ, không rời trang"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 10,
+              background: 'var(--card-bg)',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--card-border)',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
+          >
+            <PictureInPicture2 size={13} />
+            <span>Phát nền</span>
           </button>
         </div>
       </div>

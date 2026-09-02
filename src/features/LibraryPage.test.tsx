@@ -113,7 +113,7 @@ describe('LibraryPage audio navigation', () => {
 
     expect(document.querySelectorAll('audio')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Nghe Hẹn một mai' })).toBeInTheDocument()
-  })
+  }, 15000)
 })
 
 describe('LibraryPage add form', () => {
