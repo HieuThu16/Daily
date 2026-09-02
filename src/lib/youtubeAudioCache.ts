@@ -221,17 +221,19 @@ export async function playYoutubeAsAudio(
   audioPlayer: { playTrack: (track: any, queue?: any[]) => void },
   callbacks?: {
     onStart?: () => void
-    onProgress?: (pct: number) => void
+    onProgress?: (pct: number, statusText?: string) => void
+    onError?: (errorMsg: string) => void
     showToast?: (msg: string, type?: 'info' | 'success' | 'delete') => void
   }
 ): Promise<boolean> {
   callbacks?.onStart?.()
-  callbacks?.showToast?.('⏳ Đang chuyển video thành Audio...', 'info')
+  callbacks?.onProgress?.(10, 'Đang chuẩn bị trích xuất audio...')
 
   try {
     // 1. Nếu đã có file offline trong máy -> phát ngay lập tức
     const offlineUrl = await getOfflineAudioPlayUrl(video.videoId)
     if (offlineUrl) {
+      callbacks?.onProgress?.(100, 'Đã tìm thấy Audio offline!')
       audioPlayer.playTrack({
         id: `yt-${video.videoId}`,
         type: 'MUSIC',
@@ -247,15 +249,17 @@ export async function playYoutubeAsAudio(
       return true
     }
 
-    callbacks?.onProgress?.(30)
+    callbacks?.onProgress?.(25, 'Đang kết nối API trích xuất luồng âm thanh...')
     // 2. Chuyển đổi YouTube sang Audio qua API
     const info = await fetchYoutubeAudioInfo(video.videoId)
-    callbacks?.onProgress?.(80)
+    callbacks?.onProgress?.(70, 'Đang xử lý định dạng âm thanh chất lượng cao...')
 
     const playUrl = info.proxyUrl || info.audioUrl
     if (!playUrl) {
       throw new Error('Không lấy được link stream audio')
     }
+
+    callbacks?.onProgress?.(90, 'Đang nạp vào trình phát nhạc hệ thống...')
 
     // 3. Phát ngay trong Trình phát nhạc toàn hệ thống (HTML5 Audio tag)
     audioPlayer.playTrack({
@@ -269,7 +273,7 @@ export async function playYoutubeAsAudio(
       is_favorite: false,
       description: null,
     })
-    callbacks?.onProgress?.(100)
+    callbacks?.onProgress?.(100, '🎉 Chuyển đổi thành công! Đang phát audio...')
     callbacks?.showToast?.('🎧 Đang phát Audio (hỗ trợ tắt màn hình & chạy ngầm)!', 'success')
 
     // 4. Lưu nền vào bộ nhớ máy nếu hỗ trợ (không chặn phát nhạc)
@@ -285,10 +289,9 @@ export async function playYoutubeAsAudio(
     return true
   } catch (err: any) {
     console.error('[playYoutubeAsAudio error]:', err)
-    callbacks?.showToast?.(
-      '⚠️ Không thể chuyển video này thành audio. Hãy thử video khác hoặc kiểm tra kết nối mạng.',
-      'delete'
-    )
+    const errorMsg = 'Không thể chuyển video này thành audio. Hãy thử video khác hoặc kiểm tra kết nối mạng.'
+    callbacks?.onError?.(errorMsg)
+    callbacks?.showToast?.(`⚠️ ${errorMsg}`, 'delete')
     return false
   }
 }
@@ -444,4 +447,22 @@ export function useOfflineAudioState(videoId: string) {
     audioItem: item,
     sizeLabel: item ? formatAudioBytes(item.sizeBytes) : null,
   }
+}
+
+/** React hook lấy toàn bộ danh sách video có audio đã lưu */
+export function useOfflineAudiosList(): OfflineAudioItem[] {
+  const [list, setList] = useState<OfflineAudioItem[]>(() => getOfflineAudiosList())
+
+  useEffect(() => {
+    setList(getOfflineAudiosList())
+
+    const handler = () => {
+      setList(getOfflineAudiosList())
+    }
+
+    window.addEventListener(AUDIO_EVENT_NAME, handler)
+    return () => window.removeEventListener(AUDIO_EVENT_NAME, handler)
+  }, [])
+
+  return list
 }

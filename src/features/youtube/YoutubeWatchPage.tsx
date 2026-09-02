@@ -24,6 +24,7 @@ import {
   getVideoStatusSets, setVideoStatus as updateVideoStatusRecord, useVideoStatusListener, autoMarkVideoWatching,
 } from '../../lib/videoStatus'
 import { useVideoMiniPlayer } from './VideoMiniPlayer'
+import { ConvertingAudioModal, type ConvertingAudioState } from './ConvertingAudioModal'
 import '../tvshow/tvShow.css'
 
 export type WatchVideo = {
@@ -167,13 +168,34 @@ export function YoutubeWatchPage() {
   const { isSaved: isAudioSaved, sizeLabel: audioSizeLabel } = useOfflineAudioState(videoId)
   const [audioLoading, setAudioLoading] = useState(false)
   const [audioPercent, setAudioPercent] = useState(0)
+  const [convertingState, setConvertingState] = useState<ConvertingAudioState>({
+    isOpen: false,
+    videoId: '',
+    title: '',
+    progress: 0,
+    statusText: '',
+    error: null,
+    isCompleted: false,
+  })
 
   const handlePlayAudio = async () => {
     if (!video || !audioPlayer) return
     setAudioLoading(true)
     setAudioPercent(0)
+    setConvertingState({
+      isOpen: true,
+      videoId: video.video_id,
+      title: video.title,
+      channelName: video.creator_name,
+      thumbnail: video.thumbnail,
+      progress: 10,
+      statusText: 'Đang kết nối trích xuất Audio...',
+      error: null,
+      isCompleted: false,
+    })
+
     try {
-      await playYoutubeAsAudio(
+      const ok = await playYoutubeAsAudio(
         {
           videoId: video.video_id,
           title: video.title,
@@ -183,13 +205,31 @@ export function YoutubeWatchPage() {
         },
         audioPlayer,
         {
-          onProgress: (pct) => setAudioPercent(pct),
+          onProgress: (pct, statusText) => {
+            setAudioPercent(pct)
+            setConvertingState((prev) => ({
+              ...prev,
+              progress: pct,
+              statusText: statusText || prev.statusText,
+              isCompleted: pct >= 100,
+            }))
+          },
+          onError: (errMsg) => {
+            setConvertingState((prev) => ({ ...prev, error: errMsg }))
+          },
           showToast: (msg, type) => showToast(msg, type),
         }
       )
+      if (ok) {
+        setConvertingState((prev) => ({
+          ...prev,
+          progress: 100,
+          statusText: '🎉 Đã chuyển đổi thành công! Đang phát Audio...',
+          isCompleted: true,
+        }))
+      }
     } finally {
       setAudioLoading(false)
-      setAudioPercent(0)
     }
   }
 
@@ -721,6 +761,13 @@ export function YoutubeWatchPage() {
         watchedSet={watchedSet}
         progressMap={progressMap}
         onSelectVideo={(selectedId) => navigate(`/youtube/watch/${selectedId}`)}
+      />
+
+      {/* Modal Tiến độ chuyển đổi Video sang Audio */}
+      <ConvertingAudioModal
+        state={convertingState}
+        onClose={() => setConvertingState((prev) => ({ ...prev, isOpen: false }))}
+        onRetry={() => void handlePlayAudio()}
       />
     </div>
   )

@@ -115,4 +115,59 @@ describe('youtubeAudioCache unit tests', () => {
     expect(playedTracks[0].artist).toBe('Kênh Ca Nhạc')
     expect(playedTracks[0].audio_url).toBe(mockData.proxyUrl)
   })
+
+  it('deleteOfflineAudio removes audio item and updates localStorage', async () => {
+    const { deleteOfflineAudio } = await import('./youtubeAudioCache')
+    const mockItem = {
+      videoId: 'delete123',
+      title: 'Xóa bài này',
+      fileName: 'delete123.mp4',
+      sizeBytes: 2048,
+      savedAt: new Date().toISOString(),
+    }
+    localStorage.setItem('daily_youtube_offline_audios', JSON.stringify([mockItem]))
+    expect(getOfflineAudiosList()).toHaveLength(1)
+
+    await deleteOfflineAudio('delete123')
+    expect(getOfflineAudiosList()).toHaveLength(0)
+  })
+
+  it('playYoutubeAsAudio calls onProgress with percentage and status text', async () => {
+    const mockData = {
+      success: true,
+      audioUrl: 'https://stream.audio/sample2.mp3',
+      proxyUrl: '/api/youtube-audio?videoId=sample999&stream=true',
+      title: 'Bài hát tiến độ',
+      uploader: 'Kênh Test',
+      duration: 120,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => mockData,
+      blob: async () => new Blob(['dummy audio content']),
+      headers: new Headers({ 'content-length': '1024' }),
+    } as any)
+
+    const progressUpdates: { pct: number; text?: string }[] = []
+    const mockAudioPlayer = { playTrack: vi.fn() }
+
+    await playYoutubeAsAudio(
+      {
+        videoId: 'sample999',
+        title: 'Bài hát tiến độ',
+      },
+      mockAudioPlayer,
+      {
+        onProgress: (pct, text) => {
+          progressUpdates.push({ pct, text })
+        },
+      }
+    )
+
+    expect(progressUpdates.length).toBeGreaterThanOrEqual(3)
+    expect(progressUpdates[0].pct).toBe(10)
+    expect(progressUpdates[progressUpdates.length - 1].pct).toBe(100)
+    expect(mockAudioPlayer.playTrack).toHaveBeenCalled()
+  })
 })

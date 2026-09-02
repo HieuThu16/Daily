@@ -13,8 +13,13 @@ import {
 import { useOptionalAudioPlayer } from '../library/AudioPlayerContext'
 import {
   useOfflineAudioState,
+  useOfflineAudiosList,
+  deleteOfflineAudio,
   playYoutubeAsAudio,
+  formatAudioBytes,
+  type OfflineAudioItem,
 } from '../../lib/youtubeAudioCache'
+import { ConvertingAudioModal, type ConvertingAudioState } from './ConvertingAudioModal'
 import { supabase } from '../../lib/supabase'
 import { youtubeVideoId } from '../../lib/youtubeMeta'
 import { publishedLabel } from './YoutubeWatchPage'
@@ -264,7 +269,7 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const [inProgressSet, setInProgressSet] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'channel' | 'video' | 'history'>('video')
+  const [viewMode, setViewMode] = useState<'channel' | 'video' | 'history' | 'audio'>('video')
   const [historyPeriod, setHistoryPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all')
   const [watchFilter, setWatchFilter] = useState<'all' | 'unwatched' | 'in_progress' | 'watched'>('all')
   const [shuffleSeed, setShuffleSeed] = useState(() => Math.random())
@@ -317,6 +322,110 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
   const { playInMini } = useVideoMiniPlayer()
   const audioPlayer = useOptionalAudioPlayer()
   const [, setStatusMap] = useState<Map<string, VideoStatus>>(new Map())
+
+  // Danh sách video có Audio đã chuyển đổi / lưu trong máy
+  const offlineAudioList = useOfflineAudiosList()
+  const [showCreateAudioModal, setShowCreateAudioModal] = useState(false)
+  const [createAudioUrlInput, setCreateAudioUrlInput] = useState('')
+  const [convertingState, setConvertingState] = useState<ConvertingAudioState>({
+    isOpen: false,
+    videoId: '',
+    title: '',
+    progress: 0,
+    statusText: '',
+    error: null,
+    isCompleted: false,
+  })
+
+  const totalAudioSizeBytes = useMemo(
+    () => offlineAudioList.reduce((sum, a) => sum + (a.sizeBytes || 0), 0),
+    [offlineAudioList]
+  )
+
+  const filteredAudioList = useMemo(() => {
+    if (!search.trim()) return offlineAudioList
+    const q = search.toLowerCase()
+    return offlineAudioList.filter(
+      (a) => a.title.toLowerCase().includes(q) || (a.channelName && a.channelName.toLowerCase().includes(q))
+    )
+  }, [offlineAudioList, search])
+
+  const handleConvertAndPlayAudio = async (video: {
+    videoId: string
+    title: string
+    channelName?: string | null
+    thumbnail?: string | null
+    duration?: number | null
+  }) => {
+    if (!audioPlayer) return
+    setConvertingState({
+      isOpen: true,
+      videoId: video.videoId,
+      title: video.title,
+      channelName: video.channelName,
+      thumbnail: video.thumbnail,
+      progress: 10,
+      statusText: 'Đang kết nối trích xuất Audio...',
+      error: null,
+      isCompleted: false,
+    })
+
+    try {
+      const ok = await playYoutubeAsAudio(
+        video,
+        audioPlayer,
+        {
+          onProgress: (pct, statusText) => {
+            setConvertingState((prev) => ({
+              ...prev,
+              progress: pct,
+              statusText: statusText || prev.statusText,
+              isCompleted: pct >= 100,
+            }))
+          },
+          onError: (errMsg) => {
+            setConvertingState((prev) => ({ ...prev, error: errMsg }))
+          },
+          showToast: (msg, type) => showToast(msg, type),
+        }
+      )
+      if (ok) {
+        setConvertingState((prev) => ({
+          ...prev,
+          progress: 100,
+          statusText: '🎉 Đã chuyển đổi thành công! Đang phát Audio...',
+          isCompleted: true,
+        }))
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleCreateAudioFromUrl = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const url = createAudioUrlInput.trim()
+    if (!url) {
+      showToast('⚠️ Vui lòng nhập link hoặc ID video YouTube!', 'info')
+      return
+    }
+
+    const vId = youtubeVideoId(url)
+    if (!vId) {
+      showToast('❌ Link YouTube không hợp lệ. Vui lòng thử lại!', 'delete')
+      return
+    }
+
+    setShowCreateAudioModal(false)
+    setCreateAudioUrlInput('')
+
+    await handleConvertAndPlayAudio({
+      videoId: vId,
+      title: 'Đang tải thông tin video...',
+      channelName: 'YouTube',
+      thumbnail: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
+    })
+  }
 
   /**
    * Bấm một kết quả tìm kiếm là vào thẳng trang xem, không chỉ thu nhỏ.
@@ -1937,6 +2046,14 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             </button>
             <button
               type="button"
+              className={`tv-btn ${viewMode === 'audio' ? 'primary' : ''}`}
+              style={{ padding: '6px 12px', fontSize: '0.78rem', border: 'none', borderRadius: 9 }}
+              onClick={() => setViewMode('audio')}
+            >
+              <Headphones size={14} /> Audio ({offlineAudioList.length})
+            </button>
+            <button
+              type="button"
               className={`tv-btn ${viewMode === 'history' ? 'primary' : ''}`}
               style={{ padding: '6px 12px', fontSize: '0.78rem', border: 'none', borderRadius: 9 }}
               onClick={() => setViewMode('history')}
@@ -2265,18 +2382,12 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                             title="Chuyển video thành Audio & Nghe"
                             aria-label="Nghe Audio"
                             onClick={() => {
-                              if (audioPlayer) {
-                                void playYoutubeAsAudio(
-                                  {
-                                    videoId: item.videoId,
-                                    title: item.title,
-                                    channelName: item.channelTitle,
-                                    thumbnail: item.thumbnail,
-                                  },
-                                  audioPlayer,
-                                  { showToast }
-                                )
-                              }
+                              void handleConvertAndPlayAudio({
+                                videoId: item.videoId,
+                                title: item.title,
+                                channelName: item.channelTitle,
+                                thumbnail: item.thumbnail,
+                              })
                             }}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--cyan, #06b6d4)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}
                           >
@@ -2356,6 +2467,141 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240, gap: 10, color: 'var(--text-muted)' }}>
               <Loader2 size={24} className="tv-spin" /> Đang tải kho video YouTube...
             </div>
+          ) : viewMode === 'audio' ? (
+            /* CHẾ ĐỘ XEM KHO VIDEO CÓ AUDIO */
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0 16px', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Headphones size={18} color="#06b6d4" />
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                    Kho Video có Audio ({filteredAudioList.length})
+                  </h3>
+                  {totalAudioSizeBytes > 0 && (
+                    <span
+                      style={{
+                        fontSize: '0.74rem',
+                        padding: '2px 8px',
+                        borderRadius: 8,
+                        background: 'rgba(6, 182, 212, 0.15)',
+                        color: '#06b6d4',
+                        fontWeight: 700,
+                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                      }}
+                    >
+                      Tổng: {formatAudioBytes(totalAudioSizeBytes)}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="tv-btn primary"
+                  onClick={() => setShowCreateAudioModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                    border: 'none',
+                    color: '#fff',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.3)',
+                  }}
+                >
+                  <Plus size={15} />
+                  <span>Tạo Audio từ link YouTube</span>
+                </button>
+              </div>
+
+              {filteredAudioList.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 16px', color: 'var(--text-muted)' }}>
+                  <div
+                    style={{
+                      width: 68,
+                      height: 68,
+                      borderRadius: '50%',
+                      background: 'rgba(6, 182, 212, 0.12)',
+                      border: '1px solid rgba(6, 182, 212, 0.3)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      margin: '0 auto 16px',
+                    }}
+                  >
+                    <Headphones size={32} color="#06b6d4" />
+                  </div>
+                  <p style={{ margin: '0 0 6px', fontWeight: 800, fontSize: '1rem', color: 'var(--text-main)' }}>
+                    Chưa có video nào được chuyển thành Audio
+                  </p>
+                  <p
+                    style={{
+                      margin: '0 0 18px',
+                      fontSize: '0.82rem',
+                      maxWidth: 440,
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Bấm nút <strong>Nghe Audio</strong> ở bất kỳ video nào hoặc dán link YouTube để trích xuất âm thanh và nghe trong nền khi tắt màn hình!
+                  </p>
+                  <button
+                    type="button"
+                    className="tv-btn primary"
+                    onClick={() => setShowCreateAudioModal(true)}
+                    style={{
+                      padding: '8px 20px',
+                      borderRadius: 12,
+                      background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                      border: 'none',
+                      color: '#fff',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Plus size={15} /> Tạo Audio ngay
+                  </button>
+                </div>
+              ) : (
+                <div className="yt-grid">
+                  {filteredAudioList.map((item) => (
+                    <AudioVideoCard
+                      key={item.videoId}
+                      item={item}
+                      onPlayAudio={() =>
+                        void handleConvertAndPlayAudio({
+                          videoId: item.videoId,
+                          title: item.title,
+                          channelName: item.channelName,
+                          thumbnail: item.thumbnail,
+                          duration: item.durationSeconds,
+                        })
+                      }
+                      onOpenVideo={() =>
+                        navigate(`${watchBasePath}/watch/${item.videoId}`, {
+                          state: {
+                            title: item.title,
+                            channelName: item.channelName,
+                            thumbnail: item.thumbnail,
+                            from: watchBasePath,
+                            fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube',
+                          },
+                        })
+                      }
+                      onDelete={() => {
+                        if (window.confirm(`Xóa file audio của "${item.title}" khỏi máy?`)) {
+                          void deleteOfflineAudio(item.videoId)
+                          showToast('🗑️ Đã xóa audio và giải phóng dung lượng!', 'info')
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           ) : viewMode === 'history' ? (
             /* CHẾ ĐỘ XEM LỊCH SỬ VIDEO */
             <>
@@ -2381,6 +2627,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                       key={item.video.video_id}
                       item={item}
                       onOpen={() => navigate(`${watchBasePath}/watch/${item.video.video_id}`, { state: { from: watchBasePath, fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube' } })}
+                      onPlayAudio={() =>
+                        void handleConvertAndPlayAudio({
+                          videoId: item.video.video_id,
+                          title: item.video.title,
+                          channelName: item.video.creator_name,
+                          thumbnail: item.video.thumbnail,
+                          duration: item.video.duration,
+                        })
+                      }
                       onPlayMini={() =>
                         playInMini({
                           videoId: item.video.video_id,
@@ -2605,6 +2860,15 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
                     progress={progressMap[video.video_id]}
                     onToggleWatched={() => void handleToggleWatched(video)}
                     onOpen={() => navigate(`${watchBasePath}/watch/${video.video_id}`, { state: { from: watchBasePath, fromLabel: isShorts ? 'YouTube Shorts' : 'YouTube' } })}
+                    onPlayAudio={() =>
+                      void handleConvertAndPlayAudio({
+                        videoId: video.video_id,
+                        title: video.title,
+                        channelName: video.creator_name,
+                        thumbnail: video.thumbnail,
+                        duration: video.duration,
+                      })
+                    }
                     onPlayMini={() =>
                       playInMini({
                         videoId: video.video_id,
@@ -2758,6 +3022,81 @@ export function YoutubeView({ isShorts = false }: { isShorts?: boolean } = {}) {
           onClose={() => setQuickAddTagCategory(null)}
         />
       )}
+
+      {/* MODAL TẠO AUDIO MỚI TỪ LINK YOUTUBE */}
+      {showCreateAudioModal && (
+        <Modal
+          onClose={() => setShowCreateAudioModal(false)}
+          title="Tạo Audio từ link YouTube"
+        >
+          <form onSubmit={handleCreateAudioFromUrl} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+              Nhập hoặc dán link video YouTube để trích xuất file Audio chất lượng cao và phát nền.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                Link hoặc ID video YouTube:
+              </label>
+              <input
+                type="text"
+                placeholder="VD: https://www.youtube.com/watch?v=... hoặc youtu.be/..."
+                value={createAudioUrlInput}
+                onChange={(e) => setCreateAudioUrlInput(e.target.value)}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid var(--card-border)',
+                  background: 'var(--bg-main)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.86rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 6 }}>
+              <button
+                type="button"
+                className="tv-btn"
+                onClick={() => setShowCreateAudioModal(false)}
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                className="tv-btn primary"
+                disabled={!createAudioUrlInput.trim()}
+                style={{
+                  background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                  border: 'none',
+                  color: '#fff',
+                }}
+              >
+                <Headphones size={15} />
+                <span>Bắt đầu chuyển đổi</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL TIẾN ĐỘ CHUYỂN ĐỔI AUDIO (% TIẾN ĐỘ) */}
+      <ConvertingAudioModal
+        state={convertingState}
+        onClose={() => setConvertingState((prev) => ({ ...prev, isOpen: false }))}
+        onRetry={() => {
+          if (convertingState.videoId) {
+            void handleConvertAndPlayAudio({
+              videoId: convertingState.videoId,
+              title: convertingState.title,
+              channelName: convertingState.channelName,
+              thumbnail: convertingState.thumbnail,
+            })
+          }
+        }}
+      />
     </section>
   )
 }
@@ -4114,6 +4453,7 @@ function YoutubeVideoCard({
   inProgress,
   progress,
   onToggleWatched,
+  onPlayAudio,
   onPlayMini,
   onOpen,
 }: {
@@ -4122,6 +4462,7 @@ function YoutubeVideoCard({
   inProgress: boolean
   progress?: { percent: number; status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED'; seconds?: number }
   onToggleWatched: () => void
+  onPlayAudio?: () => void
   onPlayMini: () => void
   onOpen: () => void
 }) {
@@ -4134,6 +4475,10 @@ function YoutubeVideoCard({
 
   const handleAudioAction = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (onPlayAudio) {
+      onPlayAudio()
+      return
+    }
     if (!audioPlayer) return
     setAudioLoading(true)
     try {
@@ -4273,6 +4618,7 @@ function YoutubeVideoCard({
 function HistoryVideoCard({
   item,
   onOpen,
+  onPlayAudio,
   onPlayMini,
   onRemove,
 }: {
@@ -4284,6 +4630,7 @@ function HistoryVideoCard({
     updatedAt: string
   }
   onOpen: () => void
+  onPlayAudio?: () => void
   onPlayMini: () => void
   onRemove: () => void
 }) {
@@ -4298,6 +4645,10 @@ function HistoryVideoCard({
 
   const handleAudioAction = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (onPlayAudio) {
+      onPlayAudio()
+      return
+    }
     if (!audioPlayer) return
     setAudioLoading(true)
     try {
@@ -4494,6 +4845,193 @@ function HistoryVideoCard({
           >
             <PictureInPicture2 size={13} />
             <span>Phát nền</span>
+          </button>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+/** Thẻ Video hiển thị trong Tab Kho Audio */
+function AudioVideoCard({
+  item,
+  onPlayAudio,
+  onOpenVideo,
+  onDelete,
+}: {
+  item: OfflineAudioItem
+  onPlayAudio: () => void
+  onOpenVideo: () => void
+  onDelete: () => void
+}) {
+  const sizeLabel = formatAudioBytes(item.sizeBytes)
+  const savedDateLabel = item.savedAt
+    ? new Date(item.savedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : ''
+
+  return (
+    <article className="yt-card audio-card" style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 16, padding: 10, overflow: 'hidden' }}>
+      <div
+        className="yt-thumb"
+        role="button"
+        tabIndex={0}
+        aria-label={`Nghe audio ${item.title}`}
+        onClick={onPlayAudio}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onPlayAudio()}
+        style={{ cursor: 'pointer' }}
+      >
+        {item.thumbnail ? (
+          <img src={item.thumbnail} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <div className="yt-thumb-placeholder" style={{ background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2))' }}>
+            <Headphones size={36} color="#06b6d4" />
+          </div>
+        )}
+
+        {/* Nút Play to ở giữa thumbnail */}
+        <button
+          type="button"
+          className="yt-play-overlay"
+          aria-label="Phát Audio"
+          onClick={(e) => {
+            e.stopPropagation()
+            onPlayAudio()
+          }}
+        >
+          <Play size={26} fill="#fff" />
+        </button>
+
+        {/* Nút xóa Audio ở góc trên phải */}
+        <button
+          type="button"
+          title="Xóa Audio khỏi máy"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: 'rgba(0, 0, 0, 0.75)',
+            color: '#f87171',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            display: 'grid',
+            placeItems: 'center',
+            cursor: 'pointer',
+            zIndex: 3,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Trash2 size={13} />
+        </button>
+
+        {/* Badge Dung lượng & Audio */}
+        <div
+          className="yt-progress-badge"
+          style={{
+            background: 'rgba(6, 182, 212, 0.95)',
+            color: '#fff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <Volume2 size={12} />
+          <span>{sizeLabel}</span>
+        </div>
+
+        {/* Thời lượng */}
+        {item.durationSeconds ? (
+          <span className="yt-duration">{formatVideoDuration(item.durationSeconds)}</span>
+        ) : null}
+      </div>
+
+      <div className="yt-info" style={{ marginTop: 8 }}>
+        <h3
+          className="yt-title"
+          title={item.title}
+          role="button"
+          tabIndex={0}
+          onClick={onPlayAudio}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onPlayAudio()}
+          style={{ cursor: 'pointer' }}
+        >
+          {item.title}
+        </h3>
+        <p className="yt-meta">
+          {[item.channelName, savedDateLabel ? `Đã lưu: ${savedDateLabel}` : null].filter(Boolean).join(' · ')}
+        </p>
+
+        <div className="yt-card-actions" style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="yt-card-btn audio"
+            onClick={onPlayAudio}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
+          >
+            <Play size={13} fill="#fff" /> Nghe Audio
+          </button>
+
+          <button
+            type="button"
+            className="yt-card-btn video"
+            onClick={onOpenVideo}
+            title="Xem Video"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 10,
+              background: 'var(--card-bg)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--card-border)',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+            }}
+          >
+            <ExternalLink size={13} /> Xem Video
+          </button>
+
+          <button
+            type="button"
+            className="yt-card-btn delete"
+            onClick={onDelete}
+            title="Xóa Audio khỏi máy"
+            style={{
+              padding: '6px 10px',
+              borderRadius: 10,
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: '#f87171',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              cursor: 'pointer',
+              marginLeft: 'auto',
+            }}
+          >
+            <Trash2 size={13} />
+            <span>Xóa</span>
           </button>
         </div>
       </div>
