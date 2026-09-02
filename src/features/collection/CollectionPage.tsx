@@ -4,7 +4,7 @@ import {
   Calendar, Camera, ChevronLeft, ChevronRight, Download,
   ExternalLink,
   Layers, Play, Search, Sparkles, Star,
-  Video, X
+  X
 } from 'lucide-react'
 import { useQuery } from '../shared'
 import { localDate } from '../../lib/date'
@@ -319,39 +319,7 @@ export function CollectionPage() {
 
   return (
     <div className="collection-page">
-      {/* 1. HERO BANNER: TỔNG KHOẢNH KHẮC MEDIA */}
-      <section className="collection-hero">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: '1.4rem' }}>✨</span>
-              <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: 'var(--text-main)' }}>
-                Bộ Sưu Tập Khoảnh Khắc
-              </h2>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', maxWidth: 520, lineHeight: 1.4 }}>
-              Nơi lưu giữ trọn vẹn từng bức ảnh, thước phim từ <strong>Kỷ niệm</strong>, <strong>Nhật ký</strong> và <strong>Ăn uống</strong> theo dòng thời gian.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div className="collection-stat-pill">
-              <Camera size={14} color="#38bdf8" />
-              <span>{allMediaItems.filter((i) => i.mediaType === 'image').length} hình ảnh</span>
-            </div>
-            <div className="collection-stat-pill">
-              <Video size={14} color="#f43f5e" />
-              <span>{allMediaItems.filter((i) => i.mediaType === 'video').length} video</span>
-            </div>
-            <div className="collection-stat-pill">
-              <Calendar size={14} color="#10b981" />
-              <span>{timelineGroupedByDate.length} ngày ghi lại</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. THANH ĐIỀU HƯỚNG TABS & BỘ CHỌN NGÀY */}
+      {/* 1. THANH ĐIỀU HƯỚNG TABS & BỘ CHỌN NGÀY TINH GỌN */}
       <div className="collection-nav-bar">
         <div className="collection-tabs">
           <button

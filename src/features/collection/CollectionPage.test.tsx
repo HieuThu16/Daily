@@ -23,10 +23,9 @@ describe('CollectionPage', () => {
     cleanup()
   })
 
-  it('hiển thị tiêu đề Bộ sưu tập và thống kê khoảnh khắc', () => {
+  it('hiển thị thanh điều hướng khoảnh khắc', () => {
     renderCollectionPage()
-    expect(screen.getByText(/Bộ Sưu Tập Khoảnh Khắc/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/Theo Ngày/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /Theo Ngày/i }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Dòng Thời Gian/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Thư Viện Media/i })).toBeInTheDocument()
   })

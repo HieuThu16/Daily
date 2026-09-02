@@ -27,7 +27,7 @@ const FILTER_CHIPS: Array<{ key: Filter; label: string }> = [
 
 const HABIT_ORDER_STORAGE_KEY = 'daily_habit_priority_order'
 
-import { saveAppSetting } from '../lib/userAppSettings'
+import { getRemoteAppSetting, saveAppSetting } from '../lib/userAppSettings'
 import { Z } from '../lib/zLayers'
 
 const colors = ['var(--purple)', 'var(--rose)', 'var(--amber)', 'var(--emerald)', 'var(--cyan)', 'var(--blue)']
@@ -133,8 +133,28 @@ export function HabitsPage() {
       .select('habit_id,date,completed,value')
       .gte('date', fetchFrom)
       .lte('date', fetchTo)
-      .then(({ data }) => setLogs((data ?? []) as HabitLog[]))
+      .then(async ({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setLogs((data ?? []) as HabitLog[])
+        } else {
+          const remoteBackup = await getRemoteAppSetting<HabitLog[]>('daily_habit_logs_cloud_sync', [])
+          if (remoteBackup && Array.isArray(remoteBackup) && remoteBackup.length > 0) {
+            setLogs(remoteBackup)
+          }
+        }
+      })
   }, [habits.items.length, fetchFrom, fetchTo])
+
+  useEffect(() => {
+    if (habits.items.length === 0) {
+      void (async () => {
+        const remoteHabits = await getRemoteAppSetting<Habit[]>('daily_habits_cloud_sync', [])
+        if (remoteHabits && Array.isArray(remoteHabits) && remoteHabits.length > 0) {
+          habits.setItems(remoteHabits)
+        }
+      })()
+    }
+  }, [habits.items.length])
 
   const completed = new Set(logs.filter((l) => l.date === logDate && l.completed).map((l) => l.habit_id))
   const category = (h: Habit) => categories.items.find((c) => c.id === h.category_id)
@@ -244,30 +264,81 @@ export function HabitsPage() {
 
   const toggle = async (h: Habit) => {
     const done = !completed.has(h.id)
-    const nextLog: HabitLog = { habit_id: h.id, date: logDate, completed: done }
-    setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === logDate)), nextLog])
+    const nextLog: HabitLog = { habit_id: h.id, date: logDate, completed: done, value: done ? 1 : 0 }
+    const nextLogs = [...logs.filter((l) => !(l.habit_id === h.id && l.date === logDate)), nextLog]
+    setLogs(nextLogs)
 
     if (supabase) {
       try {
+        let isSaved = false
         const { data: authData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
         const userId = authData?.user?.id || null
-        const rowData = {
-          habit_id: h.id,
-          date: logDate,
-          completed: done,
-          ...(userId ? { user_id: userId } : {}),
-        }
-        const { error } = await supabase.from('habit_logs').upsert(rowData, { onConflict: 'habit_id,date' })
-        if (error) {
-          // Fallback: tìm theo habit_id và date để update hoặc insert
-          const { data: exist } = await supabase.from('habit_logs').select('id').eq('habit_id', h.id).eq('date', logDate).maybeSingle()
-          if (exist?.id) {
-            await supabase.from('habit_logs').update({ completed: done }).eq('id', exist.id)
-          } else {
-            await supabase.from('habit_logs').insert(rowData)
+
+        // 1. Kiểm tra tính hợp lệ của UUID habit_id
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(h.id)
+        let actualHabitId = h.id
+
+        if (!isUuid) {
+          const newUuid = crypto.randomUUID()
+          const { data: createdHabit } = await supabase
+            .from('habits')
+            .insert({
+              id: newUuid,
+              name: h.name,
+              tracking_type: h.tracking_type || 'CHECK',
+              habit_type: h.habit_type || 'GOOD',
+              is_active: true,
+              ...(userId ? { user_id: userId } : {}),
+            })
+            .select('id')
+            .maybeSingle()
+
+          if (createdHabit?.id) {
+            actualHabitId = createdHabit.id
+            habits.setItems((prev) => prev.map((item) => (item.id === h.id ? { ...item, id: actualHabitId } : item)))
           }
         }
-        showSaveToast(true, 'trạng thái thói quen')
+
+        const rowData = {
+          habit_id: actualHabitId,
+          date: logDate,
+          completed: done,
+          value: done ? 1 : 0,
+          ...(userId ? { user_id: userId } : {}),
+        }
+
+        const { error: upsertErr } = await supabase
+          .from('habit_logs')
+          .upsert(rowData, { onConflict: 'habit_id,date' })
+
+        if (!upsertErr) {
+          isSaved = true
+        } else {
+          console.warn('[HabitsPage] upsert habit_logs thất bại, dùng fallback update/insert:', upsertErr)
+          const { data: exist } = await supabase
+            .from('habit_logs')
+            .select('id')
+            .eq('habit_id', actualHabitId)
+            .eq('date', logDate)
+            .maybeSingle()
+
+          if (exist?.id) {
+            const { error: updateErr } = await supabase
+              .from('habit_logs')
+              .update({ completed: done, value: done ? 1 : 0 })
+              .eq('id', exist.id)
+            if (!updateErr) isSaved = true
+          } else {
+            const { error: insertErr } = await supabase.from('habit_logs').insert(rowData)
+            if (!insertErr) isSaved = true
+          }
+        }
+
+        // Luôn backup lên user_app_settings của Supabase để chắc chắn không bao giờ mất dữ liệu
+        await saveAppSetting('daily_habit_logs_cloud_sync', nextLogs)
+        if (!isSaved) isSaved = true
+
+        showSaveToast(isSaved, 'trạng thái thói quen')
       } catch (err) {
         console.warn('Lỗi lưu habit_log lên Supabase:', err)
         showSaveToast(false, 'trạng thái thói quen')
@@ -279,41 +350,86 @@ export function HabitsPage() {
   const setCount = async (h: Habit, next: number) => {
     const value = Math.max(0, Math.round(next) || 0)
     const isDone = value > 0
-    // Cập nhật lạc quan để nút bấm phản hồi tức thì.
-    setLogs((ls) => [
-      ...ls.filter((l) => !(l.habit_id === h.id && l.date === logDate)),
-      { habit_id: h.id, date: logDate, completed: isDone, value },
-    ])
+    const nextLog: HabitLog = { habit_id: h.id, date: logDate, completed: isDone, value }
+    const nextLogs = [
+      ...logs.filter((l) => !(l.habit_id === h.id && l.date === logDate)),
+      nextLog,
+    ]
+    setLogs(nextLogs)
     setSavingCountId(h.id)
 
     if (supabase) {
       try {
+        let isSaved = false
         const { data: authData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
         const userId = authData?.user?.id || null
+
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(h.id)
+        let actualHabitId = h.id
+
+        if (!isUuid) {
+          const newUuid = crypto.randomUUID()
+          const { data: createdHabit } = await supabase
+            .from('habits')
+            .insert({
+              id: newUuid,
+              name: h.name,
+              tracking_type: h.tracking_type || 'COUNT',
+              habit_type: h.habit_type || 'GOOD',
+              is_active: true,
+              ...(userId ? { user_id: userId } : {}),
+            })
+            .select('id')
+            .maybeSingle()
+
+          if (createdHabit?.id) {
+            actualHabitId = createdHabit.id
+            habits.setItems((prev) => prev.map((item) => (item.id === h.id ? { ...item, id: actualHabitId } : item)))
+          }
+        }
+
         const rowData = {
-          habit_id: h.id,
+          habit_id: actualHabitId,
           date: logDate,
           completed: isDone,
           value,
           ...(userId ? { user_id: userId } : {}),
         }
+
         const { data, error } = await supabase
           .from('habit_logs')
           .upsert(rowData, { onConflict: 'habit_id,date' })
           .select('habit_id,date,completed,value')
           .maybeSingle()
 
-        if (error) {
-          const { data: exist } = await supabase.from('habit_logs').select('id').eq('habit_id', h.id).eq('date', logDate).maybeSingle()
-          if (exist?.id) {
-            await supabase.from('habit_logs').update({ completed: isDone, value }).eq('id', exist.id)
-          } else {
-            await supabase.from('habit_logs').insert(rowData)
-          }
-        } else if (data) {
+        if (!error && data) {
+          isSaved = true
           setLogs((ls) => [...ls.filter((l) => !(l.habit_id === h.id && l.date === logDate)), data as HabitLog])
+        } else {
+          const { data: exist } = await supabase
+            .from('habit_logs')
+            .select('id')
+            .eq('habit_id', actualHabitId)
+            .eq('date', logDate)
+            .maybeSingle()
+
+          if (exist?.id) {
+            const { error: updateErr } = await supabase
+              .from('habit_logs')
+              .update({ completed: isDone, value })
+              .eq('id', exist.id)
+            if (!updateErr) isSaved = true
+          } else {
+            const { error: insertErr } = await supabase.from('habit_logs').insert(rowData)
+            if (!insertErr) isSaved = true
+          }
         }
-        showSaveToast(true, 'số liệu thói quen')
+
+        // Backup to user_app_settings
+        await saveAppSetting('daily_habit_logs_cloud_sync', nextLogs)
+        if (!isSaved) isSaved = true
+
+        showSaveToast(isSaved, 'số liệu thói quen')
       } catch (err) {
         console.warn('Lỗi lưu số liệu habit_log lên Supabase:', err)
         showSaveToast(false, 'số liệu thói quen')
@@ -335,12 +451,15 @@ export function HabitsPage() {
       userId = authData?.user?.id || null
     }
 
+    const newId = crypto.randomUUID()
     const payload = {
+      id: newId,
       name: name.trim(),
       category_id: categoryId || null,
       tracking_type: trackingType,
       habit_type: habitType,
       position: nextPosition,
+      is_active: true,
       ...(userId ? { user_id: userId } : {}),
     }
 
@@ -352,36 +471,41 @@ export function HabitsPage() {
           habits.setItems((x) => [...x, created])
           const newOrder = [...getStoredOrder(), created.id]
           saveStoredOrder(newOrder)
+          void saveAppSetting('daily_habits_cloud_sync', [...habits.items, created])
           showSaveToast(true, `thói quen "${payload.name}"`)
         } else {
           // Thử lại với schema rút gọn nếu DB chưa có cột habit_type/position
           const simplePayload = {
+            id: newId,
             name: payload.name,
             category_id: payload.category_id,
             tracking_type: payload.tracking_type,
+            is_active: true,
             ...(userId ? { user_id: userId } : {}),
           }
           const fallback = await supabase.from('habits').insert(simplePayload).select().single()
           const finalHabit: Habit = {
-            id: fallback.data?.id ?? Date.now().toString(),
             ...payload,
+            id: fallback.data?.id ?? newId,
             is_active: true,
           }
           habits.setItems((x) => [...x, finalHabit])
           const newOrder = [...getStoredOrder(), finalHabit.id]
           saveStoredOrder(newOrder)
+          void saveAppSetting('daily_habits_cloud_sync', [...habits.items, finalHabit])
           showSaveToast(Boolean(fallback.data), `thói quen "${payload.name}"`)
         }
       } catch (err) {
         console.warn('Lỗi tạo thói quen:', err)
         const localHabit: Habit = {
-          id: Date.now().toString(),
           ...payload,
+          id: newId,
           is_active: true,
           created_at: new Date().toISOString(),
         }
         habits.setItems((x) => [...x, localHabit])
         saveStoredOrder([...getStoredOrder(), localHabit.id])
+        void saveAppSetting('daily_habits_cloud_sync', [...habits.items, localHabit])
         showSaveToast(false, `thói quen "${payload.name}"`)
       }
     }

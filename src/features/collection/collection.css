@@ -49,34 +49,47 @@
 /* --- Thanh điều hướng tab chính & Bộ chọn Ngày --- */
 .collection-nav-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 768px) {
+  .collection-nav-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 .collection-tabs {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   padding: 4px;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.collection-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .light .collection-tabs {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.9);
 }
 
 .collection-tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
+  padding: 8px 14px;
   border-radius: 10px;
   border: none;
   background: transparent;
@@ -84,6 +97,8 @@
   font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.2s ease;
 }
 
@@ -97,16 +112,17 @@
 .date-controller-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(15, 23, 42, 0.65);
+  justify-content: space-between;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   padding: 6px 10px;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
 }
 
 .light .date-controller-toolbar {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.85);
   border-color: rgba(255, 255, 255, 0.9);
 }
 
