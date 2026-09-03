@@ -1042,105 +1042,132 @@ export function SharedEventsView({
             return (
               <>
                 {/* 1. THANH TIÊU ĐỀ & NÚT BACK / ĐÓNG */}
-                <div className="mem-detail-head">
-                  <div className="mem-detail-head-left">
-                    <button
-                      type="button"
-                      className="mem-detail-back-btn"
-                      onClick={() => setViewing(null)}
-                      title="Quay lại"
-                      aria-label="Quay lại"
-                    >
-                      <ArrowLeft size={16} />
-                    </button>
-                    <h3 className="mem-detail-title">{viewingEvent.title}</h3>
-                    {viewingEvent.owner_id !== myId && (
+              {isGridView ? (
+                /* CHẾ ĐỘ XEM LƯỚI TOÀN BỘ ẢNH CHUẨN NATIVE GALLERY (3 CỘT VUÔNG VẮN NHƯ GOOGLE PHOTOS) */
+                <>
+                  <div className="mem-detail-head">
+                    <div className="mem-detail-head-left">
+                      <button
+                        type="button"
+                        className="mem-detail-back-btn"
+                        onClick={() => setIsGridView(false)}
+                        title="Quay lại xem từng ảnh"
+                        aria-label="Quay lại"
+                      >
+                        <ArrowLeft size={18} />
+                      </button>
+                      <h3 className="mem-detail-title">
+                        {viewingEvent.title || 'Kỷ niệm'}
+                      </h3>
                       <span
                         className="eyebrow"
                         style={{
                           margin: 0,
-                          padding: '2px 7px',
-                          fontSize: '0.65rem',
-                          background: 'var(--purple-bg)',
-                          color: 'var(--purple)',
-                          borderRadius: 6,
+                          padding: '2px 8px',
+                          fontSize: '0.7rem',
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          color: '#38bdf8',
+                          borderRadius: 8,
                           fontWeight: 700,
                           flexShrink: 0,
                         }}
                       >
-                        {partnerDisplayName}
+                        {allImages.length} ảnh
                       </span>
-                    )}
+                    </div>
+                    <button
+                      type="button"
+                      className="icon"
+                      onClick={() => setViewing(null)}
+                      title="Đóng"
+                      aria-label="Đóng"
+                      style={{ padding: 4 }}
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="icon"
-                    onClick={() => setViewing(null)}
-                    title="Đóng"
-                    aria-label="Đóng"
-                    style={{ padding: 4 }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
 
-                {/* 2. KHUNG ẢNH & VIDEO CO GIÃN THEO MÀN HÌNH (LƯỚT ĐƯỢC HOẶC XEM DẠNG LƯỚI) */}
-                {allImages.length > 0 && (
-                  <div className="mem-detail-gallery-wrap">
-                    {isGridView ? (
-                      <div className="mem-detail-grid-container">
-                        <div className="mem-detail-grid-header">
-                          <span className="mem-detail-grid-title">
-                            <LayoutGrid size={14} /> Toàn bộ {allImages.length} ảnh & video
-                          </span>
+                  {/* LƯỚI 3 CỘT CHUẨN ĐẸP 100% NHƯ SAMSUNG GALLERY / GOOGLE PHOTOS */}
+                  <div className="mem-gallery-grid-scroll">
+                    <div className="mem-gallery-grid-track">
+                      {allImages.map((mediaUrl, idx) => {
+                        const isVid = isMediaVideo(mediaUrl)
+                        const isSelected = idx === selectedImageIdx
+                        return (
                           <button
+                            key={idx}
                             type="button"
-                            className="mem-detail-grid-back-btn"
-                            onClick={() => setIsGridView(false)}
-                            title="Quay lại xem ảnh"
+                            className={`mem-gallery-grid-thumb ${isSelected ? 'active' : ''}`}
+                            onClick={() => {
+                              setSelectedImageIdx(idx)
+                              setFullscreenIdx(idx)
+                            }}
+                            title={`Ảnh ${idx + 1} — Nhấn để xem toàn màn hình`}
                           >
-                            <X size={14} /> Trở lại xem ảnh
+                            {isVid ? (
+                              <>
+                                <video src={mediaUrl} preload="metadata" muted playsInline />
+                                <span className="mem-gallery-grid-vid-badge">
+                                  <Video size={11} />
+                                </span>
+                              </>
+                            ) : (
+                              <img src={mediaUrl} alt="" loading="lazy" />
+                            )}
                           </button>
-                        </div>
-                        <div className="mem-detail-grid-content">
-                          {allImages.map((mediaUrl, idx) => {
-                            const isVid = isMediaVideo(mediaUrl)
-                            const isSelected = idx === selectedImageIdx
-                            return (
-                              <button
-                                key={idx}
-                                type="button"
-                                className={`mem-detail-grid-card ${isSelected ? 'active' : ''}`}
-                                onClick={() => {
-                                  setSelectedImageIdx(idx)
-                                  setIsGridView(false)
-                                  setTimeout(() => {
-                                    const track = galleryRef.current
-                                    if (track) {
-                                      track.scrollTo({ left: idx * track.clientWidth, behavior: 'instant' })
-                                    }
-                                  }, 30)
-                                }}
-                                title={`Ảnh ${idx + 1} — Nhấn để chọn xem`}
-                              >
-                                {isVid ? (
-                                  <>
-                                    <video src={mediaUrl} preload="metadata" muted playsInline />
-                                    <span className="mem-detail-grid-video-tag">
-                                      <Video size={10} />
-                                    </span>
-                                  </>
-                                ) : (
-                                  <img src={mediaUrl} alt="" loading="lazy" />
-                                )}
-                                <span className="mem-detail-grid-card-idx">{idx + 1}</span>
-                                {isSelected && <span className="mem-detail-grid-card-badge">Đang xem</span>}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ) : (
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* CHẾ ĐỘ XEM CHI TIẾT TỪNG ẢNH (SLIDESHOW) */
+                <>
+                  <div className="mem-detail-head">
+                    <div className="mem-detail-head-left">
+                      <button
+                        type="button"
+                        className="mem-detail-back-btn"
+                        onClick={() => setViewing(null)}
+                        title="Quay lại"
+                        aria-label="Quay lại"
+                      >
+                        <ArrowLeft size={16} />
+                      </button>
+                      <h3 className="mem-detail-title">{viewingEvent.title}</h3>
+                      {viewingEvent.owner_id !== myId && (
+                        <span
+                          className="eyebrow"
+                          style={{
+                            margin: 0,
+                            padding: '2px 7px',
+                            fontSize: '0.65rem',
+                            background: 'var(--purple-bg)',
+                            color: 'var(--purple)',
+                            borderRadius: 6,
+                            fontWeight: 700,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {partnerDisplayName}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="icon"
+                      onClick={() => setViewing(null)}
+                      title="Đóng"
+                      aria-label="Đóng"
+                      style={{ padding: 4 }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* KHUNG ẢNH & VIDEO CO GIÃN THEO MÀN HÌNH */}
+                  {allImages.length > 0 && (
+                    <div className="mem-detail-gallery-wrap">
                       <div className="mem-gallery">
                         {/* Huy hiệu & nút thao tác nhanh phía trên ảnh */}
                         <div className="mem-gallery-top-badges">
@@ -1202,7 +1229,7 @@ export function SharedEventsView({
                           </>
                         )}
 
-                        {/* Vuốt ngang để đổi ảnh; mỗi ảnh chiếm trọn bề ngang khung. */}
+                        {/* Vuốt ngang để đổi ảnh; mỗi ảnh chiếm trọn bề ngang khung */}
                         <div
                           className="mem-gallery-track"
                           ref={galleryRef}
@@ -1250,33 +1277,34 @@ export function SharedEventsView({
                           </>
                         )}
                       </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 3. THÔNG TIN NGÀY GIỜ, VỊ TRÍ, GHI CHÚ */}
-                <div className="mem-detail-info-wrap">
-                  <div className="mem-detail-meta-row">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <CalendarDays size={13} style={{ color: 'var(--purple)' }} />
-                      <strong style={{ color: 'var(--text-main)' }}>{viDate(viewingEvent.event_date)}</strong>
-                      {viewingEvent.event_time && <span>· {viewingEvent.event_time}</span>}
-                    </span>
-
-                    {viewingEvent.location && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <MapPin size={13} style={{ color: 'var(--rose)' }} />
-                        <span>{viewingEvent.location}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {viewingEvent.note && (
-                    <div className="mem-detail-note">
-                      {viewingEvent.note}
                     </div>
                   )}
-                </div>
+
+                  {/* THÔNG TIN NGÀY GIỜ, VỊ TRÍ, GHI CHÚ */}
+                  <div className="mem-detail-info-wrap">
+                    <div className="mem-detail-meta-row">
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <CalendarDays size={13} style={{ color: 'var(--purple)' }} />
+                        <strong style={{ color: 'var(--text-main)' }}>{viDate(viewingEvent.event_date)}</strong>
+                        {viewingEvent.event_time && <span>· {viewingEvent.event_time}</span>}
+                      </span>
+
+                      {viewingEvent.location && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <MapPin size={13} style={{ color: 'var(--rose)' }} />
+                          <span>{viewingEvent.location}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {viewingEvent.note && (
+                      <div className="mem-detail-note">
+                        {viewingEvent.note}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
                 {/* 4. ĐÚNG 5 NÚT TRÊN 1 HÀNG NGANG KHÔNG CẦN CUỘN */}
                 <div
