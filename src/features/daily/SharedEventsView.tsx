@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
-  Filter, Heart, ImagePlus, Mail, MapPin, Maximize2,
+  Filter, Heart, ImagePlus, LayoutGrid, Mail, MapPin, Maximize2,
   MoreVertical, Pencil, Plus, RotateCcw, Trash2,
   UserPlus, Video, Loader2, X
 } from 'lucide-react'
@@ -100,6 +100,13 @@ export function SharedEventsView({
   const [progress, setProgress] = useState<PhotoProgress | null>(null)
   const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
   const [fullscreenIdx, setFullscreenIdx] = useState<number | null>(null)
+  const [isGridView, setIsGridView] = useState<boolean>(false)
+
+  // Đặt lại xem ảnh đơn và ảnh đầu tiên mỗi khi mở kỷ niệm mới
+  useEffect(() => {
+    setIsGridView(false)
+    setSelectedImageIdx(0)
+  }, [viewing?.id])
 
   // Điều khiển phím mũi tên & Esc khi xem toàn màn hình
   useEffect(() => {
@@ -1077,106 +1084,173 @@ export function SharedEventsView({
                   </button>
                 </div>
 
-                {/* 2. KHUNG ẢNH & VIDEO CO GIÃN THEO MÀN HÌNH (LƯỚT ĐƯỢC) */}
+                {/* 2. KHUNG ẢNH & VIDEO CO GIÃN THEO MÀN HÌNH (LƯỚT ĐƯỢC HOẶC XEM DẠNG LƯỚI) */}
                 {allImages.length > 0 && (
                   <div className="mem-detail-gallery-wrap">
-                    <div className="mem-gallery">
-                      {/* Nút phóng to toàn màn hình */}
-                      <button
-                        type="button"
-                        className="mem-gallery-fullscreen-btn"
-                        onClick={() => setFullscreenIdx(selectedImageIdx)}
-                        title="Xem toàn màn hình"
-                      >
-                        <Maximize2 size={12} /> Toàn màn hình
-                      </button>
-
-                      {/* Nút mũi tên chuyển ảnh trái / phải */}
-                      {allImages.length > 1 && (
-                        <>
-                          {selectedImageIdx > 0 && (
-                            <button
-                              type="button"
-                              className="mem-gallery-nav-btn prev"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                const nextIdx = selectedImageIdx - 1
-                                setSelectedImageIdx(nextIdx)
-                                const track = galleryRef.current
-                                track?.scrollTo({ left: nextIdx * track.clientWidth, behavior: 'smooth' })
-                              }}
-                              title="Ảnh trước"
-                            >
-                              <ChevronLeft size={18} />
-                            </button>
-                          )}
-                          {selectedImageIdx < allImages.length - 1 && (
-                            <button
-                              type="button"
-                              className="mem-gallery-nav-btn next"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                const nextIdx = selectedImageIdx + 1
-                                setSelectedImageIdx(nextIdx)
-                                const track = galleryRef.current
-                                track?.scrollTo({ left: nextIdx * track.clientWidth, behavior: 'smooth' })
-                              }}
-                              title="Ảnh tiếp theo"
-                            >
-                              <ChevronRight size={18} />
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      {/* Vuốt ngang để đổi ảnh; mỗi ảnh chiếm trọn bề ngang khung. */}
-                      <div
-                        className="mem-gallery-track"
-                        ref={galleryRef}
-                        onScroll={(e) => {
-                          const el = e.currentTarget
-                          const idx = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
-                          if (idx !== selectedImageIdx) setSelectedImageIdx(idx)
-                        }}
-                      >
-                        {allImages.map((mediaUrl, idx) => {
-                          const isVid = isMediaVideo(mediaUrl)
-                          return (
-                            <div
-                              className="mem-gallery-slide"
-                              key={idx}
-                              onClick={() => setFullscreenIdx(idx)}
-                              title="Nhấn để xem toàn màn hình"
-                            >
-                              {isVid ? (
-                                <video
-                                  src={mediaUrl}
-                                  controls
-                                  playsInline
-                                  preload="metadata"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <img src={mediaUrl} alt={`${viewingEvent.title} — ${idx + 1}`} loading="lazy" />
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                      {allImages.length > 1 && (
-                        <>
-                          <span className="mem-gallery-count">
-                            {selectedImageIdx + 1}/{allImages.length}
+                    {isGridView ? (
+                      <div className="mem-detail-grid-container">
+                        <div className="mem-detail-grid-header">
+                          <span className="mem-detail-grid-title">
+                            <LayoutGrid size={14} /> Toàn bộ {allImages.length} ảnh & video
                           </span>
-                          <div className="mem-gallery-dots">
-                            {allImages.map((_, idx) => (
-                              <i key={idx} className={idx === selectedImageIdx ? 'on' : undefined} />
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                          <button
+                            type="button"
+                            className="mem-detail-grid-back-btn"
+                            onClick={() => setIsGridView(false)}
+                            title="Quay lại xem ảnh"
+                          >
+                            <X size={14} /> Trở lại xem ảnh
+                          </button>
+                        </div>
+                        <div className="mem-detail-grid-content">
+                          {allImages.map((mediaUrl, idx) => {
+                            const isVid = isMediaVideo(mediaUrl)
+                            const isSelected = idx === selectedImageIdx
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                className={`mem-detail-grid-card ${isSelected ? 'active' : ''}`}
+                                onClick={() => {
+                                  setSelectedImageIdx(idx)
+                                  setIsGridView(false)
+                                  setTimeout(() => {
+                                    const track = galleryRef.current
+                                    if (track) {
+                                      track.scrollTo({ left: idx * track.clientWidth, behavior: 'instant' })
+                                    }
+                                  }, 30)
+                                }}
+                                title={`Ảnh ${idx + 1} — Nhấn để chọn xem`}
+                              >
+                                {isVid ? (
+                                  <>
+                                    <video src={mediaUrl} preload="metadata" muted playsInline />
+                                    <span className="mem-detail-grid-video-tag">
+                                      <Video size={10} />
+                                    </span>
+                                  </>
+                                ) : (
+                                  <img src={mediaUrl} alt="" loading="lazy" />
+                                )}
+                                <span className="mem-detail-grid-card-idx">{idx + 1}</span>
+                                {isSelected && <span className="mem-detail-grid-card-badge">Đang xem</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mem-gallery">
+                        {/* Huy hiệu & nút thao tác nhanh phía trên ảnh */}
+                        <div className="mem-gallery-top-badges">
+                          <button
+                            type="button"
+                            className="mem-gallery-top-badge-btn"
+                            onClick={() => setFullscreenIdx(selectedImageIdx)}
+                            title="Xem toàn màn hình"
+                          >
+                            <Maximize2 size={12} /> Toàn màn hình
+                          </button>
+                          {allImages.length > 1 && (
+                            <button
+                              type="button"
+                              className="mem-gallery-top-badge-btn grid-pill"
+                              onClick={() => setIsGridView(true)}
+                              title="Xem toàn bộ ảnh dạng lưới"
+                            >
+                              <LayoutGrid size={12} /> Lưới ảnh ({allImages.length})
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Nút mũi tên chuyển ảnh trái / phải */}
+                        {allImages.length > 1 && (
+                          <>
+                            {selectedImageIdx > 0 && (
+                              <button
+                                type="button"
+                                className="mem-gallery-nav-btn prev"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const nextIdx = selectedImageIdx - 1
+                                  setSelectedImageIdx(nextIdx)
+                                  const track = galleryRef.current
+                                  track?.scrollTo({ left: nextIdx * track.clientWidth, behavior: 'smooth' })
+                                }}
+                                title="Ảnh trước"
+                              >
+                                <ChevronLeft size={18} />
+                              </button>
+                            )}
+                            {selectedImageIdx < allImages.length - 1 && (
+                              <button
+                                type="button"
+                                className="mem-gallery-nav-btn next"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const nextIdx = selectedImageIdx + 1
+                                  setSelectedImageIdx(nextIdx)
+                                  const track = galleryRef.current
+                                  track?.scrollTo({ left: nextIdx * track.clientWidth, behavior: 'smooth' })
+                                }}
+                                title="Ảnh tiếp theo"
+                              >
+                                <ChevronRight size={18} />
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Vuốt ngang để đổi ảnh; mỗi ảnh chiếm trọn bề ngang khung. */}
+                        <div
+                          className="mem-gallery-track"
+                          ref={galleryRef}
+                          onScroll={(e) => {
+                            const el = e.currentTarget
+                            const idx = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+                            if (idx !== selectedImageIdx) setSelectedImageIdx(idx)
+                          }}
+                        >
+                          {allImages.map((mediaUrl, idx) => {
+                            const isVid = isMediaVideo(mediaUrl)
+                            return (
+                              <div
+                                className="mem-gallery-slide"
+                                key={idx}
+                                onClick={() => setFullscreenIdx(idx)}
+                                title="Nhấn để xem toàn màn hình"
+                              >
+                                {isVid ? (
+                                  <video
+                                    src={mediaUrl}
+                                    controls
+                                    playsInline
+                                    preload="metadata"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <img src={mediaUrl} alt={`${viewingEvent.title} — ${idx + 1}`} loading="lazy" />
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {allImages.length > 1 && (
+                          <>
+                            <span className="mem-gallery-count">
+                              {selectedImageIdx + 1}/{allImages.length}
+                            </span>
+                            <div className="mem-gallery-dots">
+                              {allImages.map((_, idx) => (
+                                <i key={idx} className={idx === selectedImageIdx ? 'on' : undefined} />
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1204,10 +1278,10 @@ export function SharedEventsView({
                   )}
                 </div>
 
-                {/* 4. ĐÚNG 4 NÚT TRÊN 1 HÀNG NGANG KHÔNG CẦN CUỘN */}
+                {/* 4. ĐÚNG 5 NÚT TRÊN 1 HÀNG NGANG KHÔNG CẦN CUỘN */}
                 <div
-                  className="mem-detail-actions-4"
-                  style={{ gridTemplateColumns: allImages.length > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)' }}
+                  className="mem-detail-actions-5"
+                  style={{ gridTemplateColumns: allImages.length > 0 ? 'repeat(5, 1fr)' : 'repeat(3, 1fr)' }}
                 >
                   <button
                     type="button"
@@ -1228,6 +1302,18 @@ export function SharedEventsView({
                     >
                       <Maximize2 size={14} />
                       <span>Phóng to</span>
+                    </button>
+                  )}
+
+                  {allImages.length > 0 && (
+                    <button
+                      type="button"
+                      className={`mem-detail-btn-compact grid ${isGridView ? 'active' : ''}`}
+                      onClick={() => setIsGridView((prev) => !prev)}
+                      title={isGridView ? 'Quay lại xem ảnh' : 'Xem toàn bộ ảnh dạng lưới'}
+                    >
+                      <LayoutGrid size={14} />
+                      <span>{isGridView ? 'Đóng lưới' : 'Lưới'}</span>
                     </button>
                   )}
 
