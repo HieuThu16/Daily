@@ -237,10 +237,23 @@ export function SharedEventsView({
     setSelectedImageIdx(0)
   }
 
-  const payload = () => ({
+  const getEffectiveTitle = () => {
+    if (title.trim()) return title.trim()
+    if (note.trim()) return note.trim().slice(0, 40)
+    if (eventDate) {
+      const parts = eventDate.split('-')
+      if (parts.length === 3) {
+        return `Kỷ niệm ${parts[2]}/${parts[1]}/${parts[0]}`
+      }
+      return `Kỷ niệm ${eventDate}`
+    }
+    return 'Kỷ niệm chung'
+  }
+
+  const payload = (customTitle?: string) => ({
     person_id: personId,
     room_code: isPartner && roomCode ? roomCode : null,
-    title: title.trim(),
+    title: (customTitle ?? getEffectiveTitle()).trim(),
     note: note.trim() || null,
     event_date: eventDate,
     event_time: eventTime || null,
@@ -268,11 +281,11 @@ export function SharedEventsView({
     let fellBack = 0
 
     for (const [index, file] of files.entries()) {
+      let blobToUpload: Blob = file
       try {
         const isVid = isVideoFile(file)
         onProgress?.({ phase: isVid ? 'upload' : 'compress', done: index, total: files.length })
 
-        let blobToUpload: Blob = file
         let ext = file.name.split('.').pop()?.toLowerCase() || (isVid ? 'mp4' : 'jpg')
 
         if (!isVid) {
@@ -283,7 +296,10 @@ export function SharedEventsView({
         }
 
         onProgress?.({ phase: 'upload', done: index, total: files.length })
-        const path = `${folder}/${crypto.randomUUID()}.${ext}`
+        const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        const path = `${folder}/${uuid}.${ext}`
         let uploadedUrl = ''
 
         if (supabase) {
@@ -311,7 +327,7 @@ export function SharedEventsView({
         }
       } catch (err) {
         console.error('Lỗi tải media:', err)
-        const dataUrl = await fileToDataUrl(file)
+        const dataUrl = await fileToDataUrl(blobToUpload || file)
         if (dataUrl) {
           urls.push(dataUrl)
           paths.push('')
@@ -324,172 +340,187 @@ export function SharedEventsView({
   }
 
   const createEvent = async () => {
-    if (!title.trim()) return
+    if (!title.trim() && !note.trim() && pendingFiles.length === 0) {
+      showToast('Vui lòng nhập tên sự kiện hoặc đính kèm ảnh/video', 'delete')
+      return
+    }
     setBusy(true)
 
-    let urls: string[] = []
-    let paths: string[] = []
-    let fellBack = 0
-    if (pendingFiles.length > 0) {
-      const res = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
-      urls = res.urls
-      paths = res.paths
-      fellBack = res.fellBack
-    }
-    setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
+    try {
+      let urls: string[] = []
+      let paths: string[] = []
+      let fellBack = 0
+      if (pendingFiles.length > 0) {
+        const res = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
+        urls = res.urls
+        paths = res.paths
+        fellBack = res.fellBack
+      }
+      setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
 
-    const firstUrl = urls[0] || null
-    const firstPath = paths[0] || null
+      const firstUrl = urls[0] || null
+      const firstPath = paths[0] || null
 
-    const basePayload = {
-      ...payload(),
-      image_url: firstUrl,
-      image_path: firstPath,
-    }
+      const basePayload = {
+        ...payload(),
+        image_url: firstUrl,
+        image_path: firstPath,
+      }
 
-    let created: SharedEvent | null = null
+      let created: SharedEvent | null = null
 
-    if (supabase) {
-      if (urls.length > 0) {
-        const fullPayload = {
+      if (supabase) {
+        if (urls.length > 0) {
+          const fullPayload = {
+            ...basePayload,
+            images: urls,
+            image_paths: paths,
+          }
+          const { data, error } = await supabase.from('shared_events').insert(fullPayload).select().single()
+          if (error) {
+            // Schema cũ chưa có cột mảng images, thử lại với basePayload.
+            // Phải nói ra: nếu im lặng thì tải lại trang là mất sạch ảnh từ ảnh thứ hai.
+            if (urls.length > 1) warnMissingImagesColumn(showToast)
+            const retryRes = await supabase.from('shared_events').insert(basePayload).select().single()
+            if (retryRes.data) {
+              created = {
+                ...(retryRes.data as SharedEvent),
+                images: urls,
+                image_paths: paths,
+              }
+            }
+          } else if (data) {
+            created = data as SharedEvent
+          }
+        } else {
+          const { data } = await supabase.from('shared_events').insert(basePayload).select().single()
+          if (data) {
+            created = data as SharedEvent
+          }
+        }
+      }
+
+      // Không lưu được lên máy chủ: vẫn hiện ra để khỏi mất công gõ lại, nhưng phải
+      // nói thẳng là chưa lưu — trước đây toast báo thành công rồi tải lại trang là mất.
+      const savedRemotely = created !== null
+
+      /*
+       * Ảnh/video đã nằm trên storage trước khi insert. Insert hỏng mà cứ để đó thì mỗi
+       * lần bấm thêm lại là một bộ media mới nằm lại vĩnh viễn — dọn ngay.
+       */
+      if (!savedRemotely && supabase) {
+        const uploaded = paths.filter(Boolean)
+        if (uploaded.length) {
+          const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove(uploaded)
+          if (rmErr) console.warn('Không dọn được media của lần thêm hỏng:', rmErr)
+        }
+      }
+
+      if (!created) {
+        created = {
+          id: `local-${Date.now()}`,
+          owner_id: myId || 'local',
           ...basePayload,
           images: urls,
           image_paths: paths,
-        }
-        const { data, error } = await supabase.from('shared_events').insert(fullPayload).select().single()
-        if (error) {
-          // Schema cũ chưa có cột mảng images, thử lại với basePayload.
-          // Phải nói ra: nếu im lặng thì tải lại trang là mất sạch ảnh từ ảnh thứ hai.
-          if (urls.length > 1) warnMissingImagesColumn(showToast)
-          const retryRes = await supabase.from('shared_events').insert(basePayload).select().single()
-          if (retryRes.data) {
-            created = {
-              ...(retryRes.data as SharedEvent),
-              images: urls,
-              image_paths: paths,
-            }
-          }
-        } else if (data) {
-          created = data as SharedEvent
-        }
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          deleted_at: null,
+        } as SharedEvent
+      }
+
+      events.setItems((prev) => [created!, ...prev])
+
+      if (savedRemotely) {
+        void notifyPartner('Có kỷ niệm mới được chia sẻ', created.title, '/daily', `share-${created.id}`)
+        // Nói rõ đã lưu được bao nhiêu ảnh/video
+        const savedCount = urls.length
+        const missing = pendingFiles.length - savedCount
+        let message = savedCount > 0 ? `✅ Đã lưu kỷ niệm cùng ${savedCount} ảnh/video` : '✅ Đã lưu kỷ niệm'
+        if (missing > 0) message += ` · ${missing} tệp không đọc được`
+        if (fellBack > 0) message += ` · ${fellBack} tệp lưu kèm bản ghi (nặng hơn)`
+        showToast(message)
       } else {
-        const { data } = await supabase.from('shared_events').insert(basePayload).select().single()
-        if (data) {
-          created = data as SharedEvent
-        }
+        showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
       }
+      setAdding(false)
+      resetForm()
+    } catch (err: any) {
+      console.error('Lỗi khi lưu kỷ niệm:', err)
+      showToast('❌ Có lỗi khi lưu: ' + (err?.message || 'Vui lòng thử lại'), 'delete')
+    } finally {
+      setProgress(null)
+      setBusy(false)
     }
-
-    // Không lưu được lên máy chủ: vẫn hiện ra để khỏi mất công gõ lại, nhưng phải
-    // nói thẳng là chưa lưu — trước đây toast báo thành công rồi tải lại trang là mất.
-    const savedRemotely = created !== null
-
-    /*
-     * Ảnh/video đã nằm trên storage trước khi insert. Insert hỏng mà cứ để đó thì mỗi
-     * lần bấm thêm lại là một bộ media mới nằm lại vĩnh viễn — dọn ngay.
-     */
-    if (!savedRemotely && supabase) {
-      const uploaded = paths.filter(Boolean)
-      if (uploaded.length) {
-        const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove(uploaded)
-        if (rmErr) console.warn('Không dọn được media của lần thêm hỏng:', rmErr)
-      }
-    }
-
-    if (!created) {
-      created = {
-        id: `local-${Date.now()}`,
-        owner_id: myId || 'local',
-        ...basePayload,
-        images: urls,
-        image_paths: paths,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-      } as SharedEvent
-    }
-
-    setProgress(null)
-    setBusy(false)
-    events.setItems((prev) => [created!, ...prev])
-
-    if (savedRemotely) {
-      void notifyPartner('Có kỷ niệm mới được chia sẻ', created.title, '/daily', `share-${created.id}`)
-      // Nói rõ đã lưu được bao nhiêu ảnh/video
-      const savedCount = urls.length
-      const missing = pendingFiles.length - savedCount
-      let message = savedCount > 0 ? `✅ Đã lưu kỷ niệm cùng ${savedCount} ảnh/video` : '✅ Đã lưu kỷ niệm'
-      if (missing > 0) message += ` · ${missing} tệp không đọc được`
-      if (fellBack > 0) message += ` · ${fellBack} tệp lưu kèm bản ghi (nặng hơn)`
-      showToast(message)
-    } else {
-      showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
-    }
-    setAdding(false)
-    resetForm()
   }
 
   const saveEvent = async () => {
-    if (!editing || !title.trim()) return
+    if (!editing) return
     setBusy(true)
-    const next = payload()
-    
-    let currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
-    let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
+    try {
+      const next = payload()
+      
+      let currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
+      let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
-    if (pendingFiles.length > 0) {
-      const { urls, paths } = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
-      currentImages = [...currentImages, ...urls]
-      currentPaths = [...currentPaths, ...paths]
-      setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
-    }
-
-    const baseUpdateData = {
-      ...next,
-      image_url: currentImages[0] || null,
-      image_path: currentPaths[0] || null,
-    }
-
-    const fullUpdateData = {
-      ...baseUpdateData,
-      images: currentImages,
-      image_paths: currentPaths,
-    }
-
-    /*
-     * Phải biết ĐÃ ghi được hay chưa, chứ không báo bừa: trước đây lần thử lại
-     * hỏng cũng vẫn hiện "Đã cập nhật", tải lại trang mới biết là mất.
-     */
-    let savedRemotely = !supabase
-    if (supabase) {
-      const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
-      if (!error) {
-        savedRemotely = true
-      } else {
-        // Schema cũ chưa có cột mảng images, thử lại với baseUpdateData
-        if (currentImages.length > 1) warnMissingImagesColumn(showToast)
-        const retry = await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
-        savedRemotely = !retry.error
-        if (retry.error) console.warn('Không cập nhật được kỷ niệm:', retry.error.message)
+      if (pendingFiles.length > 0) {
+        const { urls, paths } = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
+        currentImages = [...currentImages, ...urls]
+        currentPaths = [...currentPaths, ...paths]
+        setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
       }
-    }
 
-    setProgress(null)
-    setBusy(false)
-    const finalEvent = {
-      ...editing,
-      ...fullUpdateData,
+      const baseUpdateData = {
+        ...next,
+        image_url: currentImages[0] || null,
+        image_path: currentPaths[0] || null,
+      }
+
+      const fullUpdateData = {
+        ...baseUpdateData,
+        images: currentImages,
+        image_paths: currentPaths,
+      }
+
+      /*
+       * Phải biết ĐÃ ghi được hay chưa, chứ không báo bừa: trước đây lần thử lại
+       * hỏng cũng vẫn hiện "Đã cập nhật", tải lại trang mới biết là mất.
+       */
+      let savedRemotely = !supabase
+      if (supabase) {
+        const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
+        if (!error) {
+          savedRemotely = true
+        } else {
+          // Schema cũ chưa có cột mảng images, thử lại với baseUpdateData
+          if (currentImages.length > 1) warnMissingImagesColumn(showToast)
+          const retry = await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
+          savedRemotely = !retry.error
+          if (retry.error) console.warn('Không cập nhật được kỷ niệm:', retry.error.message)
+        }
+      }
+
+      const finalEvent = {
+        ...editing,
+        ...fullUpdateData,
+      }
+      events.setItems((prev) => prev.map((e) => (e.id === editing.id ? finalEvent : e)))
+      if (savedRemotely) {
+        const added = pendingFiles.length
+        showToast(added > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${added} ảnh/video` : '✏️ Đã cập nhật kỷ niệm')
+      } else {
+        showToast('⚠️ Chưa lưu được thay đổi lên máy chủ — kiểm tra kết nối rồi thử lại.', 'delete')
+      }
+      setEditing(null)
+      setViewing(null)
+      resetForm()
+    } catch (err: any) {
+      console.error('Lỗi khi cập nhật kỷ niệm:', err)
+      showToast('❌ Có lỗi khi cập nhật: ' + (err?.message || 'Vui lòng thử lại'), 'delete')
+    } finally {
+      setProgress(null)
+      setBusy(false)
     }
-    events.setItems((prev) => prev.map((e) => (e.id === editing.id ? finalEvent : e)))
-    if (savedRemotely) {
-      const added = pendingFiles.length
-      showToast(added > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${added} ảnh/video` : '✏️ Đã cập nhật kỷ niệm')
-    } else {
-      showToast('⚠️ Chưa lưu được thay đổi lên máy chủ — kiểm tra kết nối rồi thử lại.', 'delete')
-    }
-    setEditing(null)
-    setViewing(null)
-    resetForm()
   }
 
   const deleteEvent = async (id: string) => {
@@ -592,7 +623,12 @@ export function SharedEventsView({
     <>
       <label>
         Thông tin sự kiện
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ví dụ: Lần đầu đi Đà Lạt" autoFocus />
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Ví dụ: Lần đầu đi Đà Lạt (để trống tự đặt theo ngày)"
+          autoFocus
+        />
       </label>
       <div style={{ display: 'flex', gap: 8 }}>
         <label style={{ flex: 1 }}>

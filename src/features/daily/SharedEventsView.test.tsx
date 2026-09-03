@@ -133,4 +133,21 @@ describe('SharedEventsView - xu ly nhieu anh', () => {
     await waitFor(() => expect(state.toasts.length).toBeGreaterThan(0), { timeout: 4000 })
     expect(state.toasts.at(-1)).toContain('Chưa lưu được')
   })
+
+  it('tu dong dat ten ky niem va luu thanh cong khi de trong tieu de', async () => {
+    const user = userEvent.setup()
+    render(<SharedEventsView personId="p1" personName="Kim Y" />)
+    await user.click(await screen.findByRole('button', { name: /Thêm kỷ niệm|Thêm sự kiện|Thêm/i }))
+
+    // Không nhập tiêu đề, chỉ chọn ảnh và bấm Lưu
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, pick(2))
+
+    await user.click(screen.getByRole('button', { name: /Lưu sự kiện/i }))
+
+    await waitFor(() => expect(state.toasts.length).toBeGreaterThan(0), { timeout: 4000 })
+    expect(state.uploaded).toHaveLength(2)
+    expect(state.toasts.at(-1)).toContain('2 ảnh/video')
+  })
 })
+
