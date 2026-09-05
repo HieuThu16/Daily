@@ -87,8 +87,8 @@ export function SharedEventsView({
   const [busy, setBusy] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
-  const galleryRef = useRef<HTMLDivElement>(null)
-  const lightboxTrackRef = useRef<HTMLDivElement>(null)
+  const galleryRef = useRef<HTMLDivElement | null>(null)
+  const lightboxTrackRef = useRef<HTMLDivElement | null>(null)
 
   const [partnerEmail, setPartnerEmail] = useState('')
   const [managePartners, setManagePartners] = useState(false)
@@ -101,12 +101,50 @@ export function SharedEventsView({
   const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
   const [fullscreenIdx, setFullscreenIdx] = useState<number | null>(null)
   const [isGridView, setIsGridView] = useState<boolean>(false)
+  const isProgrammaticScrollRef = useRef(false)
 
   // Đặt lại xem ảnh đơn và ảnh đầu tiên mỗi khi mở kỷ niệm mới
   useEffect(() => {
     setIsGridView(false)
     setSelectedImageIdx(0)
   }, [viewing?.id])
+
+  // Cuộn ngay lập tức tới slide tương ứng khi mở Lightbox hoặc đổi fullscreenIdx
+  useEffect(() => {
+    if (fullscreenIdx === null) return
+    const track = lightboxTrackRef.current
+    if (track) {
+      isProgrammaticScrollRef.current = true
+      const width = track.clientWidth || window.innerWidth
+      track.scrollTo({ left: fullscreenIdx * width, behavior: 'instant' as ScrollBehavior })
+      const timer = setTimeout(() => {
+        isProgrammaticScrollRef.current = false
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [fullscreenIdx])
+
+  // Cuộn thumbnail active ở đáy lightbox vào giữa tầm nhìn
+  useEffect(() => {
+    if (fullscreenIdx === null) return
+    const timer = setTimeout(() => {
+      const activeThumb = document.querySelector('.mem-lightbox-bottom .mem-gallery-thumb-item.on')
+      activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [fullscreenIdx])
+
+  // Đồng bộ galleryRef khi không ở chế độ lưới
+  useEffect(() => {
+    if (isGridView) return
+    const track = galleryRef.current
+    if (track && selectedImageIdx >= 0) {
+      const width = track.clientWidth
+      if (width > 0) {
+        track.scrollTo({ left: selectedImageIdx * width, behavior: 'instant' as ScrollBehavior })
+      }
+    }
+  }, [selectedImageIdx, isGridView, viewing?.id])
 
   // Điều khiển phím mũi tên & Esc khi xem toàn màn hình
   useEffect(() => {
@@ -120,7 +158,10 @@ export function SharedEventsView({
         if (all.length > 0) {
           const prev = Math.max(0, fullscreenIdx - 1)
           setFullscreenIdx(prev)
-          lightboxTrackRef.current?.scrollTo({ left: prev * window.innerWidth, behavior: 'smooth' })
+          isProgrammaticScrollRef.current = true
+          const w = lightboxTrackRef.current?.clientWidth || window.innerWidth
+          lightboxTrackRef.current?.scrollTo({ left: prev * w, behavior: 'smooth' })
+          setTimeout(() => { isProgrammaticScrollRef.current = false }, 300)
         }
       } else if (e.key === 'ArrowRight') {
         const curEvent = viewing || editing
@@ -128,7 +169,10 @@ export function SharedEventsView({
         if (all.length > 0) {
           const next = Math.min(all.length - 1, fullscreenIdx + 1)
           setFullscreenIdx(next)
-          lightboxTrackRef.current?.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' })
+          isProgrammaticScrollRef.current = true
+          const w = lightboxTrackRef.current?.clientWidth || window.innerWidth
+          lightboxTrackRef.current?.scrollTo({ left: next * w, behavior: 'smooth' })
+          setTimeout(() => { isProgrammaticScrollRef.current = false }, 300)
         }
       }
     }
@@ -579,45 +623,106 @@ export function SharedEventsView({
     showToast('🗑️ Đã xoá người chung', 'delete')
   }
 
+  const deleteImageFromEvent = async (targetEvent: SharedEvent, imgIdx: number) => {
+    const currentImages = targetEvent.images && targetEvent.images.length
+      ? [...targetEvent.images]
+      : (targetEvent.image_url ? [targetEvent.image_url] : [])
+    const currentPaths = targetEvent.image_paths && targetEvent.image_paths.length
+      ? [...targetEvent.image_paths]
+      : (targetEvent.image_path ? [targetEvent.image_path] : [])
+
+    if (imgIdx < 0 || imgIdx >= currentImages.length) return
+
+    if (!confirm(`Xoá ảnh/video số ${imgIdx + 1} này khỏi Supabase? Không thể hoàn tác.`)) {
+      return
+    }
+
+    setBusy(true)
+    try {
+      let pathToDelete = currentPaths[imgIdx]
+      if (!pathToDelete && currentImages[imgIdx]) {
+        try {
+          const u = new URL(currentImages[imgIdx])
+          const bucketMarker = `/${PHOTO_BUCKET}/`
+          const markerIdx = u.pathname.indexOf(bucketMarker)
+          if (markerIdx !== -1) {
+            pathToDelete = decodeURIComponent(u.pathname.slice(markerIdx + bucketMarker.length).split('?')[0])
+          }
+        } catch {
+          // Ignored
+        }
+      }
+
+      if (pathToDelete && supabase) {
+        try {
+          await supabase.storage.from(PHOTO_BUCKET).remove([pathToDelete])
+        } catch (e) {
+          console.warn('Lỗi khi xoá file Supabase Storage:', e)
+        }
+      }
+
+      const nextImages = currentImages.filter((_, i) => i !== imgIdx)
+      const nextPaths = currentPaths.filter((_, i) => i !== imgIdx)
+
+      const baseUpdateData = {
+        image_url: nextImages[0] || null,
+        image_path: nextPaths[0] || null,
+      }
+
+      const fullUpdateData = {
+        ...baseUpdateData,
+        images: nextImages,
+        image_paths: nextPaths,
+      }
+
+      if (supabase) {
+        const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', targetEvent.id)
+        if (error) {
+          await supabase.from('shared_events').update(baseUpdateData).eq('id', targetEvent.id)
+        }
+      }
+
+      const updated = { ...targetEvent, ...fullUpdateData }
+      events.setItems((prev) => prev.map((item) => (item.id === targetEvent.id ? updated : item)))
+      if (viewing?.id === targetEvent.id) {
+        setViewing(updated)
+      }
+      if (editing?.id === targetEvent.id) {
+        setEditing(updated)
+      }
+
+      const remainingCount = nextImages.length
+      if (remainingCount === 0) {
+        setFullscreenIdx(null)
+        setSelectedImageIdx(0)
+        setIsGridView(false)
+      } else {
+        const nextIdx = Math.min(imgIdx, remainingCount - 1)
+        setSelectedImageIdx(nextIdx)
+        if (fullscreenIdx !== null) {
+          setFullscreenIdx(nextIdx)
+          setTimeout(() => {
+            const track = lightboxTrackRef.current
+            if (track) {
+              const width = track.clientWidth || window.innerWidth
+              track.scrollTo({ left: nextIdx * width, behavior: 'instant' as ScrollBehavior })
+            }
+          }, 30)
+        }
+      }
+
+      showToast('🗑️ Đã xoá ảnh khỏi Supabase')
+    } catch (err: any) {
+      console.error('Lỗi khi xoá ảnh:', err)
+      showToast('❌ Có lỗi khi xoá ảnh: ' + (err?.message || 'Vui lòng thử lại'), 'delete')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const removeExistingImage = async (imgIdx: number) => {
     if (!editing) return
-    const currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
-    const currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
-
-    const pathToDelete = currentPaths[imgIdx]
-    if (pathToDelete && supabase) {
-      try {
-        await supabase.storage.from(PHOTO_BUCKET).remove([pathToDelete])
-      } catch {
-        // Ignored
-      }
-    }
-
-    currentImages.splice(imgIdx, 1)
-    currentPaths.splice(imgIdx, 1)
-
-    const baseUpdateData = {
-      image_url: currentImages[0] || null,
-      image_path: currentPaths[0] || null,
-    }
-
-    const fullUpdateData = {
-      ...baseUpdateData,
-      images: currentImages,
-      image_paths: currentPaths,
-    }
-
-    if (supabase) {
-      const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
-      if (error) {
-        await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
-      }
-    }
-
-    const updated = { ...editing, ...fullUpdateData }
-    setEditing(updated)
-    events.setItems((prev) => prev.map((item) => (item.id === editing.id ? updated : item)))
-    showToast('🗑️ Đã gỡ ảnh')
+    await deleteImageFromEvent(editing, imgIdx)
   }
 
   const handlePendingFileSelection = (files: FileList | null) => {
@@ -1094,15 +1199,16 @@ export function SharedEventsView({
                         const isVid = isMediaVideo(mediaUrl)
                         const isSelected = idx === selectedImageIdx
                         return (
-                          <button
+                          <div
                             key={idx}
-                            type="button"
                             className={`mem-gallery-grid-thumb ${isSelected ? 'active' : ''}`}
                             onClick={() => {
                               setSelectedImageIdx(idx)
                               setFullscreenIdx(idx)
                             }}
                             title={`Ảnh ${idx + 1} — Nhấn để xem toàn màn hình`}
+                            role="button"
+                            tabIndex={0}
                           >
                             {isVid ? (
                               <>
@@ -1114,7 +1220,19 @@ export function SharedEventsView({
                             ) : (
                               <img src={mediaUrl} alt="" loading="lazy" />
                             )}
-                          </button>
+                            <button
+                              type="button"
+                              className="mem-gallery-grid-del-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deleteImageFromEvent(viewingEvent, idx)
+                              }}
+                              title={`Xoá ảnh ${idx + 1} này khỏi Supabase`}
+                              aria-label={`Xoá ảnh ${idx + 1}`}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         )
                       })}
                     </div>
@@ -1189,6 +1307,14 @@ export function SharedEventsView({
                               <LayoutGrid size={12} /> Lưới ảnh ({allImages.length})
                             </button>
                           )}
+                          <button
+                            type="button"
+                            className="mem-gallery-top-badge-btn danger"
+                            onClick={() => deleteImageFromEvent(viewingEvent, selectedImageIdx)}
+                            title={`Xoá ảnh ${selectedImageIdx + 1} này khỏi Supabase`}
+                          >
+                            <Trash2 size={12} /> Xoá ảnh này
+                          </button>
                         </div>
 
                         {/* Nút mũi tên chuyển ảnh trái / phải */}
@@ -1476,10 +1602,11 @@ export function SharedEventsView({
       )}
 
       {/* ─── FULLSCREEN LIGHTBOX (XEM TOÀN MÀN HÌNH ẢNH & VIDEO) ─── */}
-      {fullscreenIdx !== null && viewing && (() => {
-        const allImages = viewing.images && viewing.images.length
-          ? viewing.images
-          : (viewing.image_url ? [viewing.image_url] : [])
+      {fullscreenIdx !== null && (viewingEvent || viewing) && (() => {
+        const curEvent = viewingEvent || viewing!
+        const allImages = curEvent.images && curEvent.images.length
+          ? curEvent.images
+          : (curEvent.image_url ? [curEvent.image_url] : [])
 
         if (!allImages.length) return null
 
@@ -1487,15 +1614,25 @@ export function SharedEventsView({
           <div className="mem-lightbox" role="dialog" aria-modal="true">
             <div className="mem-lightbox-topbar">
               <div className="mem-lightbox-title">
-                <strong>{viewing.title}</strong>
-                <span>{viDate(viewing.event_date)} {viewing.event_time ? `· ${viewing.event_time}` : ''}</span>
+                <strong>{curEvent.title}</strong>
+                <span>{viDate(curEvent.event_date)} {curEvent.event_time ? `· ${curEvent.event_time}` : ''}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {allImages.length > 1 && (
                   <span style={{ fontSize: '0.85rem', fontWeight: 700, background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: 20 }}>
                     {fullscreenIdx + 1} / {allImages.length}
                   </span>
                 )}
+                {/* Nút xoá ảnh Supabase từng ảnh trực tiếp từ Lightbox */}
+                <button
+                  type="button"
+                  className="mem-lightbox-action-btn danger"
+                  onClick={() => deleteImageFromEvent(curEvent, fullscreenIdx)}
+                  title={`Xoá ảnh ${fullscreenIdx + 1} này khỏi Supabase`}
+                  aria-label={`Xoá ảnh ${fullscreenIdx + 1}`}
+                >
+                  <Trash2 size={18} />
+                </button>
                 <button
                   type="button"
                   className="mem-lightbox-close"
@@ -1518,7 +1655,10 @@ export function SharedEventsView({
                     onClick={() => {
                       const next = fullscreenIdx - 1
                       setFullscreenIdx(next)
-                      lightboxTrackRef.current?.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' })
+                      isProgrammaticScrollRef.current = true
+                      const w = lightboxTrackRef.current?.clientWidth || window.innerWidth
+                      lightboxTrackRef.current?.scrollTo({ left: next * w, behavior: 'smooth' })
+                      setTimeout(() => { isProgrammaticScrollRef.current = false }, 300)
                     }}
                   >
                     <ChevronLeft size={26} />
@@ -1532,7 +1672,10 @@ export function SharedEventsView({
                     onClick={() => {
                       const next = fullscreenIdx + 1
                       setFullscreenIdx(next)
-                      lightboxTrackRef.current?.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' })
+                      isProgrammaticScrollRef.current = true
+                      const w = lightboxTrackRef.current?.clientWidth || window.innerWidth
+                      lightboxTrackRef.current?.scrollTo({ left: next * w, behavior: 'smooth' })
+                      setTimeout(() => { isProgrammaticScrollRef.current = false }, 300)
                     }}
                   >
                     <ChevronRight size={26} />
@@ -1544,10 +1687,29 @@ export function SharedEventsView({
             {/* Slide track toàn màn hình */}
             <div
               className="mem-lightbox-track"
-              ref={lightboxTrackRef}
+              ref={(node) => {
+                lightboxTrackRef.current = node
+                if (node && fullscreenIdx !== null) {
+                  isProgrammaticScrollRef.current = true
+                  const width = node.clientWidth || window.innerWidth
+                  node.scrollLeft = fullscreenIdx * width
+                  requestAnimationFrame(() => {
+                    if (node && fullscreenIdx !== null) {
+                      const finalWidth = node.clientWidth || window.innerWidth
+                      node.scrollLeft = fullscreenIdx * finalWidth
+                      setTimeout(() => {
+                        isProgrammaticScrollRef.current = false
+                      }, 150)
+                    }
+                  })
+                }
+              }}
               onScroll={(e) => {
+                if (isProgrammaticScrollRef.current) return
                 const el = e.currentTarget
-                const idx = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+                const width = el.clientWidth || window.innerWidth
+                if (width <= 0) return
+                const idx = Math.round(el.scrollLeft / width)
                 if (idx !== fullscreenIdx && idx >= 0 && idx < allImages.length) {
                   setFullscreenIdx(idx)
                   setSelectedImageIdx(idx)
@@ -1567,7 +1729,7 @@ export function SharedEventsView({
                         preload="metadata"
                       />
                     ) : (
-                      <img src={mediaUrl} alt={`${viewing.title} — ảnh ${idx + 1}`} />
+                      <img src={mediaUrl} alt={`${curEvent.title} — ảnh ${idx + 1}`} />
                     )}
                   </div>
                 )
@@ -1587,7 +1749,10 @@ export function SharedEventsView({
                         onClick={() => {
                           setFullscreenIdx(idx)
                           setSelectedImageIdx(idx)
-                          lightboxTrackRef.current?.scrollTo({ left: idx * window.innerWidth, behavior: 'smooth' })
+                          isProgrammaticScrollRef.current = true
+                          const w = lightboxTrackRef.current?.clientWidth || window.innerWidth
+                          lightboxTrackRef.current?.scrollTo({ left: idx * w, behavior: 'smooth' })
+                          setTimeout(() => { isProgrammaticScrollRef.current = false }, 300)
                         }}
                       >
                         {isVid ? (
