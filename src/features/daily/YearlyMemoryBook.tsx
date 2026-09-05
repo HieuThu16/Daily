@@ -26,15 +26,15 @@ export type SeasonTheme = {
 
 export const SEASONS: SeasonTheme[] = [
   {
-    // SPRING — Xuân (hoa anh đào rực rỡ)
+    // SPRING — Xuân (hoa anh đào Play Together bồng bềnh kẹo ngọt)
     name: 'Xuân',
-    treeTrunk: '#5d3825',
-    treeCanopy: ['#ff758c', '#ff7eb3', '#fbcfe8'],
-    flowers: ['#ff4d8d', '#ff758c', '#ffb6c1', '#ffffff', '#fbcfe8', '#f43f5e'],
-    petalColor: '#ff758c',
-    bgGradient: 'linear-gradient(160deg, #fff5f7 0%, #fce7f3 45%, #fef3c7 100%)',
-    groundColor: 'rgba(34, 197, 94, 0.25)',
-    glowColor: 'rgba(244, 114, 182, 0.35)',
+    treeTrunk: '#7c4a3a',
+    treeCanopy: ['#ffaec9', '#ff9ebb', '#ffd4e5'],
+    flowers: ['#ffffff', '#ff9ebb', '#ff4d8d', '#ffd4e5', '#ffaec9', '#ff758c'],
+    petalColor: '#ff8fab',
+    bgGradient: 'linear-gradient(160deg, #fff5f8 0%, #fce7f3 45%, #fef3c7 100%)',
+    groundColor: 'rgba(74, 222, 128, 0.35)',
+    glowColor: 'rgba(255, 174, 201, 0.45)',
     accent: '#ec4899',
   },
   {
