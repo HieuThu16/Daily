@@ -18,7 +18,7 @@ import { SkeletonList } from './Skeleton'
 import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
 import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 import { compressForUpload } from '../lib/photo'
-import { Memory3DCard } from './daily/Memory3DCard'
+import { YearlyMemoryBook } from './daily/YearlyMemoryBook'
 import { getVideoPosterUrl } from './daily/SharedEventsView'
 import { deleteStorageFile, deleteStorageFiles } from '../lib/storageDelete'
 import { uploadMediaFile } from '../lib/storageService'
@@ -1271,6 +1271,20 @@ export function DailyPage() {
       })
       .filter((i) => !q || i.content.toLowerCase().includes(q) || i.entry_date.includes(q))
   }, [collectionEntries, collectionFilter, collectionSearch])
+
+  // ── Group filtered collection by year for YearlyMemoryBook ──
+  const yearlyGroups = useMemo(() => {
+    const map = new Map<number, Entry[]>()
+    for (const entry of filteredCollection) {
+      const y = entry.entry_date ? parseInt(entry.entry_date.slice(0, 4), 10) : new Date().getFullYear()
+      if (!map.has(y)) map.set(y, [])
+      map.get(y)!.push(entry)
+    }
+    // Sort years descending (newest first)
+    return Array.from(map.entries())
+      .sort(([a], [b]) => b - a)
+      .map(([year, entries]) => ({ year, entries }))
+  }, [filteredCollection])
 
   // ── Month & Calendar groups for Month View ──────────────────────────────
   const sortedAllEntries = useMemo(() => {
@@ -3086,10 +3100,11 @@ export function DailyPage() {
                 paddingBottom: 20,
               }}
             >
-              {filteredCollection.map((entry) => (
-                <Memory3DCard
-                  key={entry.id}
-                  entry={entry}
+              {yearlyGroups.map(({ year, entries: yearEntries }) => (
+                <YearlyMemoryBook
+                  key={year}
+                  year={year}
+                  entries={yearEntries}
                   onEdit={openEntry}
                   onToggleFavorite={toggleFavorite}
                 />
