@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
-import { localDate, longDate } from '../lib/date'
+import { localDate } from '../lib/date'
 import { queueWrite } from '../lib/offlineQueue'
 import { isEntryFirstTime, isEntrySpecial, type DailyCategoryItem, type DailyType, type Entry, type Person } from '../types'
 import { loadLocal, saveLocal } from '../lib/persistence'
@@ -1389,6 +1389,38 @@ export function DailyPage() {
     return list
   }, [activeMonthGroup, selectedCalDay])
 
+  const viDisplayDate = (dStr: string) => {
+    try {
+      const d = new Date(dStr + 'T12:00:00')
+      const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
+      const dayName = days[d.getDay()]
+      const day = String(d.getDate()).padStart(2, '0')
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      return `${dayName}, ${day}/${month}/${d.getFullYear()}`
+    } catch {
+      return dStr
+    }
+  }
+
+  const getEntryMedias = (entry: Entry | null | undefined): string[] => {
+    if (!entry) return []
+    if (Array.isArray(entry.images) && entry.images.length > 0) {
+      return entry.images.filter((url): url is string => typeof url === 'string' && Boolean(url.trim()))
+    }
+    if (typeof entry.images === 'string') {
+      try {
+        const parsed = JSON.parse(entry.images)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((url): url is string => typeof url === 'string' && Boolean(url.trim()))
+        }
+      } catch {}
+    }
+    if (entry.image_url && typeof entry.image_url === 'string' && entry.image_url.trim()) {
+      return [entry.image_url.trim()]
+    }
+    return []
+  }
+
   const shiftDate = (offset: number) => {
     const d = new Date(date + 'T12:00:00')
     d.setDate(d.getDate() + offset)
@@ -1399,139 +1431,167 @@ export function DailyPage() {
     setDate(localDate())
   }
 
-  // ── render card helper ───────────────────────────────────────────────────
-  const renderDailyEntryCard = (entry: Entry, showDatePill = false) => {
+  // ── render card helper (Đồng bộ giao diện Thẻ Kỷ Niệm chuẩn Kỷ niệm chung) ──
+  const renderDailyEntryCard = (entry: Entry, i = 0, showDatePill = false) => {
     const catInfo = getCategoryInfo(entry, dailyCategories)
     const attachedPeople = getAttachedPeople(entry, peopleQuery.items)
     const hasAttachedPeople = attachedPeople.length > 0
-    const entryMedias = entry.images && entry.images.length > 0 ? entry.images : (entry.image_url ? [entry.image_url] : [])
+    const entryMedias = getEntryMedias(entry)
     const isSpecialEntry = isEntrySpecial(entry)
     const isFirstTimeEntry = isEntryFirstTime(entry)
+    const rawText = formatDisplayContent(entry.content)
+    const cleanText = rawText || (entryMedias.length > 0 ? '(Nhật ký ảnh / video)' : 'Nhật ký')
+    const dayStr = entry.entry_date ? entry.entry_date.slice(8, 10) : ''
+    const monthNum = entry.entry_date ? Number(entry.entry_date.slice(5, 7)) : ''
 
     return (
       <article
         key={entry.id}
-        className={`daily-card ${hasAttachedPeople ? 'has-people' : ''} ${isSpecialEntry ? 'is-special' : ''} ${isFirstTimeEntry ? 'is-first' : ''}`}
+        className={`memory-card ${hasAttachedPeople ? 'has-people' : ''}`}
+        onClick={() => openEntry(entry)}
+        title="Bấm để xem và sửa chi tiết"
       >
-        <div className="daily-card-header">
-          <div className="daily-card-tags">
-            {(showDatePill || keyword) && entry.entry_date && (
-              <span className="daily-pill-date" title="Ngày viết">
-                <Calendar size={11} /> {entry.entry_date.slice(8, 10)}/{entry.entry_date.slice(5, 7)}/{entry.entry_date.slice(0, 4)}
-              </span>
+        {/* Khối ngày tháng đồng bộ kiểu Kỷ niệm chung nếu showDatePill */}
+        {showDatePill && entry.entry_date ? (
+          <time className={`memory-date memory-date-${i % 5}`} dateTime={entry.entry_date} style={{ flexShrink: 0 }}>
+            <strong>{dayStr}</strong>
+            <span>Thg {monthNum}</span>
+          </time>
+        ) : (
+          /* Nếu xem trong ngày: hiển thị icon thể loại hoặc icon sổ */
+          <div
+            className="icon-box icon-box-sm"
+            style={{
+              background: catInfo ? catInfo.bg : 'var(--bg-main)',
+              color: catInfo ? catInfo.color : 'var(--primary)',
+              width: 38,
+              height: 48,
+              borderRadius: 10,
+              flexShrink: 0,
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: '1rem',
+              border: '1px solid var(--card-border)',
+            }}
+            title={catInfo ? catInfo.label : 'Nhật ký'}
+          >
+            {catInfo ? catInfo.icon : '📝'}
+          </div>
+        )}
+
+        {/* Thumbnail ảnh / video nhỏ gọn bo góc (chuẩn memory-thumb, không vỡ layout) */}
+        {entryMedias.length > 0 && (
+          <div
+            className="memory-thumb"
+            onClick={(e) => {
+              e.stopPropagation()
+              openMediaGallery(entryMedias, 0)
+            }}
+            title="Nhấn xem toàn màn hình"
+            style={{ flexShrink: 0, cursor: 'pointer' }}
+          >
+            {/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entryMedias[0]) ? (
+              <>
+                <video src={entryMedias[0]} preload="metadata" muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.3)', color: '#fff' }}>
+                  <Play size={12} fill="#fff" />
+                </div>
+              </>
+            ) : (
+              <img
+                src={entryMedias[0]}
+                alt=""
+                loading="lazy"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none'
+                }}
+              />
             )}
+            {entryMedias.length > 1 && (
+              <span>+{entryMedias.length - 1}</span>
+            )}
+          </div>
+        )}
+
+        {/* Thân thẻ: Tags, Giờ và Trích đoạn chữ sạch đẹp */}
+        <div className="memory-card-body" style={{ flex: 1, minWidth: 0 }}>
+          {/* Header nhỏ: giờ, phân loại, người thân, badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
             {entry.entry_time && (
-              <span className="daily-pill-time" style={catInfo ? { color: catInfo.color, background: catInfo.bg } : undefined}>
-                <Clock size={11} /> {entry.entry_time}
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: catInfo?.color || 'var(--amber)', background: 'var(--amber-bg)', padding: '1px 5px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <Clock size={10} /> {entry.entry_time}
               </span>
             )}
             {catInfo && (
-              <span className="daily-pill-cat" style={{ background: catInfo.bg, color: catInfo.color }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: catInfo.color, background: catInfo.bg, padding: '1px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <span>{catInfo.icon}</span> {catInfo.label}
               </span>
             )}
             {isFirstTimeEntry && (
-              <span className="daily-pill-first">
-                <Sparkles size={11} /> Lần đầu
+              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#06b6d4', background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: 6 }}>
+                ✨ Lần đầu
               </span>
             )}
             {isSpecialEntry && (
-              <span className="daily-pill-special">
-                <Star size={11} /> Đặc biệt
+              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 6 }}>
+                🌟 Đặc biệt
               </span>
             )}
             {attachedPeople.map((p) => (
-              <span key={p.id} className="daily-pill-person" title={`Gắn với ${p.name}`}>
+              <span
+                key={p.id}
+                style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 800,
+                  color: '#c084fc',
+                  background: 'rgba(168, 85, 247, 0.18)',
+                  border: '1px solid rgba(168, 85, 247, 0.45)',
+                  padding: '1px 6px',
+                  borderRadius: 6,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
                 👤 {p.name}
               </span>
             ))}
           </div>
 
-          <div className="daily-card-actions">
-            <button
-              type="button"
-              className={`daily-card-btn ${entry.is_favorite ? 'fav' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleFavorite(entry)
-              }}
-              title={entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
-              aria-label={entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
-            >
-              <Star size={16} fill={entry.is_favorite ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              type="button"
-              className="daily-card-btn"
-              onClick={() => openEntry(entry)}
-              title="Sửa bài nhật ký"
-              aria-label="Sửa bài nhật ký"
-            >
-              <Pencil size={15} />
-            </button>
-          </div>
+          {/* Dòng chữ nội dung: 2 dòng gọn gàng, sạch sẽ */}
+          <p style={{ margin: '3px 0 0', color: 'var(--text-main)', fontSize: '0.82rem', fontWeight: 500, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'break-word' }}>
+            {cleanText}
+          </p>
         </div>
 
-        <div
-          className="daily-card-body"
-          onClick={() => openEntry(entry)}
-          title="Bấm để xem và sửa chi tiết"
-        >
-          {formatDisplayContent(entry.content)}
+        {/* Nút hành động bên phải */}
+        <div className="memory-card-actions" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <button
+            type="button"
+            className="memory-icon"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleFavorite(entry)
+            }}
+            title={entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+            aria-label={entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+            style={{ color: entry.is_favorite ? 'var(--amber)' : 'var(--text-muted)' }}
+          >
+            <Star size={16} fill={entry.is_favorite ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            type="button"
+            className="memory-icon"
+            onClick={(e) => {
+              e.stopPropagation()
+              openEntry(entry)
+            }}
+            title="Sửa bài nhật ký"
+            aria-label="Sửa bài nhật ký"
+          >
+            <Pencil size={15} />
+          </button>
         </div>
-
-        {entryMedias.length > 0 && (
-          <div className="daily-card-media">
-            {entryMedias.length === 1 ? (
-              <div
-                className="daily-single-media"
-                onClick={() => openMediaGallery(entryMedias, 0)}
-                title="Nhấn để xem toàn màn hình"
-              >
-                {/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entryMedias[0]) ? (
-                  <div style={{ position: 'relative', width: '100%', maxHeight: 280, background: '#000', borderRadius: 12, overflow: 'hidden' }}>
-                    <video src={entryMedias[0]} style={{ width: '100%', maxHeight: 280, objectFit: 'contain' }} preload="metadata" />
-                    <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.3)', color: '#fff' }}>
-                      <Play size={32} />
-                    </div>
-                  </div>
-                ) : (
-                  <img src={entryMedias[0]} alt="" loading="lazy" />
-                )}
-              </div>
-            ) : (
-              <div className="daily-media-grid">
-                {entryMedias.map((mediaUrl, idx) => {
-                  const isVid = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(mediaUrl)
-                  return (
-                    <div
-                      key={idx}
-                      className="daily-media-thumb"
-                      onClick={() => openMediaGallery(entryMedias, idx)}
-                      title={`Ảnh ${idx + 1}/${entryMedias.length} — Nhấn xem toàn màn hình`}
-                    >
-                      {isVid ? (
-                        <>
-                          <video src={mediaUrl} preload="metadata" muted />
-                          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.35)', color: '#fff' }}>
-                            <Play size={16} />
-                          </div>
-                        </>
-                      ) : (
-                        <img src={mediaUrl} alt="" loading="lazy" />
-                      )}
-                      {idx === 0 && (
-                        <span style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '1px 4px', borderRadius: 4 }}>
-                          +{entryMedias.length}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </article>
     )
   }
@@ -1633,12 +1693,12 @@ export function DailyPage() {
                 </button>
                 <label className="daily-date-label" title="Bấm để chọn ngày khác">
                   <Calendar size={13} style={{ color: 'var(--primary)' }} />
-                  <span>{longDate(new Date(date + 'T12:00:00'))}</span>
+                  <span>{viDisplayDate(date)}</span>
                   <input
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
                     aria-label="Chọn ngày nhật ký"
                   />
                 </label>
@@ -1980,7 +2040,7 @@ export function DailyPage() {
                   <div className="daily-extra-row-title">
                     <Sparkles size={12} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(82px, 1fr))', gap: 6 }}>
                     {/* Nút Hành động */}
                     <button
                       type="button"
@@ -2341,7 +2401,7 @@ export function DailyPage() {
             <div className="card" style={{ padding: 14, margin: 0, borderRadius: 16 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <h2 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký ${longDate(new Date(date + 'T12:00:00'))} (${todayEntries.length})`}
+                  <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký ${viDisplayDate(date)} (${todayEntries.length})`}
                 </h2>
 
                 <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)', overflowX: 'auto', maxWidth: '100%' }}>
@@ -2397,8 +2457,8 @@ export function DailyPage() {
               {loading ? (
                 <SkeletonList rows={3} height={72} />
               ) : todayEntries.length ? (
-                <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 330px)', minHeight: '230px', overflowY: 'auto' }}>
-                  {todayEntries.map((entry) => renderDailyEntryCard(entry, Boolean(keyword)))}
+                <div className="memory-list" style={{ maxHeight: 'calc(100vh - 330px)', minHeight: '230px', overflowY: 'auto' }}>
+                  {todayEntries.map((entry, i) => renderDailyEntryCard(entry, i, Boolean(keyword || filterType !== 'ALL')))}
                 </div>
               ) : (
                 <Empty icon={NotebookPen} colorClass="icon-box-emerald">
@@ -2410,7 +2470,7 @@ export function DailyPage() {
             </div>
           )}
 
-          {/* ════ CHẾ ĐỘ XEM: DẠNG THÁNG (MONTH VIEW) ════ */}
+          {/* ════ CHẾ ĐỘ XEM: DẠNG THÁNG (MONTH VIEW - MINI CALENDAR) ════ */}
           {viewMode === 'month' && (
             <div className="card" style={{ padding: 14, margin: 0, borderRadius: 16 }}>
               {/* Thanh chọn tháng dạng pills */}
@@ -2449,37 +2509,39 @@ export function DailyPage() {
                   {/* Header tháng và điều hướng tháng */}
                   <div className="mem-month-header-bar">
                     <div className="mem-month-title">
-                      <h3>Tháng {activeMonthGroup.month}, {activeMonthGroup.year}</h3>
-                      <span className="mem-month-badge">
+                      <strong>Tháng {activeMonthGroup.month}, {activeMonthGroup.year}</strong>
+                      <span>
                         {activeMonthGroup.entries.length} bài nhật ký {activeMonthGroup.totalPhotos > 0 && `· ${activeMonthGroup.totalPhotos} ảnh`}
                       </span>
                     </div>
 
-                    <div className="mem-month-nav">
+                    <div className="mem-month-nav-btns">
                       <button
                         type="button"
+                        className="mem-month-nav-btn"
                         onClick={goPrevMonth}
                         disabled={!hasPrevMonth}
-                        title="Tháng trước"
-                        aria-label="Tháng trước"
+                        title="Tháng trước đó"
+                        aria-label="Tháng trước đó"
                       >
                         <ChevronLeft size={16} />
                       </button>
                       <button
                         type="button"
+                        className="mem-month-nav-btn"
                         onClick={goNextMonth}
                         disabled={!hasNextMonth}
-                        title="Tháng sau"
-                        aria-label="Tháng sau"
+                        title="Tháng tiếp theo"
+                        aria-label="Tháng tiếp theo"
                       >
                         <ChevronRight size={16} />
                       </button>
                     </div>
                   </div>
 
-                  {/* Lưới Mini Calendar (T2 - CN) */}
+                  {/* Lưới Mini Calendar (T2 - CN) chuẩn CSS SharedEventsView */}
                   <div className="mem-mini-calendar" style={{ marginBottom: 14 }}>
-                    <div className="mem-mini-cal-header">
+                    <div className="mem-cal-grid-header">
                       <span>T2</span>
                       <span>T3</span>
                       <span>T4</span>
@@ -2489,9 +2551,9 @@ export function DailyPage() {
                       <span>CN</span>
                     </div>
 
-                    <div className="mem-mini-cal-grid">
+                    <div className="mem-cal-grid">
                       {calendarDays.map((cell, idx) => {
-                        if (!cell.dayNum) {
+                        if (cell.dayNum === null) {
                           return <div key={`empty-${idx}`} className="mem-cal-cell empty" />
                         }
 
@@ -2499,27 +2561,25 @@ export function DailyPage() {
                         const hasEvs = cell.hasEvents
 
                         return (
-                          <div
-                            key={`day-${cell.dayNum}`}
+                          <button
+                            key={cell.dateStr || `day-${cell.dayNum}`}
+                            type="button"
                             className={`mem-cal-cell ${hasEvs ? 'has-memory' : ''} ${isSelected ? 'selected' : ''}`}
                             onClick={() => {
-                              if (!cell.dateStr) return
-                              if (selectedCalDay === cell.dateStr) {
-                                setSelectedCalDay(null)
-                              } else {
-                                setSelectedCalDay(cell.dateStr)
-                                setDate(cell.dateStr)
+                              if (cell.hasEvents && cell.dateStr) {
+                                setSelectedCalDay(isSelected ? null : cell.dateStr)
                               }
                             }}
+                            disabled={!hasEvs}
                             title={
                               hasEvs
                                 ? `Ngày ${cell.dayNum}: ${cell.entries.length} bài nhật ký${cell.photosCount > 0 ? ` (${cell.photosCount} ảnh)` : ''} — Bấm để lọc`
-                                : `Ngày ${cell.dayNum}: Chưa có nhật ký — Bấm để chọn ghi nhật ký ngày này`
+                                : `Ngày ${cell.dayNum}: Chưa có nhật ký`
                             }
                           >
-                            <span className="mem-cal-num">{cell.dayNum}</span>
-                            {hasEvs && <span className="mem-cal-dot" />}
-                          </div>
+                            <span>{cell.dayNum}</span>
+                            {hasEvs && <div className="mem-cal-dot" />}
+                          </button>
                         )
                       })}
                     </div>
@@ -2527,24 +2587,25 @@ export function DailyPage() {
 
                   {/* Badge hiển thị nếu đang lọc theo ngày trong tháng */}
                   {selectedCalDay && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 10, marginBottom: 12 }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div className="mem-day-filter-badge" style={{ marginBottom: 12 }}>
+                      <span>
                         <Calendar size={13} /> Đang xem: Ngày {selectedCalDay.slice(8, 10)}/{selectedCalDay.slice(5, 7)}/{selectedCalDay.slice(0, 4)} ({monthEntries.length} bài)
                       </span>
                       <button
                         type="button"
                         onClick={() => setSelectedCalDay(null)}
-                        style={{ border: 0, background: 'transparent', color: 'var(--rose)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}
+                        title="Xem toàn bộ tháng"
+                        aria-label="Xem toàn bộ tháng"
                       >
-                        <X size={13} /> Xem toàn bộ tháng
+                        <X size={13} />
                       </button>
                     </div>
                   )}
 
                   {/* Danh sách bài nhật ký của tháng / ngày đã chọn */}
                   {monthEntries.length > 0 ? (
-                    <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 420px)', minHeight: '230px', overflowY: 'auto' }}>
-                      {monthEntries.map((entry) => renderDailyEntryCard(entry, true))}
+                    <div className="memory-list" style={{ maxHeight: 'calc(100vh - 420px)', minHeight: '230px', overflowY: 'auto' }}>
+                      {monthEntries.map((entry, i) => renderDailyEntryCard(entry, i, true))}
                     </div>
                   ) : (
                     <Empty icon={NotebookPen} colorClass="icon-box-emerald">
@@ -2567,8 +2628,8 @@ export function DailyPage() {
                             {g.entries.length} bài {g.totalPhotos > 0 && `· ${g.totalPhotos} ảnh`}
                           </span>
                         </div>
-                        <div style={{ display: 'grid', gap: 10 }}>
-                          {g.entries.map((entry) => renderDailyEntryCard(entry, true))}
+                        <div className="memory-list">
+                          {g.entries.map((entry, i) => renderDailyEntryCard(entry, i, true))}
                         </div>
                       </section>
                     ))
