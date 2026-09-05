@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { uploadMediaFile } from './storageService';
 
 const DB_NAME = 'DailyMangaCoversDB';
 const STORE_NAME = 'covers';
@@ -89,8 +90,8 @@ export async function fetchAndCacheCover(url: string, key: string): Promise<stri
 export async function uploadCoverToSupabase(slug: string, rawCoverUrl: string): Promise<string | null> {
   if (!supabase || !slug || !rawCoverUrl) return null;
   
-  // Nếu đã là link Supabase Storage thì không cần upload lại
-  if (rawCoverUrl.includes('supabase.co/storage/v1/object/public/')) {
+  // Nếu đã là link Cloudinary hoặc Supabase Storage thì không cần upload lại
+  if (rawCoverUrl.includes('cloudinary.com') || rawCoverUrl.includes('supabase.co/storage/v1/object/public/')) {
     return rawCoverUrl;
   }
 
@@ -100,21 +101,18 @@ export async function uploadCoverToSupabase(slug: string, rawCoverUrl: string): 
     const blob = await res.blob();
     if (!blob || blob.size < 500) return null;
 
-    const ext = blob.type.includes('png') ? 'png' : (blob.type.includes('webp') ? 'webp' : 'jpg');
-    const path = `manga-covers/${slug}.${ext}`;
+    const uploaded = await uploadMediaFile(blob, {
+      folder: 'manga-covers',
+      fileName: slug,
+      bucketFallback: PHOTO_BUCKET,
+      resourceType: 'image',
+    });
 
-    const { error: upErr } = await supabase.storage
-      .from(PHOTO_BUCKET)
-      .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
-
-    if (!upErr) {
-      const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
-      if (data?.publicUrl) {
-        return data.publicUrl;
-      }
+    if (uploaded?.url) {
+      return uploaded.url;
     }
   } catch (e) {
-    console.warn('[uploadCoverToSupabase error]', e);
+    console.warn('[uploadCoverToCloudinary error]', e);
   }
   return null;
 }

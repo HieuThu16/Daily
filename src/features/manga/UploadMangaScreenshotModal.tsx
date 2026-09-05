@@ -10,6 +10,7 @@ import {
   type HManga
 } from './hMangaService'
 import { saveHMangaScreenshot, type HMangaScreenshot } from './hMangaScreenshot'
+import { uploadMediaFile } from '../../lib/storageService'
 import { useToast } from '../ToastContext'
 import { Z } from '../../lib/zLayers'
 
@@ -233,12 +234,27 @@ export function UploadMangaScreenshotModal({
         setSavingProgress({ current: i + 1, total: selectedFiles.length })
 
         const dataUrl = await compressImage(item.file)
+        let finalUrl = dataUrl
+        try {
+          const uploaded = await uploadMediaFile(item.file, {
+            folder: 'manga-screenshots',
+            fileName: `${selectedManga.slug}_${Date.now()}_${i}`,
+            bucketFallback: 'daily-photos',
+            resourceType: 'image',
+          })
+          if (uploaded?.url) {
+            finalUrl = uploaded.url
+          }
+        } catch {
+          // Fallback to dataUrl
+        }
+
         const shot = await saveHMangaScreenshot({
           mangaSlug: selectedManga.slug,
           mangaTitle: selectedManga.title,
           chapterNumber: selectedManga.chapterNum || 1,
           chapterName: chapterNameInput.trim() || selectedManga.chapterName || 'Ảnh từ máy',
-          imageData: dataUrl,
+          imageData: finalUrl,
         })
         savedList.push(shot)
       }

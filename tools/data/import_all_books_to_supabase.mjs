@@ -37,7 +37,27 @@ async function uploadCoverImage(mediaItemId, coverPath, title) {
   try {
     const fileBuf = await fs.readFile(coverPath);
     const ext = path.extname(coverPath).toLowerCase();
-    const contentType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+    if (process.env.CLOUDINARY_CLOUD_NAME) {
+      try {
+        const { v2: cloudinary } = await import('cloudinary');
+        cloudinary.config({
+          cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+          api_key: process.env.CLOUDINARY_API_KEY,
+          api_secret: process.env.CLOUDINARY_API_SECRET,
+          secure: true,
+        });
+        const res = await cloudinary.uploader.upload(`data:image/jpeg;base64,${fileBuf.toString('base64')}`, {
+          folder: 'media-covers',
+          public_id: `${slugify(title)}-${mediaItemId.slice(0, 8)}`,
+          resource_type: 'image',
+          overwrite: true,
+        });
+        if (res?.secure_url) return res.secure_url;
+      } catch (cErr) {
+        console.warn('Cloudinary upload error in import, fallback to Supabase:', cErr.message);
+      }
+    }
+
     const storagePath = `covers/${slugify(title)}-${mediaItemId.slice(0, 8)}.jpg`;
 
     const { error: upErr } = await supabase.storage

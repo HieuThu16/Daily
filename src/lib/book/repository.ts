@@ -3,6 +3,7 @@ import { localDate } from '../date'
 import type { BookChapterMeta, BookDocument, BookReadingLog } from '../../types'
 import { splitLongChapters, withOffsets } from './chapters'
 import type { RawBook } from './types'
+import { uploadMediaFile, deleteMediaFile } from '../storageService'
 
 export const CHARS_PER_PAGE = 1800
 const CHAPTER_INSERT_BATCH = 20
@@ -308,16 +309,17 @@ async function currentUserId(): Promise<string> {
  * vẫn hiện ảnh cũ.
  */
 export async function uploadCover(mediaItemId: string, blob: Blob): Promise<string> {
-  const db = client()
-  const path = coverPath(await currentUserId(), mediaItemId)
+  const userId = await currentUserId()
+  const fileName = `${userId}_${mediaItemId}`
 
-  const { error } = await db.storage
-    .from(COVER_BUCKET)
-    .upload(path, blob, { contentType: 'image/jpeg', upsert: true })
-  if (error) throw new Error(error.message)
+  const uploaded = await uploadMediaFile(blob, {
+    folder: 'book-covers',
+    fileName,
+    bucketFallback: COVER_BUCKET,
+    resourceType: 'image',
+  })
 
-  const { data } = db.storage.from(COVER_BUCKET).getPublicUrl(path)
-  return `${data.publicUrl}?v=${Date.now()}`
+  return `${uploaded.url}${uploaded.url.includes('?') ? '&' : '?'}v=${Date.now()}`
 }
 
 export async function saveCoverUrl(mediaItemId: string, url: string | null): Promise<void> {
@@ -326,15 +328,17 @@ export async function saveCoverUrl(mediaItemId: string, url: string | null): Pro
 }
 
 /**
- * Xoá file trong bucket rồi mới xoá URL trong DB.
- * Xoá file lỗi thì ném luôn, **không** xoá `cover_url`: bucket là public nên bỏ qua lỗi
- * ở đây sẽ để lại một file ảnh ai cũng tải được ở đường dẫn đoán ra được, mà DB thì không
- * còn dấu vết nào để dọn. Giữ hai bên khớp nhau và để người dùng thử lại.
+ * Xoá file trong Cloudinary / Supabase Storage rồi mới xoá URL trong DB.
  */
 export async function removeCover(mediaItemId: string): Promise<void> {
   const db = client()
-  const path = coverPath(await currentUserId(), mediaItemId)
-  const { error } = await db.storage.from(COVER_BUCKET).remove([path])
-  if (error) throw new Error(error.message)
+  const { data } = await db.from('media_items').select('cover_url').eq('id', mediaItemId).maybeSingle()
+  const existingUrl = data?.cover_url
+  if (existingUrl) {
+    await deleteMediaFile(existingUrl, COVER_BUCKET).catch(() => {})
+  } else {
+    const path = coverPath(await currentUserId(), mediaItemId)
+    await deleteMediaFile(path, COVER_BUCKET).catch(() => {})
+  }
   await saveCoverUrl(mediaItemId, null)
 }
