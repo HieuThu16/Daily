@@ -4,7 +4,7 @@ import {
   Play, Sparkles, X, Heart, BookOpen, Columns2,
   ArrowUpDown, Search, Volume2, VolumeX, Calendar,
   Download, TreePine, RotateCcw, List, Smartphone, Flower2,
-  Menu
+  Menu, Eye, EyeOff, Maximize2
 } from 'lucide-react'
 import type { SharedEvent } from '../../types'
 import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
@@ -16,6 +16,7 @@ export interface MemoryBookViewProps {
   events: SharedEvent[]
   personName?: string
   roomCode?: string | null
+  initialViewMode?: MemoryViewType
   onClose: () => void
 }
 
@@ -332,7 +333,7 @@ function Flower2DDetailModal({
 /* ═══════════════════════════════════════════════════════════════════
  * MAIN COMPONENT: MemoryBookView
  * ═══════════════════════════════════════════════════════════════════ */
-export function MemoryBookView({ events, personName, onClose }: MemoryBookViewProps) {
+export function MemoryBookView({ events, personName, roomCode: _roomCode, initialViewMode, onClose }: MemoryBookViewProps) {
   // Phân nhóm toàn bộ kỷ niệm theo từng năm
   const yearlyGroups = useMemo(() => {
     const map = new Map<number, SharedEvent[]>()
@@ -356,8 +357,11 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       })
   }, [events])
 
-  // 4 CHẾ ĐỘ XEM: 'tree' | 'book' | 'month' | 'list'
-  const [viewMode, setViewMode] = useState<MemoryViewType>('tree')
+  // 4 CHẾ ĐỘ XEM ĐỘC LẬP: 'tree' | 'book' | 'month' | 'list'
+  const [viewMode, setViewMode] = useState<MemoryViewType>(initialViewMode || 'book')
+
+  // Chế độ toàn màn hình ảnh (Zen mode — ẩn thanh tiến độ & nút quay về để toàn bộ màn hình là ảnh)
+  const [isZenMode, setIsZenMode] = useState<boolean>(false)
 
   // Chế độ lật trang trong 'book': 'spread' (Sách 2 bên) | 'single' (Trang đơn)
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('spread')
@@ -608,6 +612,20 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     note?: string
     date?: string
   } | null>(null)
+  const [isClosingGallery, setIsClosingGallery] = useState(false)
+
+  const openGallery = useCallback((images: string[], currentIndex: number, title?: string, date?: string) => {
+    setIsClosingGallery(false)
+    setActiveGallery({ images, currentIndex, title, date })
+  }, [])
+
+  const closeGallery = useCallback(() => {
+    setIsClosingGallery(true)
+    setTimeout(() => {
+      setActiveGallery(null)
+      setIsClosingGallery(false)
+    }, 220)
+  }, [])
 
   const goNextSpread = useCallback(() => {
     if (currentSpread >= totalSpreads - 1 || turningState) return
@@ -616,7 +634,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     setTimeout(() => {
       setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
       setTurningState(null)
-    }, 340)
+    }, 380)
   }, [currentSpread, totalSpreads, turningState, soundEnabled])
 
   const goPrevSpread = useCallback(() => {
@@ -626,7 +644,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     setTimeout(() => {
       setCurrentSpread((s) => Math.max(s - 1, 0))
       setTurningState(null)
-    }, 340)
+    }, 380)
   }, [currentSpread, turningState, soundEnabled])
 
   const goNextPage = useCallback(() => {
@@ -677,7 +695,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (activeGallery) {
-        if (e.key === 'Escape') setActiveGallery(null)
+        if (e.key === 'Escape') closeGallery()
         return
       }
       if (selectedFlowerMonth !== null) {
@@ -704,13 +722,13 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeGallery, selectedFlowerMonth, isSearchOpen, isMenuOpen, goNextPage, goPrevPage, onClose])
 
-  // Cử chỉ vuốt chạm siêu mượt, không rác render
+  // Cử chỉ vuốt chạm siêu mượt, chuẩn xác trên mọi thiết bị màn hình cảm ứng & chuột
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const touchMovedRef = useRef<boolean>(false)
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement
-    if (target.closest('button, input, a, .search-input-field')) return
+    if (target.closest('button, input, a, .search-input-field, .polaroid-zoom-badge, .popup-btn-icon')) return
     touchStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() }
     touchMovedRef.current = false
   }
@@ -719,7 +737,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     if (!touchStartRef.current) return
     const diffX = Math.abs(e.clientX - touchStartRef.current.x)
     const diffY = Math.abs(e.clientY - touchStartRef.current.y)
-    if (diffX > 8 || diffY > 8) {
+    if (diffX > 6 || diffY > 6) {
       touchMovedRef.current = true
     }
   }
@@ -741,8 +759,8 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       return
     }
 
-    // B. Vuốt ngang (Swipe): Nhạy bén, lướt ngón tay là lật ngay
-    if (absX > 28 && absX > absY * 0.9) {
+    // B. Vuốt ngang (Swipe): Cực nhạy trên mobile, góc vuốt tự nhiên của ngón cái
+    if (absX > 20 && absX > absY * 0.5) {
       if (diffX < 0) {
         goNextPage()
       } else {
@@ -751,15 +769,22 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       return
     }
 
-    // C. Chạm nhẹ vào 2 bên trang sách (Tap):
-    if (absX < 18 && absY < 18 && elapsed < 450) {
+    // C. Chạm ngón tay lật sách (Tap): Chạm nửa phải lật tới, chạm nửa trái lật lùi
+    if (absX <= 20 && elapsed < 450) {
       const target = e.target as HTMLElement
-      if (target.closest('.polaroid-frame, .polaroid-hero-frame')) return
+      // Nếu chạm vào nút phóng to ảnh hoặc video controls thì không lật sách
+      if (target.closest('.polaroid-zoom-badge, video, audio')) return
 
       const rect = chassisRef.current?.getBoundingClientRect()
       if (rect) {
         const clickX = e.clientX - rect.left
         if (clickX > rect.width * 0.5) {
+          goNextPage()
+        } else {
+          goPrevPage()
+        }
+      } else {
+        if (e.clientX > window.innerWidth * 0.5) {
           goNextPage()
         } else {
           goPrevPage()
@@ -804,7 +829,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                   style={{ width: 68, padding: '4px 4px 10px 4px', transform: `rotate(${idx === 1 ? 0 : idx === 0 ? -3 : 3}deg)` }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    setActiveGallery({ images: content.images || [], currentIndex: idx })
+                    openGallery(content.images || [], idx)
                   }}
                 >
                   <SafeMediaImage src={img} alt="" style={{ width: '100%', height: 48, objectFit: 'cover' }} />
@@ -967,41 +992,71 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             </div>
           )}
 
-          {/* Khung ảnh Polaroid cân bằng */}
+          {/* Khung ảnh Polaroid cân bằng, ảnh to rực rỡ chiếm trọn trang */}
           {pageImages.length > 0 && (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div className={`spread-images-stage ${pageImages.length === 1 ? 'single' : 'dual'}`}>
               {pageImages.map((imgUrl, imgIdx) => {
                 const isSingle = pageImages.length === 1
+                const imgOrder = day.allImages.indexOf(imgUrl) >= 0 ? day.allImages.indexOf(imgUrl) : 0
                 return (
                   <div
                     key={imgIdx}
-                    className="polaroid-hero-frame"
-                    style={{
-                      width: isSingle ? '92%' : '46%',
-                      minWidth: isSingle ? 180 : 120,
-                      margin: isSingle ? '4px auto 8px' : '4px',
-                    }}
-                    onClick={() =>
-                      setActiveGallery({
-                        images: day.allImages,
-                        currentIndex: day.allImages.indexOf(imgUrl) >= 0 ? day.allImages.indexOf(imgUrl) : 0,
-                        title: firstEvent?.title,
-                        date: `${day.dayNum}/${day.monthNum}/${day.yearNum}`,
-                      })
-                    }
-                    title="Chạm để mở ảnh to"
+                    className={`polaroid-hero-frame ${isSingle ? 'single-photo' : 'dual-photo'}`}
                   >
                     <div className="washi-tape-sakura" />
-                    {isVideo(imgUrl) ? (
-                      <div style={{ position: 'relative' }}>
-                        <video src={imgUrl} poster={getVideoPosterUrl(imgUrl)} playsInline muted style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover' }} />
-                        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.25)' }}>
-                          <Play size={24} fill="#ffffff" color="#ffffff" />
+                    
+                    <div className="polaroid-media-box">
+                      {isVideo(imgUrl) ? (
+                        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                          <video
+                            src={imgUrl}
+                            poster={getVideoPosterUrl(imgUrl)}
+                            playsInline
+                            muted
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <div
+                            style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.25)', cursor: 'pointer' }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openGallery(
+                                day.allImages,
+                                imgOrder,
+                                firstEvent?.title,
+                                `${day.dayNum}/${day.monthNum}/${day.yearNum}`
+                              )
+                            }}
+                          >
+                            <Play size={28} fill="#ffffff" color="#ffffff" />
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <SafeMediaImage src={imgUrl} alt="" className="polaroid-hero-photo" />
-                    )}
+                      ) : (
+                        <>
+                          <SafeMediaImage src={imgUrl} alt="" className="polaroid-hero-photo" />
+                          <div className="polaroid-gloss-glare" />
+                        </>
+                      )}
+
+                      {/* Nút phóng to ảnh mượt mà có animation kéo mở & thu nhỏ */}
+                      <button
+                        type="button"
+                        className="polaroid-zoom-badge"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openGallery(
+                            day.allImages,
+                            imgOrder,
+                            firstEvent?.title,
+                            `${day.dayNum}/${day.monthNum}/${day.yearNum}`
+                          )
+                        }}
+                        title="Chạm để phóng to ảnh toàn màn hình"
+                      >
+                        <Maximize2 size={11} />
+                        <span>Phóng to</span>
+                      </button>
+                    </div>
+
                     {firstEvent?.title && isSingle && (
                       <div className="polaroid-hero-caption">
                         {firstEvent.title}
@@ -1040,34 +1095,32 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
   const currentIsVid = currentPhoto ? isVideo(currentPhoto) : false
 
   return (
-    <div className={`memory-book-fullscreen ${layoutMode === 'spread' && viewMode === 'book' ? 'spread-mode' : ''}`}>
+    <div className={`memory-book-fullscreen ${layoutMode === 'spread' && viewMode === 'book' ? 'spread-mode' : ''} ${isZenMode ? 'zen-mode' : ''}`}>
+      {/* Nút khôi phục thanh công cụ khi đang ở chế độ toàn màn hình ảnh (Zen mode) */}
+      {isZenMode && (
+        <button
+          type="button"
+          className="zen-restore-floating-btn"
+          onClick={() => setIsZenMode(false)}
+          title="Hiện lại thanh tiến độ & nút điều khiển"
+        >
+          <Eye size={15} />
+          <span>Hiện thanh công cụ</span>
+        </button>
+      )}
+
       {/* ── TOP BAR: TIẾN ĐỘ & NÚT 3 GẠCH MENU (KHÔNG VƯỚNG TAY) ── */}
       <div className="memory-book-topbar">
         <div className="memory-book-top-left">
-          {viewMode !== 'tree' ? (
-            <button
-              type="button"
-              className="memory-book-back-btn"
-              onClick={() => {
-                if (soundEnabled) playPaperTurnSound()
-                setViewMode('tree')
-              }}
-              title="Quay lại Cây 3D"
-            >
-              <TreePine size={15} />
-              <span>Cây 3D</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="memory-book-back-btn"
-              onClick={onClose}
-              title="Thoát"
-            >
-              <ArrowLeft size={15} />
-              <span>Thoát</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="memory-book-back-btn"
+            onClick={onClose}
+            title="Quay lại"
+          >
+            <ArrowLeft size={16} />
+            <span>Quay lại</span>
+          </button>
         </div>
 
         {/* PHẦN GIỮA: THANH TIẾN ĐỘ SCRUBBER Ở TRÊN KHI Ở CHẾ ĐỘ SÁCH */}
@@ -1110,8 +1163,20 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
           </div>
         )}
 
-        {/* PHẦN PHẢI: NÚT 3 GẠCH MENU & NÚT ĐÓNG */}
+        {/* PHẦN PHẢI: NÚT TOÀN MÀN HÌNH ẢNH + NÚT 3 GẠCH MENU & NÚT ĐÓNG */}
         <div className="memory-book-top-actions">
+          {viewMode === 'book' && (
+            <button
+              type="button"
+              className="memory-book-zen-btn"
+              onClick={() => setIsZenMode(true)}
+              title="Ẩn thanh tiến độ & nút quay về để toàn bộ màn hình là ảnh"
+            >
+              <EyeOff size={15} />
+              <span className="zen-btn-text">Toàn ảnh</span>
+            </button>
+          )}
+
           <button
             type="button"
             className={`memory-book-menu-trigger-btn ${isMenuOpen ? 'active' : ''}`}
@@ -1234,6 +1299,19 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                   >
                     <BookOpen size={14} />
                     <span>📄 1 Trang</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`menu-option-btn ${isZenMode ? 'active' : ''}`}
+                    onClick={() => {
+                      setIsZenMode((v) => !v)
+                      setIsMenuOpen(false)
+                    }}
+                    title="Ẩn thanh tiến độ & nút quay về để toàn bộ màn hình là ảnh"
+                  >
+                    {isZenMode ? <Eye size={14} /> : <EyeOff size={14} />}
+                    <span>{isZenMode ? 'Hiện công cụ' : 'Toàn màn hình ảnh'}</span>
                   </button>
                 </div>
               </div>
@@ -1629,7 +1707,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                         key={iIdx}
                         className="polaroid-frame"
                         style={{ width: 110, padding: '4px 4px 14px 4px', flexShrink: 0 }}
-                        onClick={() => setActiveGallery({ images: day.allImages, currentIndex: iIdx })}
+                        onClick={() => openGallery(day.allImages, iIdx)}
                       >
                         <SafeMediaImage src={img} alt="" style={{ width: '100%', height: 80, objectFit: 'cover' }} />
                       </div>
@@ -1737,13 +1815,20 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
         </div>
       )}
 
-      {/* Lightbox xem ảnh phóng to */}
+      {/* Lightbox xem ảnh phóng to mượt mà có animation mở dần và thu nhỏ khi tắt */}
       {activeGallery && currentPhoto && (
-        <div className="scrapbook-photo-modal" onClick={() => setActiveGallery(null)}>
-          <div className="scrapbook-photo-popup" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`scrapbook-photo-modal ${isClosingGallery ? 'closing' : 'opening'}`}
+          onClick={closeGallery}
+        >
+          <div
+            className={`scrapbook-photo-popup ${isClosingGallery ? 'closing' : 'opening'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="popup-top-controls">
               <div className="popup-counter">
                 🖼️ {activeGallery.currentIndex + 1} / {activeGallery.images.length}
+                {activeGallery.date && <span style={{ opacity: 0.85, marginLeft: 6, fontWeight: 500 }}>· {activeGallery.date}</span>}
               </div>
               <div className="popup-actions-right">
                 <a
@@ -1759,7 +1844,8 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                 <button
                   type="button"
                   className="popup-btn-icon close-btn"
-                  onClick={() => setActiveGallery(null)}
+                  onClick={closeGallery}
+                  title="Đóng (Esc)"
                 >
                   <X size={19} />
                 </button>
@@ -1776,6 +1862,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                       g ? { ...g, currentIndex: (g.currentIndex - 1 + g.images.length) % g.images.length } : null
                     )
                   }
+                  title="Ảnh trước"
                 >
                   <ChevronLeft size={24} />
                 </button>
@@ -1798,6 +1885,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                       g ? { ...g, currentIndex: (g.currentIndex + 1) % g.images.length } : null
                     )
                   }
+                  title="Ảnh tiếp theo"
                 >
                   <ChevronRight size={24} />
                 </button>

@@ -414,6 +414,9 @@
   perspective: 2400px;
   perspective-origin: 50% 50%;
   padding: 12px 16px 6px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Nút lật trang trái/phải (Sáng bóng, Lộng lẫy) */
@@ -1334,24 +1337,36 @@
   transform: scale(1.25);
 }
 
-/* ── MODAL PHÓNG TO ẢNH & XEM GALLERY (Pop-up Lightbox) ── */
+/* ── MODAL PHÓNG TO ẢNH & XEM GALLERY (Pop-up Lightbox với animation phóng to & thu nhỏ mượt mà) ── */
 .scrapbook-photo-modal {
   position: fixed;
   inset: 0;
   z-index: 10050;
-  background: rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  animation: photoModalFade 0.22s ease-out;
 }
 
-@keyframes photoModalFade {
+.scrapbook-photo-modal.opening {
+  animation: photoModalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.scrapbook-photo-modal.closing {
+  animation: photoModalFadeOut 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes photoModalFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes photoModalFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .scrapbook-photo-popup {
@@ -1363,15 +1378,50 @@
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 35px 80px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-direction: column;
-  animation: photoPopupZoom 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes photoPopupZoom {
-  from { transform: scale(0.92); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+.scrapbook-photo-popup.opening {
+  animation: photoPopupExpand 0.36s cubic-bezier(0.18, 0.9, 0.32, 1.25) forwards;
+  will-change: transform, opacity;
+}
+
+.scrapbook-photo-popup.closing {
+  animation: photoPopupShrink 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes photoPopupExpand {
+  0% {
+    transform: scale(0.62) translateY(32px);
+    opacity: 0;
+    filter: blur(6px);
+  }
+  65% {
+    transform: scale(1.02) translateY(-2px);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+@keyframes photoPopupShrink {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    transform: scale(0.62) translateY(32px);
+    opacity: 0;
+    filter: blur(6px);
+  }
 }
 
 .popup-top-controls {
@@ -1889,29 +1939,35 @@
 
 @keyframes pageTurnForward {
   0% {
-    transform: rotateY(0deg);
+    transform: rotateY(0deg) translateZ(0);
+  }
+  42% {
+    transform: rotateY(-80deg) translateZ(14px) scale(1.02);
   }
   100% {
-    transform: rotateY(-180deg);
+    transform: rotateY(-180deg) translateZ(0) scale(1);
   }
 }
 
 @keyframes pageTurnBackward {
   0% {
-    transform: rotateY(0deg);
+    transform: rotateY(0deg) translateZ(0);
+  }
+  42% {
+    transform: rotateY(80deg) translateZ(14px) scale(1.02);
   }
   100% {
-    transform: rotateY(180deg);
+    transform: rotateY(180deg) translateZ(0) scale(1);
   }
 }
 
 .spread-flipping-leaf.flip-forward.animating {
-  animation: pageTurnForward 0.34s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: pageTurnForward 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform;
 }
 
 .spread-flipping-leaf.flip-backward.animating {
-  animation: pageTurnBackward 0.34s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: pageTurnBackward 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform;
 }
 
@@ -1922,31 +1978,31 @@
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transform-style: preserve-3d;
-  background: #ffffff;
+  background: #fffdfa;
 }
 
 .spread-flipping-leaf.flip-forward .leaf-face-front {
   border-radius: 0 14px 14px 0;
   transform: rotateY(0deg);
-  box-shadow: -15px 0 35px rgba(0, 0, 0, 0.25);
+  box-shadow: -22px 0 45px rgba(0, 0, 0, 0.35), 0 18px 30px rgba(0, 0, 0, 0.2);
 }
 
 .spread-flipping-leaf.flip-forward .leaf-face-back {
   border-radius: 14px 0 0 14px;
   transform: rotateY(180deg);
-  box-shadow: 15px 0 35px rgba(0, 0, 0, 0.25);
+  box-shadow: 22px 0 45px rgba(0, 0, 0, 0.35), 0 18px 30px rgba(0, 0, 0, 0.2);
 }
 
 .spread-flipping-leaf.flip-backward .leaf-face-front {
   border-radius: 14px 0 0 14px;
   transform: rotateY(0deg);
-  box-shadow: 15px 0 35px rgba(0, 0, 0, 0.25);
+  box-shadow: 22px 0 45px rgba(0, 0, 0, 0.35), 0 18px 30px rgba(0, 0, 0, 0.2);
 }
 
 .spread-flipping-leaf.flip-backward .leaf-face-back {
   border-radius: 0 14px 14px 0;
   transform: rotateY(180deg);
-  box-shadow: -15px 0 35px rgba(0, 0, 0, 0.25);
+  box-shadow: -22px 0 45px rgba(0, 0, 0, 0.35), 0 18px 30px rgba(0, 0, 0, 0.2);
 }
 
 /* Lớp bóng uốn cong động khi lật trang */
@@ -2148,58 +2204,150 @@
 
 /* Khung ảnh Polaroid bên trái & bên phải */
 .spread-page-content {
-  height: calc(100% - 50px);
+  height: calc(100% - 46px);
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 8px 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .spread-page-content::-webkit-scrollbar {
-  width: 5px;
+  width: 4px;
 }
 .spread-page-content::-webkit-scrollbar-thumb {
   background: rgba(245, 158, 11, 0.3);
   border-radius: 4px;
 }
 
+/* Sân khấu dàn trang ảnh chiếm trọn diện tích sách */
+.spread-images-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.spread-images-stage.single {
+  flex-direction: column;
+}
+
+.spread-images-stage.dual {
+  flex-direction: row;
+  align-items: stretch;
+}
+
 /* Ảnh Hero lớn dán Polaroid nghệ thuật */
 .polaroid-hero-frame {
   position: relative;
   background: #ffffff;
-  padding: 9px 9px 24px 9px;
-  border-radius: 4px;
+  border-radius: 6px;
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.12),
-    0 2px 6px rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  cursor: pointer;
+    0 12px 28px rgba(0, 0, 0, 0.16),
+    0 3px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   transition: transform 0.22s ease, box-shadow 0.22s ease;
-  max-width: 95%;
-  margin: 4px auto 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.polaroid-hero-frame.single-photo {
+  flex: 1;
+  width: 95%;
+  max-width: 96%;
+  height: 100%;
+  max-height: calc(100% - 2px);
+  padding: 8px 8px 18px 8px;
+  margin: 0 auto;
+}
+
+.polaroid-hero-frame.dual-photo {
+  flex: 1;
+  width: 48%;
+  height: 100%;
+  max-height: calc(100% - 2px);
+  padding: 6px 6px 14px 6px;
 }
 
 .polaroid-hero-frame:hover {
-  transform: scale(1.02) rotate(-0.5deg) !important;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.18);
+  transform: scale(1.015) rotate(-0.4deg);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.22);
+}
+
+/* Hộp chứa media ảnh / video có hiệu ứng bóng gương & góc bo */
+.polaroid-media-box {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0f172a;
 }
 
 .polaroid-hero-photo {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  height: 100%;
   object-fit: cover;
-  border-radius: 2px;
-  background: #f1f5f9;
+  border-radius: 4px;
+  display: block;
+}
+
+/* Lớp bóng gương phủ lên ảnh tạo cảm giác giấy in ảnh cao cấp */
+.polaroid-gloss-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.06) 38%,
+    transparent 60%
+  );
+}
+
+/* Nút phóng to ảnh mượt mà */
+.polaroid-zoom-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.polaroid-zoom-badge:hover {
+  background: rgba(225, 29, 72, 0.9);
+  border-color: rgba(225, 29, 72, 0.9);
+  transform: scale(1.08);
 }
 
 .polaroid-hero-caption {
-  margin-top: 10px;
-  font-size: 0.86rem;
+  margin-top: 8px;
+  font-size: 0.85rem;
   font-weight: 800;
   color: #334155;
   text-align: center;
   font-family: 'Patrick Hand', cursive, "Outfit", sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Băng dính Washi hoa đào Play Together */
@@ -2248,14 +2396,93 @@
 /* Responsive quy tắc khi màn hình hẹp */
 @media (max-width: 768px) {
   .book-3d-chassis-spread {
-    height: calc(100vh - 110px);
+    height: calc(100vh - 66px);
     max-height: 560px;
   }
   .spread-date-daynum {
     font-size: 1.3rem;
   }
   .polaroid-hero-frame {
-    padding: 6px 6px 18px 6px;
+    padding: 6px 6px 14px 6px;
+  }
+}
+
+/* ── CHẾ ĐỘ TOÀN MÀN HÌNH ẢNH (ZEN / IMMERSIVE PHOTO MODE) ── */
+.memory-book-fullscreen.zen-mode .memory-book-topbar {
+  display: none !important;
+}
+
+.memory-book-fullscreen.zen-mode .memory-book-stage {
+  padding: 4px 6px 2px;
+  height: 100vh;
+}
+
+.memory-book-fullscreen.zen-mode .book-3d-chassis-spread {
+  height: calc(100vh - 8px);
+  max-height: 99vh;
+}
+
+.memory-book-fullscreen.zen-mode .book-3d-chassis {
+  height: calc(100vh - 8px);
+  max-height: 99vh;
+}
+
+.zen-restore-floating-btn {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 10020;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.76);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(245, 158, 11, 0.45);
+  color: #fef08a;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  transition: all 0.2s ease;
+  opacity: 0.88;
+}
+
+.zen-restore-floating-btn:hover {
+  opacity: 1;
+  transform: scale(1.04);
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.memory-book-zen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+  background: rgba(254, 243, 199, 0.85);
+  color: #78350f;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.memory-book-zen-btn:hover {
+  background: #fef3c7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+
+@media (max-width: 640px) {
+  .zen-btn-text {
+    display: none;
+  }
+  .memory-book-zen-btn {
+    padding: 6px 8px;
   }
 }
 

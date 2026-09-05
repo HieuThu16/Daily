@@ -3,7 +3,7 @@ import {
   ArrowLeft, CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
   Filter, Heart, ImagePlus, LayoutGrid, List, Mail, MapPin, Maximize2,
   MoreVertical, Pencil, Plus, RotateCcw, Trash2,
-  UserPlus, Video, Loader2, X, BookOpen, Image as ImageIcon
+  UserPlus, Video, Loader2, X, BookOpen, Image as ImageIcon, TreePine
 } from 'lucide-react'
 import { MemoryBookView } from './MemoryBookView'
 import { supabase } from '../../lib/supabase'
@@ -210,6 +210,7 @@ export function SharedEventsView({
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>('ALL')
   const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null)
   const [showMemoryBook, setShowMemoryBook] = useState(false)
+  const [memoryBookMode, setMemoryBookMode] = useState<'tree' | 'book'>('book')
 
   const [pendingMedia, setPendingMedia] = useState<PendingMediaItem[]>([])
   const abortUploadRef = useRef(false)
@@ -1571,25 +1572,34 @@ export function SharedEventsView({
         <div className="mem-view-toggle">
           <button
             type="button"
-            className={viewMode === 'month' ? 'active' : ''}
-            onClick={() => setViewMode('month')}
+            className={!showMemoryBook && viewMode === 'month' ? 'active' : ''}
+            onClick={() => {
+              setShowMemoryBook(false)
+              setViewMode('month')
+            }}
             title="Xem theo dạng tháng"
           >
-            <CalendarDays size={14} /> <span>Dạng tháng</span>
+            <CalendarDays size={14} /> <span>12 Tháng</span>
           </button>
           <button
             type="button"
-            className={viewMode === 'timeline' ? 'active' : ''}
-            onClick={() => setViewMode('timeline')}
+            className={!showMemoryBook && viewMode === 'timeline' ? 'active' : ''}
+            onClick={() => {
+              setShowMemoryBook(false)
+              setViewMode('timeline')
+            }}
             title="Xem dạng danh sách timeline"
           >
             <List size={14} /> <span>Danh sách</span>
           </button>
           <button
             type="button"
-            className={`mem-view-book-btn ${showMemoryBook ? 'active' : ''}`}
-            onClick={() => setShowMemoryBook(true)}
-            title="Mở Sách Kỷ niệm 3D: Cây kỷ niệm 3D 12 tháng xoay 360 độ & lật trang chân thực"
+            className={`mem-view-book-btn ${showMemoryBook && memoryBookMode === 'book' ? 'active' : ''}`}
+            onClick={() => {
+              setMemoryBookMode('book')
+              setShowMemoryBook(true)
+            }}
+            title="Mở Sách Kỷ niệm 3D: Album lật sách 3D chân thực"
             style={{
               color: '#d97706',
               fontWeight: 800,
@@ -1599,6 +1609,24 @@ export function SharedEventsView({
             }}
           >
             <BookOpen size={14} /> <span>📖 Sách 3D</span>
+          </button>
+          <button
+            type="button"
+            className={`mem-view-tree-btn ${showMemoryBook && memoryBookMode === 'tree' ? 'active' : ''}`}
+            onClick={() => {
+              setMemoryBookMode('tree')
+              setShowMemoryBook(true)
+            }}
+            title="Mở Cây Kỷ niệm 3D: Cây hoa anh đào 3D 12 tháng xoay 360 độ"
+            style={{
+              color: '#e11d48',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <TreePine size={14} /> <span>🌸 Cây 3D</span>
           </button>
         </div>
 
@@ -2470,12 +2498,13 @@ export function SharedEventsView({
         )
       })()}
 
-      {/* ── Quyển sách Kỷ niệm 3D (Toàn màn hình riêng biệt có nút Back) ── */}
+      {/* ── Quyển sách Kỷ niệm 3D & Cây 3D riêng biệt (Có nút Back) ── */}
       {showMemoryBook && (
         <MemoryBookView
           events={sorted}
           personName={partnerDisplayName}
           roomCode={roomCode}
+          initialViewMode={memoryBookMode}
           onClose={() => setShowMemoryBook(false)}
         />
       )}
