@@ -3,6 +3,7 @@ import { Camera, Loader2, Pencil, Plus, Trash2, UtensilsCrossed, X } from 'lucid
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { compressForUpload } from '../lib/photo'
+import { uploadMediaFile } from '../lib/storageService'
 import { useToast } from './ToastContext'
 import { Modal } from './shared'
 import { FoodPeriodView, PeriodSelector } from './nutrition/NutritionPeriodViews'
@@ -150,25 +151,27 @@ export function NutritionPage() {
         ext = compressed.ext
       }
 
-      const path = `nutrition/${currentDate}/${crypto.randomUUID()}.${ext}`
-      const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+      const fileId = crypto.randomUUID()
+      const path = `nutrition/${currentDate}/${fileId}.${ext}`
 
-      const { error: uploadErr } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(path, uploadBlob, { contentType, upsert: true })
-
-      if (uploadErr) {
-        showToast('❌ Tải file lên thất bại: ' + uploadErr.message, 'delete')
+      let publicUrl = ''
+      try {
+        const uploaded = await uploadMediaFile(uploadBlob, {
+          folder: `nutrition/${currentDate}`,
+          fileName: fileId,
+          bucketFallback: PHOTO_BUCKET,
+          resourceType: isVideo ? 'video' : 'image',
+        })
+        publicUrl = uploaded.url
+      } catch (uploadErr: any) {
+        showToast('❌ Tải file lên thất bại: ' + uploadErr?.message, 'delete')
         setFoodUploading(false)
         return
       }
 
-      const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-      const publicUrl = pubData.publicUrl
-
       setFoodMedia({
         url: publicUrl,
-        path,
+        path: publicUrl.includes('cloudinary.com') ? publicUrl : path,
         type: isVideo ? 'video' : 'image',
       })
       showToast(isVideo ? '🎬 Đã tải video món ăn' : '🖼️ Đã tải ảnh món ăn')

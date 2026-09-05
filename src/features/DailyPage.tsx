@@ -19,6 +19,8 @@ import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
 import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 import { compressForUpload } from '../lib/photo'
 import { Memory3DCard } from './daily/Memory3DCard'
+import { deleteStorageFile, deleteStorageFiles } from '../lib/storageDelete'
+import { uploadMediaFile } from '../lib/storageService'
 
 export const DEFAULT_DAILY_CATEGORIES: DailyCategoryItem[] = []
 
@@ -403,24 +405,26 @@ export function DailyPage() {
           ext = compressed.ext
         }
 
-        const path = `${date}/${crypto.randomUUID()}.${ext}`
-        const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+        const fileId = crypto.randomUUID()
+        const path = `${date}/${fileId}.${ext}`
 
-        const { error: uploadErr } = await supabase.storage
-          .from(PHOTO_BUCKET)
-          .upload(path, uploadBlob, { contentType, upsert: true })
-
-        if (uploadErr) {
-          console.warn('Lỗi upload file:', uploadErr.message)
+        let publicUrl = ''
+        try {
+          const uploaded = await uploadMediaFile(uploadBlob, {
+            folder: `daily-photos/${date}`,
+            fileName: fileId,
+            bucketFallback: PHOTO_BUCKET,
+            resourceType: isVideo ? 'video' : 'image',
+          })
+          publicUrl = uploaded.url
+        } catch (uploadErr: any) {
+          console.warn('Lỗi upload file:', uploadErr?.message)
           continue
         }
 
-        const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-        const publicUrl = pubData.publicUrl
-
         const newItem: AttachedMedia = {
           url: publicUrl,
-          path,
+          path: publicUrl.includes('cloudinary.com') ? publicUrl : path,
           type: isVideo ? 'video' : 'image',
           name: file.name,
         }
@@ -444,8 +448,8 @@ export function DailyPage() {
   const handleRemoveFormMedia = async (index: number) => {
     const item = attachedMedias[index]
     if (!item) return
-    if (supabase && item.path) {
-      await supabase.storage.from(PHOTO_BUCKET).remove([item.path]).catch(() => {})
+    if (item.path) {
+      void deleteStorageFile(PHOTO_BUCKET, item.path)
     }
     setAttachedMedias((prev) => prev.filter((_, i) => i !== index))
     showToast('🗑️ Đã gỡ file đính kèm', 'delete')
@@ -1050,17 +1054,17 @@ export function DailyPage() {
           ext = compressed.ext
         }
 
-        const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
-        const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+        const fileId = crypto.randomUUID()
+        const path = `${editing.entry_date}/${fileId}.${ext}`
 
-        const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, uploadBlob, { contentType, upsert: true })
-        if (uploadError) {
-          console.warn('Lỗi upload:', uploadError)
-          continue
-        }
-        const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
-        currentImages.push(url)
-        currentPaths.push(path)
+        const uploaded = await uploadMediaFile(uploadBlob, {
+          folder: `daily-photos/${editing.entry_date}`,
+          fileName: fileId,
+          bucketFallback: PHOTO_BUCKET,
+          resourceType: isVideo ? 'video' : 'image',
+        })
+        currentImages.push(uploaded.url)
+        currentPaths.push(uploaded.url.includes('cloudinary.com') ? uploaded.url : path)
         added++
       } catch (err: any) {
         console.warn('Lỗi xử lý file:', err)
@@ -1102,12 +1106,12 @@ export function DailyPage() {
 
     if (typeof index === 'number') {
       const path = currentPaths[index]
-      if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]).catch(() => {})
+      if (path) void deleteStorageFile(PHOTO_BUCKET, path)
       currentImages.splice(index, 1)
       currentPaths.splice(index, 1)
     } else {
-      for (const p of currentPaths) {
-        if (p) await supabase.storage.from(PHOTO_BUCKET).remove([p]).catch(() => {})
+      if (currentPaths.length > 0) {
+        void deleteStorageFiles(PHOTO_BUCKET, currentPaths)
       }
       currentImages.length = 0
       currentPaths.length = 0
@@ -1148,6 +1152,19 @@ export function DailyPage() {
   }
 
   const removeEntry = async (id: string) => {
+    const target = items.find((i) => i.id === id) || (editing?.id === id ? editing : null)
+    if (target) {
+      const pathsToDelete: string[] = []
+      if (Array.isArray((target as any).image_paths)) {
+        pathsToDelete.push(...(target as any).image_paths.filter(Boolean))
+      } else if ((target as any).image_path) {
+        pathsToDelete.push((target as any).image_path)
+      }
+      if (pathsToDelete.length > 0) {
+        void deleteStorageFiles(PHOTO_BUCKET, pathsToDelete)
+      }
+    }
+
     await supabase!.from('daily_entries').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     setItems((prev) => prev.filter((i) => i.id !== id))
     showToast('🗑️ Đã xóa bài nhật ký thành công', 'delete')

@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase'
 import { useToast } from './ToastContext'
 import { forceReloadLatestVersion } from './PwaUpdateNotification'
 import { StorageBreakdownModal } from './profile/StorageBreakdownModal'
+import { CloudinaryUsageCard } from './profile/CloudinaryUsageCard'
 
 
 
@@ -462,6 +463,7 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
               <div className="settings-section-label">Dữ liệu & thiết bị</div>
               <div className="settings-group">
 
+                <CloudinaryUsageCard />
                 <StorageUsageRows />
 
                 {/* Tải dữ liệu về máy */}

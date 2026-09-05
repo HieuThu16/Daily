@@ -22,12 +22,14 @@
     "import:books": "node --import tsx tools/data/import_books_full_v2.mjs",
     "lint": "eslint . --max-warnings 9999",
     "lint:strict": "eslint .",
-    "build:ngontinh": "node --import tsx tools/data/build_ngontinh_index.mjs"
+    "build:ngontinh": "node --import tsx tools/data/build_ngontinh_index.mjs",
+    "migrate:cloudinary": "node tools/data/migrate_to_cloudinary.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "@types/leaflet": "^1.9.22",
     "cheerio": "^1.2.0",
+    "cloudinary": "^2.11.0",
     "dotenv": "^17.4.2",
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",

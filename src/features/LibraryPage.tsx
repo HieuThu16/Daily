@@ -17,6 +17,7 @@ import { RowMenu } from './library/RowMenu'
 import { fetchYouTubeMeta, parseMusicTitle, stripTitleNoise, youtubeVideoId, detectMusicGenre } from '../lib/youtubeMeta'
 import { cleanMovieTitle, fetchLinkPreview } from '../lib/linkPreview'
 import { normalizeStorageUrl } from '../lib/storageUrl'
+import { uploadMediaFile } from '../lib/storageService'
 import { shareMusicToAll } from '../lib/musicShare'
 import { dedupeMusic } from '../lib/musicDedupe'
 import { fetchYoutubeAudioInfo } from '../lib/youtubeAudioCache'
@@ -465,21 +466,24 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const openAddFromHeader = useCallback(() => openAdd(addKind), [addKind])
   useHeaderAction(`Thêm ${categories.find((c) => c.id === addKind)?.label ?? ''}`, openAddFromHeader)
 
-  /** Tải ảnh bìa từ máy lên Supabase Storage rồi đưa link công khai vào ô ảnh bìa. */
+  /** Tải ảnh bìa từ máy lên Cloudinary hoặc Supabase Storage rồi đưa link công khai vào ô ảnh bìa. */
   const uploadCoverFile = async (file: File) => {
-    if (!supabase) return showToast('Chưa cấu hình Supabase nên chưa tải ảnh lên được.', 'delete')
     setCoverUploading(true)
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const path = `${crypto.randomUUID()}.${ext}`
-    const { error } = await supabase.storage.from(COVER_BUCKET).upload(path, file)
-    if (error) {
-      showToast('Tải ảnh bìa lên thất bại', 'delete')
-    } else {
-      setCoverUrlVal(supabase.storage.from(COVER_BUCKET).getPublicUrl(path).data.publicUrl)
+    try {
+      const uploaded = await uploadMediaFile(file, {
+        folder: 'book-covers',
+        fileName: crypto.randomUUID(),
+        bucketFallback: COVER_BUCKET,
+        resourceType: 'image',
+      })
+      setCoverUrlVal(uploaded.url)
       showToast('Đã tải ảnh bìa lên')
+    } catch (err: any) {
+      showToast('Tải ảnh bìa lên thất bại: ' + (err?.message || ''), 'delete')
+    } finally {
+      setCoverUploading(false)
+      if (coverFileInput.current) coverFileInput.current.value = ''
     }
-    setCoverUploading(false)
-    if (coverFileInput.current) coverFileInput.current.value = ''
   }
 
   const openEdit = (item: Media) => {

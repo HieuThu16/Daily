@@ -13,6 +13,8 @@ import { DeleteButton, Empty, Modal, useQuery } from '../shared'
 import { useToast } from '../ToastContext'
 import { notifyPartner } from '../../lib/push'
 import { compressForUpload } from '../../lib/photo'
+import { deleteStorageFile, deleteStorageFiles } from '../../lib/storageDelete'
+import { uploadMediaFile } from '../../lib/storageService'
 
 const PHOTO_BUCKET = 'daily-photos'
 
@@ -385,17 +387,16 @@ export function SharedEventsView({
     let uploadedUrl = ''
     let isFallback = false
 
-    if (supabase) {
-      const contentType = file.type || (isVid ? 'video/mp4' : 'image/jpeg')
-      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blobToUpload, { upsert: true, contentType })
-      if (!upErr) {
-        const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-        if (pub?.publicUrl) {
-          uploadedUrl = pub.publicUrl
-        }
-      } else {
-        console.warn('Supabase storage upload error, fallback to data url:', upErr)
-      }
+    try {
+      const uploaded = await uploadMediaFile(blobToUpload, {
+        folder: `daily-photos/${folder}`,
+        fileName: uuid,
+        bucketFallback: PHOTO_BUCKET,
+        resourceType: isVid ? 'video' : 'image',
+      })
+      uploadedUrl = uploaded.url
+    } catch (upErr) {
+      console.warn('Upload error, fallback to data url:', upErr)
     }
 
     if (!uploadedUrl) {
@@ -403,7 +404,7 @@ export function SharedEventsView({
       if (uploadedUrl) isFallback = true
     }
 
-    return { url: uploadedUrl, path: uploadedUrl ? path : '', isFallback }
+    return { url: uploadedUrl, path: uploadedUrl.includes('cloudinary.com') ? uploadedUrl : (uploadedUrl ? path : ''), isFallback }
   }
 
 
@@ -720,6 +721,33 @@ export function SharedEventsView({
   }
 
   const deleteEvent = async (id: string) => {
+    const target = events.items.find((e) => e.id === id) || (viewing?.id === id ? viewing : null)
+    if (target) {
+      const pathsToDelete: string[] = []
+      if (Array.isArray(target.image_paths)) {
+        pathsToDelete.push(...target.image_paths.filter(Boolean))
+      } else if (target.image_path) {
+        pathsToDelete.push(target.image_path)
+      }
+      if (Array.isArray(target.images)) {
+        for (const url of target.images) {
+          try {
+            const u = new URL(url)
+            const marker = `/${PHOTO_BUCKET}/`
+            const idx = u.pathname.indexOf(marker)
+            if (idx !== -1) {
+              pathsToDelete.push(decodeURIComponent(u.pathname.slice(idx + marker.length).split('?')[0]))
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (pathsToDelete.length > 0) {
+        void deleteStorageFiles(PHOTO_BUCKET, Array.from(new Set(pathsToDelete)))
+      }
+    }
+
     const { error } = await supabase!.from('shared_events').update({ deleted_at: new Date().toISOString() }).eq('id', id)
     if (error) {
       showToast('❌ Chưa xoá được', 'delete')
@@ -798,12 +826,8 @@ export function SharedEventsView({
         }
       }
 
-      if (pathToDelete && supabase) {
-        try {
-          await supabase.storage.from(PHOTO_BUCKET).remove([pathToDelete])
-        } catch (e) {
-          console.warn('Lỗi khi xoá file Supabase Storage:', e)
-        }
+      if (pathToDelete) {
+        void deleteStorageFile(PHOTO_BUCKET, pathToDelete)
       }
 
       const nextImages = currentImages.filter((_, i) => i !== imgIdx)

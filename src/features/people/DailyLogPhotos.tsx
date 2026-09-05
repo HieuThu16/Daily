@@ -5,6 +5,8 @@ import { fileToUploadableJpeg } from '../../lib/photo'
 import type { PersonDailyPhoto } from '../../types'
 import { Modal } from '../shared'
 import { useToast } from '../ToastContext'
+import { deleteStorageFile } from '../../lib/storageDelete'
+import { uploadMediaFile } from '../../lib/storageService'
 
 const BUCKET = 'person-photos'
 
@@ -45,18 +47,27 @@ export function DailyLogPhotos({ personId, date }: Props) {
       const jpeg = await fileToUploadableJpeg(file)
       const body = jpeg ?? file
       const ext = jpeg ? 'jpg' : file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `${personId}/${date}/${crypto.randomUUID()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, body, { contentType: jpeg ? 'image/jpeg' : file.type || undefined })
-      if (uploadError) {
+      const fileId = crypto.randomUUID()
+      const path = `${personId}/${date}/${fileId}.${ext}`
+
+      let url = ''
+      try {
+        const uploaded = await uploadMediaFile(body, {
+          folder: `person-photos/${personId}/${date}`,
+          fileName: fileId,
+          bucketFallback: BUCKET,
+          resourceType: 'image',
+        })
+        url = uploaded.url
+      } catch (uploadError: any) {
         showToast('Tải ảnh lên thất bại')
         continue
       }
-      const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+
+      const storagePath = url.includes('cloudinary.com') ? url : path
       const { data, error } = await supabase
         .from('person_daily_photos')
-        .insert({ person_id: personId, log_date: date, url, storage_path: path })
+        .insert({ person_id: personId, log_date: date, url, storage_path: storagePath })
         .select()
         .single()
       if (!error && data) added.push(data as PersonDailyPhoto)
@@ -75,7 +86,7 @@ export function DailyLogPhotos({ personId, date }: Props) {
     setPreview(null)
     if (!supabase) return
     await supabase.from('person_daily_photos').delete().eq('id', photo.id)
-    if (photo.storage_path) await supabase.storage.from(BUCKET).remove([photo.storage_path])
+    if (photo.storage_path) void deleteStorageFile(BUCKET, photo.storage_path)
   }
 
   return (

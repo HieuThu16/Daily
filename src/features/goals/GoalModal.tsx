@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Edit3, FolderCog, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { Modal } from '../shared'
 import { compressForUpload } from '../../lib/photo'
+import { uploadMediaFile } from '../../lib/storageService'
 import { supabase } from '../../lib/supabase'
 import { useSharedCategories } from '../../lib/sharedCategories'
 import type { GoalItem } from '../../types'
@@ -72,17 +73,18 @@ export function GoalModal({ isOpen, onClose, onSave, initialGoal }: GoalModalPro
     setUploading(true)
     try {
       const compressed = await compressForUpload(file)
-      const path = `goals/${Date.now()}_${crypto.randomUUID()}.${compressed.ext}`
+      const fileId = `${Date.now()}_${crypto.randomUUID()}`
+      const path = `goals/${fileId}.${compressed.ext}`
 
-      const { error } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(path, compressed.blob, { contentType: 'image/jpeg', upsert: true })
+      const uploaded = await uploadMediaFile(compressed.blob, {
+        folder: 'goals',
+        fileName: fileId,
+        bucketFallback: PHOTO_BUCKET,
+        resourceType: 'image',
+      })
 
-      if (error) throw error
-
-      const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-      setImageUrl(pubData.publicUrl)
-      setImagePath(path)
+      setImageUrl(uploaded.url)
+      setImagePath(uploaded.url.includes('cloudinary.com') ? uploaded.url : path)
     } catch (err) {
       console.warn('Lỗi tải ảnh mục tiêu:', err)
     } finally {

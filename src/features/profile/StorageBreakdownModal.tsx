@@ -110,7 +110,9 @@ function checkIsImage(mime: string, name: string) {
   )
 }
 
-const SQL_MIGRATION_SNIPPET = `-- Chạy lệnh này trong Supabase > SQL Editor để phân tích chi tiết dung lượng:
+import { deleteStorageFile } from '../../lib/storageDelete'
+
+const SQL_MIGRATION_SNIPPET = `-- Chạy lệnh này trong Supabase > SQL Editor để phân tích chi tiết dung lượng & cấp quyền xóa tệp:
 create or replace function public.storage_details()
 returns table (
   id uuid,
@@ -152,8 +154,33 @@ as $$
   order by pg_total_relation_size(c.oid) desc;
 $$;
 
-grant execute on function public.storage_details() to authenticated;
-grant execute on function public.database_table_usage() to authenticated;`
+-- Cấp quyền xóa tệp cho Storage (tránh lỗi RLS chặn khi xóa)
+do $$ begin
+  create policy "public daily photos delete" on storage.objects for delete using (bucket_id = 'daily-photos');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "public media audio delete" on storage.objects for delete using (bucket_id = 'media-audio');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create policy "public person photos delete" on storage.objects for delete using (bucket_id = 'person-photos');
+exception when duplicate_object then null; end $$;
+
+-- Hàm RPC xóa tệp cấp cao
+create or replace function public.delete_storage_object(p_bucket text, p_name text)
+returns boolean language plpgsql security definer set search_path = public, storage as $$
+declare v_count int;
+begin
+  delete from storage.objects where bucket_id = p_bucket and name = p_name;
+  get diagnostics v_count = row_count;
+  return v_count > 0;
+end;
+$$;
+
+grant execute on function public.storage_details() to authenticated, anon;
+grant execute on function public.database_table_usage() to authenticated, anon;
+grant execute on function public.delete_storage_object(text, text) to authenticated, anon;`
 
 interface StorageBreakdownModalProps {
   onClose: () => void
@@ -416,15 +443,16 @@ export function StorageBreakdownModal({
     if (!deletingItem) return
     setDeletingBusy(true)
     try {
-      const res = await supabase?.storage
-        .from(deletingItem.bucket_id)
-        .remove([deletingItem.name])
+      const res = await deleteStorageFile(deletingItem.bucket_id, deletingItem.name)
 
-      if (res?.error) {
-        showToast(`Không thể xóa: ${res.error.message}`, 'delete')
+      if (!res.success) {
+        showToast(
+          `❌ Không thể xóa: ${res.error || 'Supabase từ chối quyền xóa'}. Vui lòng chạy câu lệnh SQL phân quyền.`,
+          'delete',
+        )
       } else {
         showToast(
-          `🗑️ Đã xóa tệp và giải phóng ${fmtBytes(deletingItem.size_bytes)}!`,
+          `🗑️ Đã xóa vĩnh viễn tệp khỏi Supabase và giải phóng ${fmtBytes(deletingItem.size_bytes)}!`,
           'success',
         )
         setItems((prev) => prev.filter((i) => i.id !== deletingItem.id))

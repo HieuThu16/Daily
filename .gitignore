@@ -11,6 +11,7 @@ public/data/ngontinh_manga.json
 data/bl_manga.json
 data/ngontinh_manga.json
 *.log
+tools/data/cloudinary_migration_map.json
 
 # Ảnh chụp của Playwright MCP, không thuộc mã nguồn
 .playwright-mcp/
