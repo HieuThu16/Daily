@@ -19,9 +19,9 @@ import {
   type PermissionState,
 } from '../lib/permissionStatus'
 import { supabase } from '../lib/supabase'
-import { sendNudge } from '../lib/pushNudge'
 import { useToast } from './ToastContext'
 import { forceReloadLatestVersion } from './PwaUpdateNotification'
+import { StorageBreakdownModal } from './profile/StorageBreakdownModal'
 
 
 
@@ -199,18 +199,55 @@ function fmtBytes(bytes: number) {
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[i]}`
 }
 
-function UsageRow({ label, used, quota, color }: { label: string; used: number; quota: number; color: string }) {
+function UsageRow({
+  label,
+  used,
+  quota,
+  color,
+  onClick,
+  showDetailHint,
+}: {
+  label: string
+  used: number
+  quota: number
+  color: string
+  onClick?: () => void
+  showDetailHint?: boolean
+}) {
   const percent = quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : 0
   return (
-    <div className="settings-row" style={{ display: 'block', cursor: 'default' }}>
+    <div
+      className={`settings-row ${onClick ? 'settings-row-interactive' : ''}`}
+      style={{ display: 'block', cursor: onClick ? 'pointer' : 'default' }}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      title={onClick ? 'Nhấn để xem video, ảnh và nơi chiếm nhiều dung lượng nhất' : undefined}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <span className="sr-label">{label}</span>
+        <span className="sr-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {label}
+          {onClick && <ChevronRight size={13} style={{ opacity: 0.6 }} />}
+        </span>
         <span style={{ fontSize: '0.78rem', fontWeight: 800, color }}>{percent}%</span>
       </div>
       <div style={{ height: 6, borderRadius: 99, background: 'var(--card-border)', margin: '6px 0 4px', overflow: 'hidden' }}>
         <div style={{ width: `${percent}%`, height: '100%', background: color, borderRadius: 99 }} />
       </div>
-      <span className="sr-sub">{fmtBytes(used)} / {fmtBytes(quota)} · còn {fmtBytes(Math.max(0, quota - used))}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+        <span className="sr-sub">{fmtBytes(used)} / {fmtBytes(quota)} · còn {fmtBytes(Math.max(0, quota - used))}</span>
+        {showDetailHint && (
+          <span className="usage-action-hint">
+            Xem video & nơi tốn dung lượng ➜
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -219,10 +256,12 @@ function UsageRow({ label, used, quota, color }: { label: string; used: number; 
  * Ba thanh dung lượng: cơ sở dữ liệu, kho tệp Supabase và bộ nhớ trình duyệt.
  * Hai số Supabase lấy từ hàm `storage_usage()` (migration 20260920000000);
  * chưa chạy migration thì phần đó tự ẩn, vẫn còn số của máy.
+ * Bấm vào kho tệp hoặc CSDL để mở bảng phân tích chi tiết video/ảnh chiếm nhiều dung lượng.
  */
 function StorageUsageRows() {
   const [remote, setRemote] = useState<{ db: number; storage: number } | null>(null)
   const [device, setDevice] = useState<{ used: number; quota: number } | null>(null)
+  const [modalTab, setModalTab] = useState<'storage' | 'database' | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -241,11 +280,34 @@ function StorageUsageRows() {
     <>
       {remote && (
         <>
-          <UsageRow label="Cơ sở dữ liệu Supabase" used={remote.db} quota={DB_QUOTA_BYTES} color="var(--primary)" />
-          <UsageRow label="Kho tệp (ảnh, nhạc)" used={remote.storage} quota={STORAGE_QUOTA_BYTES} color="var(--emerald)" />
+          <UsageRow
+            label="Cơ sở dữ liệu Supabase"
+            used={remote.db}
+            quota={DB_QUOTA_BYTES}
+            color="var(--primary)"
+            onClick={() => setModalTab('database')}
+            showDetailHint={true}
+          />
+          <UsageRow
+            label="Kho tệp (ảnh, nhạc)"
+            used={remote.storage}
+            quota={STORAGE_QUOTA_BYTES}
+            color="var(--emerald)"
+            onClick={() => setModalTab('storage')}
+            showDetailHint={true}
+          />
         </>
       )}
       {device && <UsageRow label="Bộ nhớ trên máy này" used={device.used} quota={device.quota} color="#f59e0b" />}
+
+      {modalTab && (
+        <StorageBreakdownModal
+          onClose={() => setModalTab(null)}
+          initialTab={modalTab}
+          totalStorageBytes={remote?.storage}
+          storageQuotaBytes={STORAGE_QUOTA_BYTES}
+        />
+      )}
     </>
   )
 }
@@ -285,30 +347,17 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
   const [notifPerm, setNotifPerm] = useState<PermissionState>('prompt')
   const [locPerm, setLocPerm] = useState<PermissionState>('prompt')
   const [locOn, setLocOn] = useState(isLocationSharingEnabled)
-  const [others, setOthers] = useState<{ email: string; has_push: boolean }[]>([])
-
   const refreshPermissions = useCallback(async () => {
     setNotifPerm(readNotificationPermission())
     setLocPerm(await readLocationPermission())
     void pushEnabled().then(setPushOn)
-    // Lựa chọn chia sẻ vị trí nằm trên Supabase, kéo về để đổi máy vẫn đúng.
     void loadLocationSharingEnabled().then(setLocOn)
   }, [])
 
   useEffect(() => {
     void refreshPermissions()
-    // Bảng chưa có hàm push_status thì bỏ qua phần "tài khoản khác", đừng làm hỏng trang.
-    void (async () => {
-      try {
-        const res = await supabase?.rpc('push_status')
-        setOthers((res?.data as { email: string; has_push: boolean }[]) ?? [])
-      } catch {
-        setOthers([])
-      }
-    })()
   }, [refreshPermissions])
 
-  // Quay lại tab sau khi đổi quyền trong cài đặt trình duyệt thì phải cập nhật ngay.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refreshPermissions()
@@ -319,25 +368,6 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
 
   const notifStatus = describeNotification(pushOn, notifPerm)
   const locStatus = describeLocation(locOn, locPerm)
-
-  const [nudging, setNudging] = useState<string | null>(null)
-
-  const nudge = async (email: string) => {
-    setNudging(email)
-    try {
-      const sent = await sendNudge(email)
-      showToast(
-        sent
-          ? `📨 Đã nhắc ${email} — họ sẽ thấy lời nhắc khi mở app`
-          : `⏳ Vừa nhắc ${email} gần đây rồi, để lát nữa hãy nhắc lại`,
-        sent ? undefined : 'info',
-      )
-    } catch (err) {
-      showToast(`❌ Không nhắc được: ${err instanceof Error ? err.message : err}`, 'delete')
-    } finally {
-      setNudging(null)
-    }
-  }
 
   const toggleLocation = async () => {
     const next = !locOn
@@ -508,34 +538,6 @@ export function SettingsPage({ dark, onToggleDark, canInstall, onInstallPWA }: S
                   onToggle={() => void toggleLocation()}
                 />
 
-                {/* Ai đã bật thông báo — gửi Xem chung mà họ chưa bật thì sẽ không nhận được gì. */}
-                {others.length > 1 && (
-                  <div className="status-others">
-                    <span className="status-others-title">Thông báo của các tài khoản</span>
-                    {others.map((o) => (
-                      <span key={o.email} className="status-other-row">
-                        <i className={o.has_push ? 'on' : undefined} />
-                        <span className="status-other-mail">{o.email}</span>
-                        {o.has_push ? (
-                          <b>Đã bật</b>
-                        ) : (
-                          <button
-                            type="button"
-                            className="status-nudge-btn"
-                            disabled={nudging === o.email}
-                            onClick={() => void nudge(o.email)}
-                          >
-                            {nudging === o.email ? 'Đang nhắc…' : 'Nhắc bật'}
-                          </button>
-                        )}
-                      </span>
-                    ))}
-                    <span className="status-others-hint">
-                      Người chưa bật sẽ không nhận được thông báo. Bấm “Nhắc bật” thì lần tới họ mở
-                      app sẽ thấy lời nhắc — không đẩy được thông báo cho người chưa bật thông báo.
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
 
