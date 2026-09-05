@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BarChart3, ChevronLeft, ChevronRight, Clock, History, ImagePlus,
+  BarChart3, ChevronLeft, ChevronRight, ChevronUp, Clock, History, ImagePlus,
   Loader2, NotebookPen, Pencil, Plus, Save,
   Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag, Play,
-  Users, Check, X
+  Users, Check, X, List, Calendar, CalendarDays
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
@@ -350,6 +350,12 @@ export function DailyPage() {
     if (!items.length) return
     setPreviewGallery({ items, index })
   }
+
+  // Chế độ xem & tuỳ chọn gọn
+  const [showExtraOptions, setShowExtraOptions] = useState(false)
+  const [viewMode, setViewMode] = useState<'timeline' | 'month'>('timeline')
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string>('ALL')
+  const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null)
 
   // Người thân được chọn gắn kèm nhật ký
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([])
@@ -886,6 +892,7 @@ export function DailyPage() {
       setIsSpecial(false)
       setAttachedMedias([])
       setSelectedPersonIds([])
+      setShowExtraOptions(false)
       const peopleMsg = selectedPeople.length > 0 ? ` & nhật ký ${selectedPeople.map(p => p.name).join(', ')}` : ''
       showToast(`☁️ Đã lưu ${lines.length} bài nhật ký${peopleMsg} lên Supabase!`, 'success')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung lên Supabase ✨`)
@@ -904,6 +911,7 @@ export function DailyPage() {
       setIsSpecial(false)
       setAttachedMedias([])
       setSelectedPersonIds([])
+      setShowExtraOptions(false)
       showToast(`💾 Đã lưu ${lines.length} bài vào Local (Hàng đợi đồng bộ)`, 'local')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung vào Local 💾`)
       setTimeout(() => setSaveSuccess(''), 3500)
@@ -1263,6 +1271,271 @@ export function DailyPage() {
       .filter((i) => !q || i.content.toLowerCase().includes(q) || i.entry_date.includes(q))
   }, [collectionEntries, collectionFilter, collectionSearch])
 
+  // ── Month & Calendar groups for Month View ──────────────────────────────
+  const sortedAllEntries = useMemo(() => {
+    return [...items].sort((a, b) => b.entry_date.localeCompare(a.entry_date) || (b.entry_time || '').localeCompare(a.entry_time || ''))
+  }, [items])
+
+  type MonthGroup = {
+    key: string // "YYYY-MM"
+    year: number
+    month: number
+    label: string
+    entries: Entry[]
+    totalPhotos: number
+  }
+
+  const monthGroups = useMemo<MonthGroup[]>(() => {
+    const map = new Map<string, MonthGroup>()
+    for (const entry of sortedAllEntries) {
+      if (!entry.entry_date) continue
+      const [yStr, mStr] = entry.entry_date.split('-')
+      const year = parseInt(yStr, 10)
+      const month = parseInt(mStr, 10)
+      if (isNaN(year) || isNaN(month)) continue
+      const key = `${year}-${String(month).padStart(2, '0')}`
+      let group = map.get(key)
+      if (!group) {
+        group = {
+          key,
+          year,
+          month,
+          label: `Tháng ${month}, ${year}`,
+          entries: [],
+          totalPhotos: 0,
+        }
+        map.set(key, group)
+      }
+      group.entries.push(entry)
+      const photosCount = (entry.images && entry.images.length > 0) ? entry.images.length : (entry.image_url ? 1 : 0)
+      group.totalPhotos += photosCount
+    }
+    return Array.from(map.values())
+  }, [sortedAllEntries])
+
+  const activeMonthGroup = useMemo(() => {
+    if (selectedMonthKey === 'ALL') return null
+    return monthGroups.find((g) => g.key === selectedMonthKey) || null
+  }, [monthGroups, selectedMonthKey])
+
+  type CalendarDay = {
+    dayNum: number | null
+    dateStr: string | null
+    hasEvents: boolean
+    entries: Entry[]
+    photosCount: number
+  }
+
+  const calendarDays = useMemo<CalendarDay[]>(() => {
+    if (!activeMonthGroup) return []
+    const { year, month } = activeMonthGroup
+    const firstDay = new Date(year, month - 1, 1)
+    const daysInMonth = new Date(year, month, 0).getDate()
+
+    let startCol = firstDay.getDay() - 1
+    if (startCol < 0) startCol = 6
+
+    const evMap = new Map<string, Entry[]>()
+    for (const ev of activeMonthGroup.entries) {
+      if (!ev.entry_date) continue
+      const list = evMap.get(ev.entry_date) || []
+      list.push(ev)
+      evMap.set(ev.entry_date, list)
+    }
+
+    const days: CalendarDay[] = []
+    for (let i = 0; i < startCol; i++) {
+      days.push({ dayNum: null, dateStr: null, hasEvents: false, entries: [], photosCount: 0 })
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      const evs = evMap.get(dateStr) || []
+      const pCount = evs.reduce((acc, cur) => acc + (cur.images?.length || (cur.image_url ? 1 : 0)), 0)
+      days.push({
+        dayNum: d,
+        dateStr,
+        hasEvents: evs.length > 0,
+        entries: evs,
+        photosCount: pCount,
+      })
+    }
+
+    return days
+  }, [activeMonthGroup])
+
+  const currentMonthIdx = monthGroups.findIndex((g) => g.key === selectedMonthKey)
+  const hasNextMonth = currentMonthIdx > 0
+  const hasPrevMonth = currentMonthIdx >= 0 && currentMonthIdx < monthGroups.length - 1
+  const goNextMonth = () => {
+    if (hasNextMonth) {
+      setSelectedMonthKey(monthGroups[currentMonthIdx - 1].key)
+      setSelectedCalDay(null)
+    }
+  }
+  const goPrevMonth = () => {
+    if (hasPrevMonth) {
+      setSelectedMonthKey(monthGroups[currentMonthIdx + 1].key)
+      setSelectedCalDay(null)
+    }
+  }
+
+  const monthEntries = useMemo(() => {
+    if (!activeMonthGroup) return []
+    let list = activeMonthGroup.entries
+    if (selectedCalDay) {
+      list = list.filter((e) => e.entry_date === selectedCalDay)
+    }
+    return list
+  }, [activeMonthGroup, selectedCalDay])
+
+  const shiftDate = (offset: number) => {
+    const d = new Date(date + 'T12:00:00')
+    d.setDate(d.getDate() + offset)
+    setDate(localDate(d))
+  }
+
+  const goToToday = () => {
+    setDate(localDate())
+  }
+
+  // ── render card helper ───────────────────────────────────────────────────
+  const renderDailyEntryCard = (entry: Entry, showDatePill = false) => {
+    const catInfo = getCategoryInfo(entry, dailyCategories)
+    const attachedPeople = getAttachedPeople(entry, peopleQuery.items)
+    const hasAttachedPeople = attachedPeople.length > 0
+    const entryMedias = entry.images && entry.images.length > 0 ? entry.images : (entry.image_url ? [entry.image_url] : [])
+    const isSpecialEntry = isEntrySpecial(entry)
+    const isFirstTimeEntry = isEntryFirstTime(entry)
+
+    return (
+      <article
+        key={entry.id}
+        className={`daily-card ${hasAttachedPeople ? 'has-people' : ''} ${isSpecialEntry ? 'is-special' : ''} ${isFirstTimeEntry ? 'is-first' : ''}`}
+      >
+        <div className="daily-card-header">
+          <div className="daily-card-tags">
+            {(showDatePill || keyword) && entry.entry_date && (
+              <span className="daily-pill-date" title="Ngày viết">
+                <Calendar size={11} /> {entry.entry_date.slice(8, 10)}/{entry.entry_date.slice(5, 7)}/{entry.entry_date.slice(0, 4)}
+              </span>
+            )}
+            {entry.entry_time && (
+              <span className="daily-pill-time" style={catInfo ? { color: catInfo.color, background: catInfo.bg } : undefined}>
+                <Clock size={11} /> {entry.entry_time}
+              </span>
+            )}
+            {catInfo && (
+              <span className="daily-pill-cat" style={{ background: catInfo.bg, color: catInfo.color }}>
+                <span>{catInfo.icon}</span> {catInfo.label}
+              </span>
+            )}
+            {isFirstTimeEntry && (
+              <span className="daily-pill-first">
+                <Sparkles size={11} /> Lần đầu
+              </span>
+            )}
+            {isSpecialEntry && (
+              <span className="daily-pill-special">
+                <Star size={11} /> Đặc biệt
+              </span>
+            )}
+            {attachedPeople.map((p) => (
+              <span key={p.id} className="daily-pill-person" title={`Gắn với ${p.name}`}>
+                👤 {p.name}
+              </span>
+            ))}
+          </div>
+
+          <div className="daily-card-actions">
+            <button
+              type="button"
+              className={`daily-card-btn ${entry.is_favorite ? 'fav' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleFavorite(entry)
+              }}
+              title={entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+              aria-label={entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+            >
+              <Star size={16} fill={entry.is_favorite ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              type="button"
+              className="daily-card-btn"
+              onClick={() => openEntry(entry)}
+              title="Sửa bài nhật ký"
+              aria-label="Sửa bài nhật ký"
+            >
+              <Pencil size={15} />
+            </button>
+          </div>
+        </div>
+
+        <div
+          className="daily-card-body"
+          onClick={() => openEntry(entry)}
+          title="Bấm để xem và sửa chi tiết"
+        >
+          {formatDisplayContent(entry.content)}
+        </div>
+
+        {entryMedias.length > 0 && (
+          <div className="daily-card-media">
+            {entryMedias.length === 1 ? (
+              <div
+                className="daily-single-media"
+                onClick={() => openMediaGallery(entryMedias, 0)}
+                title="Nhấn để xem toàn màn hình"
+              >
+                {/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entryMedias[0]) ? (
+                  <div style={{ position: 'relative', width: '100%', maxHeight: 280, background: '#000', borderRadius: 12, overflow: 'hidden' }}>
+                    <video src={entryMedias[0]} style={{ width: '100%', maxHeight: 280, objectFit: 'contain' }} preload="metadata" />
+                    <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.3)', color: '#fff' }}>
+                      <Play size={32} />
+                    </div>
+                  </div>
+                ) : (
+                  <img src={entryMedias[0]} alt="" loading="lazy" />
+                )}
+              </div>
+            ) : (
+              <div className="daily-media-grid">
+                {entryMedias.map((mediaUrl, idx) => {
+                  const isVid = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(mediaUrl)
+                  return (
+                    <div
+                      key={idx}
+                      className="daily-media-thumb"
+                      onClick={() => openMediaGallery(entryMedias, idx)}
+                      title={`Ảnh ${idx + 1}/${entryMedias.length} — Nhấn xem toàn màn hình`}
+                    >
+                      {isVid ? (
+                        <>
+                          <video src={mediaUrl} preload="metadata" muted />
+                          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.35)', color: '#fff' }}>
+                            <Play size={16} />
+                          </div>
+                        </>
+                      ) : (
+                        <img src={mediaUrl} alt="" loading="lazy" />
+                      )}
+                      {idx === 0 && (
+                        <span style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '1px 4px', borderRadius: 4 }}>
+                          +{entryMedias.length}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </article>
+    )
+  }
+
   // ── render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1344,598 +1617,659 @@ export function DailyPage() {
       {/* ════════════════ WRITE TAB ════════════════════════════════════════ */}
       {pageTab === 'write' && (
         <>
-          {/* Thanh chọn Thể loại nhật ký & Quản lý */}
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <Tag size={13} color="var(--purple)" /> Thể loại nhật ký:
-                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: selectedCategory ? 'var(--purple)' : 'var(--text-muted)' }}>
-                  {selectedCategory ? `(Đang chọn: ${selectedCategory})` : '(Mặc định: Không có)'}
-                </span>
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setShowCategoryConfigModal(true)}
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  padding: '3px 10px',
-                  borderRadius: 8,
-                  border: '1px solid var(--card-border)',
-                  background: 'var(--card-bg)',
-                  color: 'var(--purple)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  transition: 'all 0.15s ease',
-                }}
-                title="Cấu hình / Thêm / Sửa / Xoá thể loại"
-              >
-                <Settings2 size={12} /> Cấu hình thể loại
-              </button>
-            </div>
-
-            {/* Dải nút cuộn ngang chọn thể loại */}
-            <div
-              style={{
-                display: 'flex',
-                gap: 6,
-                overflowX: 'auto',
-                paddingBottom: 4,
-                scrollbarWidth: 'none',
-              }}
-            >
-              {/* Nút: Không phân loại (Mặc định) */}
-              <button
-                type="button"
-                onClick={() => setSelectedCategory(null)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 12,
-                  fontSize: '0.76rem',
-                  fontWeight: 700,
-                  border: selectedCategory === null ? '1.5px solid var(--primary)' : '1px solid var(--card-border)',
-                  background: selectedCategory === null ? 'rgba(99, 102, 241, 0.12)' : 'var(--card-bg)',
-                  color: selectedCategory === null ? 'var(--primary)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <span>🔘 Không phân loại</span>
-              </button>
-
-              {/* Các thể loại tùy chỉnh */}
-              {dailyCategories.map((cat) => {
-                const isSelected = selectedCategory === cat.label
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategory(isSelected ? null : cat.label)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 12,
-                      fontSize: '0.76rem',
-                      fontWeight: 700,
-                      border: isSelected ? `1.5px solid ${cat.color}` : '1px solid var(--card-border)',
-                      background: isSelected ? cat.bg : 'var(--card-bg)',
-                      color: isSelected ? cat.color : 'var(--text-main)',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      flexShrink: 0,
-                      whiteSpace: 'nowrap',
-                      boxShadow: isSelected ? `0 2px 8px ${cat.color}33` : 'none',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                  </button>
-                )
-              })}
-
-              <button
-                type="button"
-                onClick={() => setShowCategoryConfigModal(true)}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: 12,
-                  fontSize: '0.74rem',
-                  fontWeight: 700,
-                  border: '1px dashed var(--purple)',
-                  background: 'var(--purple-bg)',
-                  color: 'var(--purple)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Plus size={13} /> Thêm thể loại
-              </button>
-            </div>
-          </div>
-
-          {/* Write card */}
-          <div className="card" style={{ padding: 14, marginBottom: 14, borderRadius: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span className="eyebrow" style={{ margin: 0, padding: '3px 9px', fontSize: '0.7rem', fontWeight: 800 }}>
-                {longDate(new Date(date + 'T12:00:00'))}
-              </span>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                style={{ border: '1px solid var(--card-border)', borderRadius: 10, padding: '3px 8px', fontSize: '0.8rem', background: 'var(--bg-main)', color: 'var(--text-main)' }}
-                aria-label="Ngày của nhật ký"
-              />
-            </div>
-
-            {/* Khung chọn Giờ: Giờ từ ➔ Giờ đến & Nút Hiện tại */}
-            <div style={{ padding: '8px 12px', background: 'var(--bg-main)', borderRadius: 12, border: '1px solid var(--card-border)', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 2 }}>
-                  <Clock size={13} color="var(--amber)" /> Khung giờ:
-                </span>
-
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1.5px solid rgba(245, 158, 11, 0.4)' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--amber)' }}>Từ:</span>
-                  <input
-                    aria-label="Giờ bắt đầu"
-                    type="time"
-                    value={timeFrom}
-                    onChange={(e) => handleTimeFromChange(e.target.value)}
-                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
-                  />
-                </div>
-
-                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
-
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1.5px solid rgba(16, 185, 129, 0.4)' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--emerald)' }}>Đến:</span>
-                  <input
-                    aria-label="Giờ kết thúc"
-                    type="time"
-                    value={timeTo}
-                    onChange={(e) => handleTimeToChange(e.target.value)}
-                    style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
-                  />
-                </div>
-
+          {/* GIAO DIỆN GỌN CHO FORM NHẬT KÝ */}
+          <div className="daily-write-box">
+            {/* Header: Chọn ngày & Đồng hồ giờ hiện tại */}
+            <div className="daily-write-header">
+              <div className="daily-date-nav">
                 <button
                   type="button"
-                  onClick={() => setQuickTime(clock, '')}
-                  style={{
-                    marginLeft: 'auto',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    padding: '4px 8px',
-                    borderRadius: 8,
-                    border: '1px solid rgba(245, 158, 11, 0.35)',
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    color: 'var(--amber)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                  }}
-                  title="Điền giờ hiện tại"
+                  className="daily-date-nav-btn"
+                  onClick={() => shiftDate(-1)}
+                  title="Ngày hôm trước"
+                  aria-label="Ngày hôm trước"
                 >
-                  <Clock size={11} /> {clock}
+                  <ChevronLeft size={16} />
                 </button>
-
-                {(timeFrom || timeTo || timeOverride) && (
+                <label className="daily-date-label" title="Bấm để chọn ngày khác">
+                  <Calendar size={13} style={{ color: 'var(--primary)' }} />
+                  <span>{longDate(new Date(date + 'T12:00:00'))}</span>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                    aria-label="Chọn ngày nhật ký"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="daily-date-nav-btn"
+                  onClick={() => shiftDate(1)}
+                  title="Ngày tiếp theo"
+                  aria-label="Ngày tiếp theo"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                {date !== localDate() && (
                   <button
                     type="button"
-                    onClick={clearTimeRange}
-                    style={{ fontSize: '0.68rem', padding: '3px 6px', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--rose)', cursor: 'pointer', fontWeight: 700 }}
-                    title="Xóa giờ đã chọn"
+                    className="daily-today-btn"
+                    onClick={goToToday}
+                    title="Quay lại ngày hôm nay"
                   >
-                    ✕
+                    Hôm nay
                   </button>
                 )}
               </div>
+
+              <div
+                className="daily-clock-badge"
+                onClick={() => {
+                  if (!timeFrom) setQuickTime(clock, '')
+                }}
+                style={{ cursor: 'pointer' }}
+                title="Bấm để lấy giờ này"
+              >
+                <Clock size={13} />
+                <span>{timeOverride || clock}</span>
+              </div>
             </div>
 
-            {/* 4 Nút Tiện Ích: Hành động nhanh | Gắn YouTube | Tải Ảnh/Video | Gắn Người Thân */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
-              {/* 1. Nút Hành động */}
-              <button
-                type="button"
-                onClick={() => setShowActionModal(true)}
-                style={{
-                  padding: '7px 2px',
-                  borderRadius: 10,
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.18))',
-                  color: 'var(--amber)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  transition: 'all 0.18s ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Zap size={12} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Hành động</span>
-              </button>
-
-              {/* 2. Nút Gắn YouTube */}
-              <button
-                type="button"
-                onClick={() => setShowVideoModal(true)}
-                style={{
-                  padding: '7px 2px',
-                  borderRadius: 10,
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 63, 94, 0.15))',
-                  color: '#ef4444',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  transition: 'all 0.18s ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Youtube size={12} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>YouTube</span>
-              </button>
-
-              {/* 3. Nút Upload Ảnh / Video */}
-              <button
-                type="button"
-                onClick={() => formFileInputRef.current?.click()}
-                disabled={mediaUploading || !supabase}
-                style={{
-                  padding: '7px 2px',
-                  borderRadius: 10,
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
-                  background: attachedMedias.length > 0
-                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25))'
-                    : 'linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(99, 102, 241, 0.15))',
-                  color: attachedMedias.length > 0 ? '#10b981' : '#06b6d4',
-                  cursor: mediaUploading ? 'wait' : 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  transition: 'all 0.18s ease',
-                  whiteSpace: 'nowrap',
-                }}
-                title="Tải ảnh hoặc video đính kèm (hỗ trợ chọn nhiều)"
-              >
-                {mediaUploading ? (
-                  <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                ) : (
-                  <ImagePlus size={12} style={{ flexShrink: 0 }} />
-                )}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh/Video'}
-                </span>
-              </button>
-              <input
-                ref={formFileInputRef}
-                type="file"
-                multiple
-                accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  if (e.target.files) void handleUploadFormMedia(e.target.files)
-                  e.target.value = ''
-                }}
-              />
-
-              {/* 4. Nút Gắn Người Thân */}
-              <button
-                type="button"
-                onClick={() => setShowPeopleModal(true)}
-                style={{
-                  padding: '7px 2px',
-                  borderRadius: 10,
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
-                  background: selectedPersonIds.length > 0
-                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.3))'
-                    : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.15))',
-                  color: '#8b5cf6',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  transition: 'all 0.18s ease',
-                  whiteSpace: 'nowrap',
-                }}
-                title="Gắn người thân để đồng thời lưu vào nhật ký riêng"
-              >
-                <Users size={12} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Người thân'}
-                </span>
-              </button>
-            </div>
-
-            {/* Khung hiển thị danh sách người thân đã chọn */}
-            {selectedPeople.length > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  flexWrap: 'wrap',
-                  padding: '7px 10px',
-                  background: 'rgba(139, 92, 246, 0.08)',
-                  borderRadius: 12,
-                  border: '1px solid rgba(139, 92, 246, 0.25)',
-                  marginBottom: 10,
-                }}
-              >
-                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Users size={13} /> Gắn người thân:
-                </span>
-                {selectedPeople.map((p) => (
-                  <span
-                    key={p.id}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: '2px 8px',
-                      borderRadius: 8,
-                      background: 'var(--card-bg)',
-                      border: '1px solid var(--purple)',
-                      color: 'var(--purple)',
-                      fontSize: '0.74rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    <span>👤 {p.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPersonIds((prev) => prev.filter((id) => id !== p.id))}
-                      style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 0, color: 'var(--rose)', display: 'flex', alignItems: 'center' }}
-                      title={`Bỏ gắn ${p.name}`}
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setShowPeopleModal(true)}
-                  style={{
-                    fontSize: '0.7rem',
-                    padding: '1px 6px',
-                    borderRadius: 6,
-                    border: '1px dashed var(--purple)',
-                    background: 'transparent',
-                    color: 'var(--purple)',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                  }}
-                >
-                  + Thêm
-                </button>
-                <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 700, marginLeft: 'auto' }}>
-                  ✓ Sẽ lưu vào Nhật ký riêng
-                </span>
-              </div>
-            )}
-
-            {/* Media Preview Box nếu đã chọn file (nhiều ảnh/video) */}
-            {attachedMedias.length > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
-                  borderRadius: 12,
-                  background: 'rgba(16, 185, 129, 0.08)',
-                  border: '1.5px solid rgba(16, 185, 129, 0.35)',
-                  marginBottom: 10,
-                  overflowX: 'auto',
-                }}
-              >
-                {attachedMedias.map((media, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      position: 'relative',
-                      width: 54,
-                      height: 54,
-                      borderRadius: 8,
-                      overflow: 'hidden',
-                      background: '#000',
-                      flexShrink: 0,
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => openMediaGallery(attachedMedias.map((m) => m.url), idx)}
-                    title="Bấm để xem thử toàn màn hình"
-                  >
-                    {media.type === 'video' ? (
-                      <>
-                        <video src={media.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'grid', placeItems: 'center', color: '#fff' }}>
-                          <Play size={14} />
-                        </div>
-                      </>
-                    ) : (
-                      <img src={media.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void handleRemoveFormMedia(idx)
-                      }}
-                      title="Gỡ file này"
-                      style={{
-                        position: 'absolute',
-                        top: 2,
-                        right: 2,
-                        width: 18,
-                        height: 18,
-                        borderRadius: '50%',
-                        background: 'rgba(239, 68, 68, 0.85)',
-                        color: '#fff',
-                        border: 'none',
-                        display: 'grid',
-                        placeItems: 'center',
-                        cursor: 'pointer',
-                        padding: 0,
-                        zIndex: 2,
-                      }}
-                    >
-                      <Trash2 size={10} />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => formFileInputRef.current?.click()}
-                  disabled={mediaUploading}
-                  style={{
-                    width: 54,
-                    height: 54,
-                    borderRadius: 8,
-                    border: '1.5px dashed #10b981',
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    color: '#10b981',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 2,
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                  }}
-                  title="Thêm ảnh hoặc video khác"
-                >
-                  <Plus size={16} />
-                  <span>Thêm</span>
-                </button>
-                <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, whiteSpace: 'nowrap', paddingLeft: 4 }}>
-                  ✓ {attachedMedias.length} tệp đã chọn
-                </span>
-              </div>
-            )}
-
+            {/* Textarea nhập nhật ký */}
             <textarea
+              className="daily-textarea"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={selectedCategory ? `Viết nhật ký [${selectedCategory}] vào đây... (Ví dụ: Từ 4h -> 5h: Chơi thể thao)` : `Viết nhật ký hôm nay vào đây... (Ví dụ: Từ 4h -> 5h: Chơi LQ)`}
-              rows={3}
-              style={{ width: '100%', border: '1px solid var(--card-border)', borderRadius: 12, padding: 10, fontSize: '0.9rem', resize: 'vertical', outline: 'none', background: 'var(--card-bg)', color: 'var(--text-main)', lineHeight: 1.5, marginBottom: 8 }}
+              placeholder={
+                selectedCategory
+                  ? `Viết nhật ký [${selectedCategory}]... (Gõ @ để gắn người thân)`
+                  : 'Ghi lại một ngày của bạn... (Gõ @ để gắn người thân)'
+              }
+              rows={2}
             />
+
+            {/* Gợi ý @mention */}
             {content.includes('@') && mentionPeople.length > 0 && (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-                {mentionPeople.map((person) => <button key={person.id} type="button" className="eyebrow" onClick={() => setContent((value) => value.replace(/@[^\s@]*$/, `@${person.name} `))}>@{person.name}</button>)}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6, marginBottom: 4 }}>
+                {mentionPeople.map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    className="eyebrow"
+                    onClick={() => setContent((val) => val.replace(/@[^\s@]*$/, `@${person.name} `))}
+                  >
+                    @{person.name}
+                  </button>
+                ))}
               </div>
             )}
 
-            {/* 2 NÚT ĐÁNH DẤU: LẦN ĐẦU & ĐẶC BIỆT (XUẤT HIỆN Ở TAB SƯU TẬP THẺ 3D) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12, padding: '4px 0' }}>
-              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)' }}>Đánh dấu thẻ:</span>
-              <button
-                type="button"
-                onClick={() => setIsFirstTime(!isFirstTime)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 10,
-                  fontSize: '0.76rem',
-                  fontWeight: 800,
-                  border: isFirstTime ? '1.5px solid #06b6d4' : '1px solid var(--card-border)',
-                  background: isFirstTime ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.25))' : 'var(--bg-main)',
-                  color: isFirstTime ? '#06b6d4' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  boxShadow: isFirstTime ? '0 2px 10px rgba(6, 182, 212, 0.3)' : 'none',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <Sparkles size={13} />
-                <span>✨ Lần đầu</span>
-              </button>
+            {/* Footer Toolbar: Nút Mở rộng thông tin + Chips tóm tắt + Nút Lưu */}
+            <div className="daily-write-footer">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+                <button
+                  type="button"
+                  className={`daily-expand-btn ${showExtraOptions ? 'active' : ''}`}
+                  onClick={() => setShowExtraOptions(!showExtraOptions)}
+                  title={showExtraOptions ? 'Thu gọn tuỳ chọn thêm' : 'Mở rộng tuỳ chọn chi tiết'}
+                >
+                  {showExtraOptions ? <ChevronUp size={14} /> : <Plus size={14} />}
+                  <span>{showExtraOptions ? 'Thu gọn' : 'Thêm thông tin'}</span>
+                  {((selectedCategory ? 1 : 0) + ((timeFrom || timeTo || timeOverride) ? 1 : 0) + (attachedMedias.length > 0 ? 1 : 0) + (selectedPersonIds.length > 0 ? 1 : 0) + (isFirstTime ? 1 : 0) + (isSpecial ? 1 : 0)) > 0 && (
+                    <span className="daily-badge-count">
+                      {(selectedCategory ? 1 : 0) + ((timeFrom || timeTo || timeOverride) ? 1 : 0) + (attachedMedias.length > 0 ? 1 : 0) + (selectedPersonIds.length > 0 ? 1 : 0) + (isFirstTime ? 1 : 0) + (isSpecial ? 1 : 0)}
+                    </span>
+                  )}
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setIsSpecial(!isSpecial)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 10,
-                  fontSize: '0.76rem',
-                  fontWeight: 800,
-                  border: isSpecial ? '1.5px solid #f59e0b' : '1px solid var(--card-border)',
-                  background: isSpecial ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(234, 88, 12, 0.25))' : 'var(--bg-main)',
-                  color: isSpecial ? '#f59e0b' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  boxShadow: isSpecial ? '0 2px 10px rgba(245, 158, 11, 0.3)' : 'none',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <Star size={13} />
-                <span>🌟 Đặc biệt</span>
-              </button>
+                {/* Các chip tóm tắt tuỳ chọn đã chọn */}
+                <div className="daily-active-chips">
+                  {selectedCategory && (
+                    <span className="daily-active-chip" style={{ color: 'var(--purple)' }}>
+                      <span>🏷️ {selectedCategory}</span>
+                      <button
+                        type="button"
+                        className="daily-active-chip-del"
+                        onClick={() => setSelectedCategory(null)}
+                        title="Gỡ thể loại"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )}
 
-              {(isFirstTime || isSpecial) && (
-                <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 700, marginLeft: 'auto' }}>
-                  ✓ Sẽ lưu vào Bộ sưu tập thẻ 3D
-                </span>
-              )}
-            </div>
+                  {(timeFrom || timeTo || timeOverride) && (
+                    <span className="daily-active-chip" style={{ color: 'var(--amber)' }}>
+                      <span>🕒 {timeFrom && timeTo ? `${timeFrom}➔${timeTo}` : (timeFrom || timeOverride)}</span>
+                      <button
+                        type="button"
+                        className="daily-active-chip-del"
+                        onClick={clearTimeRange}
+                        title="Xoá giờ"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                  {attachedMedias.length > 0 && (
+                    <span
+                      className="daily-active-chip"
+                      style={{ color: '#10b981', cursor: 'pointer' }}
+                      onClick={() => setShowExtraOptions(true)}
+                      title="Nhấn xem danh sách file"
+                    >
+                      <span>🖼️ {attachedMedias.length} tệp</span>
+                    </span>
+                  )}
+
+                  {selectedPeople.length > 0 && (
+                    <span
+                      className="daily-active-chip"
+                      style={{ color: '#8b5cf6', cursor: 'pointer' }}
+                      onClick={() => setShowExtraOptions(true)}
+                      title="Nhấn xem người thân"
+                    >
+                      <span>👤 {selectedPeople.length} người</span>
+                    </span>
+                  )}
+
+                  {isFirstTime && (
+                    <span className="daily-active-chip" style={{ color: '#0891b2' }}>
+                      <span>✨ Lần đầu</span>
+                      <button
+                        type="button"
+                        className="daily-active-chip-del"
+                        onClick={() => setIsFirstTime(false)}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )}
+
+                  {isSpecial && (
+                    <span className="daily-active-chip" style={{ color: '#d97706' }}>
+                      <span>🌟 Đặc biệt</span>
+                      <button
+                        type="button"
+                        className="daily-active-chip-del"
+                        onClick={() => setIsSpecial(false)}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <button
                 className="primary"
                 onClick={saveEntries}
-                disabled={busy}
+                disabled={busy || (!content.trim() && attachedMedias.length === 0)}
                 style={{
-                  padding: '8px 20px',
-                  fontSize: '0.86rem',
+                  padding: '7px 18px',
+                  fontSize: '0.84rem',
                   fontWeight: 800,
                   borderRadius: 12,
                   background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
-                  boxShadow: '0 3px 12px rgba(37, 99, 235, 0.35)',
+                  boxShadow: '0 3px 12px rgba(37, 99, 235, 0.3)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
+                  flexShrink: 0,
                 }}
               >
-                <Save size={15} />
+                <Save size={14} />
                 {busy ? 'Đang lưu…' : 'Lưu nhật ký'}
               </button>
             </div>
+
+            {/* BẢNG MỞ RỘNG: THÔNG TIN CHI TIẾT */}
+            {showExtraOptions && (
+              <div className="daily-extra-panel">
+                {/* 1. Khung giờ chi tiết */}
+                <div>
+                  <div className="daily-extra-row-title">
+                    <Clock size={12} style={{ color: 'var(--amber)' }} /> Khung giờ chi tiết
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--amber)' }}>Từ:</span>
+                      <input
+                        type="time"
+                        value={timeFrom}
+                        onChange={(e) => handleTimeFromChange(e.target.value)}
+                        style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
+                        aria-label="Giờ bắt đầu"
+                      />
+                    </div>
+
+                    <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
+
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--emerald)' }}>Đến:</span>
+                      <input
+                        type="time"
+                        value={timeTo}
+                        onChange={(e) => handleTimeToChange(e.target.value)}
+                        style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
+                        aria-label="Giờ kết thúc"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setQuickTime(clock, '')}
+                      style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '4px 8px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        color: 'var(--amber)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                      }}
+                      title="Điền giờ hiện tại"
+                    >
+                      <Clock size={11} /> {clock}
+                    </button>
+
+                    {(timeFrom || timeTo || timeOverride) && (
+                      <button
+                        type="button"
+                        onClick={clearTimeRange}
+                        style={{
+                          fontSize: '0.68rem',
+                          padding: '3px 7px',
+                          borderRadius: 6,
+                          border: '1px solid var(--card-border)',
+                          background: 'var(--card-bg)',
+                          color: 'var(--rose)',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                        }}
+                        title="Xoá giờ"
+                      >
+                        ✕ Xoá
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Thể loại nhật ký */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div className="daily-extra-row-title" style={{ margin: 0 }}>
+                      <Tag size={12} style={{ color: 'var(--purple)' }} /> Thể loại nhật ký
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoryConfigModal(true)}
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        border: '1px solid var(--card-border)',
+                        background: 'var(--card-bg)',
+                        color: 'var(--purple)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                      }}
+                    >
+                      <Settings2 size={11} /> Cấu hình
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'thin' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategory(null)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: !selectedCategory ? '1.5px solid var(--primary)' : '1px solid var(--card-border)',
+                        background: !selectedCategory ? 'var(--card-bg)' : 'transparent',
+                        color: !selectedCategory ? 'var(--primary)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}
+                    >
+                      🔘 Không phân loại
+                    </button>
+
+                    {dailyCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCategory(selectedCategory === cat.label ? null : cat.label)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 8,
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          border: selectedCategory === cat.label ? `1.5px solid ${cat.color}` : '1px solid var(--card-border)',
+                          background: selectedCategory === cat.label ? cat.bg : 'var(--card-bg)',
+                          color: selectedCategory === cat.label ? cat.color : 'var(--text-main)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <span>{cat.icon}</span> {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Tiện ích & Đính kèm */}
+                <div>
+                  <div className="daily-extra-row-title">
+                    <Sparkles size={12} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                    {/* Nút Hành động */}
+                    <button
+                      type="button"
+                      onClick={() => setShowActionModal(true)}
+                      style={{
+                        padding: '6px 2px',
+                        borderRadius: 10,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.18))',
+                        color: 'var(--amber)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 3,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <Zap size={12} />
+                      <span>Hành động</span>
+                    </button>
+
+                    {/* Nút YouTube */}
+                    <button
+                      type="button"
+                      onClick={() => setShowVideoModal(true)}
+                      style={{
+                        padding: '6px 2px',
+                        borderRadius: 10,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 63, 94, 0.15))',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 3,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <Youtube size={12} />
+                      <span>YouTube</span>
+                    </button>
+
+                    {/* Nút Tải Ảnh / Video */}
+                    <button
+                      type="button"
+                      onClick={() => formFileInputRef.current?.click()}
+                      disabled={mediaUploading || !supabase}
+                      style={{
+                        padding: '6px 2px',
+                        borderRadius: 10,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
+                        background: attachedMedias.length > 0
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25))'
+                          : 'linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(99, 102, 241, 0.15))',
+                        color: attachedMedias.length > 0 ? '#10b981' : '#06b6d4',
+                        cursor: mediaUploading ? 'wait' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 3,
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="Tải ảnh hoặc video đính kèm"
+                    >
+                      {mediaUploading ? (
+                        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <ImagePlus size={12} />
+                      )}
+                      <span>{mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh/Video'}</span>
+                    </button>
+                    <input
+                      ref={formFileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files) void handleUploadFormMedia(e.target.files)
+                        e.target.value = ''
+                      }}
+                    />
+
+                    {/* Nút Gắn Người Thân */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPeopleModal(true)}
+                      style={{
+                        padding: '6px 2px',
+                        borderRadius: 10,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
+                        background: selectedPersonIds.length > 0
+                          ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.3))'
+                          : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.15))',
+                        color: '#8b5cf6',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 3,
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="Gắn người thân"
+                    >
+                      <Users size={12} />
+                      <span>{selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Người thân'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Đánh dấu thẻ 3D */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span className="daily-extra-row-title" style={{ margin: 0 }}>
+                    Đánh dấu thẻ 3D:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsFirstTime(!isFirstTime)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 8,
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      border: isFirstTime ? '1.5px solid #06b6d4' : '1px solid var(--card-border)',
+                      background: isFirstTime ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.25))' : 'var(--card-bg)',
+                      color: isFirstTime ? '#06b6d4' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <Sparkles size={12} />
+                    <span>✨ Lần đầu</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSpecial(!isSpecial)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 8,
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      border: isSpecial ? '1.5px solid #f59e0b' : '1px solid var(--card-border)',
+                      background: isSpecial ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(234, 88, 12, 0.25))' : 'var(--card-bg)',
+                      color: isSpecial ? '#f59e0b' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <Star size={12} />
+                    <span>🌟 Đặc biệt</span>
+                  </button>
+                </div>
+
+                {/* Danh sách người thân đã gắn */}
+                {selectedPeople.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '6px 10px', background: 'rgba(139, 92, 246, 0.08)', borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Users size={12} /> Gắn:
+                    </span>
+                    {selectedPeople.map((p) => (
+                      <span
+                        key={p.id}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '2px 7px',
+                          borderRadius: 7,
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--purple)',
+                          color: 'var(--purple)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <span>👤 {p.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPersonIds((prev) => prev.filter((id) => id !== p.id))}
+                          style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 0, color: 'var(--rose)', display: 'flex', alignItems: 'center' }}
+                          title={`Bỏ gắn ${p.name}`}
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setShowPeopleModal(true)}
+                      style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: 6, border: '1px dashed var(--purple)', background: 'transparent', color: 'var(--purple)', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      + Thêm
+                    </button>
+                  </div>
+                )}
+
+                {/* Danh sách file ảnh/video preview */}
+                {attachedMedias.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 10, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', overflowX: 'auto' }}>
+                    {attachedMedias.map((media, idx) => (
+                      <div
+                        key={idx}
+                        style={{ position: 'relative', width: 48, height: 48, borderRadius: 8, overflow: 'hidden', background: '#000', flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
+                        onClick={() => openMediaGallery(attachedMedias.map((m) => m.url), idx)}
+                        title="Bấm xem thử"
+                      >
+                        {media.type === 'video' ? (
+                          <>
+                            <video src={media.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'grid', placeItems: 'center', color: '#fff' }}>
+                              <Play size={12} />
+                            </div>
+                          </>
+                        ) : (
+                          <img src={media.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleRemoveFormMedia(idx)
+                          }}
+                          title="Gỡ file này"
+                          style={{
+                            position: 'absolute',
+                            top: 2,
+                            right: 2,
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            background: 'rgba(239, 68, 68, 0.85)',
+                            color: '#fff',
+                            border: 'none',
+                            display: 'grid',
+                            placeItems: 'center',
+                            cursor: 'pointer',
+                            padding: 0,
+                            zIndex: 2,
+                          }}
+                        >
+                          <Trash2 size={9} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => formFileInputRef.current?.click()}
+                      disabled={mediaUploading}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 8,
+                        border: '1.5px dashed #10b981',
+                        background: 'rgba(16, 185, 129, 0.12)',
+                        color: '#10b981',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 2,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>Thêm</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {saveSuccess && (
               <div style={{ marginTop: 8, padding: '7px 12px', background: 'var(--emerald-bg)', color: 'var(--emerald)', borderRadius: 10, fontSize: '0.82rem', fontWeight: 700, textAlign: 'center' }}>
                 {saveSuccess}
@@ -1968,234 +2302,285 @@ export function DailyPage() {
             </div>
           )}
 
-          {/* Today's entries list */}
-          <div className="card" style={{ padding: 14, margin: 0, borderRadius: 16 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <h2 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)' }}>
-                <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký hôm nay (${todayEntries.length})`}
-              </h2>
-              <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)', overflowX: 'auto', maxWidth: '100%' }}>
-                <button
-                  onClick={() => setFilterType('ALL')}
-                  style={{ border: 0, background: filterType === 'ALL' ? 'var(--card-bg)' : 'transparent', color: filterType === 'ALL' ? 'var(--primary)' : 'var(--text-muted)', fontWeight: filterType === 'ALL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
-                >
-                  Tất cả
-                </button>
-                <button
-                  onClick={() => setFilterType('FAV')}
-                  aria-label="Lọc bài yêu thích"
-                  style={{ border: 0, background: filterType === 'FAV' ? 'var(--amber-bg)' : 'transparent', color: filterType === 'FAV' ? 'var(--amber)' : 'var(--text-muted)', fontWeight: filterType === 'FAV' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
-                >
-                  <Star size={11} /> Yêu thích
-                </button>
-                <button
-                  onClick={() => setFilterType('FIRST_TIME')}
-                  style={{ border: 0, background: filterType === 'FIRST_TIME' ? 'rgba(6, 182, 212, 0.18)' : 'transparent', color: filterType === 'FIRST_TIME' ? '#06b6d4' : 'var(--text-muted)', fontWeight: filterType === 'FIRST_TIME' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
-                >
-                  ✨ Lần đầu
-                </button>
-                <button
-                  onClick={() => setFilterType('SPECIAL')}
-                  style={{ border: 0, background: filterType === 'SPECIAL' ? 'rgba(245, 158, 11, 0.18)' : 'transparent', color: filterType === 'SPECIAL' ? '#f59e0b' : 'var(--text-muted)', fontWeight: filterType === 'SPECIAL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
-                >
-                  🌟 Đặc biệt
-                </button>
-                <button
-                  onClick={() => setFilterType('PEOPLE')}
-                  style={{ border: 0, background: filterType === 'PEOPLE' ? 'rgba(168, 85, 247, 0.18)' : 'transparent', color: filterType === 'PEOPLE' ? '#c084fc' : 'var(--text-muted)', fontWeight: filterType === 'PEOPLE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
-                >
-                  <Users size={11} /> 👤 Có người
-                </button>
-                <button
-                  onClick={() => setFilterType('NONE')}
-                  style={{ border: 0, background: filterType === 'NONE' ? 'var(--card-bg)' : 'transparent', color: filterType === 'NONE' ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: filterType === 'NONE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
-                >
-                  🔘 Không phân loại
-                </button>
-                {dailyCategories.map((cat) => (
+          {/* Thanh chuyển chế độ xem: Danh sách vs Dạng tháng */}
+          <div className="memory-controls-row" style={{ marginTop: 6, marginBottom: 12 }}>
+            <div className="mem-view-toggle">
+              <button
+                type="button"
+                className={viewMode === 'timeline' ? 'active' : ''}
+                onClick={() => setViewMode('timeline')}
+                title="Xem theo danh sách ngày"
+              >
+                <List size={14} /> <span>Danh sách</span>
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'month' ? 'active' : ''}
+                onClick={() => setViewMode('month')}
+                title="Xem theo tháng giống Kỷ niệm chung"
+              >
+                <CalendarDays size={14} /> <span>Dạng tháng</span>
+              </button>
+            </div>
+
+            {viewMode === 'timeline' && (
+              <div style={{ flex: 1, minWidth: 200, display: 'flex', justifyContent: 'flex-end' }}>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Tìm trong toàn bộ nhật ký…"
+                  aria-label="Tìm trong nhật ký"
+                  style={{ width: '100%', maxWidth: 300, fontSize: '0.82rem', borderRadius: 10, padding: '6px 12px' }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* ════ CHẾ ĐỘ XEM: DANH SÁCH (TIMELINE) ════ */}
+          {viewMode === 'timeline' && (
+            <div className="card" style={{ padding: 14, margin: 0, borderRadius: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <h2 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <NotebookPen size={15} /> {keyword ? `Kết quả tìm (${todayEntries.length})` : `Nhật ký ${longDate(new Date(date + 'T12:00:00'))} (${todayEntries.length})`}
+                </h2>
+
+                <div style={{ display: 'flex', gap: 4, background: 'var(--bg-main)', padding: 3, borderRadius: 10, border: '1px solid var(--card-border)', overflowX: 'auto', maxWidth: '100%' }}>
                   <button
-                    key={cat.id}
-                    onClick={() => setFilterType(cat.label)}
-                    style={{ border: 0, background: filterType === cat.label ? cat.bg : 'transparent', color: filterType === cat.label ? cat.color : 'var(--text-muted)', fontWeight: filterType === cat.label ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+                    onClick={() => setFilterType('ALL')}
+                    style={{ border: 0, background: filterType === 'ALL' ? 'var(--card-bg)' : 'transparent', color: filterType === 'ALL' ? 'var(--primary)' : 'var(--text-muted)', fontWeight: filterType === 'ALL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
                   >
-                    {cat.icon} {cat.label}
+                    Tất cả
+                  </button>
+                  <button
+                    onClick={() => setFilterType('FAV')}
+                    aria-label="Lọc bài yêu thích"
+                    style={{ border: 0, background: filterType === 'FAV' ? 'var(--amber-bg)' : 'transparent', color: filterType === 'FAV' ? 'var(--amber)' : 'var(--text-muted)', fontWeight: filterType === 'FAV' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+                  >
+                    <Star size={11} /> Yêu thích
+                  </button>
+                  <button
+                    onClick={() => setFilterType('FIRST_TIME')}
+                    style={{ border: 0, background: filterType === 'FIRST_TIME' ? 'rgba(6, 182, 212, 0.18)' : 'transparent', color: filterType === 'FIRST_TIME' ? '#06b6d4' : 'var(--text-muted)', fontWeight: filterType === 'FIRST_TIME' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    ✨ Lần đầu
+                  </button>
+                  <button
+                    onClick={() => setFilterType('SPECIAL')}
+                    style={{ border: 0, background: filterType === 'SPECIAL' ? 'rgba(245, 158, 11, 0.18)' : 'transparent', color: filterType === 'SPECIAL' ? '#f59e0b' : 'var(--text-muted)', fontWeight: filterType === 'SPECIAL' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    🌟 Đặc biệt
+                  </button>
+                  <button
+                    onClick={() => setFilterType('PEOPLE')}
+                    style={{ border: 0, background: filterType === 'PEOPLE' ? 'rgba(168, 85, 247, 0.18)' : 'transparent', color: filterType === 'PEOPLE' ? '#c084fc' : 'var(--text-muted)', fontWeight: filterType === 'PEOPLE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+                  >
+                    <Users size={11} /> Có người
+                  </button>
+                  <button
+                    onClick={() => setFilterType('NONE')}
+                    style={{ border: 0, background: filterType === 'NONE' ? 'var(--card-bg)' : 'transparent', color: filterType === 'NONE' ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: filterType === 'NONE' ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    🔘 Không phân loại
+                  </button>
+                  {dailyCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setFilterType(cat.label)}
+                      style={{ border: 0, background: filterType === cat.label ? cat.bg : 'transparent', color: filterType === cat.label ? cat.color : 'var(--text-muted)', fontWeight: filterType === cat.label ? 700 : 500, fontSize: '0.72rem', padding: '3px 8px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+                    >
+                      {cat.icon} {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {loading ? (
+                <SkeletonList rows={3} height={72} />
+              ) : todayEntries.length ? (
+                <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 330px)', minHeight: '230px', overflowY: 'auto' }}>
+                  {todayEntries.map((entry) => renderDailyEntryCard(entry, Boolean(keyword)))}
+                </div>
+              ) : (
+                <Empty icon={NotebookPen} colorClass="icon-box-emerald">
+                  {keyword
+                    ? `Không có bài nào chứa "${search.trim()}".`
+                    : filterType === 'ALL' ? 'Chưa có nhật ký nào cho ngày này.' : `Chưa có mục nào cho "${filterType}".`}
+                </Empty>
+              )}
+            </div>
+          )}
+
+          {/* ════ CHẾ ĐỘ XEM: DẠNG THÁNG (MONTH VIEW) ════ */}
+          {viewMode === 'month' && (
+            <div className="card" style={{ padding: 14, margin: 0, borderRadius: 16 }}>
+              {/* Thanh chọn tháng dạng pills */}
+              <div className="mem-month-pills-bar" style={{ marginBottom: 14 }}>
+                <button
+                  type="button"
+                  className={`mem-month-pill ${selectedMonthKey === 'ALL' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedMonthKey('ALL')
+                    setSelectedCalDay(null)
+                  }}
+                >
+                  <Calendar size={13} />
+                  <span>Tất cả tháng ({sortedAllEntries.length})</span>
+                </button>
+
+                {monthGroups.map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    className={`mem-month-pill ${selectedMonthKey === g.key ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedMonthKey(g.key)
+                      setSelectedCalDay(null)
+                    }}
+                  >
+                    <span>Thg {g.month}/{g.year}</span>
+                    <span className="mem-month-pill-count">{g.entries.length}</span>
                   </button>
                 ))}
               </div>
-            </div>
 
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm trong toàn bộ nhật ký…"
-              aria-label="Tìm trong nhật ký"
-              style={{ width: '100%', marginBottom: 10, fontSize: '0.82rem', borderRadius: 10 }}
-            />
+              {/* Nếu xem 1 tháng cụ thể: Lịch trực quan + Danh sách */}
+              {selectedMonthKey !== 'ALL' && activeMonthGroup ? (
+                <div>
+                  {/* Header tháng và điều hướng tháng */}
+                  <div className="mem-month-header-bar">
+                    <div className="mem-month-title">
+                      <h3>Tháng {activeMonthGroup.month}, {activeMonthGroup.year}</h3>
+                      <span className="mem-month-badge">
+                        {activeMonthGroup.entries.length} bài nhật ký {activeMonthGroup.totalPhotos > 0 && `· ${activeMonthGroup.totalPhotos} ảnh`}
+                      </span>
+                    </div>
 
-            {loading ? (
-              <SkeletonList rows={3} height={72} />
-            ) : todayEntries.length ? (
-              <div style={{ display: 'grid', gap: 8, maxHeight: 'calc(100vh - 350px)', minHeight: '230px', overflowY: 'auto' }}>
-                {todayEntries.map((entry) => {
-                  const catInfo = getCategoryInfo(entry, dailyCategories)
-                  const attachedPeople = getAttachedPeople(entry, peopleQuery.items)
-                  const hasAttachedPeople = attachedPeople.length > 0
-                  const entryMedias = entry.images && entry.images.length > 0 ? entry.images : (entry.image_url ? [entry.image_url] : [])
-                  const hasMedia = entryMedias.length > 0
-                  const isFirstVideo = hasMedia && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entryMedias[0])
-                  return (
-                    <div
-                      key={entry.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        background: hasAttachedPeople
-                          ? 'linear-gradient(90deg, rgba(168, 85, 247, 0.08), var(--bg-main) 45%)'
-                          : 'var(--bg-main)',
-                        borderRadius: 12,
-                        padding: '4px 6px',
-                        border: hasAttachedPeople
-                          ? '1px solid rgba(168, 85, 247, 0.38)'
-                          : '1px solid var(--card-border)',
-                        boxShadow: hasAttachedPeople
-                          ? '0 2px 8px rgba(168, 85, 247, 0.12)'
-                          : 'none',
-                        transition: 'all 0.18s ease',
-                      }}
-                    >
+                    <div className="mem-month-nav">
                       <button
                         type="button"
-                        aria-label={`Xem chi tiết: ${entry.content}`}
-                        onClick={() => openEntry(entry)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', borderRadius: 8, padding: '4px 6px', cursor: 'pointer' }}
+                        onClick={goPrevMonth}
+                        disabled={!hasPrevMonth}
+                        title="Tháng trước"
+                        aria-label="Tháng trước"
                       >
-                        {catInfo ? (
-                          <div className="icon-box icon-box-sm" style={{ background: catInfo.bg, color: catInfo.color, width: 22, height: 22, flexShrink: 0, fontSize: '0.75rem', borderRadius: 7 }} title={catInfo.label}>
-                            {catInfo.icon}
-                          </div>
-                        ) : (
-                          <div className="icon-box icon-box-sm" style={{ background: 'var(--card-bg)', color: 'var(--text-muted)', width: 22, height: 22, flexShrink: 0, fontSize: '0.7rem', borderRadius: 7 }}>
-                            📝
-                          </div>
-                        )}
-                        {keyword && (
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', flexShrink: 0 }}>{entry.entry_date.slice(8)}/{entry.entry_date.slice(5, 7)}</span>
-                        )}
-                        {entry.entry_time && (
-                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: catInfo?.color || 'var(--amber)', flexShrink: 0 }}>{entry.entry_time}</span>
-                        )}
-                        {isEntryFirstTime(entry) && (
-                          <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#06b6d4', background: 'rgba(6, 182, 212, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
-                            ✨ Lần đầu
-                          </span>
-                        )}
-                        {isEntrySpecial(entry) && (
-                          <span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: 6, flexShrink: 0 }}>
-                            🌟 Đặc biệt
-                          </span>
-                        )}
-                        {attachedPeople.map((p) => (
-                          <span
-                            key={p.id}
-                            style={{
-                              fontSize: '0.66rem',
-                              fontWeight: 800,
-                              color: '#c084fc',
-                              background: 'rgba(168, 85, 247, 0.18)',
-                              border: '1px solid rgba(168, 85, 247, 0.45)',
-                              padding: '1px 6px',
-                              borderRadius: 6,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 3,
-                              flexShrink: 0,
-                              boxShadow: '0 1px 4px rgba(168, 85, 247, 0.18)',
-                            }}
-                            title={`Gắn với ${p.name}`}
-                          >
-                            <span>👤</span> {p.name}
-                          </span>
-                        ))}
-                        <span style={{ flex: 1, minWidth: 0, fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {formatDisplayContent(entry.content)}
-                        </span>
-                      </button>
-
-                      {/* Thumbnail ảnh hoặc Video badge (hỗ trợ nhiều ảnh/video) */}
-                      {hasMedia && (
-                        <div
-                          style={{
-                            position: 'relative',
-                            width: 28,
-                            height: 28,
-                            borderRadius: 6,
-                            overflow: 'hidden',
-                            background: '#000',
-                            flexShrink: 0,
-                            cursor: 'pointer',
-                            display: 'grid',
-                            placeItems: 'center',
-                            border: '1px solid rgba(255,255,255,0.15)',
-                          }}
-                          onClick={() => openMediaGallery(entryMedias, 0)}
-                          title={`Bấm để xem ${entryMedias.length} ảnh/video`}
-                        >
-                          {isFirstVideo ? (
-                            <span style={{ fontSize: '0.7rem' }}>🎬</span>
-                          ) : (
-                            <img src={entryMedias[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          )}
-                          {entryMedias.length > 1 && (
-                            <span
-                              style={{
-                                position: 'absolute',
-                                bottom: 0,
-                                right: 0,
-                                background: 'rgba(0,0,0,0.85)',
-                                color: '#fff',
-                                fontSize: '0.55rem',
-                                fontWeight: 800,
-                                padding: '1px 2px',
-                                borderRadius: '3px 0 0 0',
-                                lineHeight: 1,
-                              }}
-                            >
-                              +{entryMedias.length - 1}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        aria-label={`${entry.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'}: ${entry.content}`}
-                        aria-pressed={!!entry.is_favorite}
-                        onClick={() => toggleFavorite(entry)}
-                        style={{ border: 0, background: 'transparent', padding: '4px 6px', cursor: 'pointer', color: entry.is_favorite ? 'var(--amber)' : 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                      >
-                        <Star size={14} fill={entry.is_favorite ? 'currentColor' : 'none'} />
+                        <ChevronLeft size={16} />
                       </button>
                       <button
                         type="button"
-                        aria-label={`Sửa: ${entry.content}`}
-                        onClick={() => openEntry(entry)}
-                        style={{ border: 0, background: 'transparent', padding: '4px 6px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                        onClick={goNextMonth}
+                        disabled={!hasNextMonth}
+                        title="Tháng sau"
+                        aria-label="Tháng sau"
                       >
-                        <Pencil size={14} />
+                        <ChevronRight size={16} />
                       </button>
                     </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <Empty icon={NotebookPen} colorClass="icon-box-emerald">
-                {keyword
-                  ? `Không có bài nào chứa "${search.trim()}".`
-                  : filterType === 'ALL' ? 'Chưa có nhật ký nào cho hôm nay.' : `Chưa có mục nào cho "${filterType}".`}
-              </Empty>
-            )}
-          </div>
+                  </div>
+
+                  {/* Lưới Mini Calendar (T2 - CN) */}
+                  <div className="mem-mini-calendar" style={{ marginBottom: 14 }}>
+                    <div className="mem-mini-cal-header">
+                      <span>T2</span>
+                      <span>T3</span>
+                      <span>T4</span>
+                      <span>T5</span>
+                      <span>T6</span>
+                      <span>T7</span>
+                      <span>CN</span>
+                    </div>
+
+                    <div className="mem-mini-cal-grid">
+                      {calendarDays.map((cell, idx) => {
+                        if (!cell.dayNum) {
+                          return <div key={`empty-${idx}`} className="mem-cal-cell empty" />
+                        }
+
+                        const isSelected = selectedCalDay === cell.dateStr
+                        const hasEvs = cell.hasEvents
+
+                        return (
+                          <div
+                            key={`day-${cell.dayNum}`}
+                            className={`mem-cal-cell ${hasEvs ? 'has-memory' : ''} ${isSelected ? 'selected' : ''}`}
+                            onClick={() => {
+                              if (!cell.dateStr) return
+                              if (selectedCalDay === cell.dateStr) {
+                                setSelectedCalDay(null)
+                              } else {
+                                setSelectedCalDay(cell.dateStr)
+                                setDate(cell.dateStr)
+                              }
+                            }}
+                            title={
+                              hasEvs
+                                ? `Ngày ${cell.dayNum}: ${cell.entries.length} bài nhật ký${cell.photosCount > 0 ? ` (${cell.photosCount} ảnh)` : ''} — Bấm để lọc`
+                                : `Ngày ${cell.dayNum}: Chưa có nhật ký — Bấm để chọn ghi nhật ký ngày này`
+                            }
+                          >
+                            <span className="mem-cal-num">{cell.dayNum}</span>
+                            {hasEvs && <span className="mem-cal-dot" />}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Badge hiển thị nếu đang lọc theo ngày trong tháng */}
+                  {selectedCalDay && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 10, marginBottom: 12 }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Calendar size={13} /> Đang xem: Ngày {selectedCalDay.slice(8, 10)}/{selectedCalDay.slice(5, 7)}/{selectedCalDay.slice(0, 4)} ({monthEntries.length} bài)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCalDay(null)}
+                        style={{ border: 0, background: 'transparent', color: 'var(--rose)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}
+                      >
+                        <X size={13} /> Xem toàn bộ tháng
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Danh sách bài nhật ký của tháng / ngày đã chọn */}
+                  {monthEntries.length > 0 ? (
+                    <div style={{ display: 'grid', gap: 10, maxHeight: 'calc(100vh - 420px)', minHeight: '230px', overflowY: 'auto' }}>
+                      {monthEntries.map((entry) => renderDailyEntryCard(entry, true))}
+                    </div>
+                  ) : (
+                    <Empty icon={NotebookPen} colorClass="icon-box-emerald">
+                      {selectedCalDay ? 'Ngày này chưa có bài nhật ký nào.' : 'Tháng này chưa có bài nhật ký nào.'}
+                    </Empty>
+                  )}
+                </div>
+              ) : (
+                /* Xem tất cả tháng gom nhóm */
+                <div style={{ display: 'grid', gap: 18, maxHeight: 'calc(100vh - 330px)', minHeight: '260px', overflowY: 'auto' }}>
+                  {monthGroups.length > 0 ? (
+                    monthGroups.map((g) => (
+                      <section key={g.key} style={{ display: 'grid', gap: 8 }}>
+                        <div className="mem-month-group-header">
+                          <span className="mem-month-group-title">
+                            <Calendar size={13} style={{ color: 'var(--primary)' }} />
+                            Tháng {g.month}, {g.year}
+                          </span>
+                          <span className="mem-month-group-count">
+                            {g.entries.length} bài {g.totalPhotos > 0 && `· ${g.totalPhotos} ảnh`}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gap: 10 }}>
+                          {g.entries.map((entry) => renderDailyEntryCard(entry, true))}
+                        </div>
+                      </section>
+                    ))
+                  ) : (
+                    <Empty icon={NotebookPen} colorClass="icon-box-emerald">
+                      Chưa có nhật ký nào được ghi nhận.
+                    </Empty>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
