@@ -6,9 +6,10 @@ import {
 } from 'lucide-react'
 import { isEntryFirstTime, isEntrySpecial, type Entry } from '../../types'
 import { formatCardDate, formatMemoryCardContent } from './Memory3DCard'
+import { Interactive3DTreeCanvas } from './Interactive3DTreeThree'
 
 /* ═══════════════════════════════════════════════════════════════════
- * SEASON THEMES — Mỗi năm 1 mùa, cycle qua 4 mùa
+ * SEASON THEMES — Mỗi năm 1 mùa, cycle qua 4 mùa (Theme Sáng & Rực Rỡ)
  * ═══════════════════════════════════════════════════════════════════ */
 export type SeasonTheme = {
   name: string
@@ -25,54 +26,54 @@ export type SeasonTheme = {
 
 export const SEASONS: SeasonTheme[] = [
   {
-    // SPRING — Xuân (hoa anh đào)
+    // SPRING — Xuân (hoa anh đào rực rỡ)
     name: 'Xuân',
-    treeTrunk: '#5d4037',
-    treeCanopy: ['#2e7d32', '#43a047', '#66bb6a'],
-    flowers: ['#f8bbd0', '#f48fb1', '#ec407a', '#fff', '#fce4ec'],
-    petalColor: '#f48fb1',
-    bgGradient: 'linear-gradient(170deg, #1a1a2e 0%, #16213e 30%, #0f3d3e 60%, #1a3a2a 100%)',
-    groundColor: 'rgba(46, 125, 50, 0.25)',
-    glowColor: 'rgba(244, 143, 177, 0.4)',
-    accent: '#f48fb1',
+    treeTrunk: '#5d3825',
+    treeCanopy: ['#ff758c', '#ff7eb3', '#fbcfe8'],
+    flowers: ['#ff4d8d', '#ff758c', '#ffb6c1', '#ffffff', '#fbcfe8', '#f43f5e'],
+    petalColor: '#ff758c',
+    bgGradient: 'linear-gradient(160deg, #fff5f7 0%, #fce7f3 45%, #fef3c7 100%)',
+    groundColor: 'rgba(34, 197, 94, 0.25)',
+    glowColor: 'rgba(244, 114, 182, 0.35)',
+    accent: '#ec4899',
   },
   {
-    // SUMMER — Hạ (hoa hướng dương)
+    // SUMMER — Hạ (hoa hướng dương rực rỡ)
     name: 'Hạ',
     treeTrunk: '#6d4c41',
-    treeCanopy: ['#1b5e20', '#2e7d32', '#388e3c'],
-    flowers: ['#ffeb3b', '#ffc107', '#ff9800', '#fff176', '#ffe082'],
-    petalColor: '#ffc107',
-    bgGradient: 'linear-gradient(170deg, #1a1a2e 0%, #1e2a3a 30%, #2a3a1a 60%, #3a3a1a 100%)',
-    groundColor: 'rgba(139, 195, 74, 0.2)',
-    glowColor: 'rgba(255, 193, 7, 0.4)',
-    accent: '#ffc107',
-    leafColors: ['#8bc34a', '#cddc39', '#4caf50'],
+    treeCanopy: ['#10b981', '#34d399', '#facc15'],
+    flowers: ['#f59e0b', '#fbbf24', '#facc15', '#10b981', '#f43f5e', '#ffffff'],
+    petalColor: '#f59e0b',
+    bgGradient: 'linear-gradient(160deg, #fefce8 0%, #fef08a 45%, #bbf7d0 100%)',
+    groundColor: 'rgba(132, 204, 22, 0.25)',
+    glowColor: 'rgba(245, 158, 11, 0.35)',
+    accent: '#d97706',
+    leafColors: ['#84cc16', '#a3e635', '#22c55e'],
   },
   {
-    // AUTUMN — Thu (lá đỏ vàng)
+    // AUTUMN — Thu (lá phong đỏ vàng lộng lẫy)
     name: 'Thu',
     treeTrunk: '#4e342e',
-    treeCanopy: ['#e65100', '#f57c00', '#ff9800', '#d84315'],
-    flowers: ['#ffcc80', '#ffe0b2', '#ffab40', '#ff6d00'],
-    petalColor: '#ff9800',
-    bgGradient: 'linear-gradient(170deg, #1a1a2e 0%, #2a1a0a 30%, #3a2a1a 60%, #2a1a1a 100%)',
-    groundColor: 'rgba(230, 81, 0, 0.2)',
-    glowColor: 'rgba(255, 152, 0, 0.4)',
-    accent: '#ff9800',
-    leafColors: ['#ff6d00', '#e65100', '#f4511e', '#d84315', '#ffab40'],
+    treeCanopy: ['#ea580c', '#f97316', '#fbbf24'],
+    flowers: ['#dc2626', '#ea580c', '#f97316', '#fbbf24', '#fde047', '#ffffff'],
+    petalColor: '#ea580c',
+    bgGradient: 'linear-gradient(160deg, #fff7ed 0%, #ffedd5 45%, #fed7aa 100%)',
+    groundColor: 'rgba(234, 88, 12, 0.2)',
+    glowColor: 'rgba(234, 88, 12, 0.35)',
+    accent: '#ea580c',
+    leafColors: ['#ea580c', '#dc2626', '#f97316', '#fbbf24'],
   },
   {
-    // WINTER — Đông (tuyết tinh)
+    // WINTER — Đông (tuyết tinh & hoa mai trắng hồng)
     name: 'Đông',
     treeTrunk: '#5d4037',
-    treeCanopy: ['#37474f', '#455a64', '#546e7a'],
-    flowers: ['#e3f2fd', '#bbdefb', '#90caf9', '#ffffff', '#b3e5fc'],
-    petalColor: '#90caf9',
-    bgGradient: 'linear-gradient(170deg, #0d1b2a 0%, #1b2838 30%, #1a2540 60%, #0a1628 100%)',
-    groundColor: 'rgba(144, 202, 249, 0.15)',
-    glowColor: 'rgba(144, 202, 249, 0.35)',
-    accent: '#90caf9',
+    treeCanopy: ['#38bdf8', '#818cf8', '#e0e7ff'],
+    flowers: ['#38bdf8', '#818cf8', '#f43f5e', '#ffffff', '#e0f2fe', '#bae6fd'],
+    petalColor: '#38bdf8',
+    bgGradient: 'linear-gradient(160deg, #f0fdf4 0%, #e0f2fe 45%, #e0e7ff 100%)',
+    groundColor: 'rgba(56, 189, 248, 0.2)',
+    glowColor: 'rgba(56, 189, 248, 0.35)',
+    accent: '#0284c7',
   },
 ]
 
@@ -81,7 +82,7 @@ export function getSeasonTheme(year: number): SeasonTheme {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * SUB-COMPONENT: MemoryTreeCover — Bìa cây kỷ niệm SVG + CSS effects
+ * SUB-COMPONENT: MemoryTreeCover — Bìa Cây Kỷ Niệm 3D tương tác
  * ═══════════════════════════════════════════════════════════════════ */
 export function MemoryTreeCover({
   year,
@@ -89,204 +90,65 @@ export function MemoryTreeCover({
   firstTimeCount = 0,
   specialCount = 0,
   mediaCount,
+  entries = [],
+  onOpen,
 }: {
   year: number
   entryCount: number
   firstTimeCount?: number
   specialCount?: number
   mediaCount?: number
+  entries?: any[]
+  onOpen?: () => void
 }) {
   const theme = getSeasonTheme(year)
-
-  // Stable random positions for flowers & petals using year as seed
-  const seed = year * 31
-  const pseudoRand = (i: number) => {
-    const x = Math.sin(seed + i * 127.1) * 43758.5453
-    return x - Math.floor(x)
-  }
-
-  // Generate 6 flower positions on the canopy
-  const flowers = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => ({
-      cx: 28 + pseudoRand(i) * 44,      // spread across canopy width
-      cy: 18 + pseudoRand(i + 50) * 28,  // upper half  
-      r: 2 + pseudoRand(i + 100) * 2.5,
-      color: theme.flowers[i % theme.flowers.length],
-      delay: pseudoRand(i + 200) * 3,
-      dur: 2 + pseudoRand(i + 300) * 2,
-    }))
-  }, [year])
-
-  // Generate 8 falling petals
-  const petals = useMemo(() => {
-    return Array.from({ length: 9 }, (_, i) => ({
-      startX: 25 + pseudoRand(i + 400) * 50,
-      startY: 25 + pseudoRand(i + 450) * 15,
-      dx: -20 + pseudoRand(i + 500) * 40,
-      dy: 40 + pseudoRand(i + 550) * 50,
-      rot: 200 + pseudoRand(i + 600) * 400,
-      size: 3 + pseudoRand(i + 650) * 3,
-      delay: pseudoRand(i + 700) * 5,
-      dur: 3 + pseudoRand(i + 750) * 3,
-      color: theme.flowers[i % theme.flowers.length],
-    }))
-  }, [year])
-
-  // Generate fireflies / sparkle particles
-  const fireflies = useMemo(() => {
-    return Array.from({ length: 5 }, (_, i) => ({
-      cx: 15 + pseudoRand(i + 800) * 70,
-      cy: 15 + pseudoRand(i + 850) * 50,
-      delay: pseudoRand(i + 900) * 4,
-      dur: 2 + pseudoRand(i + 950) * 2,
-    }))
-  }, [year])
 
   return (
     <div
       style={{
         position: 'relative',
         width: '100%',
-        height: 200,
+        height: 220,
         borderRadius: 14,
         overflow: 'hidden',
         marginBottom: 10,
         background: theme.bgGradient,
-        boxShadow: `0 8px 24px rgba(0,0,0,0.5), inset 4px 0 10px rgba(0,0,0,0.6)`,
-        border: `1px solid ${theme.accent}30`,
+        boxShadow: `0 8px 24px rgba(0,0,0,0.06), inset 4px 0 10px rgba(0,0,0,0.04)`,
+        border: `1.5px solid ${theme.accent}35`,
       }}
     >
       {/* Spine/Gáy sách bên trái */}
       <div
         style={{
           position: 'absolute', top: 0, bottom: 0, left: 0, width: 12,
-          background: 'linear-gradient(to right, rgba(0,0,0,0.7) 0%, rgba(255,255,255,0.12) 40%, rgba(0,0,0,0.45) 100%)',
+          background: 'linear-gradient(to right, rgba(0,0,0,0.18) 0%, rgba(255,255,255,0.5) 40%, rgba(0,0,0,0.08) 100%)',
           zIndex: 10, pointerEvents: 'none',
         }}
       />
 
-      {/* Ground gradient */}
-      <div
-        style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: '35%',
-          background: `linear-gradient(to top, ${theme.groundColor}, transparent)`,
-          zIndex: 1, pointerEvents: 'none',
-        }}
+      {/* Cây 3D Three.js chân thực với hoa nở và cánh hoa rơi rơi */}
+      <Interactive3DTreeCanvas
+        compact
+        year={year}
+        events={entries}
+        theme={theme}
+        onOpenBook={onOpen}
       />
-
-      {/* The Tree SVG — animated sway */}
-      <svg
-        viewBox="0 0 100 80"
-        style={{
-          position: 'absolute',
-          bottom: 0, left: '50%', transform: 'translateX(-50%)',
-          width: '85%', height: '88%',
-          animation: 'mtree-sway 6s ease-in-out infinite',
-          zIndex: 2,
-          filter: `drop-shadow(0 4px 12px rgba(0,0,0,0.4))`,
-        }}
-      >
-        {/* Trunk with gradient */}
-        <defs>
-          <linearGradient id={`trunk-${year}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={theme.treeTrunk} stopOpacity="0.9" />
-            <stop offset="40%" stopColor={theme.treeTrunk} />
-            <stop offset="100%" stopColor={theme.treeTrunk} stopOpacity="0.7" />
-          </linearGradient>
-          <radialGradient id={`canopy-${year}`} cx="50%" cy="45%" r="50%">
-            <stop offset="0%" stopColor={theme.treeCanopy[0]} />
-            <stop offset="50%" stopColor={theme.treeCanopy[1] || theme.treeCanopy[0]} />
-            <stop offset="100%" stopColor={theme.treeCanopy[2] || theme.treeCanopy[0]} stopOpacity="0.8" />
-          </radialGradient>
-        </defs>
-
-        {/* Trunk */}
-        <rect x="46" y="48" width="8" height="28" rx="2" fill={`url(#trunk-${year})`} />
-        {/* Root lines */}
-        <path d="M46 74 Q40 78 35 76" fill="none" stroke={theme.treeTrunk} strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-        <path d="M54 74 Q60 78 65 76" fill="none" stroke={theme.treeTrunk} strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-
-        {/* Main canopy — large ellipse */}
-        <ellipse cx="50" cy="34" rx="26" ry="22" fill={`url(#canopy-${year})`} opacity="0.9" />
-        {/* Secondary canopy bumps */}
-        <ellipse cx="36" cy="38" rx="14" ry="12" fill={theme.treeCanopy[1] || theme.treeCanopy[0]} opacity="0.55" />
-        <ellipse cx="64" cy="38" rx="14" ry="12" fill={theme.treeCanopy[1] || theme.treeCanopy[0]} opacity="0.55" />
-        <ellipse cx="50" cy="24" rx="16" ry="13" fill={theme.treeCanopy[0]} opacity="0.45" />
-
-        {/* Flowers blooming on canopy */}
-        {flowers.map((f, i) => (
-          <circle
-            key={`f-${i}`}
-            cx={f.cx}
-            cy={f.cy}
-            r={f.r}
-            fill={f.color}
-            opacity="0.9"
-            style={{
-              animation: `mtree-bloom ${f.dur}s ease-in-out ${f.delay}s infinite`,
-              transformOrigin: `${f.cx}px ${f.cy}px`,
-            }}
-          />
-        ))}
-      </svg>
-
-      {/* Falling petals — pure CSS animation */}
-      {petals.map((p, i) => (
-        <div
-          key={`p-${i}`}
-          style={{
-            position: 'absolute',
-            left: `${p.startX}%`,
-            top: `${p.startY}%`,
-            width: p.size,
-            height: p.size,
-            borderRadius: '50% 0 50% 0',
-            background: p.color,
-            opacity: 0,
-            zIndex: 3,
-            pointerEvents: 'none',
-            ['--dx' as string]: `${p.dx}px`,
-            ['--dy' as string]: `${p.dy}px`,
-            ['--rot' as string]: `${p.rot}deg`,
-            animation: `mtree-petal-fall ${p.dur}s ease-in ${p.delay}s infinite`,
-          }}
-        />
-      ))}
-
-      {/* Firefly sparkles */}
-      {fireflies.map((ff, i) => (
-        <div
-          key={`ff-${i}`}
-          style={{
-            position: 'absolute',
-            left: `${ff.cx}%`,
-            top: `${ff.cy}%`,
-            width: 3,
-            height: 3,
-            borderRadius: '50%',
-            background: theme.accent,
-            boxShadow: `0 0 6px ${theme.accent}`,
-            opacity: 0,
-            zIndex: 4,
-            pointerEvents: 'none',
-            animation: `mtree-firefly ${ff.dur}s ease-in-out ${ff.delay}s infinite`,
-          }}
-        />
-      ))}
 
       {/* Year badge — top right */}
       <div
         style={{
-          position: 'absolute', top: 8, right: 12, zIndex: 8,
-          padding: '3px 10px',
+          position: 'absolute', top: 8, right: 10, zIndex: 8,
+          padding: '3px 9px',
           borderRadius: 8,
-          background: `linear-gradient(135deg, ${theme.accent}dd, ${theme.accent}99)`,
+          background: `linear-gradient(135deg, ${theme.accent}ee, ${theme.accent}bb)`,
           color: '#fff',
-          fontSize: '0.72rem',
+          fontSize: '0.7rem',
           fontWeight: 900,
-          letterSpacing: '0.5px',
+          letterSpacing: '0.4px',
           boxShadow: `0 2px 8px ${theme.glowColor}`,
           display: 'flex', alignItems: 'center', gap: 4,
+          pointerEvents: 'none',
         }}
       >
         <TreePine size={11} />
@@ -297,22 +159,23 @@ export function MemoryTreeCover({
       <div
         style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          padding: '20px 14px 10px 18px',
-          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)',
+          padding: '16px 12px 8px 16px',
+          background: 'linear-gradient(to top, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.6) 60%, transparent 100%)',
           zIndex: 6,
+          pointerEvents: 'none',
+          backdropFilter: 'blur(4px)',
         }}
       >
         <div style={{
-          fontSize: '0.95rem', fontWeight: 900, color: '#fff',
-          textShadow: '0 2px 8px rgba(0,0,0,0.9)',
-          lineHeight: 1.3,
+          fontSize: '0.9rem', fontWeight: 900, color: '#0f172a',
+          lineHeight: 1.2,
         }}>
           🌳 Cây Kỷ Niệm {year}
         </div>
         <div style={{
-          display: 'flex', gap: 8, marginTop: 3,
+          display: 'flex', gap: 6, marginTop: 2,
           fontSize: '0.62rem', fontWeight: 700,
-          color: 'rgba(255,255,255,0.75)',
+          color: '#475569',
           flexWrap: 'wrap',
         }}>
           <span>📖 {entryCount} kỷ niệm</span>
@@ -390,9 +253,9 @@ export function YearlyMemoryBook({
             width: '100%',
             minHeight: 440,
             borderRadius: 22,
-            background: 'linear-gradient(145deg, rgba(18,18,22,0.98), rgba(30,30,38,0.98))',
+            background: 'linear-gradient(145deg, #ffffff, #fffdfa)',
             border: `2px solid ${theme.accent}50`,
-            boxShadow: `0 12px 35px ${theme.glowColor}, 0 0 20px ${theme.glowColor}`,
+            boxShadow: `0 12px 35px rgba(0,0,0,0.08), 0 2px 10px ${theme.glowColor}`,
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
@@ -403,7 +266,7 @@ export function YearlyMemoryBook({
           <div
             style={{
               position: 'absolute', inset: 0, pointerEvents: 'none',
-              background: `radial-gradient(circle at 30% 20%, ${theme.accent}15, transparent 60%)`,
+              background: `radial-gradient(circle at 30% 20%, ${theme.accent}12, transparent 60%)`,
               zIndex: 0,
             }}
           />
@@ -416,7 +279,7 @@ export function YearlyMemoryBook({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '4px 10px', borderRadius: 8,
-                background: 'rgba(255,255,255,0.08)', border: `1px solid ${theme.accent}40`,
+                background: '#f8fafc', border: `1px solid ${theme.accent}40`,
                 color: theme.accent, fontSize: '0.72rem', fontWeight: 700,
                 cursor: 'pointer',
               }}
@@ -424,8 +287,8 @@ export function YearlyMemoryBook({
               <ChevronLeft size={12} /> Quay lại
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>
-              <span style={{ color: theme.accent }}>{selectedIdx + 1}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', fontWeight: 700, color: '#64748b' }}>
+              <span style={{ color: theme.accent, fontWeight: 900 }}>{selectedIdx + 1}</span>
               <span>/</span>
               <span>{entries.length}</span>
             </div>
@@ -436,9 +299,9 @@ export function YearlyMemoryBook({
                 onClick={() => setSelectedIdx(Math.max(0, selectedIdx - 1))}
                 disabled={selectedIdx === 0}
                 style={{
-                  width: 28, height: 28, borderRadius: 8, border: 'none',
-                  background: selectedIdx === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)',
-                  color: selectedIdx === 0 ? 'rgba(255,255,255,0.2)' : '#fff',
+                  width: 28, height: 28, borderRadius: 8, border: '1px solid #e2e8f0',
+                  background: selectedIdx === 0 ? '#f8fafc' : '#ffffff',
+                  color: selectedIdx === 0 ? '#cbd5e1' : '#334155',
                   cursor: selectedIdx === 0 ? 'default' : 'pointer',
                   display: 'grid', placeItems: 'center',
                 }}
@@ -450,9 +313,9 @@ export function YearlyMemoryBook({
                 onClick={() => setSelectedIdx(Math.min(entries.length - 1, selectedIdx + 1))}
                 disabled={selectedIdx >= entries.length - 1}
                 style={{
-                  width: 28, height: 28, borderRadius: 8, border: 'none',
-                  background: selectedIdx >= entries.length - 1 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)',
-                  color: selectedIdx >= entries.length - 1 ? 'rgba(255,255,255,0.2)' : '#fff',
+                  width: 28, height: 28, borderRadius: 8, border: '1px solid #e2e8f0',
+                  background: selectedIdx >= entries.length - 1 ? '#f8fafc' : '#ffffff',
+                  color: selectedIdx >= entries.length - 1 ? '#cbd5e1' : '#334155',
                   cursor: selectedIdx >= entries.length - 1 ? 'default' : 'pointer',
                   display: 'grid', placeItems: 'center',
                 }}
@@ -474,7 +337,7 @@ export function YearlyMemoryBook({
                     ? 'linear-gradient(135deg, #f59e0b, #d97706)'
                     : 'linear-gradient(135deg, #06b6d4, #3b82f6)',
                 color: '#fff', fontSize: '0.65rem', fontWeight: 800,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
               }}
             >
               {entryIsBoth ? <Award size={10} /> : entryIsSpecial ? <Sparkles size={10} /> : <Heart size={10} />}
@@ -489,19 +352,20 @@ export function YearlyMemoryBook({
           {/* Date & time */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: '0.74rem', color: '#cbd5e1',
+            fontSize: '0.74rem', color: '#64748b',
             marginBottom: 8, zIndex: 3, flexWrap: 'wrap',
           }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: '#f8fafc' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: '#0f172a' }}>
               <Calendar size={12} color={theme.accent} />
               {formatCardDate(entry.entry_date)}
             </span>
             {entry.entry_time && (
               <span style={{
                 display: 'flex', alignItems: 'center', gap: 3,
-                background: 'rgba(255,255,255,0.08)', padding: '2px 7px', borderRadius: 6, fontSize: '0.7rem',
+                background: '#f1f5f9', padding: '2px 7px', borderRadius: 6, fontSize: '0.7rem',
+                color: '#475569', fontWeight: 600,
               }}>
-                <Clock size={11} color="#fbbf24" />
+                <Clock size={11} color="#f59e0b" />
                 {entry.entry_time}
               </span>
             )}
@@ -512,11 +376,11 @@ export function YearlyMemoryBook({
             style={{
               flex: 1, overflowY: 'auto',
               fontSize: '0.84rem', lineHeight: 1.65,
-              color: '#e4e4e7', whiteSpace: 'pre-wrap',
+              color: '#1e293b', whiteSpace: 'pre-wrap',
               paddingRight: 4, marginBottom: 10,
-              background: 'rgba(255,255,255,0.03)',
+              background: '#f8fafc',
               borderRadius: 10, padding: 10,
-              border: '1px solid rgba(255,255,255,0.05)',
+              border: '1px solid #e2e8f0',
               zIndex: 3,
             }}
           >
@@ -526,7 +390,7 @@ export function YearlyMemoryBook({
           {/* Action footer */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.08)',
+            paddingTop: 8, borderTop: '1px solid #f1f5f9',
             zIndex: 3,
           }}>
             <button
@@ -535,13 +399,13 @@ export function YearlyMemoryBook({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '4px 10px', borderRadius: 8,
-                background: entry.is_favorite ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)',
-                border: 'none',
-                color: entry.is_favorite ? '#f59e0b' : '#94a3b8',
+                background: entry.is_favorite ? '#fef3c7' : '#f1f5f9',
+                border: '1px solid #e2e8f0',
+                color: entry.is_favorite ? '#b45309' : '#64748b',
                 fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
               }}
             >
-              <Star size={12} fill={entry.is_favorite ? '#f59e0b' : 'none'} />
+              <Star size={12} fill={entry.is_favorite ? '#f59e0b' : 'none'} color="#f59e0b" />
               {entry.is_favorite ? 'Đã yêu thích' : 'Yêu thích'}
             </button>
 
@@ -551,9 +415,9 @@ export function YearlyMemoryBook({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '4px 10px', borderRadius: 8,
-                background: 'rgba(255,255,255,0.08)',
-                border: `1px solid ${theme.accent}30`,
-                color: '#fff', fontSize: '0.72rem', fontWeight: 700,
+                background: '#f8fafc',
+                border: `1px solid ${theme.accent}40`,
+                color: theme.accent, fontSize: '0.72rem', fontWeight: 700,
                 cursor: 'pointer',
               }}
             >
@@ -577,31 +441,34 @@ export function YearlyMemoryBook({
     >
       <div
         ref={cardRef}
+        onClick={() => setIsOpen(true)}
         onMouseMove={handleMouseMove}
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => { setIsHovered(false); setTilt({ x: 0, y: 0, sheenX: 50, sheenY: 50 }) }}
-        onClick={() => { setIsOpen(true); setSelectedIdx(0) }}
+        onMouseLeave={() => {
+          setIsHovered(false)
+          setTilt({ x: 0, y: 0, sheenX: 50, sheenY: 50 })
+        }}
         style={{
           position: 'relative',
           width: '100%',
           minHeight: 380,
-          borderRadius: 22,
+          borderRadius: 24,
           cursor: 'pointer',
           transformStyle: 'preserve-3d',
-          transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${isHovered ? 1.02 : 1}, ${isHovered ? 1.02 : 1}, 1)`,
-          transition: isHovered ? 'transform 0.08s ease-out' : 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+          transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+          transition: isHovered ? 'transform 0.1s ease-out' : 'transform 0.45s ease-out',
           boxShadow: isHovered
-            ? `0 20px 45px ${theme.glowColor}, 0 0 25px ${theme.glowColor}`
-            : '0 8px 24px rgba(0,0,0,0.35)',
+            ? `0 20px 40px rgba(0,0,0,0.12), 0 0 24px ${theme.glowColor}`
+            : `0 8px 24px rgba(0,0,0,0.06)`,
         }}
       >
-        {/* Border gradient frame */}
+        {/* Glow border ring */}
         <div
           style={{
             position: 'absolute', inset: -2, borderRadius: 24,
             background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}80 50%, ${theme.accent}40 100%)`,
             zIndex: 0,
-            opacity: isHovered ? 1 : 0.7,
+            opacity: isHovered ? 0.9 : 0.4,
             transition: 'opacity 0.3s ease',
           }}
         />
@@ -610,17 +477,18 @@ export function YearlyMemoryBook({
         <div
           style={{
             position: 'absolute', inset: 0, borderRadius: 22,
-            background: 'linear-gradient(145deg, rgba(18,18,22,0.98), rgba(28,28,35,0.98))',
+            background: 'linear-gradient(145deg, #ffffff, #fffdfa)',
             display: 'flex', flexDirection: 'column',
             overflow: 'hidden', padding: 14,
             zIndex: 2,
+            border: '1px solid #f1f5f9',
           }}
         >
           {/* Holographic sheen */}
           <div
             style={{
               position: 'absolute', inset: 0, pointerEvents: 'none',
-              background: `radial-gradient(circle at ${tilt.sheenX}% ${tilt.sheenY}%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.03) 40%, transparent 70%)`,
+              background: `radial-gradient(circle at ${tilt.sheenX}% ${tilt.sheenY}%, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.05) 40%, transparent 70%)`,
               mixBlendMode: 'overlay',
               zIndex: 5,
             }}
@@ -632,7 +500,7 @@ export function YearlyMemoryBook({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 padding: '4px 11px', borderRadius: 99,
-                background: `linear-gradient(135deg, ${theme.accent}dd, ${theme.accent}88)`,
+                background: `linear-gradient(135deg, ${theme.accent}ee, ${theme.accent}aa)`,
                 color: '#fff', fontSize: '0.68rem', fontWeight: 800,
                 letterSpacing: '0.4px',
                 boxShadow: `0 2px 10px ${theme.glowColor}`,
@@ -643,32 +511,33 @@ export function YearlyMemoryBook({
             </div>
 
             <span style={{
-              fontSize: '0.62rem', color: 'rgba(255,255,255,0.6)',
-              fontWeight: 700, letterSpacing: '0.5px',
+              fontSize: '0.65rem', color: '#64748b',
+              fontWeight: 800, letterSpacing: '0.5px',
             }}>
               VOL. {year}
             </span>
           </div>
 
-          {/* Tree Cover Art */}
+          {/* Tree Cover Art — Cây 3D Three.js thật xoay 360 độ */}
           <MemoryTreeCover
             year={year}
             entryCount={entries.length}
             firstTimeCount={firstTimeCount}
             specialCount={specialCount}
+            entries={entries}
+            onOpen={() => setIsOpen(true)}
           />
 
           {/* Year title */}
           <div style={{ zIndex: 4, marginBottom: 6 }}>
             <div style={{
-              fontSize: '1.1rem', fontWeight: 900, color: '#fff',
-              textShadow: '0 2px 6px rgba(0,0,0,0.5)',
+              fontSize: '1.15rem', fontWeight: 900, color: '#0f172a',
               letterSpacing: '-0.3px',
             }}>
               🌳 Năm {year}
             </div>
             <div style={{
-              fontSize: '0.72rem', fontWeight: 700, color: theme.accent,
+              fontSize: '0.74rem', fontWeight: 800, color: theme.accent,
               marginTop: 2,
             }}>
               ✦ {entries.length} kỷ niệm đáng nhớ ✦
@@ -683,9 +552,9 @@ export function YearlyMemoryBook({
             {firstTimeCount > 0 && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
-                padding: '2px 8px', borderRadius: 6,
-                background: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.3)',
-                color: '#22d3ee', fontSize: '0.65rem', fontWeight: 700,
+                padding: '3px 8px', borderRadius: 6,
+                background: '#ecfeff', border: '1px solid #a5f3fc',
+                color: '#0891b2', fontSize: '0.65rem', fontWeight: 700,
               }}>
                 ✨ {firstTimeCount} lần đầu
               </span>
@@ -693,9 +562,9 @@ export function YearlyMemoryBook({
             {specialCount > 0 && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
-                padding: '2px 8px', borderRadius: 6,
-                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
-                color: '#fbbf24', fontSize: '0.65rem', fontWeight: 700,
+                padding: '3px 8px', borderRadius: 6,
+                background: '#fefce8', border: '1px solid #fef08a',
+                color: '#ca8a04', fontSize: '0.65rem', fontWeight: 700,
               }}>
                 🌟 {specialCount} đặc biệt
               </span>
@@ -708,17 +577,18 @@ export function YearlyMemoryBook({
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               marginTop: 'auto',
               paddingTop: 8,
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              fontSize: '0.72rem', color: '#94a3b8', zIndex: 4,
+              borderTop: '1px solid #f1f5f9',
+              fontSize: '0.72rem', color: '#64748b', zIndex: 4,
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#a1a1aa' }}>
-              <BookOpen size={11} style={{ opacity: 0.7 }} /> Chạm để mở sách
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#64748b', fontWeight: 600 }}>
+              <BookOpen size={11} style={{ opacity: 0.8 }} /> Chạm để mở sách
             </span>
             <span style={{
               fontWeight: 800, color: theme.accent,
               fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: 3,
-              background: 'rgba(0,0,0,0.3)', padding: '2px 7px', borderRadius: 5,
+              background: '#f8fafc', padding: '3px 8px', borderRadius: 6,
+              border: '1px solid #e2e8f0',
             }}>
               <Bookmark size={10} /> MEMORY TREE · {year}
             </span>

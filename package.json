@@ -28,6 +28,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "@types/leaflet": "^1.9.22",
+    "@types/three": "^0.185.4",
     "cheerio": "^1.2.0",
     "cloudinary": "^2.11.0",
     "dotenv": "^17.4.2",
@@ -38,7 +39,8 @@
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.1.1"
+    "react-router-dom": "^7.1.1",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
