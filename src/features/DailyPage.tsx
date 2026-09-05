@@ -1599,7 +1599,7 @@ export function DailyPage() {
   // ── render ───────────────────────────────────────────────────────────────
 
   return (
-    <section className="page-shell">
+    <section className="page-shell" style={{ paddingTop: 6 }}>
 
       {/* ── Page tab switcher ──────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
@@ -1893,27 +1893,27 @@ export function DailyPage() {
                   <div className="daily-extra-row-title">
                     <Clock size={12} style={{ color: 'var(--amber)' }} /> Khung giờ chi tiết
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', width: '100%' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)', flexShrink: 0 }}>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--amber)' }}>Từ:</span>
                       <input
                         type="time"
                         value={timeFrom}
                         onChange={(e) => handleTimeFromChange(e.target.value)}
-                        style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
+                        style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.78rem', fontWeight: 700, padding: 0, width: 62, outline: 'none' }}
                         aria-label="Giờ bắt đầu"
                       />
                     </div>
 
-                    <span style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--amber)' }}>➔</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--amber)', flexShrink: 0 }}>➔</span>
 
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 8, background: 'var(--card-bg)', border: '1px solid var(--card-border)', flexShrink: 0 }}>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--emerald)' }}>Đến:</span>
                       <input
                         type="time"
                         value={timeTo}
                         onChange={(e) => handleTimeToChange(e.target.value)}
-                        style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.8rem', fontWeight: 700, padding: 0, width: 68, outline: 'none' }}
+                        style={{ border: 0, background: 'transparent', color: 'var(--text-main)', font: 'inherit', fontSize: '0.78rem', fontWeight: 700, padding: 0, width: 62, outline: 'none' }}
                         aria-label="Giờ kết thúc"
                       />
                     </div>
@@ -2036,33 +2036,35 @@ export function DailyPage() {
                 </div>
 
                 {/* 3. Tiện ích & Đính kèm */}
-                <div>
+                <div style={{ width: '100%', minWidth: 0 }}>
                   <div className="daily-extra-row-title">
                     <Sparkles size={12} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7, width: '100%', boxSizing: 'border-box' }}>
                     {/* Nút Hành động */}
                     <button
                       type="button"
                       onClick={() => setShowActionModal(true)}
                       style={{
-                        padding: '8px 10px',
+                        padding: '8px 6px',
                         borderRadius: 10,
-                        fontSize: '0.78rem',
+                        fontSize: '0.76rem',
                         fontWeight: 700,
                         border: '1px solid rgba(245, 158, 11, 0.35)',
                         background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.18))',
                         color: 'var(--amber)',
                         cursor: 'pointer',
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 5,
-                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
                       }}
                     >
-                      <Zap size={13} />
-                      <span>Hành động</span>
+                      <Zap size={13} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Hành động</span>
                     </button>
 
                     {/* Nút YouTube */}
@@ -2070,23 +2072,25 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowVideoModal(true)}
                       style={{
-                        padding: '8px 10px',
+                        padding: '8px 6px',
                         borderRadius: 10,
-                        fontSize: '0.78rem',
+                        fontSize: '0.76rem',
                         fontWeight: 700,
                         border: '1px solid rgba(239, 68, 68, 0.35)',
                         background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 63, 94, 0.15))',
                         color: '#ef4444',
                         cursor: 'pointer',
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 5,
-                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
                       }}
                     >
-                      <Youtube size={13} />
-                      <span>YouTube</span>
+                      <Youtube size={13} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube</span>
                     </button>
 
                     {/* Nút Tải Ảnh / Video */}
@@ -2095,9 +2099,9 @@ export function DailyPage() {
                       onClick={() => formFileInputRef.current?.click()}
                       disabled={mediaUploading || !supabase}
                       style={{
-                        padding: '8px 10px',
+                        padding: '8px 6px',
                         borderRadius: 10,
-                        fontSize: '0.78rem',
+                        fontSize: '0.76rem',
                         fontWeight: 700,
                         border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
                         background: attachedMedias.length > 0
@@ -2105,20 +2109,24 @@ export function DailyPage() {
                           : 'linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(99, 102, 241, 0.15))',
                         color: attachedMedias.length > 0 ? '#10b981' : '#06b6d4',
                         cursor: mediaUploading ? 'wait' : 'pointer',
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 5,
-                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
                       }}
                       title="Tải ảnh hoặc video đính kèm"
                     >
                       {mediaUploading ? (
-                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
                       ) : (
-                        <ImagePlus size={13} />
+                        <ImagePlus size={13} style={{ flexShrink: 0 }} />
                       )}
-                      <span>{mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}
+                      </span>
                     </button>
                     <input
                       ref={formFileInputRef}
@@ -2137,9 +2145,9 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowPeopleModal(true)}
                       style={{
-                        padding: '8px 10px',
+                        padding: '8px 6px',
                         borderRadius: 10,
-                        fontSize: '0.78rem',
+                        fontSize: '0.76rem',
                         fontWeight: 700,
                         border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
                         background: selectedPersonIds.length > 0
@@ -2147,16 +2155,20 @@ export function DailyPage() {
                           : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.15))',
                         color: '#8b5cf6',
                         cursor: 'pointer',
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 5,
-                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
                       }}
                       title="Gắn người thân"
                     >
-                      <Users size={13} />
-                      <span>{selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Gắn người thân'}</span>
+                      <Users size={13} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Gắn người'}
+                      </span>
                     </button>
                   </div>
                 </div>
