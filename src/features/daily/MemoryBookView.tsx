@@ -454,7 +454,10 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     if (!day) return null
 
     return (
-      <div className={`book-page-sheet day-sheet ${isLeafBack ? 'leaf-back-content' : ''}`}>
+      <div
+        className={`book-page-sheet day-sheet scrapbook-sheet ${isLeafBack ? 'leaf-back-content' : ''}`}
+        style={{ background: '#ffffff', color: '#0f172a' }}
+      >
         <div className="page-paper-decor top-crease" />
 
         <div className="scrapbook-page-inner">
