@@ -225,67 +225,158 @@ export function StorageBreakdownModal({
       hasRpc = false
     }
 
-    // 2. Fallback if RPC is not available yet
+    // 2. Fallback if RPC is not available yet: scan buckets recursively and check DB tables
     if (!hasRpc) {
       setRpcSupported(false)
       try {
         const fallbackItems: StorageItem[] = []
-        const bucket = 'photos'
-        const rootList = await supabase?.storage.from(bucket).list('', { limit: 100 })
-        const foldersToScan = ['shared_events', 'daily_entries', 'covers', 'nutrition', 'goals', 'avatars', 'videos']
+        const seenIds = new Set<string>()
 
-        // Add root items if any
-        if (rootList?.data) {
-          for (const it of rootList.data) {
-            if (it.id && it.metadata) {
-              const cat = detectCategory(it.name)
-              const mime = (it.metadata as any)?.mimetype || ''
-              fallbackItems.push({
-                id: it.id,
-                bucket_id: bucket,
-                name: it.name,
-                size_bytes: Number((it.metadata as any)?.size || 0),
-                mime_type: mime,
-                created_at: it.created_at || '',
-                public_url: supabase?.storage.from(bucket).getPublicUrl(it.name)?.data?.publicUrl || '',
-                category: cat.key,
-                category_name: cat.name,
-                is_video: checkIsVideo(mime, it.name),
-                is_image: checkIsImage(mime, it.name),
-              })
-            }
-          }
-        }
-
-        // Scan subfolders
-        for (const f of foldersToScan) {
+        // Helper to scan a folder recursively in a given bucket
+        const scanFolder = async (bucket: string, prefix: string, depth: number = 0): Promise<void> => {
+          if (depth > 2) return
           try {
-            const subRes = await supabase?.storage.from(bucket).list(f, { limit: 150 })
-            if (subRes?.data) {
-              for (const it of subRes.data) {
-                if (it.name && it.name !== '.emptyFolderPlaceholder') {
-                  const fullName = `${f}/${it.name}`
-                  const mime = (it.metadata as any)?.mimetype || ''
-                  const cat = detectCategory(fullName)
+            const { data } = await supabase?.storage.from(bucket).list(prefix, {
+              limit: 100,
+              sortBy: { column: 'name', order: 'asc' },
+            }) || {}
+
+            if (!data || !Array.isArray(data)) return
+
+            for (const it of data) {
+              if (!it.name || it.name === '.emptyFolderPlaceholder') continue
+              const fullPath = prefix ? `${prefix}/${it.name}` : it.name
+              const meta = (it.metadata as any)
+
+              // If it has a size in metadata or an extension, treat as file
+              const hasFileExt = /\.[a-z0-9]{2,5}$/i.test(it.name)
+              if (meta?.size !== undefined || hasFileExt) {
+                const mime = meta?.mimetype || ''
+                const cat = detectCategory(fullPath)
+                const itemKey = `${bucket}/${fullPath}`
+                if (!seenIds.has(itemKey)) {
+                  seenIds.add(itemKey)
                   fallbackItems.push({
-                    id: it.id || fullName,
+                    id: it.id || itemKey,
                     bucket_id: bucket,
-                    name: fullName,
-                    size_bytes: Number((it.metadata as any)?.size || 0),
+                    name: fullPath,
+                    size_bytes: Number(meta?.size || 0),
                     mime_type: mime,
                     created_at: it.created_at || '',
-                    public_url: supabase?.storage.from(bucket).getPublicUrl(fullName)?.data?.publicUrl || '',
+                    public_url: supabase?.storage.from(bucket).getPublicUrl(fullPath)?.data?.publicUrl || '',
                     category: cat.key,
                     category_name: cat.name,
                     is_video: checkIsVideo(mime, it.name),
                     is_image: checkIsImage(mime, it.name),
                   })
                 }
+              } else {
+                // It's a folder, traverse into it
+                await scanFolder(bucket, fullPath, depth + 1)
               }
             }
           } catch {
             // continue
           }
+        }
+
+        // Scan known buckets
+        const targetBuckets = ['daily-photos', 'person-photos', 'media-covers', 'book-covers']
+        for (const b of targetBuckets) {
+          await scanFolder(b, '', 0)
+        }
+
+        // Also query shared_events and daily_entries to catch all attached photos/videos
+        try {
+          const { data: sharedEvents } = await supabase
+            ?.from('shared_events')
+            .select('id, title, image_url, image_path, images, image_paths, created_at')
+            .order('created_at', { ascending: false })
+            .limit(100) || {}
+
+          if (sharedEvents && Array.isArray(sharedEvents)) {
+            for (const ev of sharedEvents) {
+              const paths: string[] = []
+              if (Array.isArray(ev.image_paths)) paths.push(...ev.image_paths)
+              else if (ev.image_path) paths.push(ev.image_path)
+
+              const urls: string[] = []
+              if (Array.isArray(ev.images)) urls.push(...ev.images)
+              else if (ev.image_url) urls.push(ev.image_url)
+
+              for (let i = 0; i < Math.max(paths.length, urls.length); i++) {
+                const path = paths[i] || ''
+                const url = urls[i] || (path ? supabase?.storage.from('daily-photos').getPublicUrl(path)?.data?.publicUrl || '' : '')
+                const fileName = path ? path.split('/').pop() || path : (url.split('/').pop()?.split('?')[0] || `Ảnh/Video sự kiện`)
+                const itemKey = path ? `daily-photos/${path}` : url
+                if (!seenIds.has(itemKey) && (path || url)) {
+                  seenIds.add(itemKey)
+                  const isVid = checkIsVideo('', fileName) || checkIsVideo('', url)
+                  fallbackItems.push({
+                    id: itemKey,
+                    bucket_id: 'daily-photos',
+                    name: path || fileName,
+                    size_bytes: 0,
+                    mime_type: isVid ? 'video/mp4' : 'image/jpeg',
+                    created_at: ev.created_at || '',
+                    public_url: url,
+                    category: 'shared_events',
+                    category_name: `Sự kiện: ${ev.title || 'Kỷ niệm chung'}`,
+                    is_video: isVid,
+                    is_image: !isVid,
+                  })
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        try {
+          const { data: dailyEntries } = await supabase
+            ?.from('daily_entries')
+            .select('id, title, date, image_url, image_path, images, image_paths, created_at')
+            .order('created_at', { ascending: false })
+            .limit(100) || {}
+
+          if (dailyEntries && Array.isArray(dailyEntries)) {
+            for (const de of dailyEntries) {
+              const paths: string[] = []
+              if (Array.isArray(de.image_paths)) paths.push(...de.image_paths)
+              else if (de.image_path) paths.push(de.image_path)
+
+              const urls: string[] = []
+              if (Array.isArray(de.images)) urls.push(...de.images)
+              else if (de.image_url) urls.push(de.image_url)
+
+              for (let i = 0; i < Math.max(paths.length, urls.length); i++) {
+                const path = paths[i] || ''
+                const url = urls[i] || (path ? supabase?.storage.from('daily-photos').getPublicUrl(path)?.data?.publicUrl || '' : '')
+                const fileName = path ? path.split('/').pop() || path : (url.split('/').pop()?.split('?')[0] || `Nhật ký ${de.date}`)
+                const itemKey = path ? `daily-photos/${path}` : url
+                if (!seenIds.has(itemKey) && (path || url)) {
+                  seenIds.add(itemKey)
+                  const isVid = checkIsVideo('', fileName) || checkIsVideo('', url)
+                  fallbackItems.push({
+                    id: itemKey,
+                    bucket_id: 'daily-photos',
+                    name: path || fileName,
+                    size_bytes: 0,
+                    mime_type: isVid ? 'video/mp4' : 'image/jpeg',
+                    created_at: de.created_at || '',
+                    public_url: url,
+                    category: 'daily_entries',
+                    category_name: `Nhật ký: ${de.title || de.date}`,
+                    is_video: isVid,
+                    is_image: !isVid,
+                  })
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
         }
 
         foundItems = fallbackItems.sort((a, b) => b.size_bytes - a.size_bytes)
