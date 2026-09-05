@@ -1,23 +1,45 @@
 /**
- * POST /api/sync-review
+ * POST /api/sync-channel
  *
- *   { action: 'plan', creatorUrl }        → kế hoạch duyệt + tổng số trang
- *   { action: 'page', plan, cursor }      → xử lý đúng một trang rồi ghi ngay
+ * Query or Body param: type = 'review' | 'tvshow'
  *
- * Chia nhỏ như vậy để web vẽ được thanh tiến độ và bấm tạm dừng bất cứ lúc nào:
- * mỗi trang xong là đã nằm trong DB, dừng không mất gì. API key ở env server,
- * không bao giờ xuống trình duyệt.
+ *   { action: 'plan', creatorUrl, type }        → kế hoạch duyệt + tổng số trang
+ *   { action: 'page', plan, cursor, type }      → xử lý đúng một trang rồi ghi ngay
+ *   { action: 'save_selected', plan, videos }   → lưu video đã chọn
+ *   { action: 'finish', creatorUrl, type }      → hoàn tất đồng bộ
  *
  * Env: YOUTUBE_API_KEY, VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  */
 
 import { createClient } from '@supabase/supabase-js'
-// package.json đặt "type": "module" nên hàm chạy dưới Node ESM — đường dẫn
-// tương đối bắt buộc có đuôi, thiếu là ERR_MODULE_NOT_FOUND lúc chạy.
-import { startSync, syncOnePage, writeVideos } from '../src/lib/reviewSeries/pageSync.js'
+import {
+  startSync as startReviewSync,
+  syncOnePage as syncReviewOnePage,
+  writeVideos as writeReviewVideos,
+} from '../src/lib/reviewSeries/pageSync.js'
+import {
+  startPlaylistSync as startTvshowPlaylistSync,
+  startSync as startTvshowSync,
+  syncOnePage as syncTvshowOnePage,
+  writeVideos as writeTvshowVideos,
+} from '../src/lib/tvshowSeries/pageSync.js'
+import { youtubePlaylistId } from '../src/lib/youtubeMeta.js'
 import { requireAuth } from './_auth.js'
 
 export const config = { maxDuration: 60 }
+
+/** Trả về câu báo lỗi, hoặc null nếu link hợp lệ. */
+function validateChannelUrl(creatorUrl: string): string | null {
+  if (!creatorUrl) return 'Thiếu creatorUrl'
+  let host: string
+  try {
+    host = new URL(creatorUrl).hostname.replace(/^www\./, '')
+  } catch {
+    return 'creatorUrl không phải URL hợp lệ'
+  }
+  if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return 'Hiện chỉ hỗ trợ link kênh YouTube'
+  return null
+}
 
 export default async function handler(req: any, res: any) {
   if (await requireAuth(req, res)) return
@@ -30,6 +52,11 @@ export default async function handler(req: any, res: any) {
   }
 
   const db = createClient(VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  const type = req.query?.type || req.body?.type || 'tvshow'
+  const isReview = type === 'review'
+
+  const creatorTable = isReview ? 'review_creators' : 'tvshow_creators'
+  const syncRunsTable = isReview ? 'review_sync_runs' : 'tvshow_sync_runs'
   const action = req.body?.action ?? 'plan'
 
   try {
@@ -38,8 +65,17 @@ export default async function handler(req: any, res: any) {
       const bad = validateChannelUrl(creatorUrl)
       if (bad) return res.status(400).json({ error: bad })
 
-      const plan = await startSync(creatorUrl, YOUTUBE_API_KEY)
-      await db.from('review_creators').upsert(
+      let plan: any
+      if (isReview) {
+        plan = await startReviewSync(creatorUrl, YOUTUBE_API_KEY)
+      } else {
+        const playlistId = youtubePlaylistId(creatorUrl)
+        plan = playlistId
+          ? await startTvshowPlaylistSync(playlistId, YOUTUBE_API_KEY)
+          : await startTvshowSync(creatorUrl, YOUTUBE_API_KEY)
+      }
+
+      await db.from(creatorTable).upsert(
         {
           platform: 'youtube',
           creator_url: creatorUrl,
@@ -58,7 +94,9 @@ export default async function handler(req: any, res: any) {
       if (!plan?.entries?.length) return res.status(400).json({ error: 'Thiếu plan' })
       if (typeof cursor?.entryIndex !== 'number') return res.status(400).json({ error: 'Thiếu cursor' })
 
-      const outcome = await syncOnePage(db, plan, cursor, YOUTUBE_API_KEY, fetch, { dryRun })
+      const outcome = isReview
+        ? await syncReviewOnePage(db, plan, cursor, YOUTUBE_API_KEY, fetch, { dryRun })
+        : await syncTvshowOnePage(db, plan, cursor, YOUTUBE_API_KEY, fetch, { dryRun })
       return res.status(200).json({ outcome })
     }
 
@@ -69,16 +107,20 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Không có video nào được chọn' })
       }
       const entry = plan?.entries?.[0] || { playlistId: '', name: 'Video đã chọn', itemCount: videos.length, isUploads: true }
-      await writeVideos(db, videos, entry, plan)
+      if (isReview) {
+        await writeReviewVideos(db, videos, entry, plan)
+      } else {
+        await writeTvshowVideos(db, videos, entry, plan)
+      }
 
       const creatorUrl = String(plan?.creatorUrl ?? '').trim()
       if (creatorUrl) {
         await db
-          .from('review_creators')
+          .from(creatorTable)
           .update({ last_synced_at: new Date().toISOString() })
           .eq('platform', 'youtube')
           .eq('creator_url', creatorUrl)
-        await db.from('review_sync_runs').insert({
+        await db.from(syncRunsTable).insert({
           platform: 'youtube',
           creator_url: creatorUrl,
           found_count: Number(videos.length),
@@ -89,15 +131,13 @@ export default async function handler(req: any, res: any) {
     }
 
     if (action === 'finish') {
-      // Client báo đã chạy xong (hoặc người dùng bấm dừng) — ghi lại một dòng
-      // nhật ký để lần sau biết kênh nào tải tới đâu.
       const creatorUrl = String(req.body?.creatorUrl ?? '').trim()
       await db
-        .from('review_creators')
+        .from(creatorTable)
         .update({ last_synced_at: new Date().toISOString() })
         .eq('platform', 'youtube')
         .eq('creator_url', creatorUrl)
-      await db.from('review_sync_runs').insert({
+      await db.from(syncRunsTable).insert({
         platform: 'youtube',
         creator_url: creatorUrl,
         found_count: Number(req.body?.saved ?? 0),
@@ -109,24 +149,11 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: `action lạ: ${action}` })
   } catch (error: any) {
     const message = String(error?.message ?? error).slice(0, 500)
-    await db.from('review_sync_runs').insert({
+    await db.from(syncRunsTable).insert({
       platform: 'youtube',
       creator_url: String(req.body?.creatorUrl ?? req.body?.plan?.creatorUrl ?? ''),
       error: message,
     })
     return res.status(502).json({ error: message })
   }
-}
-
-/** Trả về câu báo lỗi, hoặc null nếu link hợp lệ. */
-function validateChannelUrl(creatorUrl: string): string | null {
-  if (!creatorUrl) return 'Thiếu creatorUrl'
-  let host: string
-  try {
-    host = new URL(creatorUrl).hostname.replace(/^www\./, '')
-  } catch {
-    return 'creatorUrl không phải URL hợp lệ'
-  }
-  if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return 'Hiện chỉ hỗ trợ link kênh YouTube'
-  return null
 }

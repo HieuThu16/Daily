@@ -5,6 +5,34 @@
       "destination": "/api/link-preview?audio=1"
     },
     {
+      "source": "/api/cloudinary-upload",
+      "destination": "/api/storage?action=cloudinary-upload"
+    },
+    {
+      "source": "/api/cloudinary-delete",
+      "destination": "/api/storage?action=cloudinary-delete"
+    },
+    {
+      "source": "/api/cloudinary-usage",
+      "destination": "/api/storage?action=cloudinary-usage"
+    },
+    {
+      "source": "/api/storage-delete",
+      "destination": "/api/storage?action=storage-delete"
+    },
+    {
+      "source": "/api/sync-review",
+      "destination": "/api/sync-channel?type=review"
+    },
+    {
+      "source": "/api/sync-tvshow",
+      "destination": "/api/sync-channel?type=tvshow"
+    },
+    {
+      "source": "/api/tiktok-video",
+      "destination": "/api/crawl-tiktok?action=video"
+    },
+    {
       "source": "/((?!api/|assets/|manifest\\.webmanifest$|registerSW\\.js$|sw\\.js$|version\\.json$|workbox-.*\\.js$).*)",
       "destination": "/index.html"
     }

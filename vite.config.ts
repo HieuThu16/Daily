@@ -21,9 +21,24 @@ function apiDevServer(): Plugin {
         if (!url.startsWith('/api/')) return next()
 
         const [pathname, query = ''] = url.slice('/api/'.length).split('?')
-        const name = pathname.replace(/\/+$/, '')
+        let name = pathname.replace(/\/+$/, '')
         // Chặn ../ để không nạp được file ngoài thư mục api/
         if (!name || !/^[\w-]+$/.test(name)) return next()
+
+        const queryParams = new URLSearchParams(query)
+        if (['cloudinary-upload', 'cloudinary-delete', 'cloudinary-usage', 'storage-delete'].includes(name)) {
+          queryParams.set('action', name)
+          name = 'storage'
+        } else if (name === 'sync-review') {
+          queryParams.set('type', 'review')
+          name = 'sync-channel'
+        } else if (name === 'sync-tvshow') {
+          queryParams.set('type', 'tvshow')
+          name = 'sync-channel'
+        } else if (name === 'tiktok-video') {
+          queryParams.set('action', 'video')
+          name = 'crawl-tiktok'
+        }
 
         const file = resolve(process.cwd(), 'api', `${name}.ts`)
         if (!existsSync(file)) return next()
@@ -65,7 +80,7 @@ function apiDevServer(): Plugin {
                 method: req.method,
                 headers: req.headers,
                 url,
-                query: Object.fromEntries(new URLSearchParams(query)),
+                query: Object.fromEntries(queryParams),
                 body: raw ? JSON.parse(raw) : {},
               },
               shim,

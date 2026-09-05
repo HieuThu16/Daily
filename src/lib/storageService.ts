@@ -80,7 +80,7 @@ export async function uploadMediaFile(
   // 1. Attempt Cloudinary upload via serverless API
   try {
     const dataUrl = await blobToDataUrl(fileOrBlob)
-    const res = await fetch('/api/cloudinary-upload', {
+    const res = await fetch('/api/storage?action=cloudinary-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -93,17 +93,17 @@ export async function uploadMediaFile(
 
     if (res.ok) {
       const data = await res.json()
-      if (data?.url) {
+      if (data.url) {
         return {
           url: data.url,
-          provider: 'cloudinary',
           publicId: data.publicId,
+          provider: 'cloudinary',
           bytes: data.bytes,
         }
       }
     }
-  } catch (err) {
-    console.warn('[StorageService] Cloudinary upload skipped or failed, falling back to Supabase:', err)
+  } catch (e) {
+    console.warn('[StorageService] Cloudinary upload failed, falling back to Supabase:', e)
   }
 
   // 2. Fallback to Supabase Storage
@@ -127,6 +127,7 @@ export async function uploadMediaFile(
   }
 
   const { data: pubData } = supabase.storage.from(bucketFallback).getPublicUrl(path)
+
   return {
     url: pubData.publicUrl,
     provider: 'supabase',
@@ -135,18 +136,19 @@ export async function uploadMediaFile(
 }
 
 /**
- * Delete a media file cleanly whether it's stored on Cloudinary or Supabase Storage.
+ * Delete a media file from either Cloudinary or Supabase Storage.
+ * Auto-detects based on URL pattern.
  */
 export async function deleteMediaFile(
   urlOrPath: string,
-  bucketFallback: string = 'daily-photos'
+  bucketFallback = 'daily-photos'
 ): Promise<{ success: boolean; provider: 'cloudinary' | 'supabase' }> {
   if (!urlOrPath) return { success: false, provider: 'supabase' }
 
   // Check if it's a Cloudinary URL
   if (urlOrPath.includes('cloudinary.com')) {
     try {
-      const res = await fetch('/api/cloudinary-delete', {
+      const res = await fetch('/api/storage?action=cloudinary-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: urlOrPath }),
@@ -171,7 +173,7 @@ export async function deleteMediaFile(
  */
 export async function getCloudinaryUsage(): Promise<CloudinaryUsageData> {
   try {
-    const res = await fetch('/api/cloudinary-usage')
+    const res = await fetch('/api/storage?action=cloudinary-usage')
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       return {

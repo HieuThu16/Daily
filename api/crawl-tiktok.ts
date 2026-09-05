@@ -445,7 +445,51 @@ async function saveGroupedSeries(db: any, grouped: any[], creatorInfo: any) {
   }
 }
 
+const ALLOWED_VIDEO_HOSTS = /(^|\.)(tiktokcdn|tiktokcdn-us|tiktokv|tiktokvcdn|byteoversea)\.com$/
+
+async function handleVideoProxy(req: any, res: any) {
+  const raw = String(req.query?.url || '')
+  if (!raw) return res.status(400).json({ error: 'Thiếu url' })
+
+  let target: URL
+  try {
+    target = new URL(raw)
+  } catch {
+    return res.status(400).json({ error: 'URL không hợp lệ' })
+  }
+  if (target.protocol !== 'https:' || !ALLOWED_VIDEO_HOSTS.test(target.hostname)) {
+    return res.status(403).json({ error: 'Chỉ proxy video từ CDN TikTok' })
+  }
+
+  const headers: Record<string, string> = {
+    'User-Agent': UA,
+    Referer: 'https://www.tiktok.com/',
+  }
+  if (req.headers?.range) headers.Range = String(req.headers.range)
+
+  const upstream = await fetch(target.toString(), { headers })
+  res.status(upstream.status)
+  for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+    const v = upstream.headers.get(h)
+    if (v) res.setHeader(h, v)
+  }
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+
+  if (!upstream.body) return res.end()
+  const reader = upstream.body.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    res.write(Buffer.from(value))
+  }
+  res.end()
+}
+
 export default async function handler(req: any, res: any) {
+  if (req.method === 'GET' && (req.query?.action === 'video' || req.query?.url)) {
+    return handleVideoProxy(req, res)
+  }
+
   if (await requireAuth(req, res)) return
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Chỉ nhận POST' })

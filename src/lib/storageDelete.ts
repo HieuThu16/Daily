@@ -30,7 +30,7 @@ export async function deleteStorageFiles(
   let cloudinaryDeleted = 0
   for (const cUrl of cloudinaryUrls) {
     try {
-      const res = await fetch('/api/cloudinary-delete', {
+      const res = await fetch('/api/storage?action=cloudinary-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: cUrl }),
@@ -51,9 +51,9 @@ export async function deleteStorageFiles(
     }
   }
 
-  // 1. Thử qua backend API /api/storage-delete (dùng master key service_role)
+  // 1. Thử qua backend API /api/storage?action=storage-delete (dùng master key service_role)
   try {
-    const res = await fetch('/api/storage-delete', {
+    const res = await fetch('/api/storage?action=storage-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucket, paths: normalPaths }),
