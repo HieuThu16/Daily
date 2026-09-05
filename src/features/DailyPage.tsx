@@ -366,11 +366,33 @@ export function DailyPage() {
     const fileArray = Array.from(files)
     if (fileArray.length === 0) return
 
-    setMediaUploading(true)
-    const uploadedList: AttachedMedia[] = []
+    // Loại bỏ tệp trùng lặp với danh sách đã chọn hoặc trong cùng đợt chọn
+    const existingNames = new Set(attachedMedias.map((m) => m.name.toLowerCase()))
+    const uniqueFiles: File[] = []
+    let duplicateCount = 0
 
-    for (const file of fileArray) {
+    for (const f of fileArray) {
+      const nameLower = f.name.toLowerCase()
+      if (existingNames.has(nameLower)) {
+        duplicateCount++
+        continue
+      }
+      existingNames.add(nameLower)
+      uniqueFiles.push(f)
+    }
+
+    if (duplicateCount > 0) {
+      showToast(`ℹ️ Đã tự động bỏ qua ${duplicateCount} tệp trùng lặp`)
+    }
+
+    if (uniqueFiles.length === 0) return
+
+    setMediaUploading(true)
+    let savedCount = 0
+
+    for (const file of uniqueFiles) {
       try {
+        await new Promise((r) => setTimeout(r, 20))
         const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
         let uploadBlob: Blob | File = file
         let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
@@ -396,20 +418,23 @@ export function DailyPage() {
         const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
         const publicUrl = pubData.publicUrl
 
-        uploadedList.push({
+        const newItem: AttachedMedia = {
           url: publicUrl,
           path,
           type: isVideo ? 'video' : 'image',
           name: file.name,
-        })
+        }
+
+        // Tải ảnh/video nào hiển thị và lưu ngay ảnh đó
+        setAttachedMedias((prev) => [...prev, newItem])
+        savedCount++
       } catch (err: any) {
         console.warn('Lỗi upload file:', err)
       }
     }
 
-    if (uploadedList.length > 0) {
-      setAttachedMedias((prev) => [...prev, ...uploadedList])
-      showToast(`✅ Đã tải ${uploadedList.length} ảnh/video lên Supabase Storage!`, 'success')
+    if (savedCount > 0) {
+      showToast(`✅ Đã tải ${savedCount} ảnh/video lên Supabase Storage!`, 'success')
     } else {
       showToast('❌ Tải file lên thất bại. Vui lòng thử lại.', 'delete')
     }

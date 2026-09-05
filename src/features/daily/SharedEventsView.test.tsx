@@ -149,5 +149,43 @@ describe('SharedEventsView - xu ly nhieu anh', () => {
     expect(state.uploaded).toHaveLength(2)
     expect(state.toasts.at(-1)).toContain('2 ảnh/video')
   })
+
+  it('tu dong bo qua cac anh trung lap khi nguoi dung chon trung', async () => {
+    const user = userEvent.setup()
+    render(<SharedEventsView personId="p1" personName="Kim Y" />)
+    await user.click(await screen.findByRole('button', { name: /Thêm kỷ niệm|Thêm sự kiện|Thêm/i }))
+    await user.type(await screen.findByLabelText(/Thông tin sự kiện/i), 'Anh trung')
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    const file1 = new File([new Uint8Array(10)], 'same_photo.jpg', { type: 'image/jpeg', lastModified: 1000 })
+    const file2 = new File([new Uint8Array(10)], 'same_photo.jpg', { type: 'image/jpeg', lastModified: 1000 })
+    const file3 = new File([new Uint8Array(20)], 'different_photo.jpg', { type: 'image/jpeg', lastModified: 2000 })
+
+    await user.upload(input, [file1, file2, file3])
+
+    // Co thong bao bo qua anh trung
+    expect(state.toasts.some((t) => t.includes('trùng lặp'))).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: /Lưu sự kiện/i }))
+
+    await waitFor(() => expect(state.toasts.some((t) => t.includes('2 ảnh/video'))).toBe(true), { timeout: 4000 })
+    expect(state.uploaded).toHaveLength(2)
+  })
+
+  it('nut dung tai cho phep dung giua chung va van luu lai cac anh da tai', async () => {
+    const user = await openFormAndAttach(4)
+    await user.click(screen.getByRole('button', { name: /Lưu sự kiện/i }))
+
+    // Tim nut Dung tai va click
+    const stopBtn = await screen.findByRole('button', { name: /Dừng tải/i })
+    expect(stopBtn).toBeTruthy()
+    await user.click(stopBtn)
+
+    await waitFor(() => expect(state.toasts.some((t) => t.includes('Đã dừng') || t.includes('Đã lưu'))).toBe(true), {
+      timeout: 4000,
+    })
+    // Khong bi loi hay crash, modal duoc dong sach se
+    expect(screen.queryByRole('status')).toBeNull()
+  })
 })
 

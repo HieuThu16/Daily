@@ -31,6 +31,20 @@ export function isVideoFile(file: File): boolean {
   return ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi', '3gp', 'ogv'].includes(ext || '')
 }
 
+/** Đại diện cho một ảnh/video đang chờ tải lên với thông tin preview và fingerprint chống trùng lặp */
+export interface PendingMediaItem {
+  id: string
+  file: File
+  previewUrl: string
+  fingerprint: string
+  isVid: boolean
+}
+
+/** Tạo fingerprint duy nhất của tệp từ tên, kích thước và thời gian sửa đổi */
+export function getMediaFingerprint(file: File): string {
+  return `${file.name}__${file.size}__${file.lastModified}`
+}
+
 /** Ảnh/video đang ở bước nào; `done`/`total` để vẽ thanh tiến trình. */
 type PhotoProgress = { phase: 'compress' | 'upload' | 'save'; done: number; total: number }
 
@@ -96,7 +110,29 @@ export function SharedEventsView({
   const [filterYear, setFilterYear] = useState<string>('ALL')
   const [filterMonth, setFilterMonth] = useState<string>('ALL')
 
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [pendingMedia, setPendingMedia] = useState<PendingMediaItem[]>([])
+  const abortUploadRef = useRef(false)
+  const pendingMediaRef = useRef<PendingMediaItem[]>([])
+  pendingMediaRef.current = pendingMedia
+
+  // Dọn dẹp bộ nhớ: revoke các URL preview khi huỷ hoặc unmount
+  const revokeAllPreviews = (items: PendingMediaItem[]) => {
+    for (const item of items) {
+      if (item.previewUrl) {
+        try {
+          URL.revokeObjectURL(item.previewUrl)
+        } catch {}
+      }
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      abortUploadRef.current = true
+      revokeAllPreviews(pendingMediaRef.current)
+    }
+  }, [])
+
   const [progress, setProgress] = useState<PhotoProgress | null>(null)
   const [selectedImageIdx, setSelectedImageIdx] = useState<number>(0)
   const [fullscreenIdx, setFullscreenIdx] = useState<number | null>(null)
@@ -267,8 +303,10 @@ export function SharedEventsView({
     setEventTime('')
     setLocation('')
     setShowExtra(false)
-    setPendingFiles([])
+    revokeAllPreviews(pendingMedia)
+    setPendingMedia([])
     setSelectedImageIdx(0)
+    abortUploadRef.current = false
   }
 
   const openAdd = () => {
@@ -284,8 +322,10 @@ export function SharedEventsView({
     setEventTime(ev.event_time ?? '')
     setLocation(ev.location ?? '')
     setShowExtra(Boolean(ev.location))
-    setPendingFiles([])
+    revokeAllPreviews(pendingMedia)
+    setPendingMedia([])
     setSelectedImageIdx(0)
+    abortUploadRef.current = false
   }
 
   const getEffectiveTitle = () => {
@@ -320,180 +360,218 @@ export function SharedEventsView({
       reader.readAsDataURL(file)
     })
 
-  const uploadMultipleMedia = async (
+  /** Tải lên một tệp media đơn lẻ với nén ảnh mượt mà và fallback an toàn */
+  const uploadSingleMedia = async (
     folder: string,
-    files: File[],
-    onProgress?: (p: PhotoProgress) => void,
-  ) => {
-    if (!files.length) return { urls: [] as string[], paths: [] as string[], fellBack: 0 }
-    const urls: string[] = []
-    const paths: string[] = []
-    /** Số ảnh/video không đẩy lên storage được, phải nhúng thẳng vào bản ghi. */
-    let fellBack = 0
+    file: File,
+    isVid: boolean,
+    onPhase?: (phase: 'compress' | 'upload') => void,
+  ): Promise<{ url: string; path: string; isFallback: boolean }> => {
+    let blobToUpload: Blob = file
+    let ext = file.name.split('.').pop()?.toLowerCase() || (isVid ? 'mp4' : 'jpg')
 
-    for (const [index, file] of files.entries()) {
-      let blobToUpload: Blob = file
-      try {
-        const isVid = isVideoFile(file)
-        onProgress?.({ phase: isVid ? 'upload' : 'compress', done: index, total: files.length })
+    if (!isVid) {
+      onPhase?.('compress')
+      const compressed = await compressForUpload(file)
+      blobToUpload = compressed.blob
+      ext = compressed.ext
+    }
 
-        let ext = file.name.split('.').pop()?.toLowerCase() || (isVid ? 'mp4' : 'jpg')
+    onPhase?.('upload')
+    const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    const path = `${folder}/${uuid}.${ext}`
+    let uploadedUrl = ''
+    let isFallback = false
 
-        if (!isVid) {
-          // Nén trước: ảnh gốc từ máy ảnh 4-7MB, nén xong còn ~300KB.
-          const compressed = await compressForUpload(file)
-          blobToUpload = compressed.blob
-          ext = compressed.ext
+    if (supabase) {
+      const contentType = file.type || (isVid ? 'video/mp4' : 'image/jpeg')
+      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blobToUpload, { upsert: true, contentType })
+      if (!upErr) {
+        const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+        if (pub?.publicUrl) {
+          uploadedUrl = pub.publicUrl
         }
-
-        onProgress?.({ phase: 'upload', done: index, total: files.length })
-        const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-        const path = `${folder}/${uuid}.${ext}`
-        let uploadedUrl = ''
-
-        if (supabase) {
-          const contentType = file.type || (isVid ? 'video/mp4' : 'image/jpeg')
-          const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, blobToUpload, { upsert: true, contentType })
-          if (!upErr) {
-            const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-            if (pub?.publicUrl) {
-              uploadedUrl = pub.publicUrl
-            }
-          } else {
-            console.warn('Supabase storage upload error, fallback to data url:', upErr)
-          }
-        }
-
-        if (!uploadedUrl) {
-          // Nhúng thẳng vào bản ghi: nặng nhưng còn hơn mất ảnh. Có đếm để báo lại.
-          uploadedUrl = await fileToDataUrl(blobToUpload)
-          if (uploadedUrl) fellBack += 1
-        }
-
-        if (uploadedUrl) {
-          urls.push(uploadedUrl)
-          paths.push(path)
-        }
-      } catch (err) {
-        console.error('Lỗi tải media:', err)
-        const dataUrl = await fileToDataUrl(blobToUpload || file)
-        if (dataUrl) {
-          urls.push(dataUrl)
-          paths.push('')
-          fellBack += 1
-        }
+      } else {
+        console.warn('Supabase storage upload error, fallback to data url:', upErr)
       }
     }
-    onProgress?.({ phase: 'upload', done: files.length, total: files.length })
-    return { urls, paths, fellBack }
+
+    if (!uploadedUrl) {
+      uploadedUrl = await fileToDataUrl(blobToUpload)
+      if (uploadedUrl) isFallback = true
+    }
+
+    return { url: uploadedUrl, path: uploadedUrl ? path : '', isFallback }
   }
 
+
   const createEvent = async () => {
-    if (!title.trim() && !note.trim() && pendingFiles.length === 0) {
+    if (!title.trim() && !note.trim() && pendingMedia.length === 0) {
       showToast('Vui lòng nhập tên sự kiện hoặc đính kèm ảnh/video', 'delete')
       return
     }
     setBusy(true)
+    abortUploadRef.current = false
+
+    if (pendingMedia.length > 0) {
+      setProgress({ phase: 'compress', done: 0, total: pendingMedia.length })
+    }
 
     try {
-      let urls: string[] = []
-      let paths: string[] = []
-      let fellBack = 0
-      if (pendingFiles.length > 0) {
-        const res = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
-        urls = res.urls
-        paths = res.paths
-        fellBack = res.fellBack
-      }
-      setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
-
-      const firstUrl = urls[0] || null
-      const firstPath = paths[0] || null
-
       const basePayload = {
         ...payload(),
-        image_url: firstUrl,
-        image_path: firstPath,
+        image_url: null,
+        image_path: null,
       }
 
       let created: SharedEvent | null = null
 
+      // Bước 1: Lưu kỷ niệm vào Supabase ngay trước để có ID
       if (supabase) {
-        if (urls.length > 0) {
-          const fullPayload = {
-            ...basePayload,
-            images: urls,
-            image_paths: paths,
-          }
-          const { data, error } = await supabase.from('shared_events').insert(fullPayload).select().single()
-          if (error) {
-            // Schema cũ chưa có cột mảng images, thử lại với basePayload.
-            // Phải nói ra: nếu im lặng thì tải lại trang là mất sạch ảnh từ ảnh thứ hai.
-            if (urls.length > 1) warnMissingImagesColumn(showToast)
-            const retryRes = await supabase.from('shared_events').insert(basePayload).select().single()
-            if (retryRes.data) {
-              created = {
-                ...(retryRes.data as SharedEvent),
-                images: urls,
-                image_paths: paths,
-              }
+        const fullPayload = {
+          ...basePayload,
+          images: [],
+          image_paths: [],
+        }
+        const { data, error } = await supabase.from('shared_events').insert(fullPayload).select().single()
+        if (error) {
+          // Schema cũ chưa có cột images
+          const retryRes = await supabase.from('shared_events').insert(basePayload).select().single()
+          if (retryRes.data) {
+            created = {
+              ...(retryRes.data as SharedEvent),
+              images: [],
+              image_paths: [],
             }
-          } else if (data) {
-            created = data as SharedEvent
           }
-        } else {
-          const { data } = await supabase.from('shared_events').insert(basePayload).select().single()
-          if (data) {
-            created = data as SharedEvent
-          }
+        } else if (data) {
+          created = data as SharedEvent
         }
       }
 
-      // Không lưu được lên máy chủ: vẫn hiện ra để khỏi mất công gõ lại, nhưng phải
-      // nói thẳng là chưa lưu — trước đây toast báo thành công rồi tải lại trang là mất.
       const savedRemotely = created !== null
-
-      /*
-       * Ảnh/video đã nằm trên storage trước khi insert. Insert hỏng mà cứ để đó thì mỗi
-       * lần bấm thêm lại là một bộ media mới nằm lại vĩnh viễn — dọn ngay.
-       */
-      if (!savedRemotely && supabase) {
-        const uploaded = paths.filter(Boolean)
-        if (uploaded.length) {
-          const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove(uploaded)
-          if (rmErr) console.warn('Không dọn được media của lần thêm hỏng:', rmErr)
-        }
-      }
 
       if (!created) {
         created = {
           id: `local-${Date.now()}`,
           owner_id: myId || 'local',
           ...basePayload,
-          images: urls,
-          image_paths: paths,
+          images: [],
+          image_paths: [],
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           deleted_at: null,
         } as SharedEvent
       }
 
+      // Đưa ngay vào danh sách để giao diện hiển thị mượt mà không chờ đợi
       events.setItems((prev) => [created!, ...prev])
 
-      if (savedRemotely) {
+      if (!savedRemotely) {
+        showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
+        setAdding(false)
+        resetForm()
+        return
+      }
+
+      // Bước 2: Tải từng ảnh/video và lưu NGAY ("tải ảnh nào lưu ảnh đó", "dừng thì vẫn lưu các ảnh đã lưu")
+      const uploadedUrls: string[] = []
+      const uploadedPaths: string[] = []
+      let fellBack = 0
+      let stoppedEarly = false
+
+      if (pendingMedia.length > 0) {
+        for (let i = 0; i < pendingMedia.length; i++) {
+          if (abortUploadRef.current) {
+            stoppedEarly = true
+            break
+          }
+
+          const item = pendingMedia[i]
+          // Nhường vòng lặp 25ms để trình duyệt vẽ lại giao diện mượt mà không bị khựng
+          await new Promise((r) => setTimeout(r, 25))
+          if (abortUploadRef.current) {
+            stoppedEarly = true
+            break
+          }
+
+          setProgress({ phase: item.isVid ? 'upload' : 'compress', done: i, total: pendingMedia.length })
+
+          try {
+            const res = await uploadSingleMedia(
+              eventDate,
+              item.file,
+              item.isVid,
+              (phase) => setProgress({ phase, done: i, total: pendingMedia.length }),
+            )
+
+            if (res.isFallback) fellBack++
+
+            if (res.url) {
+              uploadedUrls.push(res.url)
+              uploadedPaths.push(res.path)
+
+              // LƯU NGAY VÀO SUPABASE CHO KỶ NIỆM HIỆN TẠI
+              if (supabase && created.id && !created.id.startsWith('local-')) {
+                const patch = {
+                  images: [...uploadedUrls],
+                  image_paths: [...uploadedPaths],
+                  image_url: uploadedUrls[0] || null,
+                  image_path: uploadedPaths[0] || null,
+                }
+                const { error: patchErr } = await supabase.from('shared_events').update(patch).eq('id', created.id)
+                if (patchErr) {
+                  if (uploadedUrls.length > 1) warnMissingImagesColumn(showToast)
+                  await supabase.from('shared_events').update({
+                    image_url: uploadedUrls[0] || null,
+                    image_path: uploadedPaths[0] || null,
+                  }).eq('id', created.id)
+                }
+              }
+
+              // Cập nhật ngay vào danh sách trong React state
+              events.setItems((prev) =>
+                prev.map((e) =>
+                  e.id === created!.id
+                    ? {
+                        ...e,
+                        images: [...uploadedUrls],
+                        image_paths: [...uploadedPaths],
+                        image_url: uploadedUrls[0] || null,
+                        image_path: uploadedPaths[0] || null,
+                      }
+                    : e,
+                ),
+              )
+
+              if (item.previewUrl) {
+                try {
+                  URL.revokeObjectURL(item.previewUrl)
+                } catch {}
+              }
+            }
+          } catch (mediaErr) {
+            console.error('Lỗi khi tải ảnh/video:', mediaErr)
+          }
+
+          setProgress({ phase: 'save', done: i + 1, total: pendingMedia.length })
+        }
+      }
+
+      if (stoppedEarly) {
+        showToast(`⏸️ Đã dừng tải lên. Đã lưu ${uploadedUrls.length}/${pendingMedia.length} ảnh/video vào kỷ niệm.`)
+      } else {
         void notifyPartner('Có kỷ niệm mới được chia sẻ', created.title, '/daily', `share-${created.id}`)
-        // Nói rõ đã lưu được bao nhiêu ảnh/video
-        const savedCount = urls.length
-        const missing = pendingFiles.length - savedCount
+        const savedCount = uploadedUrls.length
+        const missing = pendingMedia.length - savedCount
         let message = savedCount > 0 ? `✅ Đã lưu kỷ niệm cùng ${savedCount} ảnh/video` : '✅ Đã lưu kỷ niệm'
         if (missing > 0) message += ` · ${missing} tệp không đọc được`
         if (fellBack > 0) message += ` · ${fellBack} tệp lưu kèm bản ghi (nặng hơn)`
         showToast(message)
-      } else {
-        showToast('⚠️ Chưa lưu được lên máy chủ — kỷ niệm chỉ hiện tạm, kiểm tra kết nối rồi thêm lại.', 'delete')
       }
+
       setAdding(false)
       resetForm()
     } catch (err: any) {
@@ -502,48 +580,41 @@ export function SharedEventsView({
     } finally {
       setProgress(null)
       setBusy(false)
+      abortUploadRef.current = false
     }
   }
 
   const saveEvent = async () => {
     if (!editing) return
     setBusy(true)
+    abortUploadRef.current = false
+
+    if (pendingMedia.length > 0) {
+      setProgress({ phase: 'compress', done: 0, total: pendingMedia.length })
+    }
+
     try {
       const next = payload()
-      
       let currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
       let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
-
-      if (pendingFiles.length > 0) {
-        const { urls, paths } = await uploadMultipleMedia(eventDate, pendingFiles, setProgress)
-        currentImages = [...currentImages, ...urls]
-        currentPaths = [...currentPaths, ...paths]
-        setProgress({ phase: 'save', done: pendingFiles.length, total: pendingFiles.length })
-      }
 
       const baseUpdateData = {
         ...next,
         image_url: currentImages[0] || null,
         image_path: currentPaths[0] || null,
       }
-
       const fullUpdateData = {
         ...baseUpdateData,
         images: currentImages,
         image_paths: currentPaths,
       }
 
-      /*
-       * Phải biết ĐÃ ghi được hay chưa, chứ không báo bừa: trước đây lần thử lại
-       * hỏng cũng vẫn hiện "Đã cập nhật", tải lại trang mới biết là mất.
-       */
       let savedRemotely = !supabase
       if (supabase) {
         const { error } = await supabase.from('shared_events').update(fullUpdateData).eq('id', editing.id)
         if (!error) {
           savedRemotely = true
         } else {
-          // Schema cũ chưa có cột mảng images, thử lại với baseUpdateData
           if (currentImages.length > 1) warnMissingImagesColumn(showToast)
           const retry = await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
           savedRemotely = !retry.error
@@ -551,17 +622,90 @@ export function SharedEventsView({
         }
       }
 
-      const finalEvent = {
-        ...editing,
-        ...fullUpdateData,
+      let newlyUploadedCount = 0
+      let stoppedEarly = false
+
+      if (pendingMedia.length > 0) {
+        for (let i = 0; i < pendingMedia.length; i++) {
+          if (abortUploadRef.current) {
+            stoppedEarly = true
+            break
+          }
+
+          const item = pendingMedia[i]
+          await new Promise((r) => setTimeout(r, 25))
+          if (abortUploadRef.current) {
+            stoppedEarly = true
+            break
+          }
+
+          setProgress({ phase: item.isVid ? 'upload' : 'compress', done: i, total: pendingMedia.length })
+
+          try {
+            const res = await uploadSingleMedia(
+              eventDate,
+              item.file,
+              item.isVid,
+              (phase) => setProgress({ phase, done: i, total: pendingMedia.length }),
+            )
+
+            if (res.url) {
+              currentImages = [...currentImages, res.url]
+              currentPaths = [...currentPaths, res.path]
+              newlyUploadedCount++
+
+              // Cập nhật ngay vào Supabase cho sự kiện này
+              if (supabase) {
+                const patchData = {
+                  images: currentImages,
+                  image_paths: currentPaths,
+                  image_url: currentImages[0] || null,
+                  image_path: currentPaths[0] || null,
+                }
+                const { error: pErr } = await supabase.from('shared_events').update(patchData).eq('id', editing.id)
+                if (pErr) {
+                  if (currentImages.length > 1) warnMissingImagesColumn(showToast)
+                  await supabase.from('shared_events').update({
+                    image_url: currentImages[0] || null,
+                    image_path: currentPaths[0] || null,
+                  }).eq('id', editing.id)
+                }
+              }
+
+              // Cập nhật ngay trên giao diện React
+              const updatedEv = {
+                ...editing,
+                ...baseUpdateData,
+                images: currentImages,
+                image_paths: currentPaths,
+                image_url: currentImages[0] || null,
+                image_path: currentPaths[0] || null,
+              }
+              events.setItems((prev) => prev.map((e) => (e.id === editing.id ? updatedEv : e)))
+              setEditing(updatedEv)
+
+              if (item.previewUrl) {
+                try {
+                  URL.revokeObjectURL(item.previewUrl)
+                } catch {}
+              }
+            }
+          } catch (e) {
+            console.error('Lỗi khi tải ảnh vào sự kiện:', e)
+          }
+
+          setProgress({ phase: 'save', done: i + 1, total: pendingMedia.length })
+        }
       }
-      events.setItems((prev) => prev.map((e) => (e.id === editing.id ? finalEvent : e)))
-      if (savedRemotely) {
-        const added = pendingFiles.length
-        showToast(added > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${added} ảnh/video` : '✏️ Đã cập nhật kỷ niệm')
+
+      if (stoppedEarly) {
+        showToast(`⏸️ Đã dừng tải lên. Đã lưu thêm ${newlyUploadedCount}/${pendingMedia.length} ảnh/video vào kỷ niệm.`)
+      } else if (savedRemotely) {
+        showToast(newlyUploadedCount > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${newlyUploadedCount} ảnh/video` : '✏️ Đã cập nhật kỷ niệm')
       } else {
         showToast('⚠️ Chưa lưu được thay đổi lên máy chủ — kiểm tra kết nối rồi thử lại.', 'delete')
       }
+
       setEditing(null)
       setViewing(null)
       resetForm()
@@ -571,6 +715,7 @@ export function SharedEventsView({
     } finally {
       setProgress(null)
       setBusy(false)
+      abortUploadRef.current = false
     }
   }
 
@@ -725,10 +870,82 @@ export function SharedEventsView({
     await deleteImageFromEvent(editing, imgIdx)
   }
 
+  const removePendingItem = (id: string) => {
+    setPendingMedia((prev) => {
+      const target = prev.find((p) => p.id === id)
+      if (target?.previewUrl) {
+        try {
+          URL.revokeObjectURL(target.previewUrl)
+        } catch {}
+      }
+      return prev.filter((p) => p.id !== id)
+    })
+  }
+
   const handlePendingFileSelection = (files: FileList | null) => {
     if (!files || !files.length) return
     const fileArray = Array.from(files)
-    setPendingFiles((prev) => [...prev, ...fileArray])
+
+    const existingFingerprints = new Set(pendingMedia.map((p) => p.fingerprint))
+
+    const existingMediaNames = new Set<string>()
+    if (editing) {
+      const curImages = editing.images && editing.images.length ? editing.images : (editing.image_url ? [editing.image_url] : [])
+      const curPaths = editing.image_paths && editing.image_paths.length ? editing.image_paths : (editing.image_path ? [editing.image_path] : [])
+      for (const p of curPaths) {
+        const base = p.split('/').pop()?.toLowerCase()
+        if (base) existingMediaNames.add(base)
+      }
+      for (const u of curImages) {
+        const clean = u.split('?')[0]
+        const base = clean.split('/').pop()?.toLowerCase()
+        if (base) existingMediaNames.add(base)
+      }
+    }
+
+    const newItems: PendingMediaItem[] = []
+    let duplicateCount = 0
+
+    for (const file of fileArray) {
+      const fp = getMediaFingerprint(file)
+      if (existingFingerprints.has(fp)) {
+        duplicateCount++
+        continue
+      }
+      if (existingMediaNames.has(file.name.toLowerCase())) {
+        duplicateCount++
+        continue
+      }
+
+      existingFingerprints.add(fp)
+      const isVid = isVideoFile(file)
+      let previewUrl = ''
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        try {
+          previewUrl = URL.createObjectURL(file)
+        } catch {
+          previewUrl = ''
+        }
+      }
+
+      newItems.push({
+        id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        file,
+        previewUrl,
+        fingerprint: fp,
+        isVid,
+      })
+    }
+
+    if (duplicateCount > 0) {
+      showToast(`ℹ️ Đã tự động bỏ qua ${duplicateCount} ảnh/video trùng lặp`)
+    }
+
+    if (newItems.length > 0) {
+      setPendingMedia((prev) => [...prev, ...newItems])
+    }
   }
 
   const eventForm = (
@@ -840,45 +1057,74 @@ export function SharedEventsView({
           </button>
         </div>
 
-        {/* Tiến trình xử lý media: nén/tải lên -> lưu */}
+        {/* Tiến trình xử lý media: nén/tải lên -> lưu kèm nút Dừng */}
         {progress && (
           <div className="photo-progress" role="status" aria-live="polite">
             <div className="photo-progress-top">
-              <Loader2 size={14} className="photo-progress-spin" />
-              <span>
-                {PHASE_LABEL[progress.phase]}
-                {progress.total > 0 && progress.phase !== 'save' ? ` ${Math.min(progress.done + 1, progress.total)}/${progress.total}` : '…'}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
+                <Loader2 size={14} className="photo-progress-spin" />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {PHASE_LABEL[progress.phase]}
+                  {progress.total > 0 && progress.phase !== 'save' ? ` ${Math.min(progress.done + 1, progress.total)}/${progress.total}` : '…'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  abortUploadRef.current = true
+                }}
+                className="photo-progress-stop-btn"
+                title="Dừng tải lên (vẫn giữ các ảnh đã tải xong)"
+              >
+                <X size={12} /> Dừng tải
+              </button>
             </div>
             <div className="photo-progress-bar">
               <i style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 100}%` }} />
             </div>
-            <span className="photo-progress-hint">Đừng đóng cửa sổ, tệp đang được tải lên.</span>
+            <span className="photo-progress-hint">Ảnh tải đến đâu sẽ lưu ngay đến đó. Bấm "Dừng tải" bất cứ lúc nào để giữ các ảnh đã lưu.</span>
           </div>
         )}
 
         {/* Xem trước ảnh & video mới chọn chuẩn bị lưu */}
-        {pendingFiles.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {pendingFiles.map((file, idx) => {
-              const isVid = isVideoFile(file)
-              const blobUrl = URL.createObjectURL(file)
-              return (
-                <div
-                  key={idx}
+        {pendingMedia.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                Ảnh & Video đã chọn ({pendingMedia.length}):
+              </span>
+              {pendingMedia.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    revokeAllPreviews(pendingMedia)
+                    setPendingMedia([])
+                  }}
                   style={{
-                    position: 'relative',
-                    width: 58,
-                    height: 58,
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    border: '1px solid var(--border)',
-                    background: '#000',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.72rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
                   }}
                 >
-                  {isVid ? (
+                  Xoá tất cả
+                </button>
+              )}
+            </div>
+            <div className="photo-preview-grid">
+              {pendingMedia.map((item) => (
+                <div key={item.id} className="photo-preview-item">
+                  {item.isVid ? (
                     <>
-                      <video src={blobUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                      {item.previewUrl ? (
+                        <video src={item.previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: '#888' }}>
+                          <Video size={18} />
+                        </div>
+                      )}
                       <div
                         style={{
                           position: 'absolute',
@@ -896,11 +1142,17 @@ export function SharedEventsView({
                       </div>
                     </>
                   ) : (
-                    <img src={blobUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img
+                      src={item.previewUrl}
+                      alt=""
+                      loading="lazy"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   )}
                   <button
                     type="button"
-                    onClick={() => setPendingFiles((prev) => prev.filter((_, i) => i !== idx))}
+                    onClick={() => removePendingItem(item.id)}
+                    title="Bỏ tệp này"
                     style={{
                       position: 'absolute',
                       top: 2,
@@ -920,8 +1172,8 @@ export function SharedEventsView({
                     <Trash2 size={10} />
                   </button>
                 </div>
-              )
-            })}
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1506,7 +1758,14 @@ export function SharedEventsView({
       )}
 
       {adding && (
-        <Modal title="Sự kiện chung mới" onClose={() => setAdding(false)}>
+        <Modal
+          title="Sự kiện chung mới"
+          onClose={() => {
+            abortUploadRef.current = true
+            setAdding(false)
+            resetForm()
+          }}
+        >
           {eventForm}
           <div className="modal-actions">
             <button className="primary" onClick={createEvent} disabled={busy}>
@@ -1521,7 +1780,14 @@ export function SharedEventsView({
       )}
 
       {editing && (
-        <Modal title="Sửa sự kiện" onClose={() => setEditing(null)}>
+        <Modal
+          title="Sửa sự kiện"
+          onClose={() => {
+            abortUploadRef.current = true
+            setEditing(null)
+            resetForm()
+          }}
+        >
           {eventForm}
 
           {/* Danh sách ảnh & video hiện tại của sự kiện */}
