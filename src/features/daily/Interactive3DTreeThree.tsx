@@ -151,6 +151,12 @@ export function Interactive3DTreeCanvas({
     screenY: number
   } | null>(null)
 
+  const onOpenBookRef = useRef(onOpenBook)
+  onOpenBookRef.current = onOpenBook
+  const onSelectMonthRef = useRef(onSelectMonth)
+  onSelectMonthRef.current = onSelectMonth
+  const hoveredMonthRef = useRef<number | null>(null)
+
   useEffect(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
@@ -173,21 +179,16 @@ export function Interactive3DTreeCanvas({
       powerPreference: 'high-performance',
     })
     renderer.setSize(width, height, false)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.enabled = false
 
     // 2. Hệ thống Ánh Sáng Điện Ảnh (Cinematic Luminous Lighting)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5)
     scene.add(ambientLight)
 
     const sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2)
     sunLight.position.set(6, 12, 7)
-    sunLight.castShadow = true
-    sunLight.shadow.mapSize.width = 1024
-    sunLight.shadow.mapSize.height = 1024
-    sunLight.shadow.bias = -0.001
     scene.add(sunLight)
 
     // Ánh sáng viền tạo hào quang óng ánh trên cành & cánh hoa
@@ -359,8 +360,19 @@ export function Interactive3DTreeCanvas({
       theme.accent,
     ]
 
-    const clusterGeo = new THREE.DodecahedronGeometry(0.58, 2)
-    const clusterCount = 46
+    const clusterGeo = new THREE.DodecahedronGeometry(0.62, 1)
+    const clusterCount = compact ? 16 : 28
+
+    // Pre-create shared materials for all clusters instead of instantiating in loop
+    const paletteMats = palette.map((colHex) =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(colHex),
+        roughness: 0.45,
+        metalness: 0.08,
+        emissive: new THREE.Color(colHex),
+        emissiveIntensity: 0.25,
+      })
+    )
 
     for (let i = 0; i < clusterCount; i++) {
       const ang = (i / clusterCount) * Math.PI * 2 + (i % 3) * 0.15
@@ -369,19 +381,11 @@ export function Interactive3DTreeCanvas({
       const pX = Math.cos(ang) * radius
       const pZ = Math.sin(ang) * radius
 
-      const colHex = palette[i % palette.length]
-      const puffMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(colHex),
-        roughness: 0.45,
-        metalness: 0.08,
-        emissive: new THREE.Color(colHex),
-        emissiveIntensity: 0.22,
-      })
+      const puffMat = paletteMats[i % paletteMats.length]
       const puff = new THREE.Mesh(clusterGeo, puffMat)
       puff.position.set(pX, pY, pZ)
-      const scale = 0.8 + (i % 3) * 0.32
+      const scale = 0.85 + (i % 3) * 0.35
       puff.scale.set(scale * 1.15, scale * 0.95, scale * 1.1)
-      puff.castShadow = true
       canopyGroup.add(puff)
     }
 
@@ -393,7 +397,7 @@ export function Interactive3DTreeCanvas({
       emissive: new THREE.Color(palette[0]),
       emissiveIntensity: 0.3,
     })
-    const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.05, 2), crownMat)
+    const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.05, 1), crownMat)
     crown.position.set(0, 3.5, 0)
     canopyGroup.add(crown)
 
@@ -504,7 +508,7 @@ export function Interactive3DTreeCanvas({
 
     // ── HOA VÀ CÁNH HOA RƠI RƠI SIÊU ĐẸP (Falling Flowers & Fluttering Petals) ──
     // 1. Cánh hoa rơi đơn lẻ uốn cong
-    const petalCount = 85
+    const petalCount = compact ? 18 : 34
     const fallingPetalGeo = createCurvedPetalGeometry(0.13, 0.18)
     const petalsList: Array<{
       mesh: THREE.Mesh | THREE.Group
@@ -529,33 +533,33 @@ export function Interactive3DTreeCanvas({
     for (let i = 0; i < petalCount; i++) {
       const pMesh = new THREE.Mesh(fallingPetalGeo, fallingPetalMat)
       pMesh.position.set(
-        (Math.random() - 0.5) * 4.2,
-        0.2 + Math.random() * 4.6,
-        (Math.random() - 0.5) * 4.2
+        (Math.random() - 0.5) * 4.0,
+        0.2 + Math.random() * 4.4,
+        (Math.random() - 0.5) * 4.0
       )
       pMesh.rotation.set(
         Math.random() * Math.PI * 2,
         Math.random() * Math.PI * 2,
         Math.random() * Math.PI * 2
       )
-      const pScale = 0.75 + Math.random() * 0.65
+      const pScale = 0.75 + Math.random() * 0.55
       pMesh.scale.set(pScale, pScale, pScale)
       scene.add(pMesh)
 
       petalsList.push({
         mesh: pMesh,
-        vy: 0.012 + Math.random() * 0.018,
-        vx: (Math.random() - 0.5) * 0.007,
-        vz: (Math.random() - 0.5) * 0.007,
-        rotSpeedX: 0.02 + Math.random() * 0.035,
-        rotSpeedY: 0.025 + Math.random() * 0.04,
-        rotSpeedZ: 0.015 + Math.random() * 0.025,
+        vy: 0.012 + Math.random() * 0.016,
+        vx: (Math.random() - 0.5) * 0.006,
+        vz: (Math.random() - 0.5) * 0.006,
+        rotSpeedX: 0.02 + Math.random() * 0.03,
+        rotSpeedY: 0.025 + Math.random() * 0.035,
+        rotSpeedZ: 0.015 + Math.random() * 0.02,
         seed: Math.random() * 10,
       })
     }
 
     // 2. Những bông hoa 5 cánh nguyên vẹn xoay tròn rơi từ cành (Full Blossom Falls)
-    const fullBlossomCount = 12
+    const fullBlossomCount = compact ? 3 : 6
     for (let i = 0; i < fullBlossomCount; i++) {
       const col = new THREE.Color(palette[i % palette.length])
       const fMat = new THREE.MeshStandardMaterial({
@@ -566,21 +570,21 @@ export function Interactive3DTreeCanvas({
         roughness: 0.4,
       })
       const fullBlossom = createFullBlossomMesh(fallingPetalGeo, fMat, pistilMat)
-      fullBlossom.scale.set(0.6, 0.6, 0.6)
+      fullBlossom.scale.set(0.55, 0.55, 0.55)
       fullBlossom.position.set(
-        (Math.random() - 0.5) * 3.6,
-        1.0 + Math.random() * 3.8,
-        (Math.random() - 0.5) * 3.6
+        (Math.random() - 0.5) * 3.4,
+        1.0 + Math.random() * 3.6,
+        (Math.random() - 0.5) * 3.4
       )
       scene.add(fullBlossom)
 
       petalsList.push({
         mesh: fullBlossom,
-        vy: 0.01 + Math.random() * 0.014,
-        vx: (Math.random() - 0.5) * 0.006,
-        vz: (Math.random() - 0.5) * 0.006,
+        vy: 0.01 + Math.random() * 0.012,
+        vx: (Math.random() - 0.5) * 0.005,
+        vz: (Math.random() - 0.5) * 0.005,
         rotSpeedX: 0.015 + Math.random() * 0.02,
-        rotSpeedY: 0.03 + Math.random() * 0.03,
+        rotSpeedY: 0.025 + Math.random() * 0.025,
         rotSpeedZ: 0.01 + Math.random() * 0.02,
         seed: Math.random() * 10,
         isBlossom: true,
@@ -588,8 +592,8 @@ export function Interactive3DTreeCanvas({
     }
 
     // ── ĐOM ĐÓM & BỤI TIÊN PHÁT SÁNG (Golden Fireflies Dust) ──
-    const fireflyCount = 28
-    const ffGeo = new THREE.SphereGeometry(0.042, 8, 8)
+    const fireflyCount = compact ? 8 : 14
+    const ffGeo = new THREE.SphereGeometry(0.045, 6, 6)
     const ffMat = new THREE.MeshBasicMaterial({
       color: 0xfef08a,
       transparent: true,
@@ -667,32 +671,39 @@ export function Interactive3DTreeCanvas({
           const sX = ((screenPos.x + 1) / 2) * r.width
           const sY = ((-screenPos.y + 1) / 2) * r.height
 
-          setHoveredFlower({
-            month: m,
-            label: `Tháng ${m}`,
-            count,
-            screenX: sX,
-            screenY: sY,
-          })
+          if (hoveredMonthRef.current !== m) {
+            hoveredMonthRef.current = m
+            setHoveredFlower({
+              month: m,
+              label: `Tháng ${m}`,
+              count,
+              screenX: sX,
+              screenY: sY,
+            })
+          }
           canvas.style.cursor = 'pointer'
           return
         }
       }
 
-      setHoveredFlower(null)
+      if (hoveredMonthRef.current !== null) {
+        hoveredMonthRef.current = null
+        setHoveredFlower(null)
+      }
       canvas.style.cursor = isDragging ? 'grabbing' : 'grab'
     }
 
     const onPointerUp = () => {
       if (!hasMoved) {
-        if (hoveredFlower) {
-          if (onSelectMonth) {
-            onSelectMonth(hoveredFlower.month)
-          } else if (onOpenBook) {
-            onOpenBook()
+        const hovM = hoveredMonthRef.current
+        if (hovM) {
+          if (onSelectMonthRef.current) {
+            onSelectMonthRef.current(hovM)
+          } else if (onOpenBookRef.current) {
+            onOpenBookRef.current()
           }
-        } else if (onOpenBook) {
-          onOpenBook()
+        } else if (onOpenBookRef.current) {
+          onOpenBookRef.current()
         }
       }
       isDragging = false
@@ -764,7 +775,7 @@ export function Interactive3DTreeCanvas({
 
       // Cập nhật hiệu ứng hoa tháng (phóng to khi hover)
       for (const fl of monthFlowerMeshes) {
-        const isHov = hoveredFlower?.month === fl.month
+        const isHov = hoveredMonthRef.current === fl.month
         const targetScale = isHov ? fl.baseScale * 1.3 : fl.baseScale
         fl.group.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.14)
 
@@ -788,7 +799,7 @@ export function Interactive3DTreeCanvas({
       window.removeEventListener('resize', onResize)
       renderer.dispose()
     }
-  }, [theme, monthCounts, hoveredFlower, onOpenBook, onSelectMonth, compact])
+  }, [theme, monthCounts, compact])
 
   return (
     <div

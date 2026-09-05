@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { SharedEvent } from '../../types'
 import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
-import { getSeasonTheme, MemoryTreeCover } from './YearlyMemoryBook'
+import { getSeasonTheme } from './YearlyMemoryBook'
 import { Interactive3DTreeCanvas } from './Interactive3DTreeThree'
 import './memory-book.css'
 
@@ -354,7 +354,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
 
   // Render nội dung của 1 trang cụ thể (Bìa trước, Ngày kỷ niệm Scrapbook, hoặc Bìa sau)
   const renderPageContent = (pageIdx: number, isLeafBack = false) => {
-    // 1. TRANG BÌA TRƯỚC (Trang 0) — Tích hợp Bìa Cây Kỷ Niệm 3D của Năm
+    // 1. TRANG BÌA TRƯỚC (Trang 0) — Bìa Cuốn Sổ Kỷ Niệm Sang Trọng
     if (pageIdx === 0) {
       return (
         <div className="book-page-sheet cover-sheet" onClick={goNextPage}>
@@ -365,16 +365,18 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             </div>
 
             <div className="cover-center-content">
-              {/* Bìa cây kỷ niệm thu nhỏ thanh lịch trên bìa sổ */}
-              <div style={{ width: '100%', maxWidth: 320, margin: '0 auto 8px', borderRadius: 12, overflow: 'hidden' }}>
-                <MemoryTreeCover
-                  year={selectedYear || new Date().getFullYear()}
-                  entryCount={activeYearEvents.length}
-                  entries={activeYearEvents}
-                />
+              {/* Huy hiệu Cây Kỷ Niệm mạ vàng hoàng gia siêu nhẹ */}
+              <div className="cover-art-crest">
+                <div className="cover-art-glow" style={{ background: activeYearTheme.glowColor }} />
+                <div className="cover-art-tree-circle" style={{ borderColor: activeYearTheme.accent }}>
+                  <TreePine size={48} style={{ color: activeYearTheme.accent }} />
+                </div>
+                <div className="cover-art-season-pill" style={{ background: activeYearTheme.accent }}>
+                  <span>{activeYearTheme.name === 'Xuân' ? '🌸 Mùa Xuân' : activeYearTheme.name === 'Hạ' ? '☀️ Mùa Hạ' : activeYearTheme.name === 'Thu' ? '🍂 Mùa Thu' : '❄️ Mùa Đông'}</span>
+                </div>
               </div>
 
-              <h1 className="cover-book-title" style={{ fontSize: '1.25rem', marginTop: 4 }}>
+              <h1 className="cover-book-title">
                 CUỐN SỔ KỶ NIỆM {selectedYear}
               </h1>
               {personName && (
@@ -382,6 +384,9 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                   Kỷ niệm cùng <strong>{personName}</strong>
                 </div>
               )}
+              <p className="cover-sub-text">
+                Tuyển tập những khoảnh khắc ấm áp và đáng trân quý nhất trong năm {selectedYear}
+              </p>
             </div>
 
             <div className="cover-footer">
@@ -389,6 +394,8 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                 <span>📅 {dayPages.length} ngày</span>
                 <span>·</span>
                 <span>📖 {activeYearEvents.length} kỷ niệm</span>
+                <span>·</span>
+                <span>🖼️ {activeYearMediaCount} ảnh</span>
               </div>
               <button
                 type="button"
@@ -398,7 +405,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                   goNextPage()
                 }}
               >
-                <span>Mở cuốn sổ</span>
+                <span>Mở xem cuốn sổ</span>
                 <ChevronRight size={17} />
               </button>
             </div>
@@ -514,6 +521,20 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                     </div>
                   )}
 
+                  {/* Khi không có ảnh và không có ghi chú: thiệp lưu niệm thanh lịch */}
+                  {evImages.length === 0 && !ev.note && (
+                    <div className="scrapbook-empty-memo">
+                      <div className="empty-memo-tape" />
+                      <div className="empty-memo-inner">
+                        <Sparkles size={18} style={{ color: activeYearTheme.accent }} />
+                        <span className="empty-memo-tag">Dấu ấn kỷ niệm</span>
+                        <p className="empty-memo-text">
+                          Một ngày trọn vẹn yêu thương và nụ cười được ghi lại trong cuốn sổ.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Khung ảnh Polaroid dán băng dính Washi Tape */}
                   {evImages.length > 0 && (
                     <div className={`scrapbook-photos-layout count-${Math.min(evImages.length, 4)}`}>
@@ -588,7 +609,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
 
   return (
     <div className="memory-book-fullscreen">
-      {/* ── TOP BAR (SÁNG BÓNG, FROSTED GLASS, GỌN GÀNG) ─────────────────── */}
+      {/* ── TOP BAR (SÁNG BÓNG, FROSTED GLASS, GỌN GÀNG KHÔNG CO RÚM) ── */}
       <div className="memory-book-topbar">
         <div className="memory-book-top-left">
           {viewMode === 'book' ? (
@@ -601,77 +622,76 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               }}
               title="Quay lại Cây Kỷ Niệm 3D"
             >
-              <TreePine size={16} />
-              <span className="topbar-btn-text">Cây 3D</span>
+              <ChevronLeft size={16} />
+              <span>Cây 3D</span>
             </button>
           ) : (
             <button
               type="button"
               className="memory-book-back-btn"
               onClick={onClose}
-              title="Quay lại Kỷ niệm chung"
+              title="Quay lại"
             >
               <ArrowLeft size={16} />
-              <span className="topbar-btn-text">Quay lại</span>
-            </button>
-          )}
-
-          {viewMode === 'book' && (
-            <button
-              type="button"
-              className={`memory-book-sort-btn ${sortOrder === 'desc' ? 'active-desc' : 'active-asc'}`}
-              onClick={toggleSortOrder}
-              title={sortOrder === 'desc' ? 'Mới nhất trước' : 'Cũ nhất trước'}
-            >
-              <ArrowUpDown size={14} />
-              <span>{sortOrder === 'desc' ? 'Mới → Cũ' : 'Cũ → Mới'}</span>
+              <span>Đóng</span>
             </button>
           )}
         </div>
 
-        {/* Chỉ số trang hoặc tiêu đề ở giữa */}
+        {/* Chỉ số trang hoặc tiêu đề ở giữa gọn gàng */}
         <div className="memory-book-page-indicator">
           {viewMode === 'tree' ? (
             <>
-              <TreePine size={16} style={{ color: activeYearTheme.accent }} />
-              <span>
-                Cây Kỷ Niệm 3D · Năm {selectedYear} {personName ? `· ${personName}` : ''}
+              <TreePine size={15} style={{ color: activeYearTheme.accent, flexShrink: 0 }} />
+              <span className="indicator-title">
+                Cây {selectedYear} {personName ? `· ${personName}` : ''}
               </span>
             </>
           ) : (
             <>
-              <BookOpen size={15} style={{ color: activeYearTheme.accent }} />
-              <span>
+              <BookOpen size={14} style={{ color: activeYearTheme.accent, flexShrink: 0 }} />
+              <span className="indicator-title">
                 {currentPage === 0
                   ? `Bìa sổ ${selectedYear}`
                   : currentPage === totalPages - 1
                   ? `Hết sổ ${selectedYear}`
-                  : `Trang ${currentPage} / ${dayPages.length} (Năm ${selectedYear})`}
+                  : `Trang ${currentPage}/${dayPages.length} · Năm ${selectedYear}`}
               </span>
             </>
           )}
         </div>
 
         <div className="memory-book-top-actions">
-          {/* Nút Tìm kiếm nhanh khi đang đọc sách */}
+          {/* Nút Đảo chiều sắp xếp */}
           {viewMode === 'book' && (
             <button
               type="button"
-              className={`memory-book-pill-btn ${isSearchOpen ? 'active' : ''}`}
-              onClick={() => setIsSearchOpen((v) => !v)}
-              title="Tìm kiếm nhanh kỷ niệm"
+              className={`memory-book-circle-btn ${sortOrder === 'desc' ? 'active' : ''}`}
+              onClick={toggleSortOrder}
+              title={sortOrder === 'desc' ? 'Đang xếp Mới → Cũ (Chạm để đảo Cũ → Mới)' : 'Đang xếp Cũ → Mới (Chạm để đảo Mới → Cũ)'}
             >
-              <Search size={14} />
-              <span className="topbar-btn-text">Tìm</span>
+              <ArrowUpDown size={15} />
+            </button>
+          )}
+
+          {/* Nút Tìm kiếm nhanh */}
+          {viewMode === 'book' && (
+            <button
+              type="button"
+              className={`memory-book-circle-btn ${isSearchOpen ? 'active' : ''}`}
+              onClick={() => setIsSearchOpen((v) => !v)}
+              title="Tìm kiếm kỷ niệm"
+            >
+              <Search size={15} />
             </button>
           )}
 
           {/* Âm thanh lật giấy */}
           <button
             type="button"
-            className="memory-book-pill-btn icon-only"
+            className="memory-book-circle-btn"
             onClick={() => setSoundEnabled((v) => !v)}
-            title={soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}
+            title={soundEnabled ? 'Tắt âm thanh lật trang' : 'Bật âm thanh lật trang'}
           >
             {soundEnabled ? <Volume2 size={15} style={{ color: '#d97706' }} /> : <VolumeX size={15} style={{ opacity: 0.5 }} />}
           </button>
@@ -679,7 +699,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
           {/* Đóng */}
           <button
             type="button"
-            className="memory-book-pill-btn icon-only"
+            className="memory-book-circle-btn close-circle"
             onClick={onClose}
             title="Đóng (Esc)"
           >
@@ -896,15 +916,16 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
+            {/* Nút lật trang ngoài lề hiển thị trên màn hình rộng */}
             <button
               type="button"
-              className={`book-turn-arrow prev ${currentPage === 0 || !!flipState ? 'disabled' : ''}`}
+              className={`book-turn-arrow desktop-turn-arrow prev ${currentPage === 0 || !!flipState ? 'disabled' : ''}`}
               onClick={goPrevPage}
               disabled={currentPage === 0 || !!flipState}
               title="Lật về trang trước"
               aria-label="Trang trước"
             >
-              <ChevronLeft size={28} />
+              <ChevronLeft size={24} />
             </button>
 
             <div className="book-3d-chassis">
@@ -937,35 +958,63 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               )}
             </div>
 
+            {/* Nút lật trang ngoài lề hiển thị trên màn hình rộng */}
             <button
               type="button"
-              className={`book-turn-arrow next ${currentPage >= totalPages - 1 || !!flipState ? 'disabled' : ''}`}
+              className={`book-turn-arrow desktop-turn-arrow next ${currentPage >= totalPages - 1 || !!flipState ? 'disabled' : ''}`}
               onClick={goNextPage}
               disabled={currentPage >= totalPages - 1 || !!flipState}
               title="Lật sang trang tiếp theo"
               aria-label="Trang tiếp theo"
             >
-              <ChevronRight size={28} />
+              <ChevronRight size={24} />
             </button>
           </div>
 
-          {/* Thanh trượt điều hướng trang nhanh ở đáy */}
-          <div className="memory-book-bottom-scrubber">
-            <span className="scrubber-label">
-              {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={totalPages - 1}
-              value={currentPage}
-              onChange={(e) => jumpToPage(Number(e.target.value))}
-              className="scrubber-slider"
-              aria-label="Thanh trượt trang sách"
-            />
-            <span className="scrubber-label">
-              {sortOrder === 'desc' ? 'Cũ nhất' : 'Mới nhất'}
-            </span>
+          {/* Thanh điều hướng trang ở đáy gọn gàng, mượt mà & không che khuất */}
+          <div className="memory-book-bottom-nav">
+            <button
+              type="button"
+              className="nav-arrow-btn prev"
+              onClick={goPrevPage}
+              disabled={currentPage === 0 || !!flipState}
+              title="Lật về trang trước"
+            >
+              <ChevronLeft size={18} />
+              <span className="nav-arrow-label">Trước</span>
+            </button>
+
+            <div className="nav-scrubber-center">
+              <input
+                type="range"
+                min={0}
+                max={totalPages - 1}
+                value={currentPage}
+                onChange={(e) => jumpToPage(Number(e.target.value))}
+                className="scrubber-slider"
+                aria-label="Thanh trượt trang sách"
+              />
+              <div className="nav-page-badge">
+                <span>
+                  {currentPage === 0
+                    ? `Bìa ${selectedYear}`
+                    : currentPage === totalPages - 1
+                    ? `Hết sổ`
+                    : `Trang ${currentPage} / ${dayPages.length}`}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="nav-arrow-btn next"
+              onClick={goNextPage}
+              disabled={currentPage >= totalPages - 1 || !!flipState}
+              title="Lật sang trang tiếp theo"
+            >
+              <span className="nav-arrow-label">Sau</span>
+              <ChevronRight size={18} />
+            </button>
           </div>
         </>
       )}
