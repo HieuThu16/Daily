@@ -2055,20 +2055,38 @@ export function DailyPage() {
                   <div className="daily-extra-row-title">
                     <Sparkles size={11} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div className="daily-extra-utils-grid">
+                  <div
+                    className="daily-extra-utils-grid"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                      gap: 6,
+                      width: '100%',
+                      maxWidth: '100%',
+                      minWidth: 0,
+                      boxSizing: 'border-box',
+                      overflow: 'hidden',
+                    }}
+                  >
                     {/* Nút Hành động */}
                     <button
                       type="button"
                       className="daily-extra-utils-btn"
                       onClick={() => setShowActionModal(true)}
                       style={{
+                        width: '100%',
+                        minWidth: 0,
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        height: 28,
+                        fontSize: '0.68rem',
                         border: '1px solid rgba(245, 158, 11, 0.35)',
                         background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.16))',
                         color: 'var(--amber)',
                       }}
                     >
-                      <Zap size={10} style={{ flexShrink: 0 }} />
-                      <span>Hành động</span>
+                      <Zap size={11} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Hành động</span>
                     </button>
 
                     {/* Nút YouTube */}
@@ -2077,13 +2095,19 @@ export function DailyPage() {
                       className="daily-extra-utils-btn"
                       onClick={() => setShowVideoModal(true)}
                       style={{
+                        width: '100%',
+                        minWidth: 0,
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        height: 28,
+                        fontSize: '0.68rem',
                         border: '1px solid rgba(239, 68, 68, 0.35)',
                         background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(244, 63, 94, 0.15))',
                         color: '#ef4444',
                       }}
                     >
-                      <Youtube size={10} style={{ flexShrink: 0 }} />
-                      <span>YouTube</span>
+                      <Youtube size={11} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube</span>
                     </button>
 
                     {/* Nút Tải Ảnh / Video */}
@@ -2093,6 +2117,12 @@ export function DailyPage() {
                       onClick={() => formFileInputRef.current?.click()}
                       disabled={mediaUploading || !supabase}
                       style={{
+                        width: '100%',
+                        minWidth: 0,
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        height: 28,
+                        fontSize: '0.68rem',
                         border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
                         background: attachedMedias.length > 0
                           ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.22))'
@@ -2103,11 +2133,11 @@ export function DailyPage() {
                       title="Tải ảnh hoặc video đính kèm"
                     >
                       {mediaUploading ? (
-                        <Loader2 size={10} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                        <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
                       ) : (
-                        <ImagePlus size={10} style={{ flexShrink: 0 }} />
+                        <ImagePlus size={11} style={{ flexShrink: 0 }} />
                       )}
-                      <span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}
                       </span>
                     </button>
@@ -2118,6 +2148,12 @@ export function DailyPage() {
                       className="daily-extra-utils-btn"
                       onClick={() => setShowPeopleModal(true)}
                       style={{
+                        width: '100%',
+                        minWidth: 0,
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        height: 28,
+                        fontSize: '0.68rem',
                         border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
                         background: selectedPersonIds.length > 0
                           ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.22))'
@@ -2126,8 +2162,8 @@ export function DailyPage() {
                       }}
                       title="Gắn người thân"
                     >
-                      <Users size={10} style={{ flexShrink: 0 }} />
-                      <span>
+                      <Users size={11} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Gắn người'}
                       </span>
                     </button>

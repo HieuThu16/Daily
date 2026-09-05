@@ -3,7 +3,7 @@ import {
   ArrowLeft, ChevronLeft, ChevronRight, MapPin, Clock,
   Play, Sparkles, X, Heart, BookOpen,
   ArrowUpDown, Search, Volume2, VolumeX, Calendar,
-  Download, RotateCw, TreePine
+  Download, TreePine
 } from 'lucide-react'
 import type { SharedEvent } from '../../types'
 import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
@@ -91,240 +91,637 @@ function playPaperTurnSound() {
 /* ═══════════════════════════════════════════════════════════════════
  * THẺ SÁCH 3D VUỐT XOAY 360 ĐỘ TRÊN KỆ SÁCH
  * ═══════════════════════════════════════════════════════════════════ */
-function Interactive3DYearBook({
-  year,
-  events,
-  mediaCount,
-  onOpen,
-}: {
-  year: number
+/* ═══════════════════════════════════════════════════════════════════
+ * COMPONENT: Interactive3DTreeCanvas
+ * CÂY KỶ NIỆM 3D ĐÍCH THỰC — XOAY 360 ĐỘ — 12 HOA TƯỢNG TRƯNG 12 THÁNG
+ * ═══════════════════════════════════════════════════════════════════ */
+interface MonthFlower3D {
+  month: number
+  label: string
+  x: number
+  y: number
+  z: number
+  count: number
+  baseRadius: number
+}
+
+interface Interactive3DTreeCanvasProps {
+  year?: number
   events: SharedEvent[]
-  mediaCount: number
-  onOpen: () => void
-}) {
-  const theme = getSeasonTheme(year)
-  const [rotY, setRotY] = useState(0)
-  const [rotX, setRotX] = useState(0)
-  const [isDragging, setIsDragging] = useState(false)
+  theme: ReturnType<typeof getSeasonTheme>
+  onOpenBook: () => void
+  onSelectMonth?: (monthNum: number) => void
+}
+
+function Interactive3DTreeCanvas({
+  events,
+  theme,
+  onOpenBook,
+  onSelectMonth,
+}: Interactive3DTreeCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Đếm số kỷ niệm theo từng tháng 1..12
+  const monthCounts = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (let i = 1; i <= 12; i++) counts[i] = 0
+    for (const ev of events) {
+      if (!ev.event_date) continue
+      const m = parseInt(ev.event_date.slice(5, 7), 10)
+      if (m >= 1 && m <= 12) {
+        counts[m] = (counts[m] || 0) + 1
+      }
+    }
+    return counts
+  }, [events])
+
+  // Dữ liệu 12 bông hoa tượng trưng 12 tháng phân bổ trên không gian 3D quanh tán cây
+  const monthFlowers = useMemo<MonthFlower3D[]>(() => {
+    const list: MonthFlower3D[] = []
+    for (let m = 1; m <= 12; m++) {
+      const angle = ((m - 1) / 12) * Math.PI * 2 - Math.PI / 2
+      const radius = 96 + ((m % 2 === 0) ? 14 : -10)
+      const y = -140 - Math.sin(((m - 1) / 12) * Math.PI * 2) * 48
+      const x = Math.cos(angle) * radius
+      const z = Math.sin(angle) * radius
+      const count = monthCounts[m] || 0
+      list.push({
+        month: m,
+        label: `T${m}`,
+        x,
+        y,
+        z,
+        count,
+        baseRadius: count > 0 ? 19 : 15,
+      })
+    }
+    return list
+  }, [monthCounts])
+
+  // Cấu trúc cành cây 3D cố định
+  const branches = useMemo(() => {
+    const list: Array<{ start: [number, number, number]; end: [number, number, number]; width: number }> = []
+    for (let i = 0; i < 6; i++) {
+      const ang = i * (Math.PI / 3) + 0.2
+      const bx = Math.cos(ang) * 65
+      const bz = Math.sin(ang) * 65
+      const by = -125 + (i % 2 === 0 ? 14 : -14)
+      list.push({ start: [0, -70, 0], end: [bx, by, bz], width: 8.5 })
+
+      // Nhánh nhỏ 1
+      const s1x = bx + Math.cos(ang - 0.45) * 32
+      const s1z = bz + Math.sin(ang - 0.45) * 32
+      list.push({ start: [bx, by, bz], end: [s1x, by - 36, s1z], width: 4.2 })
+
+      // Nhánh nhỏ 2
+      const s2x = bx + Math.cos(ang + 0.45) * 32
+      const s2z = bz + Math.sin(ang + 0.45) * 32
+      list.push({ start: [bx, by, bz], end: [s2x, by - 40, s2z], width: 3.8 })
+    }
+    return list
+  }, [])
+
+  // Các cụm tán lá 3D bồng bềnh
+  const canopyPuffs = useMemo(() => {
+    const list: Array<{ x: number; y: number; z: number; r: number; colorIdx: number }> = []
+    list.push({ x: 0, y: -180, z: 0, r: 58, colorIdx: 0 })
+    list.push({ x: 0, y: -148, z: 0, r: 52, colorIdx: 1 })
+    list.push({ x: 0, y: -206, z: 0, r: 44, colorIdx: 2 })
+
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2
+      const dist = 52 + (i % 3) * 12
+      const cy = -158 + Math.sin(i * 1.5) * 28
+      list.push({
+        x: Math.cos(ang) * dist,
+        y: cy,
+        z: Math.sin(ang) * dist,
+        r: 38 + (i % 3) * 8,
+        colorIdx: i % 3,
+      })
+    }
+    return list
+  }, [])
+
+  // Hạt cánh hoa rơi và đom đóm 3D
+  const particlesRef = useRef({
+    petals: Array.from({ length: 22 }, () => ({
+      x: (Math.random() - 0.5) * 220,
+      y: -220 + Math.random() * 260,
+      z: (Math.random() - 0.5) * 220,
+      speed: 0.55 + Math.random() * 0.65,
+      seed: Math.random() * 10,
+      size: 4 + Math.random() * 3.5,
+      rot: Math.random() * Math.PI * 2,
+    })),
+    fireflies: Array.from({ length: 12 }, () => ({
+      x: (Math.random() - 0.5) * 160,
+      y: -210 + Math.random() * 170,
+      z: (Math.random() - 0.5) * 160,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.02 + Math.random() * 0.03,
+      radius: 1.5 + Math.random() * 1.5,
+    })),
+  })
+
+  // Góc xoay 3D
+  const rotYRef = useRef(0)
+  const rotXRef = useRef(0.08)
+  const isDraggingRef = useRef(false)
   const dragStartRef = useRef<{ x: number; y: number; startRotY: number; startRotX: number } | null>(null)
   const hasMovedRef = useRef(false)
 
+  // Tooltip hoa được hover
+  const [hoveredFlower, setHoveredFlower] = useState<{
+    month: number
+    label: string
+    count: number
+    screenX: number
+    screenY: number
+  } | null>(null)
+
+  // Vòng lặp vẽ Canvas 3D
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let animId: number
+    let lastTime = performance.now()
+
+    const handleResize = () => {
+      const rect = canvas.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = Math.floor(rect.width * dpr)
+      canvas.height = Math.floor(rect.height * dpr)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+
+    const render = (time: number) => {
+      animId = requestAnimationFrame(render)
+      const dt = Math.min((time - lastTime) / 1000, 0.1)
+      lastTime = time
+
+      // Tự động xoay nhẹ khi người dùng không kéo
+      if (!isDraggingRef.current) {
+        rotYRef.current += 0.22 * dt
+      }
+
+      const dpr = window.devicePixelRatio || 1
+      const w = canvas.width
+      const h = canvas.height
+      if (w === 0 || h === 0) return
+
+      ctx.clearRect(0, 0, w, h)
+
+      const centerX = w / 2
+      const centerY = h * 0.72
+
+      const cosY = Math.cos(rotYRef.current)
+      const sinY = Math.sin(rotYRef.current)
+      const cosX = Math.cos(rotXRef.current)
+      const sinX = Math.sin(rotXRef.current)
+
+      const fov = 440 * dpr
+      const cameraDist = 410
+
+      // Hàm chiếu 3D sang 2D
+      const project = (x: number, y: number, z: number) => {
+        const x1 = x * cosY + z * sinY
+        const y1 = y
+        const z1 = -x * sinY + z * cosY
+
+        const x2 = x1
+        const y2 = y1 * cosX - z1 * sinX
+        const z2 = y1 * sinX + z1 * cosX
+
+        const scale = fov / (cameraDist + z2)
+        return {
+          screenX: centerX + x2 * scale,
+          screenY: centerY + y2 * scale,
+          scale,
+          depth: z2,
+        }
+      }
+
+      // Danh sách các phần tử vẽ theo thứ tự chiều sâu Depth
+      type DrawItem = {
+        depth: number
+        draw: () => void
+      }
+      const drawItems: DrawItem[] = []
+
+      // 1. Đế đảo đất phát sáng dưới chân cây
+      drawItems.push({
+        depth: 95,
+        draw: () => {
+          const p = project(0, 36, 0)
+          const rx = 105 * p.scale
+          const ry = 30 * p.scale
+
+          // Bóng mờ chân đế
+          const shadowGrad = ctx.createRadialGradient(p.screenX, p.screenY + 6 * p.scale, rx * 0.3, p.screenX, p.screenY + 6 * p.scale, rx * 1.1)
+          shadowGrad.addColorStop(0, 'rgba(217, 119, 6, 0.25)')
+          shadowGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.08)')
+          shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)')
+          ctx.beginPath()
+          ctx.ellipse(p.screenX, p.screenY + 6 * p.scale, rx * 1.1, ry * 1.1, 0, 0, Math.PI * 2)
+          ctx.fillStyle = shadowGrad
+          ctx.fill()
+
+          // Đảo cỏ ngọc ấm áp
+          const moundGrad = ctx.createLinearGradient(p.screenX - rx, p.screenY - ry, p.screenX + rx, p.screenY + ry)
+          moundGrad.addColorStop(0, '#fef08a')
+          moundGrad.addColorStop(0.4, '#86efac')
+          moundGrad.addColorStop(1, '#22c55e')
+
+          ctx.beginPath()
+          ctx.ellipse(p.screenX, p.screenY, rx, ry, 0, 0, Math.PI * 2)
+          ctx.fillStyle = moundGrad
+          ctx.fill()
+          ctx.lineWidth = 2 * dpr
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)'
+          ctx.stroke()
+        },
+      })
+
+      // 2. Rễ cây tỏa ra 4 hướng
+      const roots = [
+        { start: [0, 32, 0], end: [-35, 38, -20] },
+        { start: [0, 32, 0], end: [35, 38, 20] },
+        { start: [0, 32, 0], end: [25, 38, -30] },
+        { start: [0, 32, 0], end: [-25, 38, 30] },
+      ]
+      for (const r of roots) {
+        const p1 = project(r.start[0], r.start[1], r.start[2])
+        const p2 = project(r.end[0], r.end[1], r.end[2])
+        drawItems.push({
+          depth: (p1.depth + p2.depth) / 2,
+          draw: () => {
+            ctx.beginPath()
+            ctx.moveTo(p1.screenX, p1.screenY)
+            ctx.lineTo(p2.screenX, p2.screenY)
+            ctx.lineWidth = 6.5 * p1.scale
+            ctx.lineCap = 'round'
+            ctx.strokeStyle = '#5d4037'
+            ctx.stroke()
+          },
+        })
+      }
+
+      // 3. Thân cây chính (Trunk) với gradient vỏ gỗ 3D
+      const trunkPoints: Array<[number, number, number]> = [
+        [0, 34, 0],
+        [3, 5, 0],
+        [-2, -32, 0],
+        [0, -75, 0],
+      ]
+      for (let i = 0; i < trunkPoints.length - 1; i++) {
+        const pA = project(trunkPoints[i][0], trunkPoints[i][1], trunkPoints[i][2])
+        const pB = project(trunkPoints[i + 1][0], trunkPoints[i + 1][1], trunkPoints[i + 1][2])
+        const width = (18 - i * 3.5) * pA.scale
+        drawItems.push({
+          depth: (pA.depth + pB.depth) / 2,
+          draw: () => {
+            ctx.beginPath()
+            ctx.moveTo(pA.screenX, pA.screenY)
+            ctx.lineTo(pB.screenX, pB.screenY)
+            ctx.lineWidth = width
+            ctx.lineCap = 'round'
+            ctx.strokeStyle = '#6d4c41'
+            ctx.stroke()
+
+            // Highlight bóng sáng trên thân cây
+            ctx.beginPath()
+            ctx.moveTo(pA.screenX - width * 0.2, pA.screenY)
+            ctx.lineTo(pB.screenX - width * 0.2, pB.screenY)
+            ctx.lineWidth = width * 0.3
+            ctx.strokeStyle = 'rgba(254, 240, 138, 0.45)'
+            ctx.stroke()
+          },
+        })
+      }
+
+      // 4. Các nhánh cây vươn ra không gian 3D
+      for (const b of branches) {
+        const pS = project(b.start[0], b.start[1], b.start[2])
+        const pE = project(b.end[0], b.end[1], b.end[2])
+        drawItems.push({
+          depth: (pS.depth + pE.depth) / 2,
+          draw: () => {
+            ctx.beginPath()
+            ctx.moveTo(pS.screenX, pS.screenY)
+            ctx.lineTo(pE.screenX, pE.screenY)
+            ctx.lineWidth = b.width * pS.scale
+            ctx.lineCap = 'round'
+            ctx.strokeStyle = '#5d4037'
+            ctx.stroke()
+          },
+        })
+      }
+
+      // 5. Các cụm tán lá 3D (Canopy Puffs)
+      const sway = Math.sin(time * 0.002) * 2
+      for (const puff of canopyPuffs) {
+        const p = project(puff.x + sway, puff.y, puff.z)
+        const radius = puff.r * p.scale
+        drawItems.push({
+          depth: p.depth,
+          draw: () => {
+            const grad = ctx.createRadialGradient(
+              p.screenX - radius * 0.25,
+              p.screenY - radius * 0.25,
+              radius * 0.1,
+              p.screenX,
+              p.screenY,
+              radius
+            )
+            const baseColor = theme.treeCanopy[puff.colorIdx % theme.treeCanopy.length] || '#43a047'
+            grad.addColorStop(0, 'rgba(255, 255, 255, 0.65)')
+            grad.addColorStop(0.2, baseColor)
+            grad.addColorStop(0.85, baseColor)
+            grad.addColorStop(1, 'rgba(0,0,0,0.12)')
+
+            ctx.beginPath()
+            ctx.arc(p.screenX, p.screenY, radius, 0, Math.PI * 2)
+            ctx.fillStyle = grad
+            ctx.fill()
+          },
+        })
+      }
+
+      // 6. Cánh hoa rơi (Falling Petals)
+      const particles = particlesRef.current
+      for (const petal of particles.petals) {
+        petal.y += petal.speed * 60 * dt
+        petal.rot += 1.5 * dt
+        if (petal.y > 45) {
+          petal.y = -220
+          petal.x = (Math.random() - 0.5) * 200
+          petal.z = (Math.random() - 0.5) * 200
+        }
+        const px = petal.x + Math.sin(time * 0.0015 + petal.seed) * 15
+        const p = project(px, petal.y, petal.z)
+        const pSize = petal.size * p.scale
+        drawItems.push({
+          depth: p.depth,
+          draw: () => {
+            ctx.save()
+            ctx.translate(p.screenX, p.screenY)
+            ctx.rotate(petal.rot)
+            ctx.beginPath()
+            ctx.ellipse(0, 0, pSize, pSize * 0.55, 0, 0, Math.PI * 2)
+            ctx.fillStyle = theme.petalColor
+            ctx.globalAlpha = 0.8
+            ctx.fill()
+            ctx.restore()
+          },
+        })
+      }
+
+      // 7. Đom đóm phát sáng (Fireflies)
+      for (const ff of particles.fireflies) {
+        const fy = ff.y + Math.sin(time * 0.003 + ff.phase) * 10
+        const p = project(ff.x, fy, ff.z)
+        const alpha = 0.35 + 0.55 * Math.sin(time * 0.005 + ff.phase)
+        drawItems.push({
+          depth: p.depth,
+          draw: () => {
+            const rad = ff.radius * p.scale
+            ctx.beginPath()
+            ctx.arc(p.screenX, p.screenY, rad * 2.8, 0, Math.PI * 2)
+            ctx.fillStyle = `rgba(254, 240, 138, ${alpha * 0.4})`
+            ctx.fill()
+
+            ctx.beginPath()
+            ctx.arc(p.screenX, p.screenY, rad, 0, Math.PI * 2)
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`
+            ctx.fill()
+          },
+        })
+      }
+
+      // 8. ĐẶC BIỆT: 12 BÔNG HOA TƯỢNG TRƯNG 12 THÁNG NỞ RỰC RỠ TRÊN TÁN CÂY
+      for (const fl of monthFlowers) {
+        const p = project(fl.x, fl.y, fl.z)
+        const isHovered = hoveredFlower?.month === fl.month
+        const baseR = (fl.baseRadius + (isHovered ? 4 : 0)) * p.scale
+
+        drawItems.push({
+          depth: p.depth,
+          draw: () => {
+            const { screenX: sx, screenY: sy } = p
+
+            // Vòng hào quang sáng vàng nếu tháng đó có kỷ niệm
+            if (fl.count > 0 || isHovered) {
+              const pulse = Math.sin(time * 0.006 + fl.month) * 3 * p.scale
+              ctx.beginPath()
+              ctx.arc(sx, sy, baseR + 7 * p.scale + pulse, 0, Math.PI * 2)
+              ctx.fillStyle = isHovered ? 'rgba(245, 158, 11, 0.45)' : 'rgba(254, 240, 138, 0.35)'
+              ctx.fill()
+            }
+
+            // 5 cánh hoa bung nở lộng lẫy
+            const petalCount = 5
+            const petalDist = baseR * 0.58
+            const petalR = baseR * 0.52
+            for (let i = 0; i < petalCount; i++) {
+              const pAng = (i / petalCount) * Math.PI * 2 + (fl.month * 0.3)
+              const px = sx + Math.cos(pAng) * petalDist
+              const py = sy + Math.sin(pAng) * petalDist
+
+              ctx.beginPath()
+              ctx.arc(px, py, petalR, 0, Math.PI * 2)
+              const petalColor = theme.flowers[i % theme.flowers.length] || theme.petalColor
+              ctx.fillStyle = petalColor
+              ctx.fill()
+              ctx.lineWidth = 1 * dpr
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+              ctx.stroke()
+            }
+
+            // Nhuỵ hoa trung tâm mạ vàng / trắng ngọc
+            ctx.beginPath()
+            ctx.arc(sx, sy, baseR * 0.58, 0, Math.PI * 2)
+            ctx.fillStyle = fl.count > 0 ? '#fef08a' : '#ffffff'
+            ctx.fill()
+            ctx.lineWidth = 1.5 * dpr
+            ctx.strokeStyle = '#f59e0b'
+            ctx.stroke()
+
+            // Chữ tên tháng (T1, T2, ..., T12)
+            ctx.font = `900 ${Math.max(10, Math.floor(10.5 * p.scale))}px Inter, sans-serif`
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillStyle = '#78350f'
+            ctx.fillText(fl.label, sx, sy + 0.5 * dpr)
+
+            // Badge số lượng kỷ niệm nếu có
+            if (fl.count > 0) {
+              const badgeX = sx + baseR * 0.7
+              const badgeY = sy - baseR * 0.7
+              const badgeR = 7.5 * p.scale
+
+              ctx.beginPath()
+              ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2)
+              ctx.fillStyle = '#ea580c'
+              ctx.fill()
+              ctx.lineWidth = 1 * dpr
+              ctx.strokeStyle = '#ffffff'
+              ctx.stroke()
+
+              ctx.font = `800 ${Math.max(7, Math.floor(8 * p.scale))}px Inter, sans-serif`
+              ctx.fillStyle = '#ffffff'
+              ctx.fillText(String(fl.count), badgeX, badgeY)
+            }
+          },
+        })
+      }
+
+      // SẮP XẾP VÀ VẼ THEO THỨ TỰ CHIỀU SÂU (Depth-sorting Painter's Algorithm)
+      drawItems.sort((a, b) => b.depth - a.depth)
+      for (const item of drawItems) {
+        item.draw()
+      }
+    }
+
+    animId = requestAnimationFrame(render)
+
+    return () => {
+      cancelAnimationFrame(animId)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [theme, monthFlowers, branches, canopyPuffs, hoveredFlower])
+
+  // Xử lý kéo xoay 360 độ bằng chuột / cảm ứng
   const handlePointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId)
-    setIsDragging(true)
+    isDraggingRef.current = true
     hasMovedRef.current = false
     dragStartRef.current = {
       x: e.clientX,
       y: e.clientY,
-      startRotY: rotY,
-      startRotX: rotX,
+      startRotY: rotYRef.current,
+      startRotX: rotXRef.current,
     }
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragStartRef.current) return
-    const dx = e.clientX - dragStartRef.current.x
-    const dy = e.clientY - dragStartRef.current.y
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-      hasMovedRef.current = true
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const pointerX = (e.clientX - rect.left) * (canvas.width / rect.width)
+    const pointerY = (e.clientY - rect.top) * (canvas.height / rect.height)
+
+    // Nếu đang kéo vuốt
+    if (isDraggingRef.current && dragStartRef.current) {
+      const dx = e.clientX - dragStartRef.current.x
+      const dy = e.clientY - dragStartRef.current.y
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        hasMovedRef.current = true
+      }
+      rotYRef.current = dragStartRef.current.startRotY + dx * 0.011
+      rotXRef.current = Math.max(-0.28, Math.min(0.28, dragStartRef.current.startRotX - dy * 0.007))
     }
-    // Xoay tự do 360 độ quanh trục Y
-    setRotY(dragStartRef.current.startRotY + dx * 0.8)
-    // Nghiêng nhẹ trục X
-    const newX = Math.max(-25, Math.min(25, dragStartRef.current.startRotX - dy * 0.4))
-    setRotX(newX)
+
+    // Kiểm tra xem con trỏ chuột có đang trỏ vào 1 trong 12 bông hoa tháng không
+    const dpr = window.devicePixelRatio || 1
+    const centerX = canvas.width / 2
+    const centerY = canvas.height * 0.72
+    const cosY = Math.cos(rotYRef.current)
+    const sinY = Math.sin(rotYRef.current)
+    const cosX = Math.cos(rotXRef.current)
+    const sinX = Math.sin(rotXRef.current)
+    const fov = 440 * dpr
+    const cameraDist = 410
+
+    let hitFlower: typeof hoveredFlower = null
+    for (const fl of monthFlowers) {
+      const x1 = fl.x * cosY + fl.z * sinY
+      const y1 = fl.y
+      const z1 = -fl.x * sinY + fl.z * cosY
+      const x2 = x1
+      const y2 = y1 * cosX - z1 * sinX
+      const z2 = y1 * sinX + z1 * cosX
+      const scale = fov / (cameraDist + z2)
+      const sx = centerX + x2 * scale
+      const sy = centerY + y2 * scale
+
+      const dist = Math.hypot(pointerX - sx, pointerY - sy)
+      if (dist <= 24 * scale) {
+        hitFlower = {
+          month: fl.month,
+          label: fl.label,
+          count: fl.count,
+          screenX: (sx / canvas.width) * rect.width,
+          screenY: (sy / canvas.height) * rect.height,
+        }
+        break
+      }
+    }
+    setHoveredFlower(hitFlower)
   }
 
   const handlePointerUp = (e: React.PointerEvent) => {
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {}
-    setIsDragging(false)
+    isDraggingRef.current = false
     dragStartRef.current = null
-    // Nếu chỉ click chạm (không kéo vuốt) -> Mở sách
+
+    // Nếu chỉ chạm click (không kéo di chuyển)
     if (!hasMovedRef.current) {
-      onOpen()
+      if (hoveredFlower) {
+        if (onSelectMonth) {
+          onSelectMonth(hoveredFlower.month)
+        } else {
+          onOpenBook()
+        }
+      } else {
+        onOpenBook()
+      }
     }
   }
 
   return (
     <div
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       style={{
-        perspective: 1200,
+        position: 'relative',
         width: '100%',
-        maxWidth: 320,
-        margin: '0 auto',
-        userSelect: 'none',
+        height: '100%',
+        cursor: hoveredFlower ? 'pointer' : 'grab',
+        touchAction: 'none',
       }}
     >
-      <div
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: 380,
-          borderRadius: 20,
-          cursor: isDragging ? 'grabbing' : 'grab',
-          transformStyle: 'preserve-3d',
-          transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
-          transition: isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-          touchAction: 'none',
-        }}
-      >
-        {/* ── MẶT TRƯỚC: BÌA CÂY KỶ NIỆM 3D (0 -> 90deg, 270 -> 360deg) ── */}
+      <canvas
+        ref={canvasRef}
+        className="tree-canvas-element"
+        style={{ width: '100%', height: '100%', display: 'block' }}
+      />
+
+      {/* Tooltip nổi thông minh khi chạm/hover hoa 12 tháng */}
+      {hoveredFlower && (
         <div
+          className="tree-month-tooltip"
           style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: 20,
-            backfaceVisibility: 'hidden',
-            background: 'linear-gradient(155deg, rgba(24,20,24,0.98), rgba(14,12,16,0.98))',
-            border: `2px solid ${theme.accent}70`,
-            boxShadow: `0 16px 36px rgba(0,0,0,0.6), 0 0 20px ${theme.glowColor}`,
-            padding: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            zIndex: 2,
+            left: hoveredFlower.screenX,
+            top: hoveredFlower.screenY,
           }}
         >
-          {/* Header nhỏ */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '3px 9px',
-                borderRadius: 99,
-                background: `linear-gradient(135deg, ${theme.accent}cc, ${theme.accent}88)`,
-                color: '#fff',
-                fontSize: '0.66rem',
-                fontWeight: 800,
-              }}
-            >
-              <TreePine size={11} />
-              <span>CÂY KỶ NIỆM · Mùa {theme.name}</span>
-            </span>
-
-            <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>
-              VOL. {year}
-            </span>
-          </div>
-
-          {/* Bìa Cây Kỷ Niệm 3D */}
-          <div style={{ flex: 1, position: 'relative', borderRadius: 14, overflow: 'hidden' }}>
-            <MemoryTreeCover
-              year={year}
-              entryCount={events.length}
-              mediaCount={mediaCount}
-            />
-          </div>
-
-          {/* Footer thông tin & hướng dẫn vuốt 360 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingTop: 8,
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              marginTop: 6,
-            }}
-          >
-            <span style={{ fontSize: '0.68rem', color: '#fef08a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <BookOpen size={12} style={{ color: theme.accent }} /> Mở cuốn sách
-            </span>
-            <span style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: 3 }}>
-              <RotateCw size={10} /> Vuốt xoay 360°
-            </span>
-          </div>
+          <span>🌸 Tháng {hoveredFlower.month}:</span>
+          <span>
+            {hoveredFlower.count > 0 ? `${hoveredFlower.count} kỷ niệm` : 'Chưa có kỷ niệm'}
+          </span>
+          <span style={{ opacity: 0.6, fontSize: '0.68rem' }}>· Chạm để mở →</span>
         </div>
-
-        {/* ── MẶT SAU: GÁY DA & DẤU ẤN KỶ NIỆM KHI XOAY 180 ĐỘ ── */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: 20,
-            backfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)',
-            background: 'linear-gradient(155deg, #2b1810 0%, #170d08 100%)',
-            border: `2px solid ${theme.accent}60`,
-            boxShadow: `0 16px 36px rgba(0,0,0,0.7), 0 0 20px ${theme.glowColor}`,
-            padding: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            color: '#fff',
-            zIndex: 1,
-          }}
-        >
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: '50%',
-              background: `linear-gradient(135deg, ${theme.accent}30, rgba(0,0,0,0.4))`,
-              border: `2px solid ${theme.accent}`,
-              display: 'grid',
-              placeItems: 'center',
-              marginBottom: 14,
-              boxShadow: `0 0 16px ${theme.glowColor}`,
-            }}
-          >
-            <TreePine size={30} style={{ color: theme.accent }} />
-          </div>
-
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: 4, color: '#fef08a' }}>
-            NĂM {year}
-          </h3>
-          <p style={{ fontSize: '0.78rem', color: theme.accent, fontWeight: 700, marginBottom: 12 }}>
-            MÙA {theme.name.toUpperCase()}
-          </p>
-
-          <div
-            style={{
-              background: 'rgba(0,0,0,0.4)',
-              borderRadius: 12,
-              padding: '10px 16px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              fontSize: '0.75rem',
-              color: '#e2e8f0',
-              lineHeight: 1.6,
-              marginBottom: 16,
-            }}
-          >
-            <div>📖 <strong>{events.length}</strong> kỷ niệm lưu giữ</div>
-            <div>🖼️ <strong>{mediaCount}</strong> hình ảnh & video</div>
-          </div>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpen()
-            }}
-            style={{
-              padding: '6px 16px',
-              borderRadius: 20,
-              background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent}aa)`,
-              color: '#fff',
-              fontSize: '0.75rem',
-              fontWeight: 800,
-              border: 'none',
-              cursor: 'pointer',
-              boxShadow: `0 3px 12px ${theme.glowColor}`,
-            }}
-          >
-            Mở cuốn sổ này →
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -333,18 +730,6 @@ function Interactive3DYearBook({
  * MAIN COMPONENT: MemoryBookView
  * ═══════════════════════════════════════════════════════════════════ */
 export function MemoryBookView({ events, personName, onClose }: MemoryBookViewProps) {
-  // Chọn năm để đọc sách (null = Kệ sách các năm)
-  const [selectedYear, setSelectedYear] = useState<number | null>(null)
-
-  // 1. Thứ tự thời gian: 'desc' = Mới nhất trước, 'asc' = Cũ nhất trước
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true)
-
-  // 2. Tìm kiếm nhanh & Bộ chọn tháng
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false)
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all')
-
   // Phân nhóm toàn bộ kỷ niệm theo từng năm
   const yearlyGroups = useMemo(() => {
     const map = new Map<number, SharedEvent[]>()
@@ -368,16 +753,37 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       })
   }, [events])
 
+  // Chế độ xem: 'tree' (Cây 3D xoay 360 độ có 12 hoa tháng) | 'book' (Quyển sách 3D lật trang chân thực)
+  const [viewMode, setViewMode] = useState<'tree' | 'book'>('tree')
+
+  // Chọn năm hiện tại để xem cây và lật sách
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    return yearlyGroups[0]?.year || new Date().getFullYear()
+  })
+
+  // 1. Thứ tự thời gian: 'desc' = Mới nhất trước, 'asc' = Cũ nhất trước
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true)
+
+  // 2. Tìm kiếm nhanh & Bộ chọn tháng
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false)
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all')
+
   // Lọc danh sách sự kiện cho năm đang mở
   const activeYearEvents = useMemo(() => {
-    if (selectedYear === null) return []
     const found = yearlyGroups.find((g) => g.year === selectedYear)
     return found ? found.events : []
   }, [selectedYear, yearlyGroups])
 
+  const activeYearMediaCount = useMemo(() => {
+    const found = yearlyGroups.find((g) => g.year === selectedYear)
+    return found ? found.mediaCount : 0
+  }, [selectedYear, yearlyGroups])
+
   // Theme của năm đang mở
   const activeYearTheme = useMemo(() => {
-    return getSeasonTheme(selectedYear || new Date().getFullYear())
+    return getSeasonTheme(selectedYear)
   }, [selectedYear])
 
   // 3. Nhóm kỷ niệm của năm đang mở theo từng ngày (Scrapbook Day Pages)
@@ -549,8 +955,8 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       } else if (e.key === 'ArrowLeft') {
         goPrevPage()
       } else if (e.key === 'Escape') {
-        if (selectedYear !== null) {
-          setSelectedYear(null)
+        if (viewMode === 'book') {
+          setViewMode('tree')
         } else {
           onClose()
         }
@@ -558,7 +964,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentPage, totalPages, activeGallery, isSearchOpen, selectedYear, goNextPage, goPrevPage, onClose])
+  }, [currentPage, totalPages, activeGallery, isSearchOpen, viewMode, goNextPage, goPrevPage, onClose])
 
   // Đổi thứ tự sắp xếp thời gian
   const toggleSortOrder = () => {
@@ -662,11 +1068,12 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                 className="cover-open-btn"
                 onClick={(e) => {
                   e.stopPropagation()
-                  setSelectedYear(null)
+                  if (soundEnabled) playPaperTurnSound()
+                  setViewMode('tree')
                 }}
-                style={{ background: 'rgba(255,255,255,0.12)' }}
+                style={{ background: 'rgba(255,255,255,0.9)', color: '#78350f', border: '1px solid rgba(245, 158, 11, 0.4)' }}
               >
-                <span>Về kệ sách</span>
+                <span>Quay lại Cây 3D</span>
               </button>
             </div>
           </div>
@@ -810,21 +1217,21 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
 
   return (
     <div className="memory-book-fullscreen">
-      {/* ── TOP BAR (GỌN GÀNG, KHÔNG RƯỜM RÀ) ─────────────────────────── */}
+      {/* ── TOP BAR (SÁNG BÓNG, FROSTED GLASS, GỌN GÀNG) ─────────────────── */}
       <div className="memory-book-topbar">
         <div className="memory-book-top-left">
-          {selectedYear !== null ? (
+          {viewMode === 'book' ? (
             <button
               type="button"
               className="memory-book-back-btn"
               onClick={() => {
                 if (soundEnabled) playPaperTurnSound()
-                setSelectedYear(null)
+                setViewMode('tree')
               }}
-              title="Quay lại Kệ sách các năm"
+              title="Quay lại Cây Kỷ Niệm 3D"
             >
-              <ArrowLeft size={16} />
-              <span className="topbar-btn-text">Kệ sách</span>
+              <TreePine size={16} />
+              <span className="topbar-btn-text">Cây 3D</span>
             </button>
           ) : (
             <button
@@ -838,7 +1245,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             </button>
           )}
 
-          {selectedYear !== null && (
+          {viewMode === 'book' && (
             <button
               type="button"
               className={`memory-book-sort-btn ${sortOrder === 'desc' ? 'active-desc' : 'active-asc'}`}
@@ -853,21 +1260,30 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
 
         {/* Chỉ số trang hoặc tiêu đề ở giữa */}
         <div className="memory-book-page-indicator">
-          <BookOpen size={15} style={{ color: activeYearTheme.accent }} />
-          <span>
-            {selectedYear === null
-              ? `Kệ Sách Kỷ Niệm 3D ${personName ? `· ${personName}` : ''}`
-              : currentPage === 0
-              ? `Bìa sổ ${selectedYear}`
-              : currentPage === totalPages - 1
-              ? `Hết sổ ${selectedYear}`
-              : `Trang ${currentPage} / ${dayPages.length} (Năm ${selectedYear})`}
-          </span>
+          {viewMode === 'tree' ? (
+            <>
+              <TreePine size={16} style={{ color: activeYearTheme.accent }} />
+              <span>
+                Cây Kỷ Niệm 3D · Năm {selectedYear} {personName ? `· ${personName}` : ''}
+              </span>
+            </>
+          ) : (
+            <>
+              <BookOpen size={15} style={{ color: activeYearTheme.accent }} />
+              <span>
+                {currentPage === 0
+                  ? `Bìa sổ ${selectedYear}`
+                  : currentPage === totalPages - 1
+                  ? `Hết sổ ${selectedYear}`
+                  : `Trang ${currentPage} / ${dayPages.length} (Năm ${selectedYear})`}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="memory-book-top-actions">
           {/* Nút Tìm kiếm nhanh khi đang đọc sách */}
-          {selectedYear !== null && (
+          {viewMode === 'book' && (
             <button
               type="button"
               className={`memory-book-pill-btn ${isSearchOpen ? 'active' : ''}`}
@@ -886,7 +1302,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             onClick={() => setSoundEnabled((v) => !v)}
             title={soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}
           >
-            {soundEnabled ? <Volume2 size={15} style={{ color: '#fbbf24' }} /> : <VolumeX size={15} style={{ opacity: 0.5 }} />}
+            {soundEnabled ? <Volume2 size={15} style={{ color: '#d97706' }} /> : <VolumeX size={15} style={{ opacity: 0.5 }} />}
           </button>
 
           {/* Đóng */}
@@ -902,40 +1318,93 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       </div>
 
       {/* ══════════════════════════════════════════════════════════════
-       * VIEW 1: KỆ SÁCH CÁC NĂM (GỌN ĐẸP, BÌA CÂY VUỐT 3D 360 ĐỘ)
+       * VIEW 1: CÂY KỶ NIỆM 3D (XOAY 360 ĐỘ — 12 HOA TƯỢNG TRƯNG 12 THÁNG)
        * ══════════════════════════════════════════════════════════════ */}
-      {selectedYear === null ? (
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '24px 16px 40px',
-            background: 'radial-gradient(ellipse at 50% 20%, #201712 0%, #100b08 100%)',
-          }}
-        >
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 24,
-              maxWidth: 960,
-              margin: '0 auto',
-              paddingBottom: 30,
-            }}
-          >
-            {yearlyGroups.map(({ year, events: yrEvents, mediaCount }) => (
-              <Interactive3DYearBook
-                key={year}
-                year={year}
-                events={yrEvents}
-                mediaCount={mediaCount}
-                onOpen={() => {
-                  if (soundEnabled) playPaperTurnSound()
-                  setSelectedYear(year)
+      {viewMode === 'tree' ? (
+        <div className="tree-explorer-stage">
+          {/* Thanh chọn năm dạng viên thuốc (nếu có nhiều năm) */}
+          {yearlyGroups.length > 1 && (
+            <div className="tree-year-switcher">
+              {yearlyGroups.map((g) => {
+                const t = getSeasonTheme(g.year)
+                const isActive = g.year === selectedYear
+                return (
+                  <button
+                    key={g.year}
+                    type="button"
+                    className={`tree-year-pill ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      if (soundEnabled) playPaperTurnSound()
+                      setSelectedYear(g.year)
+                      setCurrentPage(0)
+                    }}
+                  >
+                    <span>{t.name === 'Xuân' ? '🌸' : t.name === 'Hạ' ? '☀️' : t.name === 'Thu' ? '🍂' : '❄️'}</span>
+                    <span>Năm {g.year}</span>
+                    <span style={{ opacity: 0.7, fontSize: '0.72rem' }}>({g.events.length})</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Khung Canvas Cây 3D xoay 360 độ */}
+          <div className="tree-canvas-wrapper">
+            <Interactive3DTreeCanvas
+              year={selectedYear}
+              events={activeYearEvents}
+              theme={activeYearTheme}
+              onOpenBook={() => {
+                if (soundEnabled) playPaperTurnSound()
+                setCurrentPage(0)
+                setViewMode('book')
+              }}
+              onSelectMonth={(m) => {
+                const targetIdx = dayPages.findIndex((p) => parseInt(p.monthNum, 10) === m)
+                if (targetIdx >= 0) {
+                  setCurrentPage(targetIdx + 1)
+                } else {
                   setCurrentPage(0)
-                }}
-              />
-            ))}
+                }
+                if (soundEnabled) playPaperTurnSound()
+                setViewMode('book')
+              }}
+            />
+          </div>
+
+          {/* Bảng đế cây & Nút mở sách lật 3D */}
+          <div className="tree-pedestal-card">
+            <div className="tree-pedestal-title">
+              <TreePine size={18} style={{ color: activeYearTheme.accent }} />
+              <span>CÂY KỶ NIỆM 3D · NĂM {selectedYear}</span>
+            </div>
+
+            <div className="tree-pedestal-meta">
+              <span>🌸 Mùa {activeYearTheme.name}</span>
+              <span>·</span>
+              <span>📖 {activeYearEvents.length} kỷ niệm</span>
+              <span>·</span>
+              <span>🖼️ {activeYearMediaCount} ảnh & video</span>
+              <span>·</span>
+              <span>✨ 12 tháng nở hoa</span>
+            </div>
+
+            <button
+              type="button"
+              className="tree-open-book-btn"
+              onClick={() => {
+                if (soundEnabled) playPaperTurnSound()
+                setCurrentPage(0)
+                setViewMode('book')
+              }}
+            >
+              <BookOpen size={18} />
+              <span>Mở Cuốn Sách Năm {selectedYear} (Lật Trang 3D) →</span>
+            </button>
+
+            <div className="tree-pedestal-hint">
+              ✨ Kéo vuốt để xoay cây 360° · Chạm hoa 12 tháng để mở nhanh
+            </div>
           </div>
         </div>
       ) : (

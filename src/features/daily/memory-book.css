@@ -1,16 +1,17 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   QUYỂN SÁCH KỶ NIỆM 3D (REALISTIC 3D MEMORY SCRAPBOOK VIEW)
+   QUYỂN SÁCH KỶ NIỆM 3D (BRIGHT LUMINOUS 3D MEMORY SCRAPBOOK VIEW)
    ══════════════════════════════════════════════════════════════════════════ */
 .memory-book-fullscreen {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: radial-gradient(ellipse at center, #2e221b 0%, #17110e 100%);
+  background: radial-gradient(ellipse at 50% 15%, #ffffff 0%, #fffcf5 30%, #fef3c7 70%, #f8fafc 100%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   user-select: none;
   animation: bookFadeIn 0.3s ease-out;
+  color: #1e293b;
 }
 
 @keyframes bookFadeIn {
@@ -18,16 +19,17 @@
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ── TOP FLOATING BAR ── */
+/* ── TOP FLOATING BAR (BRIGHT FROSTED GLASS) ── */
 .memory-book-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 18px;
-  background: rgba(23, 17, 14, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  box-shadow: 0 4px 20px rgba(180, 83, 9, 0.08);
   z-index: 50;
   gap: 12px;
 }
@@ -42,9 +44,9 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #78350f;
   padding: 7px 13px;
   border-radius: 20px;
   font-size: 0.82rem;
@@ -54,7 +56,8 @@
 }
 
 .memory-book-back-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(245, 158, 11, 0.2);
+  color: #451a03;
   transform: translateX(-2px);
 }
 
@@ -63,37 +66,38 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #fef08a;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #92400e;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.78rem;
   font-weight: 800;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.12);
 }
 
 .memory-book-sort-btn:hover {
   background: rgba(245, 158, 11, 0.25);
-  border-color: rgba(245, 158, 11, 0.6);
+  border-color: rgba(245, 158, 11, 0.7);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
 }
 
 .memory-book-page-indicator {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #fef08a;
+  color: #78350f;
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.03em;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.95);
   padding: 6px 14px;
   border-radius: 20px;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.08);
 }
 
 .memory-book-top-actions {
@@ -106,22 +110,23 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #475569;
   padding: 6px 12px;
   border-radius: 16px;
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .memory-book-pill-btn:hover,
 .memory-book-pill-btn.active {
-  background: rgba(245, 158, 11, 0.2);
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #fef08a;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #92400e;
 }
 
 .memory-book-pill-btn.icon-only {
@@ -153,14 +158,15 @@
   width: 100%;
   max-width: 540px;
   max-height: 75vh;
-  background: #1c1512;
+  background: #ffffff;
   border: 1px solid rgba(245, 158, 11, 0.35);
   border-radius: 18px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(245, 158, 11, 0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: searchSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #1e293b;
 }
 
 @keyframes searchSlideDown {
@@ -173,8 +179,8 @@
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+  background: #fdfbf7;
 }
 
 .search-input-wrap {
@@ -182,11 +188,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   padding: 8px 12px;
   border-radius: 12px;
-  color: #fff;
+  color: #0f172a;
 }
 
 .search-input-wrap:focus-within {
@@ -195,7 +201,7 @@
 }
 
 .search-input-icon {
-  color: #a8a29e;
+  color: #94a3b8;
   flex-shrink: 0;
 }
 
@@ -203,7 +209,7 @@
   flex: 1;
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: #0f172a;
   font-size: 0.88rem;
   outline: none;
 }
@@ -211,7 +217,7 @@
 .search-input-clear {
   background: transparent;
   border: none;
-  color: #a8a29e;
+  color: #94a3b8;
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -219,9 +225,9 @@
 }
 
 .search-modal-close {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #d6d3d1;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #64748b;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -232,8 +238,8 @@
 }
 
 .search-modal-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+  background: rgba(0, 0, 0, 0.1);
+  color: #0f172a;
 }
 
 /* Bộ lọc tháng */
@@ -243,8 +249,8 @@
   gap: 6px;
   padding: 10px 16px;
   overflow-x: auto;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.12);
+  background: #fdf8ee;
 }
 
 .search-months-filter::-webkit-scrollbar {
@@ -308,20 +314,21 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
   cursor: pointer;
   transition: all 0.18s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
 .search-result-item:hover {
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.35);
+  background: #fefce8;
+  border-color: #fde047;
   transform: translateX(3px);
 }
 
 .search-result-item.current-page {
-  background: rgba(245, 158, 11, 0.18);
+  background: #fef3c7;
   border-color: #f59e0b;
 }
 
@@ -334,8 +341,8 @@
   height: 48px;
   border-radius: 10px;
   background: rgba(245, 158, 11, 0.15);
-  border: 1px dashed rgba(245, 158, 11, 0.45);
-  color: #fef08a;
+  border: 1px dashed rgba(245, 158, 11, 0.5);
+  color: #92400e;
   flex-shrink: 0;
 }
 
@@ -348,7 +355,7 @@
 .result-date-badge .r-m {
   font-size: 0.62rem;
   font-weight: 700;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .result-info {
@@ -368,7 +375,7 @@
 .result-title-pill {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #f5f5f4;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -380,7 +387,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.7rem;
-  color: #a8a29e;
+  color: #64748b;
 }
 
 .result-jump-btn {
@@ -389,7 +396,7 @@
   gap: 4px;
   font-size: 0.74rem;
   font-weight: 700;
-  color: #f59e0b;
+  color: #d97706;
   flex-shrink: 0;
 }
 
@@ -406,7 +413,7 @@
   padding: 12px 16px 6px;
 }
 
-/* Nút lật trang trái/phải */
+/* Nút lật trang trái/phải (Sáng bóng, Lộng lẫy) */
 .book-turn-arrow {
   position: absolute;
   top: 50%;
@@ -414,25 +421,26 @@
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  border: 1.5px solid rgba(245, 158, 11, 0.25);
-  background: rgba(30, 20, 16, 0.8);
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  color: #fef08a;
+  color: #b45309;
   display: grid;
   place-items: center;
   cursor: pointer;
   z-index: 40;
   transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(180, 83, 9, 0.15);
 }
 
 .book-turn-arrow.prev { left: 16px; }
 .book-turn-arrow.next { right: 16px; }
 
 .book-turn-arrow:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.35);
-  border-color: rgba(245, 158, 11, 0.7);
+  background: #ffffff;
+  border-color: #f59e0b;
+  color: #78350f;
   transform: translateY(-50%) scale(1.1);
   box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3);
 }
@@ -453,8 +461,8 @@
   border-radius: 18px;
   transform-style: preserve-3d;
   box-shadow:
-    0 25px 65px rgba(0, 0, 0, 0.75),
-    0 10px 25px rgba(0, 0, 0, 0.5);
+    0 25px 65px rgba(180, 83, 9, 0.2),
+    0 10px 25px rgba(0, 0, 0, 0.12);
 }
 
 /* Vỏ bìa cứng dưới đáy sổ (Book Hardcover Edge) */
@@ -1134,27 +1142,28 @@
   justify-content: center;
   gap: 12px;
   padding: 8px 20px 12px;
-  background: rgba(23, 17, 14, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+  box-shadow: 0 -4px 16px rgba(180, 83, 9, 0.06);
   z-index: 30;
 }
 
 .scrubber-label {
   font-size: 0.72rem;
   font-weight: 800;
-  color: #a8a29e;
+  color: #78350f;
   white-space: nowrap;
 }
 
 .scrubber-slider {
   flex: 1;
   max-width: 440px;
-  height: 5px;
+  height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(245, 158, 11, 0.2);
   border-radius: 5px;
   outline: none;
   cursor: pointer;
@@ -1390,4 +1399,199 @@
   .memory-quick-search-backdrop {
     padding: 60px 10px 10px;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   3D TREE EXPLORER VIEW (CÂY KỶ NIỆM 3D VỚI 12 HOA THÁNG)
+   ═══════════════════════════════════════════════════════════════════ */
+.tree-explorer-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px 20px;
+  background: radial-gradient(ellipse at 50% 20%, #ffffff 0%, #fffdf7 35%, #fef3c7 75%, #f8fafc 100%);
+  position: relative;
+}
+
+/* Thanh chọn năm dạng viên thuốc (Year Switcher Pills) */
+.tree-year-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px 6px;
+  margin-bottom: 8px;
+  scrollbar-width: none;
+}
+
+.tree-year-switcher::-webkit-scrollbar {
+  display: none;
+}
+
+.tree-year-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #78350f;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(180, 83, 9, 0.06);
+}
+
+.tree-year-pill:hover {
+  background: #fefce8;
+  border-color: #f59e0b;
+  transform: translateY(-1px);
+}
+
+.tree-year-pill.active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: #b45309;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+  font-weight: 800;
+}
+
+/* Khung bọc Canvas Cây 3D */
+.tree-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  height: 400px;
+  max-height: 52vh;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.tree-canvas-element {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Tooltip nổi khi chạm / hover vào hoa 12 tháng */
+.tree-month-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -12px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid #f59e0b;
+  border-radius: 24px;
+  padding: 6px 14px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #78350f;
+  box-shadow: 0 8px 24px rgba(180, 83, 9, 0.25);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 60;
+  animation: tooltipPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@keyframes tooltipPop {
+  from { opacity: 0; transform: translate(-50%, -85%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+
+/* Thẻ thông tin dưới đế cây (Pedestal Info Card) */
+.tree-pedestal-card {
+  width: 100%;
+  max-width: 460px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 20px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(180, 83, 9, 0.08);
+  margin-top: 6px;
+  gap: 8px;
+}
+
+.tree-pedestal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #78350f;
+}
+
+.tree-pedestal-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.74rem;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.tree-pedestal-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Nút lớn Mở sách kỷ niệm 3D */
+.tree-open-book-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 20px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 4px;
+}
+
+.tree-open-book-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(245, 158, 11, 0.5);
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+}
+
+.tree-open-book-btn:active {
+  transform: translateY(0);
+}
+
+.tree-pedestal-hint {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-top: 2px;
 }
