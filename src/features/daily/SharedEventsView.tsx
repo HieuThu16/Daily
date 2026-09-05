@@ -3,8 +3,9 @@ import {
   ArrowLeft, CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
   Filter, Heart, ImagePlus, LayoutGrid, List, Mail, MapPin, Maximize2,
   MoreVertical, Pencil, Plus, RotateCcw, Trash2,
-  UserPlus, Video, Loader2, X
+  UserPlus, Video, Loader2, X, BookOpen
 } from 'lucide-react'
+import { MemoryBookView } from './MemoryBookView'
 import { supabase } from '../../lib/supabase'
 import { localDate } from '../../lib/date'
 import { anniversariesOn, yearsAgoLabel } from '../../lib/anniversary'
@@ -114,6 +115,7 @@ export function SharedEventsView({
   const [viewMode, setViewMode] = useState<'timeline' | 'month'>('month')
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>('ALL')
   const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null)
+  const [showMemoryBook, setShowMemoryBook] = useState(false)
 
   const [pendingMedia, setPendingMedia] = useState<PendingMediaItem[]>([])
   const abortUploadRef = useRef(false)
@@ -1483,6 +1485,21 @@ export function SharedEventsView({
           >
             <List size={14} /> <span>Danh sách</span>
           </button>
+          <button
+            type="button"
+            className="mem-view-book-btn"
+            onClick={() => setShowMemoryBook(true)}
+            title="Mở toàn màn hình: Quyển sách Kỷ niệm 3D lật trang chân thực"
+            style={{
+              color: '#d97706',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <BookOpen size={14} /> <span>📖 Quyển sách 3D</span>
+          </button>
         </div>
 
         {viewMode === 'timeline' && (
@@ -2338,6 +2355,16 @@ export function SharedEventsView({
           </div>
         )
       })()}
+
+      {/* ── Quyển sách Kỷ niệm 3D (Toàn màn hình riêng biệt có nút Back) ── */}
+      {showMemoryBook && (
+        <MemoryBookView
+          events={sorted}
+          personName={partnerDisplayName}
+          roomCode={roomCode}
+          onClose={() => setShowMemoryBook(false)}
+        />
+      )}
     </section>
   )
 }

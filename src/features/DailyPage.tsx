@@ -3,7 +3,7 @@ import {
   BarChart3, ChevronLeft, ChevronRight, ChevronUp, Clock, History, ImagePlus,
   Loader2, NotebookPen, Pencil, Plus, Save,
   Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag, Play,
-  Users, Check, X, List, Calendar, CalendarDays
+  Users, Check, X, List, Calendar, CalendarDays, Search
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
@@ -2040,15 +2040,15 @@ export function DailyPage() {
                   <div className="daily-extra-row-title">
                     <Sparkles size={12} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(82px, 1fr))', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                     {/* Nút Hành động */}
                     <button
                       type="button"
                       onClick={() => setShowActionModal(true)}
                       style={{
-                        padding: '6px 2px',
+                        padding: '8px 10px',
                         borderRadius: 10,
-                        fontSize: '0.72rem',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
                         border: '1px solid rgba(245, 158, 11, 0.35)',
                         background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.18))',
@@ -2057,11 +2057,11 @@ export function DailyPage() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 3,
+                        gap: 5,
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      <Zap size={12} />
+                      <Zap size={13} />
                       <span>Hành động</span>
                     </button>
 
@@ -2070,9 +2070,9 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowVideoModal(true)}
                       style={{
-                        padding: '6px 2px',
+                        padding: '8px 10px',
                         borderRadius: 10,
-                        fontSize: '0.72rem',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
                         border: '1px solid rgba(239, 68, 68, 0.35)',
                         background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 63, 94, 0.15))',
@@ -2081,11 +2081,11 @@ export function DailyPage() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 3,
+                        gap: 5,
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      <Youtube size={12} />
+                      <Youtube size={13} />
                       <span>YouTube</span>
                     </button>
 
@@ -2095,9 +2095,9 @@ export function DailyPage() {
                       onClick={() => formFileInputRef.current?.click()}
                       disabled={mediaUploading || !supabase}
                       style={{
-                        padding: '6px 2px',
+                        padding: '8px 10px',
                         borderRadius: 10,
-                        fontSize: '0.72rem',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
                         border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
                         background: attachedMedias.length > 0
@@ -2108,17 +2108,17 @@ export function DailyPage() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 3,
+                        gap: 5,
                         whiteSpace: 'nowrap',
                       }}
                       title="Tải ảnh hoặc video đính kèm"
                     >
                       {mediaUploading ? (
-                        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
                       ) : (
-                        <ImagePlus size={12} />
+                        <ImagePlus size={13} />
                       )}
-                      <span>{mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh/Video'}</span>
+                      <span>{mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}</span>
                     </button>
                     <input
                       ref={formFileInputRef}
@@ -2137,9 +2137,9 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowPeopleModal(true)}
                       style={{
-                        padding: '6px 2px',
+                        padding: '8px 10px',
                         borderRadius: 10,
-                        fontSize: '0.72rem',
+                        fontSize: '0.78rem',
                         fontWeight: 700,
                         border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
                         background: selectedPersonIds.length > 0
@@ -2150,13 +2150,13 @@ export function DailyPage() {
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 3,
+                        gap: 5,
                         whiteSpace: 'nowrap',
                       }}
                       title="Gắn người thân"
                     >
-                      <Users size={12} />
-                      <span>{selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Người thân'}</span>
+                      <Users size={13} />
+                      <span>{selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Gắn người thân'}</span>
                     </button>
                   </div>
                 </div>
@@ -2362,36 +2362,89 @@ export function DailyPage() {
             </div>
           )}
 
-          {/* Thanh chuyển chế độ xem: Danh sách vs Dạng tháng */}
-          <div className="memory-controls-row" style={{ marginTop: 6, marginBottom: 12 }}>
-            <div className="mem-view-toggle">
-              <button
-                type="button"
-                className={viewMode === 'timeline' ? 'active' : ''}
-                onClick={() => setViewMode('timeline')}
-                title="Xem theo danh sách ngày"
-              >
-                <List size={14} /> <span>Danh sách</span>
-              </button>
-              <button
-                type="button"
-                className={viewMode === 'month' ? 'active' : ''}
-                onClick={() => setViewMode('month')}
-                title="Xem theo tháng giống Kỷ niệm chung"
-              >
-                <CalendarDays size={14} /> <span>Dạng tháng</span>
-              </button>
+          {/* Thanh chuyển chế độ xem & Ô tìm kiếm (Full width, cân đối, không lệch) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4, marginBottom: 14 }}>
+            {/* Thanh chọn chế độ xem căn giữa */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div className="mem-view-toggle" style={{ width: '100%', maxWidth: 360, display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                <button
+                  type="button"
+                  className={viewMode === 'timeline' ? 'active' : ''}
+                  onClick={() => setViewMode('timeline')}
+                  title="Xem theo danh sách ngày"
+                  style={{ justifyContent: 'center' }}
+                >
+                  <List size={14} /> <span>Danh sách</span>
+                </button>
+                <button
+                  type="button"
+                  className={viewMode === 'month' ? 'active' : ''}
+                  onClick={() => setViewMode('month')}
+                  title="Xem theo tháng giống Kỷ niệm chung"
+                  style={{ justifyContent: 'center' }}
+                >
+                  <CalendarDays size={14} /> <span>Dạng tháng</span>
+                </button>
+              </div>
             </div>
 
+            {/* Ô tìm kiếm toàn bộ nhật ký (Full width cân đối, có kính lúp) */}
             {viewMode === 'timeline' && (
-              <div style={{ flex: 1, minWidth: 200, display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ position: 'relative', width: '100%' }}>
+                <Search
+                  size={15}
+                  style={{
+                    position: 'absolute',
+                    left: 14,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                    pointerEvents: 'none',
+                  }}
+                />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Tìm trong toàn bộ nhật ký…"
                   aria-label="Tìm trong nhật ký"
-                  style={{ width: '100%', maxWidth: 300, fontSize: '0.82rem', borderRadius: 10, padding: '6px 12px' }}
+                  style={{
+                    width: '100%',
+                    paddingLeft: 38,
+                    paddingRight: search ? 36 : 14,
+                    paddingTop: 10,
+                    paddingBottom: 10,
+                    fontSize: '0.85rem',
+                    borderRadius: 13,
+                    border: '1px solid var(--card-border)',
+                    background: 'var(--card-bg)',
+                    color: 'var(--text-main)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+                  }}
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      border: 0,
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'grid',
+                      placeItems: 'center',
+                      padding: 4,
+                    }}
+                    title="Xoá tìm kiếm"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -2457,7 +2510,7 @@ export function DailyPage() {
               {loading ? (
                 <SkeletonList rows={3} height={72} />
               ) : todayEntries.length ? (
-                <div className="memory-list" style={{ maxHeight: 'calc(100vh - 330px)', minHeight: '230px', overflowY: 'auto' }}>
+                <div className="memory-list">
                   {todayEntries.map((entry, i) => renderDailyEntryCard(entry, i, Boolean(keyword || filterType !== 'ALL')))}
                 </div>
               ) : (
@@ -2602,9 +2655,9 @@ export function DailyPage() {
                     </div>
                   )}
 
-                  {/* Danh sách bài nhật ký của tháng / ngày đã chọn */}
+                  {/* Danh sách bài nhật ký của tháng / ngày đã chọn (Cuộn tự nhiên theo trang) */}
                   {monthEntries.length > 0 ? (
-                    <div className="memory-list" style={{ maxHeight: 'calc(100vh - 420px)', minHeight: '230px', overflowY: 'auto' }}>
+                    <div className="memory-list">
                       {monthEntries.map((entry, i) => renderDailyEntryCard(entry, i, true))}
                     </div>
                   ) : (
@@ -2615,7 +2668,7 @@ export function DailyPage() {
                 </div>
               ) : (
                 /* Xem tất cả tháng gom nhóm */
-                <div style={{ display: 'grid', gap: 18, maxHeight: 'calc(100vh - 330px)', minHeight: '260px', overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gap: 18 }}>
                   {monthGroups.length > 0 ? (
                     monthGroups.map((g) => (
                       <section key={g.key} style={{ display: 'grid', gap: 8 }}>
