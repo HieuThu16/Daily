@@ -10,7 +10,7 @@ import { formatCardDate, formatMemoryCardContent } from './Memory3DCard'
 /* ═══════════════════════════════════════════════════════════════════
  * SEASON THEMES — Mỗi năm 1 mùa, cycle qua 4 mùa
  * ═══════════════════════════════════════════════════════════════════ */
-type SeasonTheme = {
+export type SeasonTheme = {
   name: string
   treeTrunk: string
   treeCanopy: string[]  // gradient stops
@@ -23,7 +23,7 @@ type SeasonTheme = {
   leafColors?: string[]
 }
 
-const SEASONS: SeasonTheme[] = [
+export const SEASONS: SeasonTheme[] = [
   {
     // SPRING — Xuân (hoa anh đào)
     name: 'Xuân',
@@ -76,23 +76,25 @@ const SEASONS: SeasonTheme[] = [
   },
 ]
 
-function getSeasonTheme(year: number): SeasonTheme {
-  return SEASONS[year % 4]
+export function getSeasonTheme(year: number): SeasonTheme {
+  return SEASONS[((year % 4) + 4) % 4]
 }
 
 /* ═══════════════════════════════════════════════════════════════════
  * SUB-COMPONENT: MemoryTreeCover — Bìa cây kỷ niệm SVG + CSS effects
  * ═══════════════════════════════════════════════════════════════════ */
-function MemoryTreeCover({
+export function MemoryTreeCover({
   year,
   entryCount,
-  firstTimeCount,
-  specialCount,
+  firstTimeCount = 0,
+  specialCount = 0,
+  mediaCount,
 }: {
   year: number
   entryCount: number
-  firstTimeCount: number
-  specialCount: number
+  firstTimeCount?: number
+  specialCount?: number
+  mediaCount?: number
 }) {
   const theme = getSeasonTheme(year)
 
@@ -311,8 +313,10 @@ function MemoryTreeCover({
           display: 'flex', gap: 8, marginTop: 3,
           fontSize: '0.62rem', fontWeight: 700,
           color: 'rgba(255,255,255,0.75)',
+          flexWrap: 'wrap',
         }}>
           <span>📖 {entryCount} kỷ niệm</span>
+          {typeof mediaCount === 'number' && mediaCount > 0 && <span>🖼️ {mediaCount} ảnh/video</span>}
           {firstTimeCount > 0 && <span>✨ {firstTimeCount} lần đầu</span>}
           {specialCount > 0 && <span>🌟 {specialCount} đặc biệt</span>}
         </div>

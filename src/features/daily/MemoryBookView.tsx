@@ -1,49 +1,20 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, MapPin, Clock,
-  Play, Sparkles, X, Bookmark, Heart, BookOpen,
-  ArrowUpDown, Search, Volume2, VolumeX, Calendar,
-  Download
+  Calendar, Sparkles, X, Bookmark, BookOpen,
+  Volume2, VolumeX, Download, TreePine, Star
 } from 'lucide-react'
 import type { SharedEvent } from '../../types'
 import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
+import { getSeasonTheme, MemoryTreeCover, type SeasonTheme } from './YearlyMemoryBook'
+import { formatCardDate } from './Memory3DCard'
 import './memory-book.css'
 
-interface MemoryBookViewProps {
+export interface MemoryBookViewProps {
   events: SharedEvent[]
   personName?: string
   roomCode?: string | null
   onClose: () => void
-}
-
-interface BookDayPage {
-  dateStr: string
-  dayNum: string
-  monthNum: string
-  yearNum: string
-  weekdayStr: string
-  events: SharedEvent[]
-  allImages: string[]
-}
-
-function parseDayInfo(dateStr: string) {
-  try {
-    const d = new Date(dateStr + 'T12:00:00')
-    const weekdays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
-    return {
-      dayNum: String(d.getDate()).padStart(2, '0'),
-      monthNum: String(d.getMonth() + 1).padStart(2, '0'),
-      yearNum: String(d.getFullYear()),
-      weekdayStr: weekdays[d.getDay()] || '',
-    }
-  } catch {
-    return {
-      dayNum: dateStr.slice(8, 10),
-      monthNum: dateStr.slice(5, 7),
-      yearNum: dateStr.slice(0, 4),
-      weekdayStr: 'Kỷ niệm',
-    }
-  }
 }
 
 function isVideo(url?: string | null): boolean {
@@ -52,7 +23,7 @@ function isVideo(url?: string | null): boolean {
   return /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(url.split('?')[0])
 }
 
-// Âm thanh lật giấy êm dịu bằng Web Audio API (không phụ thuộc mạng bên ngoài)
+// Âm thanh lật giấy êm dịu bằng Web Audio API
 function playPaperTurnSound() {
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -62,7 +33,6 @@ function playPaperTurnSound() {
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
     const data = buffer.getChannelData(0)
     for (let i = 0; i < bufferSize; i++) {
-      // Nhiễu âm dịu nhẹ mô phỏng ma sát trang giấy
       data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.45))
     }
     const noise = ctx.createBufferSource()
@@ -84,101 +54,304 @@ function playPaperTurnSound() {
     gain.connect(ctx.destination)
     noise.start()
   } catch {
-    // Không bắt buộc âm thanh nếu trình duyệt hạn chế
+    // Không bắt buộc âm thanh nếu trình duyệt chặn
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+ * SUB-COMPONENT: YearlyBookCard (Cuốn sách 3D trên kệ sách các năm)
+ * ═══════════════════════════════════════════════════════════════════ */
+function YearlyBookCard({
+  year,
+  events,
+  mediaCount,
+  onOpen,
+}: {
+  year: number
+  events: SharedEvent[]
+  mediaCount: number
+  onOpen: () => void
+}) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [tilt, setTilt] = useState({ x: 0, y: 0, sheenX: 50, sheenY: 50 })
+  const [isHovered, setIsHovered] = useState(false)
+  const theme = getSeasonTheme(year)
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return
+    const rect = cardRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const cx = rect.width / 2
+    const cy = rect.height / 2
+    setTilt({
+      x: -((y - cy) / cy) * 9,
+      y: ((x - cx) / cx) * 9,
+      sheenX: Math.round((x / rect.width) * 100),
+      sheenY: Math.round((y / rect.height) * 100),
+    })
+  }
+
+  const firstTimeCount = useMemo(() => {
+    return events.filter(e => {
+      const t = (e.title || '').toLowerCase()
+      const n = (e.note || '').toLowerCase()
+      return t.includes('lần đầu') || n.includes('lần đầu') || t.includes('first time')
+    }).length
+  }, [events])
+
+  const specialCount = useMemo(() => {
+    return events.filter(e => {
+      const t = (e.title || '').toLowerCase()
+      const n = (e.note || '').toLowerCase()
+      return t.includes('đặc biệt') || n.includes('đặc biệt') || t.includes('kỷ niệm') || e.is_favorite
+    }).length
+  }, [events])
+
+  return (
+    <div
+      style={{
+        perspective: 1200,
+        width: '100%',
+        userSelect: 'none',
+      }}
+    >
+      <div
+        ref={cardRef}
+        onMouseMove={handleMouseMove}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false)
+          setTilt({ x: 0, y: 0, sheenX: 50, sheenY: 50 })
+        }}
+        onClick={onOpen}
+        style={{
+          position: 'relative',
+          width: '100%',
+          minHeight: 410,
+          borderRadius: 22,
+          cursor: 'pointer',
+          transformStyle: 'preserve-3d',
+          transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${isHovered ? 1.025 : 1}, ${isHovered ? 1.025 : 1}, 1)`,
+          transition: isHovered ? 'transform 0.08s ease-out' : 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+          boxShadow: isHovered
+            ? `0 22px 50px ${theme.glowColor}, 0 0 25px ${theme.glowColor}`
+            : '0 10px 28px rgba(0,0,0,0.45)',
+        }}
+      >
+        {/* Border gradient frame */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: -2,
+            borderRadius: 24,
+            background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent}80 50%, ${theme.accent}30 100%)`,
+            zIndex: 0,
+            opacity: isHovered ? 1 : 0.65,
+            transition: 'opacity 0.3s ease',
+          }}
+        />
+
+        {/* Card face */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 22,
+            background: 'linear-gradient(155deg, rgba(22,20,26,0.98), rgba(15,14,18,0.98))',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            padding: 14,
+            zIndex: 2,
+          }}
+        >
+          {/* Holographic sheen */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+              background: `radial-gradient(circle at ${tilt.sheenX}% ${tilt.sheenY}%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.03) 45%, transparent 70%)`,
+              mixBlendMode: 'overlay',
+              zIndex: 5,
+            }}
+          />
+
+          {/* Header chip: Season */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, zIndex: 4 }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 11px',
+                borderRadius: 99,
+                background: `linear-gradient(135deg, ${theme.accent}dd, ${theme.accent}88)`,
+                color: '#fff',
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                letterSpacing: '0.4px',
+                boxShadow: `0 2px 10px ${theme.glowColor}`,
+              }}
+            >
+              <TreePine size={12} />
+              <span>CÂY KỶ NIỆM · Mùa {theme.name}</span>
+            </div>
+
+            <span
+              style={{
+                fontSize: '0.65rem',
+                color: 'rgba(255,255,255,0.6)',
+                fontWeight: 700,
+                letterSpacing: '0.5px',
+              }}
+            >
+              VOL. {year}
+            </span>
+          </div>
+
+          {/* Animated 3D Tree Cover Art */}
+          <MemoryTreeCover
+            year={year}
+            entryCount={events.length}
+            firstTimeCount={firstTimeCount}
+            specialCount={specialCount}
+            mediaCount={mediaCount}
+          />
+
+          {/* Year Title */}
+          <div style={{ zIndex: 4, marginTop: 4, marginBottom: 6 }}>
+            <div
+              style={{
+                fontSize: '1.15rem',
+                fontWeight: 900,
+                color: '#fff',
+                textShadow: '0 2px 6px rgba(0,0,0,0.6)',
+                letterSpacing: '-0.3px',
+              }}
+            >
+              🌳 Cuốn sổ năm {year}
+            </div>
+            <div
+              style={{
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                color: theme.accent,
+                marginTop: 2,
+              }}
+            >
+              ✦ {events.length} kỷ niệm đáng nhớ ✦
+            </div>
+          </div>
+
+          {/* Badges / Stats */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, zIndex: 4 }}>
+            {mediaCount > 0 && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  color: '#f8fafc',
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                }}
+              >
+                🖼️ {mediaCount} ảnh & video
+              </span>
+            )}
+            {firstTimeCount > 0 && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(6,182,212,0.12)',
+                  border: '1px solid rgba(6,182,212,0.3)',
+                  color: '#22d3ee',
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                }}
+              >
+                ✨ {firstTimeCount} lần đầu
+              </span>
+            )}
+            {specialCount > 0 && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  color: '#fbbf24',
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                }}
+              >
+                🌟 {specialCount} đặc biệt
+              </span>
+            )}
+          </div>
+
+          {/* Footer Call to Action */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 'auto',
+              paddingTop: 8,
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              fontSize: '0.72rem',
+              color: '#94a3b8',
+              zIndex: 4,
+            }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fef08a', fontWeight: 800 }}>
+              <BookOpen size={13} style={{ color: theme.accent }} /> Mở cuốn sách →
+            </span>
+            <span
+              style={{
+                fontWeight: 800,
+                color: theme.accent,
+                fontSize: '0.66rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 3,
+                background: 'rgba(0,0,0,0.35)',
+                padding: '3px 8px',
+                borderRadius: 6,
+              }}
+            >
+              <Bookmark size={10} /> MÙA {theme.name.toUpperCase()}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+ * MAIN EXPORT: MemoryBookView
+ * ═══════════════════════════════════════════════════════════════════ */
 export function MemoryBookView({ events, personName, onClose }: MemoryBookViewProps) {
-  // 1. Thứ tự thời gian: 'desc' = Mới nhất trước (Hiện tại -> Quá khứ), 'asc' = Cũ nhất trước (Quá khứ -> Hiện tại)
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+  const [selectedEntryIdx, setSelectedEntryIdx] = useState(0)
 
-  // 2. Tìm kiếm nhanh & Bộ chọn tháng
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false)
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all')
-
-  // 3. Nhóm kỷ niệm theo từng ngày và sắp xếp theo sortOrder
-  const dayPages: BookDayPage[] = useMemo(() => {
-    const map = new Map<string, SharedEvent[]>()
-    for (const ev of events) {
-      if (!ev.event_date) continue
-      const list = map.get(ev.event_date) || []
-      list.push(ev)
-      map.set(ev.event_date, list)
-    }
-
-    const sortedDates = Array.from(map.keys()).sort((a, b) => {
-      return sortOrder === 'desc' ? b.localeCompare(a) : a.localeCompare(b)
-    })
-
-    return sortedDates.map((dateStr) => {
-      const dayEvs = map.get(dateStr) || []
-      const dayInfo = parseDayInfo(dateStr)
-      const images: string[] = []
-      for (const ev of dayEvs) {
-        if (Array.isArray(ev.images) && ev.images.length > 0) {
-          images.push(...ev.images.filter(Boolean))
-        } else if (ev.image_url) {
-          images.push(ev.image_url)
-        }
-      }
-      return {
-        dateStr,
-        ...dayInfo,
-        events: dayEvs,
-        allImages: images,
-      }
-    })
-  }, [events, sortOrder])
-
-  // Danh sách các tháng có kỷ niệm để lọc nhanh
-  const availableMonths = useMemo(() => {
-    const set = new Set<string>()
-    for (const p of dayPages) {
-      set.add(`${p.monthNum}/${p.yearNum}`)
-    }
-    return Array.from(set)
-  }, [dayPages])
-
-  // Danh sách kết quả tìm kiếm nhanh
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    return dayPages.filter((p) => {
-      // Lọc theo tháng nếu được chọn
-      if (selectedMonthFilter !== 'all') {
-        const pageMonth = `${p.monthNum}/${p.yearNum}`
-        if (pageMonth !== selectedMonthFilter) return false
-      }
-      if (!q) return true
-      // Tìm trong ngày/tháng/năm
-      const dateMatch = p.dateStr.includes(q) ||
-        `${p.dayNum}/${p.monthNum}/${p.yearNum}`.includes(q) ||
-        p.weekdayStr.toLowerCase().includes(q)
-      if (dateMatch) return true
-
-      // Tìm trong tiêu đề, ghi chú, địa điểm sự kiện
-      return p.events.some((ev) =>
-        (ev.title && ev.title.toLowerCase().includes(q)) ||
-        (ev.note && ev.note.toLowerCase().includes(q)) ||
-        (ev.location && ev.location.toLowerCase().includes(q))
-      )
-    })
-  }, [dayPages, searchQuery, selectedMonthFilter])
-
-  // 4. Trạng thái trang hiện tại & Animation lật sách 3D
-  // currentPage: 0 là Bìa trước, 1..N là các ngày, N+1 là Bìa sau
-  const totalPages = dayPages.length + 2
-  const [currentPage, setCurrentPage] = useState<number>(0)
-  
-  // Trạng thái lật trang thực thụ: leaf lật từ 0 -> 180deg hoặc ngược lại
-  const [flipState, setFlipState] = useState<{
-    direction: 'next' | 'prev'
-    fromPage: number
-    toPage: number
-  } | null>(null)
-
-  // 5. Xem ảnh phóng to pop-up với danh sách ảnh để lướt qua lại
+  // Media preview popup (Lightbox)
   const [activeGallery, setActiveGallery] = useState<{
     images: string[]
     currentIndex: number
@@ -187,67 +360,61 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     date?: string
   } | null>(null)
 
-  // Vuốt chạm cảm ứng trên di động
+  // State vuốt chạm trên mobile
   const touchStartXRef = useRef<number | null>(null)
   const touchStartYRef = useRef<number | null>(null)
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartXRef.current = e.touches[0].clientX
-    touchStartYRef.current = e.touches[0].clientY
-  }
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return
-    const diffX = e.changedTouches[0].clientX - touchStartXRef.current
-    const diffY = e.changedTouches[0].clientY - touchStartYRef.current
-
-    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX < 0) {
-        goNextPage()
-      } else {
-        goPrevPage()
+  // Nhóm kỷ niệm theo năm
+  const yearlyBooks = useMemo(() => {
+    const map = new Map<number, SharedEvent[]>()
+    for (const ev of events) {
+      if (!ev.event_date) continue
+      const y = parseInt(ev.event_date.slice(0, 4), 10)
+      if (!isNaN(y)) {
+        const list = map.get(y) || []
+        list.push(ev)
+        map.set(y, list)
       }
     }
-    touchStartXRef.current = null
-    touchStartYRef.current = null
-  }
+    if (map.size === 0) {
+      map.set(new Date().getFullYear(), [])
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => b - a)
+      .map(([year, evs]) => {
+        const sortedEvs = [...evs].sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''))
+        const mediaCount = sortedEvs.reduce((acc, cur) => acc + (cur.images?.length || (cur.image_url ? 1 : 0)), 0)
+        return {
+          year,
+          events: sortedEvs,
+          mediaCount,
+        }
+      })
+  }, [events])
 
-  // Điều hướng lật trang TỚI với 3D Flip Leaf
-  const goNextPage = useCallback(() => {
-    if (currentPage >= totalPages - 1 || flipState) return
-    const target = currentPage + 1
-    if (soundEnabled) playPaperTurnSound()
-    setFlipState({ direction: 'next', fromPage: currentPage, toPage: target })
-    setTimeout(() => {
-      setCurrentPage(target)
-      setFlipState(null)
-    }, 550)
-  }, [currentPage, totalPages, flipState, soundEnabled])
+  // Lấy cuốn sách của năm đang mở
+  const currentBook = useMemo(() => {
+    if (selectedYear === null) return null
+    return yearlyBooks.find((b) => b.year === selectedYear) || yearlyBooks[0]
+  }, [selectedYear, yearlyBooks])
 
-  // Điều hướng lật trang LÙI với 3D Flip Leaf
-  const goPrevPage = useCallback(() => {
-    if (currentPage <= 0 || flipState) return
-    const target = currentPage - 1
-    if (soundEnabled) playPaperTurnSound()
-    setFlipState({ direction: 'prev', fromPage: currentPage, toPage: target })
-    setTimeout(() => {
-      setCurrentPage(target)
-      setFlipState(null)
-    }, 550)
-  }, [currentPage, flipState, soundEnabled])
+  const currentYearEvents = currentBook ? currentBook.events : []
+  const currentEntry = currentYearEvents[selectedEntryIdx]
+  const currentTheme: SeasonTheme = currentBook ? getSeasonTheme(currentBook.year) : getSeasonTheme(new Date().getFullYear())
 
-  // Nhảy trang trực tiếp (từ tìm kiếm hoặc bộ chọn)
-  const jumpToPage = useCallback((target: number) => {
-    if (target === currentPage || flipState) return
-    const dir = target > currentPage ? 'next' : 'prev'
+  // Đổi sang entry trước
+  const handlePrevEntry = useCallback(() => {
+    if (selectedEntryIdx <= 0) return
     if (soundEnabled) playPaperTurnSound()
-    setFlipState({ direction: dir, fromPage: currentPage, toPage: target })
-    setTimeout(() => {
-      setCurrentPage(target)
-      setFlipState(null)
-    }, 450)
-    setIsSearchOpen(false)
-  }, [currentPage, flipState, soundEnabled])
+    setSelectedEntryIdx((idx) => Math.max(0, idx - 1))
+  }, [selectedEntryIdx, soundEnabled])
+
+  // Đổi sang entry kế tiếp
+  const handleNextEntry = useCallback(() => {
+    if (selectedEntryIdx >= currentYearEvents.length - 1) return
+    if (soundEnabled) playPaperTurnSound()
+    setSelectedEntryIdx((idx) => Math.min(currentYearEvents.length - 1, idx + 1))
+  }, [selectedEntryIdx, currentYearEvents.length, soundEnabled])
 
   // Phím tắt bàn phím
   useEffect(() => {
@@ -262,591 +429,813 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
         }
         return
       }
-      if (isSearchOpen) {
-        if (e.key === 'Escape') setIsSearchOpen(false)
+
+      if (e.key === 'Escape') {
+        if (selectedYear !== null) {
+          setSelectedYear(null)
+        } else {
+          onClose()
+        }
         return
       }
-      if (e.key === 'ArrowRight' || e.key === 'Space') {
-        goNextPage()
-      } else if (e.key === 'ArrowLeft') {
-        goPrevPage()
-      } else if (e.key === 'Escape') {
-        onClose()
+
+      if (selectedYear !== null) {
+        if (e.key === 'ArrowRight' || e.key === 'Space') {
+          handleNextEntry()
+        } else if (e.key === 'ArrowLeft') {
+          handlePrevEntry()
+        }
       }
     }
+
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentPage, totalPages, activeGallery, isSearchOpen, goNextPage, goPrevPage, onClose])
+  }, [activeGallery, selectedYear, handleNextEntry, handlePrevEntry, onClose])
 
-  // Đổi thứ tự sắp xếp thời gian (Hiện tại -> Quá khứ / Quá khứ -> Hiện tại)
-  const toggleSortOrder = () => {
-    // Lưu lại ngày đang xem nếu có
-    const currentDateStr = (currentPage >= 1 && currentPage <= dayPages.length)
-      ? dayPages[currentPage - 1].dateStr
-      : null
-
-    const newOrder = sortOrder === 'desc' ? 'asc' : 'desc'
-    setSortOrder(newOrder)
-
-    // Sau khi đổi order, nếu đang ở trang ngày, nhảy đúng đến ngày đó trong order mới
-    if (currentDateStr) {
-      setTimeout(() => {
-        // Tái định vị index
-        const newDayPages = [...dayPages].reverse()
-        const idx = newDayPages.findIndex((p) => p.dateStr === currentDateStr)
-        if (idx >= 0) {
-          setCurrentPage(idx + 1)
-        }
-      }, 50)
-    }
+  // Vuốt chạm cảm ứng trên di động
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX
+    touchStartYRef.current = e.touches[0].clientY
   }
 
-  // Render nội dung của 1 trang cụ thể (Bìa trước, Ngày kỷ niệm, hoặc Bìa sau)
-  const renderPageContent = (pageIdx: number, isLeafBack = false) => {
-    if (pageIdx === 0) {
-      return (
-        <div className="book-page-sheet cover-sheet" onClick={goNextPage}>
-          <div className="cover-inner-border">
-            <div className="cover-badge-top">
-              <Sparkles size={15} />
-              <span>KHOẢNH KHẮC LƯU GIỮ</span>
-            </div>
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return
+    const diffX = e.changedTouches[0].clientX - touchStartXRef.current
+    const diffY = e.changedTouches[0].clientY - touchStartYRef.current
 
-            <div className="cover-center-content">
-              <div className="cover-icon-box">
-                <Heart size={38} fill="#f59e0b" color="#f59e0b" />
-              </div>
-              <h1 className="cover-book-title">
-                CUỐN SỔ KỶ NIỆM
-              </h1>
-              {personName && (
-                <div className="cover-author">
-                  Kỷ niệm cùng <strong>{personName}</strong>
-                </div>
-              )}
-              <p className="cover-sub-text">
-                Từng trang kỷ niệm, từng khoảnh khắc đáng nhớ được gìn giữ vẹn nguyên qua năm tháng.
-              </p>
-            </div>
-
-            <div className="cover-footer">
-              <div className="cover-stats-pill">
-                <span>📅 {dayPages.length} ngày kỷ niệm</span>
-                <span>·</span>
-                <span>🖼️ {events.reduce((acc, cur) => acc + (cur.images?.length || (cur.image_url ? 1 : 0)), 0)} ảnh/video</span>
-              </div>
-              <button
-                type="button"
-                className="cover-open-btn"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  goNextPage()
-                }}
-              >
-                <span>Mở cuốn sổ</span>
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )
+    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX < 0) {
+        handleNextEntry()
+      } else {
+        handlePrevEntry()
+      }
     }
-
-    if (pageIdx === totalPages - 1) {
-      return (
-        <div className="book-page-sheet back-cover-sheet" onClick={() => jumpToPage(0)}>
-          <div className="back-cover-inner">
-            <div className="back-cover-seal">
-              <Heart size={30} fill="#f59e0b" color="#f59e0b" />
-            </div>
-            <h2>HẾT CUỐN SỔ</h2>
-            <p>
-              Mỗi ngày trôi qua là một trang sách mới được viết tiếp. Hãy cùng nhau lưu giữ thật nhiều nụ cười và kỷ niệm nhé!
-            </p>
-            <button
-              type="button"
-              className="cover-open-btn back-to-start"
-              onClick={(e) => {
-                e.stopPropagation()
-                jumpToPage(0)
-              }}
-            >
-              <span>Xem lại từ đầu</span>
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
-      )
-    }
-
-    // Trang nội dung ngày (1..N)
-    const day = dayPages[pageIdx - 1]
-    if (!day) return null
-
-    // Nếu là mặt sau của trang lật (leaf back), ta render họa tiết trang giấy kraft cổ điển
-    if (isLeafBack) {
-      return (
-        <div className="book-page-sheet leaf-back-vintage-sheet">
-          <div className="leaf-back-watermark">
-            <Heart size={64} color="rgba(180, 83, 9, 0.12)" strokeWidth={1} />
-            <span>Kỷ Niệm Yêu Thương</span>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div className="book-page-sheet scrapbook-sheet">
-        {/* Gáy xoắn cổ điển của trang sổ */}
-        <div className="scrapbook-binding-edge" />
-
-        <div className="scrapbook-page-inner">
-          {/* Header ngày tháng vintage stamp */}
-          <div className="scrapbook-header-row">
-            <div className="vintage-date-stamp">
-              <div className="stamp-day">{day.dayNum}</div>
-              <div className="stamp-sub">
-                <span>THÁNG {day.monthNum}</span>
-                <span className="stamp-year">{day.yearNum}</span>
-              </div>
-              <div className="stamp-weekday">{day.weekdayStr}</div>
-            </div>
-
-            <div className="scrapbook-corner-badge">
-              <span>{day.events.length} kỷ niệm</span>
-            </div>
-          </div>
-
-          {/* Danh sách kỷ niệm & dán ảnh Scrapbook */}
-          <div className="scrapbook-body-scroll">
-            {day.events.map((ev, evIdx) => {
-              const evImages = (ev.images && ev.images.length > 0)
-                ? ev.images
-                : (ev.image_url ? [ev.image_url] : [])
-
-              return (
-                <section key={ev.id} className="scrapbook-entry-block">
-                  {/* Tiêu đề & meta */}
-                  <div className="scrapbook-entry-head">
-                    <h3 className="scrapbook-entry-title">
-                      {ev.title || 'Kỷ niệm đẹp'}
-                    </h3>
-                    <div className="scrapbook-meta-line">
-                      {ev.event_time && (
-                        <span className="scrapbook-meta-pill">
-                          <Clock size={11} /> {ev.event_time}
-                        </span>
-                      )}
-                      {ev.location && (
-                        <span className="scrapbook-meta-pill">
-                          <MapPin size={11} /> {ev.location}
-                        </span>
-                      )}
-                      {ev.is_favorite && (
-                        <span className="scrapbook-meta-pill favorite">
-                          <Heart size={11} fill="#e11d48" color="#e11d48" /> Yêu thích
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Lời ghi chú / cảm xúc */}
-                  {ev.note && (
-                    <div className="scrapbook-handwritten-note">
-                      <p>{ev.note}</p>
-                    </div>
-                  )}
-
-                  {/* Khung ảnh Polaroid dán băng dính Washi Tape với micro-animation */}
-                  {evImages.length > 0 && (
-                    <div className={`scrapbook-photos-layout count-${Math.min(evImages.length, 4)}`}>
-                      {evImages.map((mediaUrl, imgIdx) => {
-                        const isVid = isVideo(mediaUrl)
-                        const rotateDeg = (imgIdx % 2 === 0 ? -1.6 : 1.9) * (1 + (imgIdx * 0.2))
-
-                        return (
-                          <div
-                            key={imgIdx}
-                            className="polaroid-frame"
-                            style={{
-                              transform: `rotate(${rotateDeg}deg)`,
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setActiveGallery({
-                                images: evImages,
-                                currentIndex: imgIdx,
-                                title: ev.title,
-                                note: ev.note || undefined,
-                                date: `${day.dayNum}/${day.monthNum}/${day.yearNum}`,
-                              })
-                            }}
-                            title="Chạm để mở ảnh to sống động"
-                          >
-                            {/* Băng dính Washi tape */}
-                            <div className={`washi-tape washi-tape-${(evIdx + imgIdx) % 3}`} />
-
-                            <div className="polaroid-photo-box">
-                              {isVid ? (
-                                <div className="polaroid-video-wrap">
-                                  <video
-                                    src={mediaUrl}
-                                    poster={getVideoPosterUrl(mediaUrl)}
-                                    preload="metadata"
-                                    muted
-                                    playsInline
-                                  />
-                                  <div className="polaroid-play-overlay">
-                                    <Play size={22} fill="#ffffff" color="#ffffff" />
-                                  </div>
-                                </div>
-                              ) : (
-                                <SafeMediaImage src={mediaUrl} alt="" loading="lazy" />
-                              )}
-                              <div className="polaroid-shine-effect" />
-                            </div>
-
-                            <div className="polaroid-caption">
-                              <span>{ev.title || `Khoảnh khắc #${imgIdx + 1}`}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </section>
-              )
-            })}
-          </div>
-
-          {/* Đáy trang */}
-          <div className="scrapbook-page-footer">
-            <span>Trang {pageIdx} / {dayPages.length}</span>
-            <span className="scrapbook-hint">← Vuốt hoặc click mép để lật trang →</span>
-          </div>
-        </div>
-      </div>
-    )
+    touchStartXRef.current = null
+    touchStartYRef.current = null
   }
 
-  // Active photo trong gallery
-  const currentPhoto = activeGallery
-    ? activeGallery.images[activeGallery.currentIndex]
-    : null
-  const currentIsVid = currentPhoto ? isVideo(currentPhoto) : false
+  // Tổng số media
+  const totalMedia = useMemo(() => {
+    return events.reduce((acc, cur) => acc + (cur.images?.length || (cur.image_url ? 1 : 0)), 0)
+  }, [events])
 
   return (
     <div className="memory-book-fullscreen">
-      {/* ── 1. Top floating bar ─────────────────────────────────────────── */}
+      {/* ── TOP BAR ── */}
       <div className="memory-book-topbar">
         <div className="memory-book-top-left">
-          <button
-            type="button"
-            className="memory-book-back-btn"
-            onClick={onClose}
-            title="Quay lại Kỷ niệm chung (Esc)"
-            aria-label="Quay lại"
-          >
-            <ArrowLeft size={18} />
-            <span className="topbar-btn-text">Quay lại</span>
-          </button>
+          {selectedYear !== null ? (
+            <button
+              type="button"
+              className="memory-book-back-btn"
+              onClick={() => {
+                if (soundEnabled) playPaperTurnSound()
+                setSelectedYear(null)
+              }}
+              title="Quay lại danh sách các năm"
+            >
+              <ArrowLeft size={16} />
+              <span>Kệ sách các năm</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="memory-book-back-btn"
+              onClick={onClose}
+              title="Đóng sách 3D và quay về kỷ niệm chung"
+            >
+              <ArrowLeft size={16} />
+              <span>Kỷ niệm chung</span>
+            </button>
+          )}
 
-          {/* Nút ĐẢO CHIỀU THỜI GIAN (Hiện tại -> Quá khứ hoặc ngược lại) */}
-          <button
-            type="button"
-            className={`memory-book-sort-btn ${sortOrder === 'desc' ? 'active-desc' : 'active-asc'}`}
-            onClick={toggleSortOrder}
-            title={sortOrder === 'desc' ? 'Đang xem: Mới nhất đến cũ nhất. Nhấn để đảo ngược' : 'Đang xem: Cũ nhất đến mới nhất. Nhấn để đảo ngược'}
-          >
-            <ArrowUpDown size={15} />
-            <span>
-              {sortOrder === 'desc' ? 'Hiện tại → Quá khứ' : 'Quá khứ → Hiện tại'}
-            </span>
-          </button>
+          {selectedYear !== null && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 12px',
+                borderRadius: 20,
+                background: `linear-gradient(135deg, ${currentTheme.accent}30, rgba(0,0,0,0.5))`,
+                border: `1px solid ${currentTheme.accent}60`,
+                color: currentTheme.accent,
+                fontSize: '0.78rem',
+                fontWeight: 800,
+              }}
+            >
+              <TreePine size={13} />
+              <span>Năm {selectedYear} · Mùa {currentTheme.name}</span>
+            </div>
+          )}
         </div>
 
-        {/* Chỉ số trang ở giữa */}
-        <div className="memory-book-page-indicator">
-          <BookOpen size={15} style={{ color: '#eab308' }} />
-          <span>
-            {currentPage === 0
-              ? 'Bìa cuốn sổ'
-              : currentPage === totalPages - 1
-              ? 'Trang kết'
-              : `Trang ${currentPage} / ${dayPages.length}`}
-          </span>
+        {/* Center: Title / Counter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {selectedYear !== null && currentYearEvents.length > 0 ? (
+            <div className="memory-book-page-indicator">
+              <BookOpen size={14} style={{ color: currentTheme.accent }} />
+              <span>Kỷ niệm {selectedEntryIdx + 1} / {currentYearEvents.length}</span>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                color: '#fef08a',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                letterSpacing: '0.5px',
+              }}
+            >
+              <Sparkles size={15} style={{ color: '#f59e0b' }} />
+              <span>SÁCH KỶ NIỆM 3D</span>
+              {personName && (
+                <span style={{ color: '#cbd5e1', fontWeight: 600, fontSize: '0.78rem' }}>
+                  · cùng <strong style={{ color: '#f8fafc' }}>{personName}</strong>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
+        {/* Right: Sound + Close */}
         <div className="memory-book-top-actions">
-          {/* Nút Tìm kiếm nhanh / Nhảy trang */}
-          <button
-            type="button"
-            className={`memory-book-pill-btn ${isSearchOpen ? 'active' : ''}`}
-            onClick={() => setIsSearchOpen((v) => !v)}
-            title="Tìm kiếm nhanh kỷ niệm & nhảy trang"
-          >
-            <Search size={14} />
-            <span className="topbar-btn-text">Tìm nhanh</span>
-          </button>
+          {selectedYear !== null && yearlyBooks.length > 1 && (
+            <select
+              value={selectedYear}
+              onChange={(e) => {
+                if (soundEnabled) playPaperTurnSound()
+                setSelectedYear(Number(e.target.value))
+                setSelectedEntryIdx(0)
+              }}
+              style={{
+                background: 'rgba(0,0,0,0.5)',
+                border: `1px solid ${currentTheme.accent}50`,
+                color: '#fff',
+                borderRadius: 14,
+                padding: '4px 10px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {yearlyBooks.map((b) => (
+                <option key={b.year} value={b.year} style={{ background: '#1e1e24', color: '#fff' }}>
+                  Năm {b.year} ({b.events.length})
+                </option>
+              ))}
+            </select>
+          )}
 
-          {/* Nút Bật/tắt âm thanh lật giấy */}
           <button
             type="button"
             className="memory-book-pill-btn icon-only"
             onClick={() => setSoundEnabled((v) => !v)}
-            title={soundEnabled ? 'Tắt âm thanh lật giấy' : 'Bật âm thanh lật giấy'}
-            aria-label="Âm thanh"
+            title={soundEnabled ? 'Tắt âm thanh lật sách' : 'Bật âm thanh lật sách'}
           >
-            {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} style={{ opacity: 0.5 }} />}
+            {soundEnabled ? <Volume2 size={15} style={{ color: '#fbbf24' }} /> : <VolumeX size={15} style={{ opacity: 0.5 }} />}
           </button>
 
-          {currentPage > 0 && (
-            <button
-              type="button"
-              className="memory-book-pill-btn icon-only"
-              onClick={() => jumpToPage(0)}
-              title="Về bìa sổ"
-            >
-              <Bookmark size={14} />
-            </button>
-          )}
+          <button
+            type="button"
+            className="memory-book-pill-btn icon-only"
+            onClick={onClose}
+            title="Đóng (Esc)"
+          >
+            <X size={16} />
+          </button>
         </div>
       </div>
 
-      {/* ── 2. Thanh Tìm kiếm nhanh & Nhảy trang (Quick Search Modal / Drawer) ── */}
-      {isSearchOpen && (
-        <div className="memory-quick-search-backdrop" onClick={() => setIsSearchOpen(false)}>
-          <div className="memory-quick-search-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="search-modal-header">
-              <div className="search-input-wrap">
-                <Search size={18} className="search-input-icon" />
-                <input
-                  type="text"
-                  placeholder="Tìm kỷ niệm, ngày (14/02), địa điểm, nội dung..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autoFocus
-                  className="search-input-field"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className="search-input-clear"
-                    onClick={() => setSearchQuery('')}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                className="search-modal-close"
-                onClick={() => setIsSearchOpen(false)}
+      {/* ══════════════════════════════════════════════════════════════
+       * VIEW 1: KỆ SÁCH CÁC NĂM (Mỗi năm là 1 cuốn sách 3D)
+       * ══════════════════════════════════════════════════════════════ */}
+      {selectedYear === null ? (
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '24px 20px 60px',
+            background: 'radial-gradient(ellipse at 50% 15%, #251d18 0%, #120e0c 100%)',
+          }}
+        >
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            {/* Header Banner */}
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '24px 20px 28px',
+                marginBottom: 28,
+                borderRadius: 24,
+                background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(236,72,153,0.08), rgba(0,0,0,0.4))',
+                border: '1px solid rgba(245,158,11,0.25)',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Season Chips Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: 10,
+                  marginBottom: 12,
+                  flexWrap: 'wrap',
+                }}
               >
-                <X size={18} />
-              </button>
+                <span style={{ padding: '3px 10px', borderRadius: 99, background: 'rgba(244,143,177,0.15)', color: '#f48fb1', fontSize: '0.72rem', fontWeight: 800 }}>
+                  🌸 Xuân
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>→</span>
+                <span style={{ padding: '3px 10px', borderRadius: 99, background: 'rgba(255,193,7,0.15)', color: '#ffc107', fontSize: '0.72rem', fontWeight: 800 }}>
+                  ☀️ Hạ
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>→</span>
+                <span style={{ padding: '3px 10px', borderRadius: 99, background: 'rgba(255,152,0,0.15)', color: '#ff9800', fontSize: '0.72rem', fontWeight: 800 }}>
+                  🍂 Thu
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>→</span>
+                <span style={{ padding: '3px 10px', borderRadius: 99, background: 'rgba(144,202,249,0.15)', color: '#90caf9', fontSize: '0.72rem', fontWeight: 800 }}>
+                  ❄️ Đông
+                </span>
+              </div>
+
+              <h1
+                style={{
+                  fontSize: 'clamp(1.4rem, 4vw, 2.1rem)',
+                  fontWeight: 900,
+                  color: '#fff',
+                  marginBottom: 8,
+                  textShadow: '0 2px 10px rgba(0,0,0,0.7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                }}
+              >
+                <span>🌳</span>
+                <span>KỆ SÁCH CÂY KỶ NIỆM 3D</span>
+                <span>🌳</span>
+              </h1>
+
+              <p
+                style={{
+                  maxWidth: 620,
+                  margin: '0 auto 16px',
+                  color: 'rgba(255,255,255,0.75)',
+                  fontSize: '0.85rem',
+                  lineHeight: 1.55,
+                }}
+              >
+                Mỗi năm là một cuốn sách cuộc đời với bìa cây kỷ niệm 3D hoa nở theo 4 mùa.
+                Chạm vào bất kỳ cuốn sách nào để lật mở từng kỷ niệm quý giá bên trong!
+              </p>
+
+              {/* Stats pill */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '6px 18px',
+                  borderRadius: 99,
+                  background: 'rgba(0,0,0,0.5)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#fef08a',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>📚 {yearlyBooks.length} cuốn sách (năm)</span>
+                <span>·</span>
+                <span>📖 {events.length} kỷ niệm chung</span>
+                <span>·</span>
+                <span>🖼️ {totalMedia} ảnh & video</span>
+              </div>
             </div>
 
-            {/* Bộ lọc tháng nhanh */}
-            {availableMonths.length > 0 && (
-              <div className="search-months-filter">
+            {/* Books Grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: 24,
+                paddingBottom: 40,
+              }}
+            >
+              {yearlyBooks.map(({ year, events: yearEvents, mediaCount }) => (
+                <YearlyBookCard
+                  key={year}
+                  year={year}
+                  events={yearEvents}
+                  mediaCount={mediaCount}
+                  onOpen={() => {
+                    if (soundEnabled) playPaperTurnSound()
+                    setSelectedYear(year)
+                    setSelectedEntryIdx(0)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ══════════════════════════════════════════════════════════════
+         * VIEW 2: DUYỆT TỪNG ENTRY TRONG NĂM VỚI NÚT PREV / NEXT
+         * ══════════════════════════════════════════════════════════════ */
+        <div
+          className="memory-book-stage"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            flex: 1,
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px 12px 20px',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Nút Prev ở bên trái */}
+          <button
+            type="button"
+            className={`book-turn-arrow prev ${selectedEntryIdx === 0 ? 'disabled' : ''}`}
+            onClick={handlePrevEntry}
+            disabled={selectedEntryIdx === 0}
+            title={selectedEntryIdx > 0 ? `Kỷ niệm trước (${selectedEntryIdx}/${currentYearEvents.length})` : 'Đang ở kỷ niệm đầu tiên'}
+            aria-label="Kỷ niệm trước"
+            style={{
+              zIndex: 30,
+              opacity: selectedEntryIdx === 0 ? 0.3 : 1,
+              cursor: selectedEntryIdx === 0 ? 'default' : 'pointer',
+            }}
+          >
+            <ChevronLeft size={28} />
+          </button>
+
+          {/* Nút Next ở bên phải */}
+          <button
+            type="button"
+            className={`book-turn-arrow next ${selectedEntryIdx >= currentYearEvents.length - 1 ? 'disabled' : ''}`}
+            onClick={handleNextEntry}
+            disabled={selectedEntryIdx >= currentYearEvents.length - 1}
+            title={selectedEntryIdx < currentYearEvents.length - 1 ? `Kỷ niệm tiếp (${selectedEntryIdx + 2}/${currentYearEvents.length})` : 'Đang ở kỷ niệm cuối'}
+            aria-label="Kỷ niệm tiếp"
+            style={{
+              zIndex: 30,
+              opacity: selectedEntryIdx >= currentYearEvents.length - 1 ? 0.3 : 1,
+              cursor: selectedEntryIdx >= currentYearEvents.length - 1 ? 'default' : 'pointer',
+            }}
+          >
+            <ChevronRight size={28} />
+          </button>
+
+          {/* Khung nội dung trang sách kỷ niệm 3D */}
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 760,
+              maxHeight: 'calc(100vh - 120px)',
+              borderRadius: 24,
+              background: 'linear-gradient(150deg, rgba(26,22,20,0.98), rgba(16,13,11,0.98))',
+              border: `2px solid ${currentTheme.accent}50`,
+              boxShadow: `0 20px 50px rgba(0,0,0,0.8), 0 0 35px ${currentTheme.glowColor}`,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              zIndex: 10,
+            }}
+          >
+            {/* Gáy sách mạ vàng ánh kim bên trái */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: 0,
+                width: 14,
+                background: 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, rgba(255,255,255,0.15) 45%, rgba(0,0,0,0.5) 100%)',
+                zIndex: 20,
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* Khung nội dung có thể cuộn nếu kỷ niệm dài */}
+            {currentYearEvents.length === 0 ? (
+              <div style={{ padding: '60px 30px', textAlign: 'center', color: '#cbd5e1' }}>
+                <TreePine size={48} style={{ color: currentTheme.accent, margin: '0 auto 16px', opacity: 0.8 }} />
+                <h3 style={{ color: '#fff', fontSize: '1.2rem', marginBottom: 8 }}>Năm {selectedYear} chưa có kỷ niệm nào</h3>
+                <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: 20 }}>
+                  Hãy quay lại kệ sách để khám phá những năm kỷ niệm khác nhé!
+                </p>
                 <button
                   type="button"
-                  className={`month-chip ${selectedMonthFilter === 'all' ? 'active' : ''}`}
-                  onClick={() => setSelectedMonthFilter('all')}
+                  onClick={() => setSelectedYear(null)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 12,
+                    background: currentTheme.accent,
+                    color: '#fff',
+                    fontWeight: 800,
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
                 >
-                  Tất cả ({dayPages.length})
+                  Quay lại kệ sách
                 </button>
-                {availableMonths.map((m) => {
-                  const count = dayPages.filter((p) => `${p.monthNum}/${p.yearNum}` === m).length
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`month-chip ${selectedMonthFilter === m ? 'active' : ''}`}
-                      onClick={() => setSelectedMonthFilter(m)}
-                    >
-                      Tháng {m} ({count})
-                    </button>
-                  )
-                })}
               </div>
-            )}
+            ) : (
+              (() => {
+                const entry = currentEntry
+                const images: string[] = []
+                if (Array.isArray(entry.images) && entry.images.length > 0) {
+                  images.push(...entry.images.filter(Boolean))
+                } else if (entry.image_url) {
+                  images.push(entry.image_url)
+                }
 
-            {/* Danh sách kết quả */}
-            <div className="search-results-list">
-              {searchResults.length === 0 ? (
-                <div className="search-empty-state">
-                  <Calendar size={32} style={{ opacity: 0.4, margin: '0 auto 8px' }} />
-                  <p>Không tìm thấy kỷ niệm nào phù hợp</p>
-                </div>
-              ) : (
-                searchResults.map((p) => {
-                  const pageIdx = dayPages.findIndex((d) => d.dateStr === p.dateStr) + 1
-                  const isCurrent = currentPage === pageIdx
+                const hasLocation = Boolean(entry.location)
+                const hasTime = Boolean(entry.event_time)
 
-                  return (
+                return (
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      padding: '24px 26px 20px 36px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    {/* Top Metadata Row */}
                     <div
-                      key={p.dateStr}
-                      className={`search-result-item ${isCurrent ? 'current-page' : ''}`}
-                      onClick={() => jumpToPage(pageIdx)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                        paddingBottom: 14,
+                        borderBottom: '1px solid rgba(255,255,255,0.09)',
+                        marginBottom: 16,
+                      }}
                     >
-                      <div className="result-date-badge">
-                        <span className="r-day">{p.dayNum}</span>
-                        <span className="r-m">{p.monthNum}/{p.yearNum}</span>
+                      {/* Date & Time & Location */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '4px 11px',
+                            borderRadius: 10,
+                            background: `linear-gradient(135deg, ${currentTheme.accent}30, rgba(0,0,0,0.4))`,
+                            border: `1px solid ${currentTheme.accent}50`,
+                            color: '#fff',
+                            fontSize: '0.8rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          <Calendar size={13} style={{ color: currentTheme.accent }} />
+                          {formatCardDate(entry.event_date)}
+                        </span>
+
+                        {hasTime && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '4px 9px',
+                              borderRadius: 8,
+                              background: 'rgba(255,255,255,0.06)',
+                              color: '#fef08a',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                            }}
+                          >
+                            <Clock size={12} />
+                            {entry.event_time}
+                          </span>
+                        )}
+
+                        {hasLocation && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '4px 9px',
+                              borderRadius: 8,
+                              background: 'rgba(255,255,255,0.06)',
+                              color: '#93c5fd',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <MapPin size={12} />
+                            {entry.location}
+                          </span>
+                        )}
                       </div>
-                      <div className="result-info">
-                        <div className="result-titles">
-                          {p.events.map((e, idx) => (
-                            <span key={e.id || idx} className="result-title-pill">
-                              {e.title || 'Kỷ niệm'}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="result-meta">
-                          <span>{p.weekdayStr}</span>
-                          <span>·</span>
-                          <span>{p.events.length} kỷ niệm</span>
-                          {p.allImages.length > 0 && (
-                            <>
-                              <span>·</span>
-                              <span>🖼️ {p.allImages.length} ảnh/video</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="result-jump-btn">
-                        <span>Trang {pageIdx}</span>
-                        <ChevronRight size={14} />
+
+                      {/* Badges: Favorite, Special, Counter */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {entry.is_favorite && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '3px 8px',
+                              borderRadius: 8,
+                              background: 'rgba(245,158,11,0.2)',
+                              color: '#fbbf24',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                            }}
+                          >
+                            <Star size={12} fill="#f59e0b" /> Yêu thích
+                          </span>
+                        )}
+
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            color: currentTheme.accent,
+                            padding: '3px 9px',
+                            borderRadius: 99,
+                            background: 'rgba(0,0,0,0.4)',
+                            border: `1px solid ${currentTheme.accent}40`,
+                          }}
+                        >
+                          Trang {selectedEntryIdx + 1} / {currentYearEvents.length}
+                        </span>
                       </div>
                     </div>
-                  )
-                })
-              )}
-            </div>
+
+                    {/* Entry Title */}
+                    <h2
+                      style={{
+                        fontSize: 'clamp(1.2rem, 3vw, 1.6rem)',
+                        fontWeight: 900,
+                        color: '#fff',
+                        lineHeight: 1.35,
+                        marginBottom: 16,
+                        textShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                      }}
+                    >
+                      {entry.title || 'Khoảnh khắc kỷ niệm'}
+                    </h2>
+
+                    {/* Media / Photos Section */}
+                    {images.length > 0 && (
+                      <div style={{ marginBottom: 18 }}>
+                        {/* Main Media Preview */}
+                        <div
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            maxHeight: 340,
+                            borderRadius: 16,
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            background: '#09080b',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                          }}
+                          onClick={() => {
+                            setActiveGallery({
+                              images,
+                              currentIndex: 0,
+                              title: entry.title,
+                              note: entry.note || undefined,
+                              date: formatCardDate(entry.event_date),
+                            })
+                          }}
+                        >
+                          {isVideo(images[0]) ? (
+                            <div style={{ position: 'relative', width: '100%', height: 260 }}>
+                              <video
+                                src={images[0]}
+                                poster={getVideoPosterUrl(images[0])}
+                                controls
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              />
+                            </div>
+                          ) : (
+                            <SafeMediaImage
+                              src={images[0]}
+                              alt={entry.title || 'Kỷ niệm'}
+                              style={{
+                                width: '100%',
+                                maxHeight: 340,
+                                objectFit: 'contain',
+                                display: 'block',
+                                margin: '0 auto',
+                              }}
+                            />
+                          )}
+
+                          {images.length > 1 && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: 10,
+                                right: 12,
+                                padding: '4px 10px',
+                                borderRadius: 12,
+                                background: 'rgba(0,0,0,0.75)',
+                                color: '#fff',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                backdropFilter: 'blur(4px)',
+                              }}
+                            >
+                              🖼️ +{images.length - 1} ảnh khác · Bấm để xem album
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Thumbnails Row if multiple images */}
+                        {images.length > 1 && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 8,
+                              overflowX: 'auto',
+                              paddingTop: 10,
+                              paddingBottom: 4,
+                            }}
+                          >
+                            {images.map((img, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setActiveGallery({
+                                    images,
+                                    currentIndex: idx,
+                                    title: entry.title,
+                                    note: entry.note || undefined,
+                                    date: formatCardDate(entry.event_date),
+                                  })
+                                }}
+                                style={{
+                                  width: 60,
+                                  height: 60,
+                                  borderRadius: 10,
+                                  overflow: 'hidden',
+                                  border: idx === 0 ? `2px solid ${currentTheme.accent}` : '1px solid rgba(255,255,255,0.2)',
+                                  background: '#000',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {isVideo(img) ? (
+                                  <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: '#222', color: '#fff', fontSize: '0.65rem' }}>
+                                    VIDEO
+                                  </div>
+                                ) : (
+                                  <SafeMediaImage src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Note / Text Content */}
+                    {entry.note ? (
+                      <div
+                        style={{
+                          background: 'rgba(255,255,255,0.035)',
+                          borderRadius: 14,
+                          padding: '16px 18px',
+                          border: '1px solid rgba(255,255,255,0.07)',
+                          color: '#e2e8f0',
+                          fontSize: '0.92rem',
+                          lineHeight: 1.75,
+                          whiteSpace: 'pre-wrap',
+                          marginBottom: 16,
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {entry.note}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          color: 'rgba(255,255,255,0.4)',
+                          fontSize: '0.82rem',
+                          fontStyle: 'italic',
+                          marginBottom: 16,
+                        }}
+                      >
+                        (Không có ghi chú chi tiết cho kỷ niệm này)
+                      </div>
+                    )}
+
+                    {/* Bottom In-Page Navigation Buttons */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: 'auto',
+                        paddingTop: 16,
+                        borderTop: '1px solid rgba(255,255,255,0.08)',
+                        gap: 12,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={handlePrevEntry}
+                        disabled={selectedEntryIdx === 0}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '7px 14px',
+                          borderRadius: 12,
+                          background: selectedEntryIdx === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          color: selectedEntryIdx === 0 ? 'rgba(255,255,255,0.3)' : '#fff',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: selectedEntryIdx === 0 ? 'default' : 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <ChevronLeft size={16} />
+                        <span>Kỷ niệm trước</span>
+                      </button>
+
+                      <div
+                        style={{
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          color: 'rgba(255,255,255,0.6)',
+                        }}
+                      >
+                        {selectedEntryIdx + 1} trên {currentYearEvents.length}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleNextEntry}
+                        disabled={selectedEntryIdx >= currentYearEvents.length - 1}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '7px 14px',
+                          borderRadius: 12,
+                          background: selectedEntryIdx >= currentYearEvents.length - 1 ? 'rgba(255,255,255,0.04)' : currentTheme.accent,
+                          border: 'none',
+                          color: selectedEntryIdx >= currentYearEvents.length - 1 ? 'rgba(255,255,255,0.3)' : '#fff',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          cursor: selectedEntryIdx >= currentYearEvents.length - 1 ? 'default' : 'pointer',
+                          boxShadow: selectedEntryIdx < currentYearEvents.length - 1 ? `0 2px 10px ${currentTheme.glowColor}` : 'none',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>Kỷ niệm tiếp</span>
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()
+            )}
           </div>
         </div>
       )}
 
-      {/* ── 3. 3D Book Stage (Cơ chế lật 3D thực thụ xoay 180 độ quanh gáy sách) ── */}
-      <div
-        className="memory-book-stage"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Nút lật trang trước */}
-        <button
-          type="button"
-          className={`book-turn-arrow prev ${currentPage === 0 || !!flipState ? 'disabled' : ''}`}
-          onClick={goPrevPage}
-          disabled={currentPage === 0 || !!flipState}
-          title="Lật về trang trước"
-          aria-label="Trang trước"
-        >
-          <ChevronLeft size={28} />
-        </button>
-
-        {/* Khung quyển sổ 3D với trục phối cảnh perspective */}
-        <div className="book-3d-chassis">
-          {/* Gáy sách nổi 3D (Spine) với độ cong và gân da cao cấp */}
-          <div className="book-spine-3d" />
-
-          {/* Vỏ bìa cứng dưới đáy sổ (Book Hardcover Edge) */}
-          <div className="book-hardcover-shadow" />
-
-          {/* 
-            TRƯỜNG HỢP 1: KHI ĐANG LẬT TRANG (Flip Animation 3D):
-            - Trang tĩnh bên dưới (Underneath Base Page): Là trang đích toPage.
-            - Trang lật (Flipping Leaf): Quay quanh gáy trái (0% 50%) từ 0 đến -180 độ hoặc từ -180 về 0 độ.
-            - Trang lật gồm 2 mặt: Mặt trước (fromPage) & Mặt sau (leaf-back vintage kraft).
-          */}
-          {flipState ? (
-            <>
-              {/* Trang tĩnh bên dưới đang chờ sẵn */}
-              <div className="book-page-layer base-layer">
-                {renderPageContent(flipState.toPage)}
-              </div>
-
-              {/* Tờ giấy 3D đang lật qua (Flipping Leaf) */}
-              <div
-                className={`flipping-leaf leaf-direction-${flipState.direction}`}
-              >
-                {/* Mặt trước của tờ giấy lật */}
-                <div className="leaf-face leaf-face-front">
-                  {renderPageContent(flipState.direction === 'next' ? flipState.fromPage : flipState.toPage)}
-                  {/* Lớp bóng uốn cong động của trang giấy */}
-                  <div className="leaf-shadow-curl front-shadow" />
-                </div>
-
-                {/* Mặt sau của tờ giấy lật (Hiển thị khi quay qua 90 độ) */}
-                <div className="leaf-face leaf-face-back">
-                  {renderPageContent(
-                    flipState.direction === 'next' ? flipState.toPage : flipState.fromPage,
-                    true
-                  )}
-                  {/* Lớp bóng phản chiếu mặt sau */}
-                  <div className="leaf-shadow-curl back-shadow" />
-                </div>
-              </div>
-            </>
-          ) : (
-            /* TRƯỜNG HỢP 2: TRẠNG THÁI BÌNH THƯỜNG KHÔNG LẬT */
-            <div className="book-page-layer active-layer">
-              {renderPageContent(currentPage)}
-            </div>
-          )}
-        </div>
-
-        {/* Nút lật trang sau */}
-        <button
-          type="button"
-          className={`book-turn-arrow next ${currentPage >= totalPages - 1 || !!flipState ? 'disabled' : ''}`}
-          onClick={goNextPage}
-          disabled={currentPage >= totalPages - 1 || !!flipState}
-          title="Lật sang trang tiếp theo"
-          aria-label="Trang tiếp theo"
-        >
-          <ChevronRight size={28} />
-        </button>
-      </div>
-
-      {/* ── 4. Thanh trượt Scrubber điều hướng trang nhanh ở đáy ─────────── */}
-      <div className="memory-book-bottom-scrubber">
-        <span className="scrubber-label">
-          {sortOrder === 'desc' ? 'Mới nhất' : 'Cũ nhất'}
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={totalPages - 1}
-          value={currentPage}
-          onChange={(e) => jumpToPage(Number(e.target.value))}
-          className="scrubber-slider"
-          aria-label="Thanh trượt trang sách"
-        />
-        <span className="scrubber-label">
-          {sortOrder === 'desc' ? 'Cũ nhất' : 'Mới nhất'}
-        </span>
-      </div>
-
-      {/* ── 5. Modal Phóng to ảnh & Xem Gallery mượt mà với Micro-Animation ── */}
-      {activeGallery && currentPhoto && (
-        <div
-          className="scrapbook-photo-modal"
-          onClick={() => setActiveGallery(null)}
-        >
-          <div
-            className="scrapbook-photo-popup"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Thanh điều khiển trên modal */}
-            <div className="popup-top-controls">
-              <div className="popup-counter">
-                🖼️ {activeGallery.currentIndex + 1} / {activeGallery.images.length}
-              </div>
-              <div className="popup-actions-right">
+      {/* ══════════════════════════════════════════════════════════════
+       * LIGHTBOX POPUP PHÓNG TO ẢNH / ALBUM
+       * ══════════════════════════════════════════════════════════════ */}
+      {activeGallery && (
+        <div className="scrapbook-photo-popup-backdrop" onClick={() => setActiveGallery(null)}>
+          <div className="scrapbook-photo-popup-card" onClick={(e) => e.stopPropagation()}>
+            <div className="scrapbook-popup-header">
+              <span className="popup-photo-badge">
+                Ảnh {activeGallery.currentIndex + 1} / {activeGallery.images.length}
+              </span>
+              <div className="popup-actions">
                 <a
-                  href={currentPhoto}
+                  href={activeGallery.images[activeGallery.currentIndex]}
                   download={`ky-niem-${activeGallery.currentIndex + 1}`}
                   target="_blank"
                   rel="noreferrer"
@@ -867,30 +1256,33 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               </div>
             </div>
 
-            {/* Media chính (ảnh hoặc video) có nút Previous / Next trực tiếp */}
             <div className="scrapbook-popup-media">
               {activeGallery.images.length > 1 && (
                 <button
                   type="button"
                   className="popup-nav-btn prev"
-                  onClick={() => setActiveGallery((g) => g ? { ...g, currentIndex: (g.currentIndex - 1 + g.images.length) % g.images.length } : null)}
-                  title="Ảnh trước (Mũi tên trái)"
+                  onClick={() =>
+                    setActiveGallery((g) =>
+                      g ? { ...g, currentIndex: (g.currentIndex - 1 + g.images.length) % g.images.length } : null
+                    )
+                  }
+                  title="Ảnh trước"
                 >
                   <ChevronLeft size={24} />
                 </button>
               )}
 
               <div className="popup-media-container">
-                {currentIsVid ? (
+                {isVideo(activeGallery.images[activeGallery.currentIndex]) ? (
                   <video
-                    src={currentPhoto}
-                    poster={getVideoPosterUrl(currentPhoto)}
+                    src={activeGallery.images[activeGallery.currentIndex]}
+                    poster={getVideoPosterUrl(activeGallery.images[activeGallery.currentIndex])}
                     controls
                     autoPlay
                     playsInline
                   />
                 ) : (
-                  <SafeMediaImage src={currentPhoto} alt="" />
+                  <SafeMediaImage src={activeGallery.images[activeGallery.currentIndex]} alt="" />
                 )}
               </div>
 
@@ -898,15 +1290,18 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                 <button
                   type="button"
                   className="popup-nav-btn next"
-                  onClick={() => setActiveGallery((g) => g ? { ...g, currentIndex: (g.currentIndex + 1) % g.images.length } : null)}
-                  title="Ảnh tiếp theo (Mũi tên phải)"
+                  onClick={() =>
+                    setActiveGallery((g) =>
+                      g ? { ...g, currentIndex: (g.currentIndex + 1) % g.images.length } : null
+                    )
+                  }
+                  title="Ảnh tiếp theo"
                 >
                   <ChevronRight size={24} />
                 </button>
               )}
             </div>
 
-            {/* Chú thích & cảm xúc dưới ảnh */}
             {(activeGallery.title || activeGallery.date || activeGallery.note) && (
               <div className="scrapbook-popup-info">
                 {activeGallery.title && <h4>{activeGallery.title}</h4>}

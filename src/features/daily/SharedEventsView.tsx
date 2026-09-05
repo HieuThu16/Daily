@@ -206,7 +206,7 @@ export function SharedEventsView({
 
   const [filterYear, setFilterYear] = useState<string>('ALL')
   const [filterMonth, setFilterMonth] = useState<string>('ALL')
-  const [viewMode, setViewMode] = useState<'timeline' | 'month'>('month')
+  const [viewMode, setViewMode] = useState<'timeline' | 'month' | 'book'>('month')
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>('ALL')
   const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null)
   const [showMemoryBook, setShowMemoryBook] = useState(false)
@@ -1587,9 +1587,12 @@ export function SharedEventsView({
           </button>
           <button
             type="button"
-            className="mem-view-book-btn"
-            onClick={() => setShowMemoryBook(true)}
-            title="Mở toàn màn hình: Quyển sách Kỷ niệm 3D lật trang chân thực"
+            className={`mem-view-book-btn ${viewMode === 'book' || showMemoryBook ? 'active' : ''}`}
+            onClick={() => {
+              setViewMode('book')
+              setShowMemoryBook(true)
+            }}
+            title="Mở Sách Kỷ niệm 3D: Mỗi năm là 1 cuốn sách với bìa cây kỷ niệm qua 4 mùa"
             style={{
               color: '#d97706',
               fontWeight: 800,
@@ -1656,6 +1659,17 @@ export function SharedEventsView({
             ? 'Chưa có sự kiện chung nào trong phòng. Thêm kỷ niệm đầu tiên nhé!'
             : `Chưa có kỷ niệm nào với ${partnerDisplayName}. Thêm kỷ niệm đầu tiên nhé!`}
         </Empty>
+      ) : viewMode === 'book' ? (
+        /* ===== GIAO DIỆN SÁCH KỶ NIỆM 3D TRỰC TIẾP ===== */
+        <MemoryBookView
+          events={sorted}
+          personName={partnerDisplayName}
+          roomCode={roomCode}
+          onClose={() => {
+            setViewMode('month')
+            setShowMemoryBook(false)
+          }}
+        />
       ) : viewMode === 'month' ? (
         /* ===== GIAO DIỆN THEO THÁNG ===== */
         <div>
@@ -2476,7 +2490,10 @@ export function SharedEventsView({
           events={sorted}
           personName={partnerDisplayName}
           roomCode={roomCode}
-          onClose={() => setShowMemoryBook(false)}
+          onClose={() => {
+            setShowMemoryBook(false)
+            if (viewMode === 'book') setViewMode('month')
+          }}
         />
       )}
     </section>
