@@ -3,7 +3,8 @@ import {
   ArrowLeft, ChevronLeft, ChevronRight, MapPin, Clock,
   Play, Sparkles, X, Heart, BookOpen, Columns2,
   ArrowUpDown, Search, Volume2, VolumeX, Calendar,
-  Download, TreePine, RotateCcw
+  Download, TreePine, RotateCcw, List, Smartphone, Flower2,
+  Menu
 } from 'lucide-react'
 import type { SharedEvent } from '../../types'
 import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
@@ -28,10 +29,11 @@ interface BookDayPage {
   allImages: string[]
 }
 
+export type MemoryViewType = 'tree' | 'book' | 'month' | 'list'
 export type LayoutMode = 'spread' | 'single'
 
 export interface SpreadSideContent {
-  type: 'cover-intro' | 'cover-main' | 'day-primary' | 'day-secondary' | 'day-single' | 'back-summary' | 'back-cover' | 'blank'
+  type: 'cover-intro' | 'cover-main' | 'day-primary' | 'day-secondary' | 'day-single' | 'back-summary' | 'back-cover'
   day?: BookDayPage
   events?: SharedEvent[]
   images?: string[]
@@ -39,6 +41,7 @@ export interface SpreadSideContent {
   totalDays?: number
   totalMemories?: number
   totalPhotos?: number
+  customTitle?: string
 }
 
 export interface SpreadItem {
@@ -74,7 +77,7 @@ function isVideo(url?: string | null): boolean {
   return /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(url.split('?')[0])
 }
 
-// Âm thanh lật giấy êm dịu bằng Web Audio API
+// Âm thanh lật giấy êm dịu
 function playPaperTurnSound() {
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -104,15 +107,11 @@ function playPaperTurnSound() {
     filter.connect(gain)
     gain.connect(ctx.destination)
     noise.start()
-  } catch {
-    // Không bắt buộc âm thanh nếu trình duyệt hạn chế
-  }
+  } catch {}
 }
 
 /**
- * ═══════════════════════════════════════════════════════════════════
- * BƯỚM VÀNG PHÁT SÁNG BAY LƯỢN TỪ TRANG SÁCH (TOAN.VN / SÁCH HUYỀN ẢO)
- * ═══════════════════════════════════════════════════════════════════
+ * BƯỚM VÀNG PHÁT SÁNG BAY LƯỢN TỪ TRANG SÁCH
  */
 function GoldenButterflies() {
   const butterflies = useMemo(() => [
@@ -153,6 +152,183 @@ function GoldenButterflies() {
   )
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * MODAL HOA 2D RỰC RỠ SẮC MÀU (CHI TIẾT KHI NHẤN VÀO CÂY/HOA)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+function Flower2DDetailModal({
+  month,
+  year,
+  events,
+  onClose,
+  onOpenInBook,
+}: {
+  month: number
+  year: number
+  events: SharedEvent[]
+  onClose: () => void
+  onOpenInBook: (dateStr?: string) => void
+}) {
+  const monthImages = useMemo(() => {
+    const list: Array<{ url: string; title?: string; date?: string; note?: string }> = []
+    for (const ev of events) {
+      if (Array.isArray(ev.images) && ev.images.length > 0) {
+        for (const img of ev.images) {
+          if (img) list.push({ url: img, title: ev.title, date: ev.event_date, note: ev.note || undefined })
+        }
+      } else if (ev.image_url) {
+        list.push({ url: ev.image_url, title: ev.title, date: ev.event_date, note: ev.note || undefined })
+      }
+    }
+    return list
+  }, [events])
+
+  const petalColors = [
+    '#ff4d8d', '#ff758c', '#ffaec9', '#f43f5e',
+    '#fb7185', '#f59e0b', '#fbbf24', '#f472b6',
+    '#ec4899', '#db2777', '#f87171', '#fb923c'
+  ]
+
+  return (
+    <div className="flower-2d-modal-backdrop" onClick={onClose}>
+      <div className="flower-2d-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="flower-2d-header">
+          <div className="flower-2d-title-wrap">
+            <Flower2 size={22} style={{ color: '#f43f5e' }} />
+            <h3 className="flower-2d-title">
+              Đoá Hoa Tháng {month} · Năm {year}
+            </h3>
+          </div>
+          <button
+            type="button"
+            className="memory-book-circle-btn close-circle"
+            onClick={onClose}
+            title="Đóng"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flower-2d-body">
+          {/* ĐOÁ HOA 2D BỪNG NỞ NGHỆ THUẬT VỚI 12 CÁNH HOA SẮC MÀU */}
+          <div className="blooming-flower-2d-art">
+            <svg viewBox="0 0 200 200" className="blooming-flower-svg">
+              <defs>
+                <radialGradient id="flowerCenterGrad" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#ffffff" />
+                  <stop offset="50%" stopColor="#fef08a" />
+                  <stop offset="90%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#d97706" />
+                </radialGradient>
+                <radialGradient id="petalGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#fff5f8" />
+                  <stop offset="60%" stopColor="#ff758c" />
+                  <stop offset="100%" stopColor="#e11d48" />
+                </radialGradient>
+              </defs>
+
+              {/* 12 Cánh hoa xòe tròn rực rỡ sắc màu */}
+              {Array.from({ length: 12 }).map((_, i) => {
+                const c = petalColors[i % petalColors.length]
+                return (
+                  <g key={i} transform={`rotate(${i * 30} 100 100)`}>
+                    <path
+                      d="M 100 100 C 88 65, 82 25, 100 12 C 118 25, 112 65, 100 100 Z"
+                      fill={c}
+                      opacity={0.88}
+                      stroke="#ffffff"
+                      strokeWidth="1.5"
+                    />
+                  </g>
+                )
+              })}
+
+              {/* Lõi nhụy hoa vàng kim phát sáng */}
+              <circle cx="100" cy="100" r="28" fill="url(#flowerCenterGrad)" stroke="#f59e0b" strokeWidth="2.5" />
+              <text x="100" y="104" textAnchor="middle" fontSize="13" fontWeight="900" fill="#78350f">
+                T{month}
+              </text>
+            </svg>
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#92400e' }}>
+              🌸 {events.length} kỷ niệm · 🖼️ {monthImages.length} khoảnh khắc rạng ngời
+            </div>
+            <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '4px 0 0', fontStyle: 'italic' }}>
+              {events.length > 0
+                ? 'Những đóa hoa nở rực rỡ đại diện cho từng ngày hạnh phúc trong tháng.'
+                : 'Tháng này chưa có kỷ niệm, hãy tiếp tục lưu lại những phút giây ngọt ngào nhé!'}
+            </p>
+          </div>
+
+          {/* Danh sách kỷ niệm của tháng */}
+          {events.length > 0 && (
+            <div className="flower-2d-memories-list">
+              {events.map((ev, idx) => {
+                const thumb = (ev.images && ev.images[0]) || ev.image_url
+                const dayInfo = ev.event_date ? parseDayInfo(ev.event_date) : null
+
+                return (
+                  <div
+                    key={ev.id || idx}
+                    className="flower-2d-memory-card"
+                    onClick={() => {
+                      onOpenInBook(ev.event_date)
+                      onClose()
+                    }}
+                  >
+                    {thumb ? (
+                      <SafeMediaImage src={thumb} alt="" className="flower-2d-card-thumb" />
+                    ) : (
+                      <div className="flower-2d-card-thumb" style={{ display: 'grid', placeItems: 'center', background: '#fef3c7' }}>
+                        <Heart size={20} style={{ color: '#f59e0b' }} />
+                      </div>
+                    )}
+                    <div className="flower-2d-card-info">
+                      <div className="flower-2d-card-title">
+                        {ev.title || 'Kỷ niệm đẹp'}
+                      </div>
+                      <div className="flower-2d-card-meta">
+                        {dayInfo && <span>📅 {dayInfo.dayNum}/{dayInfo.monthNum}</span>}
+                        {ev.location && <span>· 📍 {ev.location}</span>}
+                        {ev.is_favorite && <span style={{ color: '#e11d48' }}>· ❤️ Yêu thích</span>}
+                      </div>
+                      {ev.note && (
+                        <p style={{ fontSize: '0.74rem', color: '#475569', margin: '4px 0 0', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          "{ev.note}"
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight size={16} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 6, width: '100%', justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="tree-open-book-btn"
+              style={{ maxWidth: 260, padding: '9px 18px', fontSize: '0.82rem' }}
+              onClick={() => {
+                const firstDate = events[0]?.event_date
+                onOpenInBook(firstDate)
+                onClose()
+              }}
+            >
+              <BookOpen size={16} />
+              <span>Mở Xem Trong Cuốn Sách →</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════════════
  * MAIN COMPONENT: MemoryBookView
  * ═══════════════════════════════════════════════════════════════════ */
@@ -180,32 +356,32 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       })
   }, [events])
 
-  // Chế độ xem: 'tree' (Cây 3D xoay 360 độ) | 'book' (Quyển sách 3D lật trang)
-  const [viewMode, setViewMode] = useState<'tree' | 'book'>('tree')
+  // 4 CHẾ ĐỘ XEM: 'tree' | 'book' | 'month' | 'list'
+  const [viewMode, setViewMode] = useState<MemoryViewType>('tree')
 
-  // Chế độ lật trang sách: 'spread' (Sách mở 2 bên nằm ngang) | 'single' (Trang đơn)
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 640 || window.innerWidth > window.innerHeight ? 'spread' : 'spread'
-    }
-    return 'spread'
-  })
+  // Chế độ lật trang trong 'book': 'spread' (Sách 2 bên) | 'single' (Trang đơn)
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('spread')
 
-  // Chọn năm hiện tại để xem cây và lật sách
+  // Cảnh báo xoay ngang điện thoại khi vào chế độ 2 trang
+  const [showRotateGuide, setShowRotateGuide] = useState<boolean>(false)
+
+  // Modal chi tiết đóa hoa 2D màu sắc
+  const [selectedFlowerMonth, setSelectedFlowerMonth] = useState<number | null>(null)
+
+  // Chọn năm hiện tại
   const [selectedYear, setSelectedYear] = useState<number>(() => {
     return yearlyGroups[0]?.year || new Date().getFullYear()
   })
 
-  // 1. Thứ tự thời gian: 'desc' = Mới nhất trước, 'asc' = Cũ nhất trước
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true)
 
-  // 2. Tìm kiếm nhanh & Bộ chọn tháng
+  // Tìm kiếm nhanh & Bộ chọn tháng
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all')
 
-  // Lọc danh sách sự kiện cho năm đang mở
+  // Kỷ niệm năm đang mở
   const activeYearEvents = useMemo(() => {
     const found = yearlyGroups.find((g) => g.year === selectedYear)
     return found ? found.events : []
@@ -216,12 +392,11 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     return found ? found.mediaCount : 0
   }, [selectedYear, yearlyGroups])
 
-  // Theme của năm đang mở
   const activeYearTheme = useMemo(() => {
     return getSeasonTheme(selectedYear)
   }, [selectedYear])
 
-  // 3. Nhóm kỷ niệm của năm đang mở theo từng ngày (Scrapbook Day Pages)
+  // Nhóm theo ngày
   const dayPages: BookDayPage[] = useMemo(() => {
     const map = new Map<string, SharedEvent[]>()
     for (const ev of activeYearEvents) {
@@ -255,7 +430,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     })
   }, [activeYearEvents, sortOrder])
 
-  // Danh sách các tháng có kỷ niệm trong năm đang mở để lọc nhanh
   const availableMonths = useMemo(() => {
     const set = new Set<string>()
     for (const p of dayPages) {
@@ -264,36 +438,13 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     return Array.from(set)
   }, [dayPages])
 
-  // Danh sách kết quả tìm kiếm nhanh
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    return dayPages.filter((p) => {
-      if (selectedMonthFilter !== 'all') {
-        const pageMonth = `${p.monthNum}/${p.yearNum}`
-        if (pageMonth !== selectedMonthFilter) return false
-      }
-      if (!q) return true
-      const dateMatch = p.dateStr.includes(q) ||
-        `${p.dayNum}/${p.monthNum}/${p.yearNum}`.includes(q) ||
-        p.weekdayStr.toLowerCase().includes(q)
-      if (dateMatch) return true
-
-      return p.events.some((ev) =>
-        (ev.title && ev.title.toLowerCase().includes(q)) ||
-        (ev.note && ev.note.toLowerCase().includes(q)) ||
-        (ev.location && ev.location.toLowerCase().includes(q))
-      )
-    })
-  }, [dayPages, searchQuery, selectedMonthFilter])
-
   // ═══════════════════════════════════════════════════════════════════
-  // 4. XÂY DỰNG CÁC CẶP TRANG SÁCH MỞ 2 BÊN (TWO-PAGE SPREADS)
-  // "Có ảnh 2 bên luôn nha": Đảm bảo cả trang Trái và trang Phải đều có ảnh!
+  // CÂN BẰNG 2 BÊN TRANG SÁCH (ẢNH PHÂN BỔ ĐỀU 50/50, KHÔNG BỊ LỆCH)
   // ═══════════════════════════════════════════════════════════════════
   const spreads: SpreadItem[] = useMemo(() => {
     const list: SpreadItem[] = []
 
-    // 4.1. SPREAD 0: Bìa mở đầu
+    // 1. SPREAD 0: Bìa mở đầu
     const previewImages: string[] = []
     for (const p of dayPages) {
       if (p.allImages.length > 0) {
@@ -320,34 +471,41 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       },
     })
 
-    // 4.2. SPREADS KỶ NIỆM: Cả 2 bên đều có ảnh!
+    // 2. CÁC CẶP TRANG KỶ NIỆM: Phân bổ ảnh đều cả 2 bên
     let dayIdx = 0
     let pageNum = 1
 
     while (dayIdx < dayPages.length) {
       const day = dayPages[dayIdx]
+      const totalImgs = day.allImages.length
 
-      // Trường hợp ngày có từ 2 ảnh trở lên: chiếm trọn 1 Spread (Trang Trái: ảnh chính; Trang Phải: các ảnh phụ + note)
-      if (day.allImages.length >= 2) {
+      if (totalImgs >= 2) {
+        // Ngày có từ 2 ảnh trở lên: CHIA ĐỀU 50/50 CHO CẢ 2 BÊN TRÁI & PHẢI!
+        const mid = Math.ceil(totalImgs / 2)
+        const leftImgs = day.allImages.slice(0, mid)
+        const rightImgs = day.allImages.slice(mid)
+
         list.push({
           id: `spread-day-${day.dateStr}`,
           spreadIndex: list.length,
           left: {
             type: 'day-primary',
             day,
-            images: [day.allImages[0]],
+            images: leftImgs,
             pageNumber: pageNum++,
+            customTitle: 'Khoảnh khắc mở đầu',
           },
           right: {
             type: 'day-secondary',
             day,
-            images: day.allImages.slice(1),
+            images: rightImgs,
             pageNumber: pageNum++,
+            customTitle: 'Dấu ấn tiếp nối',
           },
         })
         dayIdx++
       } else {
-        // Ngày có 0 hoặc 1 ảnh: ghép Ngày A (Trang Trái) và Ngày B (Trang Phải)
+        // Ngày có 0 hoặc 1 ảnh: Ghép Ngày A (Trái) và Ngày B (Phải)
         const leftDay = day
         const rightDay = dayPages[dayIdx + 1]
 
@@ -371,7 +529,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       }
     }
 
-    // 4.3. SPREAD CUỐI: Kết cuốn sổ
+    // 3. SPREAD CUỐI: Kết cuốn sổ
     list.push({
       id: 'spread-back',
       spreadIndex: list.length,
@@ -389,28 +547,60 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     return list
   }, [dayPages, activeYearEvents.length, activeYearMediaCount])
 
-  // Chỉ số Spread hiện tại (trong chế độ 2 bên)
-  const [currentSpread, setCurrentSpread] = useState<number>(0)
+  // Menu tuỳ chọn ẩn trong nút 3 gạch
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false)
+
+  // Mở thẳng vào Trang 1 kỷ niệm (Spread 1) nếu có dữ liệu để thấy ngay ảnh
+  const [currentSpread, setCurrentSpread] = useState<number>(() => {
+    return dayPages.length > 0 ? 1 : 0
+  })
   const totalSpreads = spreads.length
 
-  // Chỉ số Page đơn (trong chế độ 1 bên)
   const totalSinglePages = dayPages.length + 2
-  const [currentPage, setCurrentPage] = useState<number>(0)
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    return dayPages.length > 0 ? 1 : 0
+  })
 
   // ═══════════════════════════════════════════════════════════════════
-  // 5. ANIMATION THEO NGÓN TAY LẬT SÁCH THỜI GIAN THỰC (TOUCH/POINTER ENGINE)
+  // CHUYỂN ĐỔI CHẾ ĐỘ 2 TRANG ↔ 1 TRANG ĐỒNG BỘ VÀ TỰ ĐỘNG XOAY MÀN HÌNH
+  // ═══════════════════════════════════════════════════════════════════
+  const switchToSpreadMode = async () => {
+    if (layoutMode === 'spread') return
+    const nextSpreadIdx = Math.min(Math.floor(currentPage / 2), totalSpreads - 1)
+    setCurrentSpread(Math.max(0, nextSpreadIdx))
+    setLayoutMode('spread')
+    if (soundEnabled) playPaperTurnSound()
+
+    if (typeof window !== 'undefined' && window.innerWidth < window.innerHeight) {
+      setShowRotateGuide(true)
+      setTimeout(() => setShowRotateGuide(false), 3800)
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen().catch(() => {})
+        }
+        if (screen.orientation && 'lock' in screen.orientation) {
+          await (screen.orientation as any).lock('landscape').catch(() => {})
+        }
+      } catch {}
+    }
+  }
+
+  const switchToSingleMode = () => {
+    if (layoutMode === 'single') return
+    const nextPageIdx = Math.min(currentSpread * 2, totalSinglePages - 1)
+    setCurrentPage(Math.max(0, nextPageIdx))
+    setLayoutMode('single')
+    if (soundEnabled) playPaperTurnSound()
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // HIỆU ỨNG LẬT TRANG 3D PHẦN CỨNG GPU SIÊU MƯỢT MÀ, KHÔNG LAG
   // ═══════════════════════════════════════════════════════════════════
   const chassisRef = useRef<HTMLDivElement | null>(null)
-  const [dragState, setDragState] = useState<{
-    isDragging: boolean
-    direction: 'next' | 'prev' | null
-    startX: number
-    currentX: number
-    ratio: number // 0 to 1
-    animating?: boolean
+  const [turningState, setTurningState] = useState<{
+    direction: 'next' | 'prev'
   } | null>(null)
 
-  // 6. Xem ảnh phóng to pop-up (Lightbox)
   const [activeGallery, setActiveGallery] = useState<{
     images: string[]
     currentIndex: number
@@ -419,229 +609,175 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     date?: string
   } | null>(null)
 
-  // Lật tới spread tiếp theo
   const goNextSpread = useCallback(() => {
-    if (currentSpread >= totalSpreads - 1 || dragState?.animating) return
+    if (currentSpread >= totalSpreads - 1 || turningState) return
     if (soundEnabled) playPaperTurnSound()
-    setDragState({
-      isDragging: false,
-      direction: 'next',
-      startX: 0,
-      currentX: 0,
-      ratio: 0,
-      animating: true,
-    })
-    // Kích hoạt transition lật trang sang -180deg
-    requestAnimationFrame(() => {
-      setDragState((prev) => prev ? { ...prev, ratio: 1 } : null)
-      setTimeout(() => {
-        setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
-        setDragState(null)
-      }, 320)
-    })
-  }, [currentSpread, totalSpreads, dragState, soundEnabled])
+    setTurningState({ direction: 'next' })
+    setTimeout(() => {
+      setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
+      setTurningState(null)
+    }, 340)
+  }, [currentSpread, totalSpreads, turningState, soundEnabled])
 
-  // Lật lùi spread trước
   const goPrevSpread = useCallback(() => {
-    if (currentSpread <= 0 || dragState?.animating) return
+    if (currentSpread <= 0 || turningState) return
     if (soundEnabled) playPaperTurnSound()
-    setDragState({
-      isDragging: false,
-      direction: 'prev',
-      startX: 0,
-      currentX: 0,
-      ratio: 0,
-      animating: true,
-    })
-    requestAnimationFrame(() => {
-      setDragState((prev) => prev ? { ...prev, ratio: 1 } : null)
-      setTimeout(() => {
-        setCurrentSpread((s) => Math.max(s - 1, 0))
-        setDragState(null)
-      }, 320)
-    })
-  }, [currentSpread, dragState, soundEnabled])
+    setTurningState({ direction: 'prev' })
+    setTimeout(() => {
+      setCurrentSpread((s) => Math.max(s - 1, 0))
+      setTurningState(null)
+    }, 340)
+  }, [currentSpread, turningState, soundEnabled])
 
-  // Điều hướng trang đơn
   const goNextPage = useCallback(() => {
     if (layoutMode === 'spread') {
       goNextSpread()
     } else {
-      if (currentPage >= totalSinglePages - 1) return
+      if (currentPage >= totalSinglePages - 1 || turningState) return
       if (soundEnabled) playPaperTurnSound()
-      setCurrentPage((p) => Math.min(p + 1, totalSinglePages - 1))
+      setTurningState({ direction: 'next' })
+      setTimeout(() => {
+        setCurrentPage((p) => Math.min(p + 1, totalSinglePages - 1))
+        setTurningState(null)
+      }, 250)
     }
-  }, [layoutMode, goNextSpread, currentPage, totalSinglePages, soundEnabled])
+  }, [layoutMode, goNextSpread, currentPage, totalSinglePages, turningState, soundEnabled])
 
   const goPrevPage = useCallback(() => {
     if (layoutMode === 'spread') {
       goPrevSpread()
     } else {
-      if (currentPage <= 0) return
+      if (currentPage <= 0 || turningState) return
       if (soundEnabled) playPaperTurnSound()
-      setCurrentPage((p) => Math.max(p - 1, 0))
+      setTurningState({ direction: 'prev' })
+      setTimeout(() => {
+        setCurrentPage((p) => Math.max(p - 1, 0))
+        setTurningState(null)
+      }, 250)
     }
-  }, [layoutMode, goPrevSpread, currentPage, soundEnabled])
+  }, [layoutMode, goPrevSpread, currentPage, turningState, soundEnabled])
 
-  // Nhảy trực tiếp tới ngày
   const jumpToDay = useCallback((dateStr: string) => {
     const sIdx = spreads.findIndex(
       (s) => s.left.day?.dateStr === dateStr || s.right.day?.dateStr === dateStr
     )
     if (sIdx >= 0) {
-      if (soundEnabled) playPaperTurnSound()
       setCurrentSpread(sIdx)
     }
     const pIdx = dayPages.findIndex((d) => d.dateStr === dateStr)
     if (pIdx >= 0) {
       setCurrentPage(pIdx + 1)
     }
+    if (soundEnabled) playPaperTurnSound()
+    setViewMode('book')
     setIsSearchOpen(false)
   }, [spreads, dayPages, soundEnabled])
-
-  // Xử lý sự kiện kéo vuốt bằng ngón tay trên màn hình cảm ứng & chuột
-  const handlePointerDown = (e: React.PointerEvent) => {
-    const target = e.target as HTMLElement
-    if (target.closest('button, input, a, .polaroid-hero-frame, .polaroid-frame, .search-input-field')) return
-
-    const rect = chassisRef.current?.getBoundingClientRect()
-    if (!rect) return
-
-    const clickX = e.clientX - rect.left
-    const isRightHalf = clickX >= rect.width * 0.45
-    const isLeftHalf = clickX < rect.width * 0.55
-
-    if (isRightHalf && currentSpread < totalSpreads - 1) {
-      setDragState({
-        isDragging: false,
-        direction: 'next',
-        startX: e.clientX,
-        currentX: e.clientX,
-        ratio: 0,
-      })
-      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch {}
-    } else if (isLeftHalf && currentSpread > 0) {
-      setDragState({
-        isDragging: false,
-        direction: 'prev',
-        startX: e.clientX,
-        currentX: e.clientX,
-        ratio: 0,
-      })
-      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch {}
-    }
-  }
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragState || dragState.animating) return
-    const rect = chassisRef.current?.getBoundingClientRect()
-    if (!rect) return
-
-    const halfW = (rect.width * 0.5) || 320
-    let diff = 0
-    if (dragState.direction === 'next') {
-      diff = dragState.startX - e.clientX
-    } else if (dragState.direction === 'prev') {
-      diff = e.clientX - dragState.startX
-    }
-
-    if (diff > 8 || dragState.isDragging) {
-      const ratio = Math.max(0, Math.min(1, diff / halfW))
-      setDragState({
-        ...dragState,
-        isDragging: true,
-        currentX: e.clientX,
-        ratio,
-      })
-    }
-  }
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (!dragState || dragState.animating) return
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch {}
-
-    if (dragState.isDragging) {
-      const shouldFlip = dragState.ratio >= 0.22
-      setDragState({ ...dragState, animating: true, ratio: shouldFlip ? 1 : 0 })
-
-      if (shouldFlip && soundEnabled) {
-        playPaperTurnSound()
-      }
-
-      setTimeout(() => {
-        if (shouldFlip) {
-          if (dragState.direction === 'next') {
-            setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
-          } else if (dragState.direction === 'prev') {
-            setCurrentSpread((s) => Math.max(s - 1, 0))
-          }
-        }
-        setDragState(null)
-      }, 280)
-    } else {
-      // Tap nhanh để lật
-      const rect = chassisRef.current?.getBoundingClientRect()
-      if (rect) {
-        const clickX = e.clientX - rect.left
-        if (clickX > rect.width * 0.6) {
-          goNextSpread()
-        } else if (clickX < rect.width * 0.4) {
-          goPrevSpread()
-        }
-      }
-      setDragState(null)
-    }
-  }
 
   // Phím tắt bàn phím
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (activeGallery) {
         if (e.key === 'Escape') setActiveGallery(null)
-        if (e.key === 'ArrowRight') {
-          setActiveGallery((g) => g ? { ...g, currentIndex: (g.currentIndex + 1) % g.images.length } : null)
-        }
-        if (e.key === 'ArrowLeft') {
-          setActiveGallery((g) => g ? { ...g, currentIndex: (g.currentIndex - 1 + g.images.length) % g.images.length } : null)
-        }
+        return
+      }
+      if (selectedFlowerMonth !== null) {
+        if (e.key === 'Escape') setSelectedFlowerMonth(null)
         return
       }
       if (isSearchOpen) {
         if (e.key === 'Escape') setIsSearchOpen(false)
         return
       }
-      if (e.key === 'ArrowRight' || e.key === 'Space') {
+      if (isMenuOpen) {
+        if (e.key === 'Escape') setIsMenuOpen(false)
+        return
+      }
+      if (e.key === 'ArrowRight') {
         goNextPage()
       } else if (e.key === 'ArrowLeft') {
         goPrevPage()
       } else if (e.key === 'Escape') {
-        if (viewMode === 'book') {
-          setViewMode('tree')
-        } else {
-          onClose()
-        }
+        onClose()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [goNextPage, goPrevPage, activeGallery, isSearchOpen, viewMode, onClose])
+  }, [activeGallery, selectedFlowerMonth, isSearchOpen, isMenuOpen, goNextPage, goPrevPage, onClose])
 
-  // Đảo thứ tự sắp xếp thời gian
-  const toggleSortOrder = () => {
-    setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
-    setCurrentSpread(0)
-    setCurrentPage(0)
-    if (soundEnabled) playPaperTurnSound()
+  // Cử chỉ vuốt chạm siêu mượt, không rác render
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
+  const touchMovedRef = useRef<boolean>(false)
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, a, .search-input-field')) return
+    touchStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() }
+    touchMovedRef.current = false
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // 6. RENDER NỘI DUNG TỪNG NỬA TRANG TRONG SPREAD (LEFT & RIGHT)
-  // ═══════════════════════════════════════════════════════════════════
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!touchStartRef.current) return
+    const diffX = Math.abs(e.clientX - touchStartRef.current.x)
+    const diffY = Math.abs(e.clientY - touchStartRef.current.y)
+    if (diffX > 8 || diffY > 8) {
+      touchMovedRef.current = true
+    }
+  }
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!touchStartRef.current) return
+    const start = touchStartRef.current
+    touchStartRef.current = null
+
+    const diffX = e.clientX - start.x
+    const diffY = e.clientY - start.y
+    const elapsed = Date.now() - start.time
+    const absX = Math.abs(diffX)
+    const absY = Math.abs(diffY)
+
+    // A. Nếu ở trang bìa (Spread 0): Chạm nhẹ hoặc vuốt đều cho lật thẳng vào Trang 1 luôn!
+    if (layoutMode === 'spread' && currentSpread === 0) {
+      goNextSpread()
+      return
+    }
+
+    // B. Vuốt ngang (Swipe): Nhạy bén, lướt ngón tay là lật ngay
+    if (absX > 28 && absX > absY * 0.9) {
+      if (diffX < 0) {
+        goNextPage()
+      } else {
+        goPrevPage()
+      }
+      return
+    }
+
+    // C. Chạm nhẹ vào 2 bên trang sách (Tap):
+    if (absX < 18 && absY < 18 && elapsed < 450) {
+      const target = e.target as HTMLElement
+      if (target.closest('.polaroid-frame, .polaroid-hero-frame')) return
+
+      const rect = chassisRef.current?.getBoundingClientRect()
+      if (rect) {
+        const clickX = e.clientX - rect.left
+        if (clickX > rect.width * 0.5) {
+          goNextPage()
+        } else {
+          goPrevPage()
+        }
+      }
+    }
+  }
+
+  // Render từng nửa trang
   const renderSpreadSide = (content: SpreadSideContent, side: 'left' | 'right') => {
-    // 6.1. Trang Lót Mở Đầu (Cover Intro — Bên Trái)
     if (content.type === 'cover-intro') {
       return (
-        <div className="spread-page-content" style={{ justifyContent: 'center', textAlign: 'center', padding: '24px 28px' }}>
+        <div
+          className="spread-page-content"
+          style={{ justifyContent: 'center', textAlign: 'center', padding: '24px 28px', cursor: 'pointer' }}
+          onClick={goNextSpread}
+          title="Chạm để mở trang kỷ niệm"
+        >
           <div className="cover-art-crest" style={{ margin: '0 auto 12px' }}>
             <div className="cover-art-glow" style={{ background: activeYearTheme.glowColor }} />
             <div className="cover-art-tree-circle" style={{ borderColor: activeYearTheme.accent, width: 70, height: 70 }}>
@@ -659,7 +795,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             "Mỗi khoảnh khắc ghi lại đều là một đóa hoa thơm ngát trên cây đời."
           </p>
 
-          {/* Ảnh kỷ niệm tiêu biểu thu nhỏ */}
           {content.images && content.images.length > 0 && (
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', margin: '8px auto' }}>
               {content.images.slice(0, 3).map((img, idx) => (
@@ -667,7 +802,10 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                   key={idx}
                   className="polaroid-frame"
                   style={{ width: 68, padding: '4px 4px 10px 4px', transform: `rotate(${idx === 1 ? 0 : idx === 0 ? -3 : 3}deg)` }}
-                  onClick={() => setActiveGallery({ images: content.images || [], currentIndex: idx })}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveGallery({ images: content.images || [], currentIndex: idx })
+                  }}
                 >
                   <SafeMediaImage src={img} alt="" style={{ width: '100%', height: 48, objectFit: 'cover' }} />
                 </div>
@@ -687,10 +825,14 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       )
     }
 
-    // 6.2. Trang Bìa Chính (Cover Main — Bên Phải)
     if (content.type === 'cover-main') {
       return (
-        <div className="spread-page-content" style={{ justifyContent: 'center', textAlign: 'center', padding: '24px 28px' }}>
+        <div
+          className="spread-page-content"
+          style={{ justifyContent: 'center', textAlign: 'center', padding: '24px 28px', cursor: 'pointer' }}
+          onClick={goNextSpread}
+          title="Chạm để mở trang kỷ niệm"
+        >
           <div className="cover-inner-border" style={{ height: '90%', margin: '0 auto', width: '100%', justifyContent: 'center', gap: 16 }}>
             <div className="cover-badge-top" style={{ justifyContent: 'center' }}>
               <Sparkles size={14} style={{ color: activeYearTheme.accent }} />
@@ -711,7 +853,10 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               type="button"
               className="tree-open-book-btn"
               style={{ margin: '14px auto 0', maxWidth: 220, padding: '9px 18px', fontSize: '0.82rem' }}
-              onClick={goNextSpread}
+              onClick={(e) => {
+                e.stopPropagation()
+                goNextSpread()
+              }}
             >
               <span>Mở lật trang sách</span>
               <ChevronRight size={16} />
@@ -722,7 +867,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       )
     }
 
-    // 6.3. Trang Kết Sổ (Back Summary — Bên Trái)
     if (content.type === 'back-summary') {
       return (
         <div className="spread-page-content" style={{ justifyContent: 'center', textAlign: 'center', padding: '24px 28px' }}>
@@ -749,7 +893,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       )
     }
 
-    // 6.4. Trang Bìa Sau (Back Cover — Bên Phải)
     if (content.type === 'back-cover') {
       return (
         <div className="spread-page-content" style={{ justifyContent: 'center', textAlign: 'center', padding: '24px 28px' }}>
@@ -774,21 +917,25 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
       )
     }
 
-    // 6.5. Trang Kỷ Niệm (Day Primary / Day Secondary / Day Single)
+    // Trang kỷ niệm: Cân bằng đẹp mắt cho cả 2 bên
     const day = content.day
     if (!day) return <div className="spread-page-content" />
 
     const firstEvent = day.events[0]
-    const heroImage = content.images && content.images[0]
+    const pageImages = content.images || []
 
     return (
       <div style={{ height: '100%', position: 'relative' }}>
-        {/* Header ngày tinh tế, không rườm rà */}
+        {/* Header tinh tế, cân đối 2 bên */}
         <div className="spread-day-header-clean">
           <div className="spread-date-title">
             <span className="spread-date-daynum">{day.dayNum}</span>
             <span className="spread-date-monthyear">THG {day.monthNum} · {day.yearNum}</span>
-            <span className="spread-date-weekday">({day.weekdayStr})</span>
+            {content.customTitle ? (
+              <span className="spread-date-weekday">({content.customTitle})</span>
+            ) : (
+              <span className="spread-date-weekday">({day.weekdayStr})</span>
+            )}
           </div>
 
           {firstEvent?.is_favorite && (
@@ -798,10 +945,9 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
           )}
         </div>
 
-        {/* Nội dung trang: Ảnh Polaroid & Ghi chú */}
+        {/* Nội dung trang: Ảnh phân bổ đều và đẹp */}
         <div className="spread-page-content">
-          {/* Tiêu đề kỷ niệm */}
-          {firstEvent?.title && (
+          {firstEvent?.title && side === 'left' && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <h3 style={{ fontSize: '0.96rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
                 {firstEvent.title}
@@ -821,86 +967,60 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             </div>
           )}
 
-          {/* Ảnh Polaroid sắc nét dán băng dính hoa anh đào */}
-          {heroImage && (
-            <div
-              className="polaroid-hero-frame"
-              onClick={() =>
-                setActiveGallery({
-                  images: content.images || [heroImage],
-                  currentIndex: 0,
-                  title: firstEvent?.title,
-                  note: firstEvent?.note || undefined,
-                  date: `${day.dayNum}/${day.monthNum}/${day.yearNum}`,
-                })
-              }
-              title="Chạm để mở ảnh to"
-            >
-              <div className="washi-tape-sakura" />
-              {isVideo(heroImage) ? (
-                <div style={{ position: 'relative' }}>
-                  <video src={heroImage} poster={getVideoPosterUrl(heroImage)} playsInline muted style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.25)' }}>
-                    <Play size={24} fill="#ffffff" color="#ffffff" />
+          {/* Khung ảnh Polaroid cân bằng */}
+          {pageImages.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {pageImages.map((imgUrl, imgIdx) => {
+                const isSingle = pageImages.length === 1
+                return (
+                  <div
+                    key={imgIdx}
+                    className="polaroid-hero-frame"
+                    style={{
+                      width: isSingle ? '92%' : '46%',
+                      minWidth: isSingle ? 180 : 120,
+                      margin: isSingle ? '4px auto 8px' : '4px',
+                    }}
+                    onClick={() =>
+                      setActiveGallery({
+                        images: day.allImages,
+                        currentIndex: day.allImages.indexOf(imgUrl) >= 0 ? day.allImages.indexOf(imgUrl) : 0,
+                        title: firstEvent?.title,
+                        date: `${day.dayNum}/${day.monthNum}/${day.yearNum}`,
+                      })
+                    }
+                    title="Chạm để mở ảnh to"
+                  >
+                    <div className="washi-tape-sakura" />
+                    {isVideo(imgUrl) ? (
+                      <div style={{ position: 'relative' }}>
+                        <video src={imgUrl} poster={getVideoPosterUrl(imgUrl)} playsInline muted style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover' }} />
+                        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.25)' }}>
+                          <Play size={24} fill="#ffffff" color="#ffffff" />
+                        </div>
+                      </div>
+                    ) : (
+                      <SafeMediaImage src={imgUrl} alt="" className="polaroid-hero-photo" />
+                    )}
+                    {firstEvent?.title && isSingle && (
+                      <div className="polaroid-hero-caption">
+                        {firstEvent.title}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <SafeMediaImage src={heroImage} alt="" className="polaroid-hero-photo" />
-              )}
-              {firstEvent?.title && (
-                <div className="polaroid-hero-caption">
-                  {firstEvent.title}
-                </div>
-              )}
+                )
+              })}
             </div>
           )}
 
-          {/* Các ảnh phụ Polaroid (nếu là trang secondary) */}
-          {content.images && content.images.length > 1 && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {content.images.slice(1).map((imgUrl, imgIdx) => (
-                <div
-                  key={imgIdx}
-                  className="polaroid-frame"
-                  style={{ width: '45%', minWidth: 100, padding: '5px 5px 12px 5px', transform: `rotate(${imgIdx % 2 === 0 ? -1.5 : 1.5}deg)` }}
-                  onClick={() =>
-                    setActiveGallery({
-                      images: content.images || [],
-                      currentIndex: imgIdx + 1,
-                      title: firstEvent?.title,
-                      date: `${day.dayNum}/${day.monthNum}/${day.yearNum}`,
-                    })
-                  }
-                >
-                  <SafeMediaImage src={imgUrl} alt="" style={{ width: '100%', height: 75, objectFit: 'cover' }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Ghi chú viết tay ấm áp */}
+          {/* Ghi chú viết tay */}
           {firstEvent?.note && (
             <div className="spread-handwritten-box">
               <p className="spread-handwritten-text">{firstEvent.note}</p>
             </div>
           )}
-
-          {/* Nếu không có ảnh: Hiển thị thiệp lưu niệm thanh lịch */}
-          {!heroImage && !firstEvent?.note && (
-            <div className="scrapbook-empty-memo" style={{ margin: '20px auto', maxWidth: 260 }}>
-              <div className="empty-memo-tape" />
-              <div className="empty-memo-inner">
-                <Sparkles size={18} style={{ color: activeYearTheme.accent }} />
-                <span className="empty-memo-tag">Dấu ấn kỷ niệm</span>
-                <p className="empty-memo-text">
-                  Một ngày bình yên được lưu giữ trọn vẹn trong cuốn sổ.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Chỉ số trang */}
         {content.pageNumber && (
           <div className={`spread-page-number ${side}`}>
             {content.pageNumber}
@@ -910,22 +1030,21 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
     )
   }
 
-  // Active photo trong gallery lightbox
+  const activeSpread = spreads[currentSpread] || spreads[0]
+  const nextSpread = spreads[currentSpread + 1]
+  const prevSpread = spreads[currentSpread - 1]
+
   const currentPhoto = activeGallery
     ? activeGallery.images[activeGallery.currentIndex]
     : null
   const currentIsVid = currentPhoto ? isVideo(currentPhoto) : false
 
-  const activeSpread = spreads[currentSpread] || spreads[0]
-  const nextSpread = spreads[currentSpread + 1]
-  const prevSpread = spreads[currentSpread - 1]
-
   return (
-    <div className={`memory-book-fullscreen ${layoutMode === 'spread' ? 'spread-mode' : ''}`}>
-      {/* ── TOP BAR (TỐI GIẢN, TRANG NHÃ, KHÔNG RƯỜM RÀ) ── */}
+    <div className={`memory-book-fullscreen ${layoutMode === 'spread' && viewMode === 'book' ? 'spread-mode' : ''}`}>
+      {/* ── TOP BAR: TIẾN ĐỘ & NÚT 3 GẠCH MENU (KHÔNG VƯỚNG TAY) ── */}
       <div className="memory-book-topbar">
         <div className="memory-book-top-left">
-          {viewMode === 'book' ? (
+          {viewMode !== 'tree' ? (
             <button
               type="button"
               className="memory-book-back-btn"
@@ -933,9 +1052,9 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                 if (soundEnabled) playPaperTurnSound()
                 setViewMode('tree')
               }}
-              title="Quay lại Cây Kỷ Niệm 3D"
+              title="Quay lại Cây 3D"
             >
-              <ChevronLeft size={16} />
+              <TreePine size={15} />
               <span>Cây 3D</span>
             </button>
           ) : (
@@ -943,102 +1062,66 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               type="button"
               className="memory-book-back-btn"
               onClick={onClose}
-              title="Đóng"
+              title="Thoát"
             >
-              <ArrowLeft size={16} />
-              <span>Đóng</span>
+              <ArrowLeft size={15} />
+              <span>Thoát</span>
             </button>
           )}
         </div>
 
-        {/* Nhóm nút chuyển chế độ 2 bên / 1 bên & chỉ số trang */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {viewMode === 'book' && (
-            <div className="book-mode-toggle-group">
-              <button
-                type="button"
-                className={`book-mode-btn ${layoutMode === 'spread' ? 'active' : ''}`}
-                onClick={() => {
-                  if (soundEnabled) playPaperTurnSound()
-                  setLayoutMode('spread')
-                }}
-                title="Sách mở 2 bên (Trang trái & Trang phải)"
-              >
-                <Columns2 size={13} />
-                <span>Sách 2 bên</span>
-              </button>
-              <button
-                type="button"
-                className={`book-mode-btn ${layoutMode === 'single' ? 'active' : ''}`}
-                onClick={() => {
-                  if (soundEnabled) playPaperTurnSound()
-                  setLayoutMode('single')
-                }}
-                title="Trang đơn"
-              >
-                <BookOpen size={13} />
-                <span>1 trang</span>
-              </button>
-            </div>
-          )}
-
-          <div className="memory-book-page-indicator">
-            {viewMode === 'tree' ? (
-              <>
-                <TreePine size={14} style={{ color: activeYearTheme.accent, flexShrink: 0 }} />
-                <span className="indicator-title">
-                  Năm {selectedYear} {personName ? `· ${personName}` : ''}
-                </span>
-              </>
-            ) : (
-              <>
-                <BookOpen size={13} style={{ color: activeYearTheme.accent, flexShrink: 0 }} />
-                <span className="indicator-title">
-                  {layoutMode === 'spread'
-                    ? `Năm ${selectedYear} · ${currentSpread + 1}/${totalSpreads}`
-                    : `Năm ${selectedYear} · Trang ${currentPage}/${dayPages.length}`}
-                </span>
-              </>
-            )}
+        {/* PHẦN GIỮA: THANH TIẾN ĐỘ SCRUBBER Ở TRÊN KHI Ở CHẾ ĐỘ SÁCH */}
+        {viewMode === 'book' ? (
+          <div className="topbar-scrubber-wrap">
+            <input
+              type="range"
+              min={0}
+              max={layoutMode === 'spread' ? totalSpreads - 1 : totalSinglePages - 1}
+              value={layoutMode === 'spread' ? currentSpread : currentPage}
+              onChange={(e) => {
+                const val = Number(e.target.value)
+                if (layoutMode === 'spread') {
+                  setCurrentSpread(val)
+                } else {
+                  setCurrentPage(val)
+                }
+                if (soundEnabled) playPaperTurnSound()
+              }}
+              className="topbar-slider"
+              aria-label="Tiến độ lật sách"
+            />
+            <span className="topbar-page-label">
+              {layoutMode === 'spread'
+                ? currentSpread === 0
+                  ? `Bìa`
+                  : currentSpread === totalSpreads - 1
+                  ? `Hết`
+                  : `${currentSpread}/${totalSpreads - 1}`
+                : currentPage === 0
+                ? `Bìa`
+                : `${currentPage}/${dayPages.length}`}
+            </span>
           </div>
-        </div>
+        ) : (
+          <div className="topbar-title-pill">
+            {viewMode === 'tree' && <span>🌸 Cây 3D · Năm {selectedYear}</span>}
+            {viewMode === 'month' && <span>📅 Vườn 12 Tháng · Năm {selectedYear}</span>}
+            {viewMode === 'list' && <span>📋 Dòng Kỷ Niệm · Năm {selectedYear}</span>}
+          </div>
+        )}
 
+        {/* PHẦN PHẢI: NÚT 3 GẠCH MENU & NÚT ĐÓNG */}
         <div className="memory-book-top-actions">
-          {/* Nút Đảo chiều sắp xếp */}
-          {viewMode === 'book' && (
-            <button
-              type="button"
-              className={`memory-book-circle-btn ${sortOrder === 'desc' ? 'active' : ''}`}
-              onClick={toggleSortOrder}
-              title={sortOrder === 'desc' ? 'Đang xếp Mới → Cũ (Chạm để đảo)' : 'Đang xếp Cũ → Mới (Chạm để đảo)'}
-            >
-              <ArrowUpDown size={15} />
-            </button>
-          )}
-
-          {/* Nút Tìm kiếm nhanh */}
-          {viewMode === 'book' && (
-            <button
-              type="button"
-              className={`memory-book-circle-btn ${isSearchOpen ? 'active' : ''}`}
-              onClick={() => setIsSearchOpen((v) => !v)}
-              title="Tìm kiếm kỷ niệm"
-            >
-              <Search size={15} />
-            </button>
-          )}
-
-          {/* Âm thanh lật giấy */}
           <button
             type="button"
-            className="memory-book-circle-btn"
-            onClick={() => setSoundEnabled((v) => !v)}
-            title={soundEnabled ? 'Tắt âm thanh lật trang' : 'Bật âm thanh lật trang'}
+            className={`memory-book-menu-trigger-btn ${isMenuOpen ? 'active' : ''}`}
+            onClick={() => setIsMenuOpen((v) => !v)}
+            title="Menu tuỳ chọn"
           >
-            {soundEnabled ? <Volume2 size={15} style={{ color: '#d97706' }} /> : <VolumeX size={15} style={{ opacity: 0.5 }} />}
+            <Menu size={16} />
+            <span className="menu-btn-text">Menu</span>
           </button>
 
-          {/* Đóng */}
           <button
             type="button"
             className="memory-book-circle-btn close-circle"
@@ -1050,10 +1133,195 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
         </div>
       </div>
 
+      {/* ── DROPDOWN MENU 3 GẠCH (ẨN CÁC NÚT VÀO ĐÂY, NHẤN MỚI HIỆN) ── */}
+      {isMenuOpen && (
+        <div className="memory-menu-backdrop" onClick={() => setIsMenuOpen(false)}>
+          <div className="memory-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+            <div className="menu-dropdown-header">
+              <span className="menu-dropdown-title">⚙️ Tuỳ Chọn Kỷ Niệm</span>
+              <button
+                type="button"
+                className="memory-book-circle-btn close-circle"
+                style={{ width: 28, height: 28, minWidth: 28 }}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* 1. 4 CHẾ ĐỘ XEM */}
+            <div className="menu-dropdown-section">
+              <span className="menu-section-label">Chế độ xem</span>
+              <div className="menu-buttons-grid">
+                <button
+                  type="button"
+                  className={`menu-option-btn ${viewMode === 'tree' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (soundEnabled) playPaperTurnSound()
+                    setViewMode('tree')
+                    setIsMenuOpen(false)
+                  }}
+                >
+                  <TreePine size={14} />
+                  <span>🌸 Cây 3D</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`menu-option-btn ${viewMode === 'book' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (soundEnabled) playPaperTurnSound()
+                    setViewMode('book')
+                    setIsMenuOpen(false)
+                  }}
+                >
+                  <BookOpen size={14} />
+                  <span>📖 Đọc Sách</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`menu-option-btn ${viewMode === 'month' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (soundEnabled) playPaperTurnSound()
+                    setViewMode('month')
+                    setIsMenuOpen(false)
+                  }}
+                >
+                  <Calendar size={14} />
+                  <span>📅 12 Tháng</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`menu-option-btn ${viewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (soundEnabled) playPaperTurnSound()
+                    setViewMode('list')
+                    setIsMenuOpen(false)
+                  }}
+                >
+                  <List size={14} />
+                  <span>📋 Danh Sách</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. BỐ CỤC TRANG SÁCH */}
+            {viewMode === 'book' && (
+              <div className="menu-dropdown-section">
+                <span className="menu-section-label">Bố cục sách</span>
+                <div className="menu-buttons-grid">
+                  <button
+                    type="button"
+                    className={`menu-option-btn ${layoutMode === 'spread' ? 'active' : ''}`}
+                    onClick={() => {
+                      switchToSpreadMode()
+                      setIsMenuOpen(false)
+                    }}
+                  >
+                    <Columns2 size={14} />
+                    <span>📖 Sách 2 bên</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`menu-option-btn ${layoutMode === 'single' ? 'active' : ''}`}
+                    onClick={() => {
+                      switchToSingleMode()
+                      setIsMenuOpen(false)
+                    }}
+                  >
+                    <BookOpen size={14} />
+                    <span>📄 1 Trang</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 3. TIỆN ÍCH */}
+            <div className="menu-dropdown-section">
+              <span className="menu-section-label">Tiện ích</span>
+              <div className="menu-list-items">
+                <button
+                  type="button"
+                  className="menu-list-item-btn"
+                  onClick={() => {
+                    setIsSearchOpen(true)
+                    setIsMenuOpen(false)
+                  }}
+                >
+                  <Search size={15} style={{ color: '#f59e0b' }} />
+                  <span>Tìm kiếm kỷ niệm...</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="menu-list-item-btn"
+                  onClick={() => {
+                    setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                    if (soundEnabled) playPaperTurnSound()
+                  }}
+                >
+                  <ArrowUpDown size={15} style={{ color: '#f59e0b' }} />
+                  <span>Thứ tự: {sortOrder === 'desc' ? 'Mới nhất trước' : 'Cũ nhất trước'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="menu-list-item-btn"
+                  onClick={() => setSoundEnabled((prev) => !prev)}
+                >
+                  {soundEnabled ? (
+                    <Volume2 size={15} style={{ color: '#10b981' }} />
+                  ) : (
+                    <VolumeX size={15} style={{ color: '#94a3b8' }} />
+                  )}
+                  <span>Âm thanh lật giấy: {soundEnabled ? 'Đang bật' : 'Đã tắt'}</span>
+                </button>
+
+                {yearlyGroups.length > 1 && (
+                  <div style={{ marginTop: 4 }}>
+                    <span className="menu-section-label" style={{ display: 'block', marginBottom: 6 }}>
+                      Chọn năm
+                    </span>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {yearlyGroups.map((g) => (
+                        <button
+                          key={g.year}
+                          type="button"
+                          className={`menu-option-btn ${g.year === selectedYear ? 'active' : ''}`}
+                          style={{ padding: '4px 10px', fontSize: '0.74rem' }}
+                          onClick={() => {
+                            setSelectedYear(g.year)
+                            if (soundEnabled) playPaperTurnSound()
+                            setIsMenuOpen(false)
+                          }}
+                        >
+                          {g.year} ({g.events.length})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CẢNH BÁO XOAY NGANG ĐIỆN THOẠI */}
+      {showRotateGuide && (
+        <div className="rotate-phone-notice">
+          <Smartphone size={20} className="phone-rotate-icon" style={{ color: '#f59e0b' }} />
+          <span>📱 Hãy xoay ngang điện thoại để đọc sách 2 trang tốt nhất ✨</span>
+        </div>
+      )}
+
       {/* ══════════════════════════════════════════════════════════════
-       * VIEW 1: CÂY KỶ NIỆM 3D (HOA ANH ĐÀO PLAY TOGETHER BỒNG BỀNH)
+       * VIEW 1: CÂY KỶ NIỆM 3D (HOA ANH ĐÀO PLAY TOGETHER)
        * ══════════════════════════════════════════════════════════════ */}
-      {viewMode === 'tree' ? (
+      {viewMode === 'tree' && (
         <div className="tree-explorer-stage">
           {yearlyGroups.length > 1 && (
             <div className="tree-year-switcher">
@@ -1068,8 +1336,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                     onClick={() => {
                       if (soundEnabled) playPaperTurnSound()
                       setSelectedYear(g.year)
-                      setCurrentSpread(0)
-                      setCurrentPage(0)
                     }}
                   >
                     <span>{t.name === 'Xuân' ? '🌸' : t.name === 'Hạ' ? '☀️' : t.name === 'Thu' ? '🍂' : '❄️'}</span>
@@ -1081,7 +1347,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
             </div>
           )}
 
-          {/* Canvas Cây 3D Three.js */}
           <div className="tree-canvas-wrapper">
             <Interactive3DTreeCanvas
               year={selectedYear}
@@ -1089,25 +1354,14 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               theme={activeYearTheme}
               onOpenBook={() => {
                 if (soundEnabled) playPaperTurnSound()
-                setCurrentSpread(0)
-                setCurrentPage(0)
                 setViewMode('book')
               }}
-              onSelectMonth={(m) => {
-                const targetIdx = dayPages.findIndex((p) => parseInt(p.monthNum, 10) === m)
-                if (targetIdx >= 0) {
-                  jumpToDay(dayPages[targetIdx].dateStr)
-                } else {
-                  setCurrentSpread(0)
-                  setCurrentPage(0)
-                }
-                if (soundEnabled) playPaperTurnSound()
-                setViewMode('book')
+              onOpenFlower2D={(m) => {
+                setSelectedFlowerMonth(m)
               }}
             />
           </div>
 
-          {/* Thẻ mở sách */}
           <div className="tree-pedestal-card">
             <div className="tree-pedestal-title">
               <TreePine size={18} style={{ color: activeYearTheme.accent }} />
@@ -1124,325 +1378,366 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
               <span>✨ 12 tháng nở hoa</span>
             </div>
 
-            <button
-              type="button"
-              className="tree-open-book-btn"
-              onClick={() => {
-                if (soundEnabled) playPaperTurnSound()
-                setCurrentSpread(0)
-                setCurrentPage(0)
-                setViewMode('book')
-              }}
-            >
-              <BookOpen size={18} />
-              <span>Mở Cuốn Sách Năm {selectedYear} (Lật Trang 3D) →</span>
-            </button>
+            <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 360, marginTop: 4 }}>
+              <button
+                type="button"
+                className="tree-open-book-btn"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  if (soundEnabled) playPaperTurnSound()
+                  setViewMode('book')
+                }}
+              >
+                <BookOpen size={16} />
+                <span>Mở Sách Lật 3D</span>
+              </button>
+
+              <button
+                type="button"
+                className="tree-open-book-btn"
+                style={{
+                  flex: 1,
+                  background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                  boxShadow: '0 6px 20px rgba(244, 63, 94, 0.35)',
+                }}
+                onClick={() => {
+                  setSelectedFlowerMonth(new Date().getMonth() + 1)
+                }}
+              >
+                <Flower2 size={16} />
+                <span>Chi Tiết Hoa 2D</span>
+              </button>
+            </div>
+
             <div className="tree-pedestal-hint">
-              ✨ Vuốt xoay 360° cây hoa · Chạm hoa 12 tháng để mở nhanh
+              ✨ Vuốt xoay 360° cây hoa · Nhấn vào hoa để mở chi tiết 2D rực rỡ
             </div>
           </div>
         </div>
-      ) : (
-        /* ══════════════════════════════════════════════════════════════
-         * VIEW 2: CUỐN SÁCH 3D (CHẾ ĐỘ MỞ 2 BÊN VÀ LẬT THEO NGÓN TAY)
-         * ══════════════════════════════════════════════════════════════ */
-        <>
-          {/* Modal tìm kiếm & lọc tháng */}
-          {isSearchOpen && (
-            <div className="memory-quick-search-backdrop" onClick={() => setIsSearchOpen(false)}>
-              <div className="memory-quick-search-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="search-modal-header">
-                  <div className="search-input-wrap">
-                    <Search size={18} className="search-input-icon" />
-                    <input
-                      type="text"
-                      placeholder={`Tìm kỷ niệm năm ${selectedYear}...`}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      autoFocus
-                      className="search-input-field"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        className="search-input-clear"
-                        onClick={() => setSearchQuery('')}
-                      >
-                        <X size={15} />
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="search-modal-close"
-                    onClick={() => setIsSearchOpen(false)}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
+      )}
 
-                {availableMonths.length > 0 && (
-                  <div className="search-months-filter">
-                    <button
-                      type="button"
-                      className={`month-chip ${selectedMonthFilter === 'all' ? 'active' : ''}`}
-                      onClick={() => setSelectedMonthFilter('all')}
-                    >
-                      Tất cả ({dayPages.length})
-                    </button>
-                    {availableMonths.map((m) => {
-                      const count = dayPages.filter((p) => `${p.monthNum}/${p.yearNum}` === m).length
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          className={`month-chip ${selectedMonthFilter === m ? 'active' : ''}`}
-                          onClick={() => setSelectedMonthFilter(m)}
-                        >
-                          Tháng {m} ({count})
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
+      {/* ══════════════════════════════════════════════════════════════
+       * VIEW 2: ĐỌC SÁCH 3D (CHẾ ĐỘ 2 TRANG & 1 TRANG)
+       * ══════════════════════════════════════════════════════════════ */}
+      {viewMode === 'book' && (
+        <div
+          className="memory-book-stage"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{ touchAction: 'none' }}
+        >
+          <button
+            type="button"
+            className={`book-turn-arrow prev ${(layoutMode === 'spread' ? currentSpread === 0 : currentPage === 0) || turningState ? 'disabled' : ''}`}
+            onClick={goPrevPage}
+            disabled={(layoutMode === 'spread' ? currentSpread === 0 : currentPage === 0) || !!turningState}
+            title="Lật về trang trước"
+          >
+            <ChevronLeft size={24} />
+          </button>
 
-                <div className="search-results-list">
-                  {searchResults.length === 0 ? (
-                    <div className="search-empty-state">
-                      <Calendar size={32} style={{ opacity: 0.4, margin: '0 auto 8px' }} />
-                      <p>Không tìm thấy kỷ niệm nào</p>
-                    </div>
-                  ) : (
-                    searchResults.map((p) => (
-                      <div
-                        key={p.dateStr}
-                        className="search-result-item"
-                        onClick={() => jumpToDay(p.dateStr)}
-                      >
-                        <div className="result-date-badge">
-                          <span className="r-day">{p.dayNum}</span>
-                          <span className="r-m">{p.monthNum}/{p.yearNum}</span>
-                        </div>
-                        <div className="result-info">
-                          <div className="result-titles">
-                            {p.events.map((e, idx) => (
-                              <span key={e.id || idx} className="result-title-pill">
-                                {e.title || 'Kỷ niệm'}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="result-meta">
-                            <span>{p.weekdayStr}</span>
-                            <span>·</span>
-                            <span>{p.events.length} kỷ niệm</span>
-                          </div>
-                        </div>
-                        <div className="result-jump-btn">
-                          <span>Mở ngày này</span>
-                          <ChevronRight size={14} />
-                        </div>
-                      </div>
-                    ))
-                  )}
+          {layoutMode === 'spread' ? (
+            <div ref={chassisRef} className="book-3d-chassis-spread">
+              <div className="book-spread-hardcover" />
+              <div className="book-spread-paper-stack-left" />
+              <div className="book-spread-paper-stack-right" />
+              <div className="book-spine-center-gutter" />
+
+              <GoldenButterflies />
+
+              <div className="book-spread-side left-side">
+                {turningState?.direction === 'prev' && prevSpread
+                  ? renderSpreadSide(prevSpread.left, 'left')
+                  : renderSpreadSide(activeSpread.left, 'left')}
+              </div>
+
+              <div className="book-spread-side right-side">
+                {turningState?.direction === 'next' && nextSpread
+                  ? renderSpreadSide(nextSpread.right, 'right')
+                  : renderSpreadSide(activeSpread.right, 'right')}
+              </div>
+
+              {turningState?.direction === 'next' && nextSpread && (
+                <div className="spread-flipping-leaf flip-forward animating">
+                  <div className="leaf-face leaf-face-front">
+                    {renderSpreadSide(activeSpread.right, 'right')}
+                    <div className="dynamic-curl-shadow" />
+                  </div>
+                  <div className="leaf-face leaf-face-back">
+                    {renderSpreadSide(nextSpread.left, 'left')}
+                    <div className="dynamic-curl-shadow" />
+                  </div>
                 </div>
+              )}
+
+              {turningState?.direction === 'prev' && prevSpread && (
+                <div className="spread-flipping-leaf flip-backward animating">
+                  <div className="leaf-face leaf-face-front">
+                    {renderSpreadSide(activeSpread.left, 'left')}
+                    <div className="dynamic-curl-shadow" />
+                  </div>
+                  <div className="leaf-face leaf-face-back">
+                    {renderSpreadSide(prevSpread.right, 'right')}
+                    <div className="dynamic-curl-shadow" />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div ref={chassisRef} className={`book-3d-chassis ${turningState ? `single-animating-${turningState.direction}` : ''}`}>
+              <div className="book-spine-3d" />
+              <div className="book-hardcover-shadow" />
+              <div className="book-page-layer active-layer">
+                {currentPage === 0
+                  ? renderSpreadSide({ type: 'cover-main' }, 'right')
+                  : currentPage === totalSinglePages - 1
+                  ? renderSpreadSide({ type: 'back-cover' }, 'right')
+                  : renderSpreadSide({ type: 'day-single', day: dayPages[currentPage - 1], images: dayPages[currentPage - 1]?.allImages }, 'right')}
               </div>
             </div>
           )}
 
-          {/* 3D BOOK STAGE VỚI SÁCH MỞ 2 BÊN */}
-          <div
-            className="memory-book-stage"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            style={{ touchAction: 'none' }}
+          <button
+            type="button"
+            className={`book-turn-arrow next ${(layoutMode === 'spread' ? currentSpread >= totalSpreads - 1 : currentPage >= totalSinglePages - 1) || turningState ? 'disabled' : ''}`}
+            onClick={goNextPage}
+            disabled={(layoutMode === 'spread' ? currentSpread >= totalSpreads - 1 : currentPage >= totalSinglePages - 1) || !!turningState}
+            title="Lật sang trang tiếp theo"
           >
-            {/* Nút lật trang ngoài lề */}
+            <ChevronRight size={24} />
+          </button>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════
+       * VIEW 3: CHẾ ĐỘ 12 THÁNG NỞ HOA
+       * ══════════════════════════════════════════════════════════════ */}
+      {viewMode === 'month' && (
+        <div className="month-view-container">
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#78350f', margin: 0 }}>
+              🌸 Vườn Hoa 12 Tháng · Năm {selectedYear}
+            </h2>
+            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0 0' }}>
+              Chạm vào từng tháng để xem chi tiết đóa hoa 2D rực rỡ và các kỷ niệm
+            </p>
+          </div>
+
+          <div className="month-view-grid">
+            {Array.from({ length: 12 }).map((_, i) => {
+              const mNum = i + 1
+              const monthDays = dayPages.filter((p) => parseInt(p.monthNum, 10) === mNum)
+              const count = monthDays.reduce((acc, cur) => acc + cur.events.length, 0)
+              const firstImg = monthDays.find((p) => p.allImages.length > 0)?.allImages[0]
+
+              return (
+                <div
+                  key={mNum}
+                  className="month-card"
+                  onClick={() => setSelectedFlowerMonth(mNum)}
+                >
+                  <div className="month-card-header">
+                    <div className="month-badge-pill">
+                      <span>🌸 Tháng {mNum}</span>
+                    </div>
+                    <span className="month-card-count">
+                      {count > 0 ? `${count} kỷ niệm` : 'Chưa có'}
+                    </span>
+                  </div>
+
+                  {firstImg ? (
+                    <SafeMediaImage src={firstImg} alt="" className="month-card-preview-thumb" />
+                  ) : (
+                    <div className="month-card-empty">
+                      <span>Chưa có hình ảnh</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>
+                      {monthDays.length} ngày ghi nhớ
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 800 }}>
+                      Xem hoa 2D →
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════
+       * VIEW 4: CHẾ ĐỘ DANH SÁCH (TIMELINE FEED)
+       * ══════════════════════════════════════════════════════════════ */}
+      {viewMode === 'list' && (
+        <div className="list-view-container">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#78350f', margin: 0 }}>
+              Dòng Thời Gian Kỷ Niệm ({dayPages.length} ngày)
+            </h2>
             <button
               type="button"
-              className={`book-turn-arrow prev ${(layoutMode === 'spread' ? currentSpread === 0 : currentPage === 0) || dragState?.animating ? 'disabled' : ''}`}
-              onClick={goPrevPage}
-              disabled={(layoutMode === 'spread' ? currentSpread === 0 : currentPage === 0) || dragState?.animating}
-              title="Lật về trang trước"
-              aria-label="Trang trước"
+              className="memory-book-circle-btn"
+              onClick={() => setSortOrder((o) => o === 'desc' ? 'asc' : 'desc')}
+              title="Đảo thứ tự"
             >
-              <ChevronLeft size={24} />
+              <ArrowUpDown size={15} />
             </button>
+          </div>
 
-            {/* CHẾ ĐỘ 1: SÁCH MỞ 2 BÊN TRẢI RỘNG (TWO-PAGE SPREAD) */}
-            {layoutMode === 'spread' ? (
-              <div ref={chassisRef} className="book-3d-chassis-spread">
-                {/* Bìa cứng nằm ngang dưới đáy sách */}
-                <div className="book-spread-hardcover" />
-                <div className="book-spread-paper-stack-left" />
-                <div className="book-spread-paper-stack-right" />
-                <div className="book-spine-center-gutter" />
-
-                {/* Hiệu ứng bướm vàng phát sáng bay lượn từ sách */}
-                <GoldenButterflies />
-
-                {/* NỀN TẢNG CƠ SỞ (BASE SPREAD) */}
-                {/* Trang bên TRÁI */}
-                <div className="book-spread-side left-side">
-                  {dragState?.direction === 'prev' && prevSpread
-                    ? renderSpreadSide(prevSpread.left, 'left')
-                    : renderSpreadSide(activeSpread.left, 'left')}
-                </div>
-
-                {/* Trang bên PHẢI */}
-                <div className="book-spread-side right-side">
-                  {dragState?.direction === 'next' && nextSpread
-                    ? renderSpreadSide(nextSpread.right, 'right')
-                    : renderSpreadSide(activeSpread.right, 'right')}
-                </div>
-
-                {/* LỚP LẬT TRANG 3D THỜI GIAN THỰC (INTERACTIVE FLIPPING LEAF) */}
-                {dragState && dragState.direction === 'next' && nextSpread && (
-                  <div
-                    className="spread-flipping-leaf flip-forward"
-                    style={{
-                      transform: `rotateY(${-dragState.ratio * 180}deg)`,
-                      transition: dragState.animating ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none',
-                    }}
-                  >
-                    {/* Mặt trước của tờ lật: hiển thị trang phải hiện tại */}
-                    <div className="leaf-face leaf-face-front">
-                      {renderSpreadSide(activeSpread.right, 'right')}
-                      <div
-                        className="dynamic-curl-shadow"
-                        style={{ opacity: Math.sin(dragState.ratio * Math.PI) * 0.7 }}
-                      />
-                    </div>
-                    {/* Mặt sau của tờ lật: hiển thị trang trái kế tiếp */}
-                    <div className="leaf-face leaf-face-back">
-                      {renderSpreadSide(nextSpread.left, 'left')}
-                      <div
-                        className="dynamic-curl-shadow"
-                        style={{ opacity: Math.sin(dragState.ratio * Math.PI) * 0.7 }}
-                      />
-                    </div>
+          <div className="list-view-feed">
+            {dayPages.map((day) => (
+              <div key={day.dateStr} className="list-day-card">
+                <div className="spread-day-header-clean" style={{ padding: '0 0 10px', background: 'transparent' }}>
+                  <div className="spread-date-title">
+                    <span className="spread-date-daynum">{day.dayNum}</span>
+                    <span className="spread-date-monthyear">THG {day.monthNum} · {day.yearNum}</span>
+                    <span className="spread-date-weekday">({day.weekdayStr})</span>
                   </div>
-                )}
-
-                {dragState && dragState.direction === 'prev' && prevSpread && (
-                  <div
-                    className="spread-flipping-leaf flip-backward"
-                    style={{
-                      transform: `rotateY(${-180 + dragState.ratio * 180}deg)`,
-                      transition: dragState.animating ? 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)' : 'none',
-                    }}
+                  <button
+                    type="button"
+                    className="book-mode-btn active"
+                    onClick={() => jumpToDay(day.dateStr)}
+                    style={{ fontSize: '0.72rem', padding: '4px 10px' }}
                   >
-                    {/* Mặt trước của tờ lật: hiển thị trang phải trước đó */}
-                    <div className="leaf-face leaf-face-front">
-                      {renderSpreadSide(prevSpread.right, 'right')}
+                    <BookOpen size={12} />
+                    <span>Xem ở Sách</span>
+                  </button>
+                </div>
+
+                {day.events.map((ev, eIdx) => (
+                  <div key={ev.id || eIdx} style={{ marginTop: 8 }}>
+                    <h4 style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
+                      {ev.title || 'Kỷ niệm'}
+                    </h4>
+                    {ev.note && (
+                      <p style={{ fontSize: '0.84rem', color: '#475569', fontStyle: 'italic', margin: '4px 0' }}>
+                        "{ev.note}"
+                      </p>
+                    )}
+                  </div>
+                ))}
+
+                {day.allImages.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0 4px' }}>
+                    {day.allImages.map((img, iIdx) => (
                       <div
-                        className="dynamic-curl-shadow"
-                        style={{ opacity: Math.sin(dragState.ratio * Math.PI) * 0.7 }}
-                      />
-                    </div>
-                    {/* Mặt sau của tờ lật: hiển thị trang trái hiện tại */}
-                    <div className="leaf-face leaf-face-back">
-                      {renderSpreadSide(activeSpread.left, 'left')}
-                      <div
-                        className="dynamic-curl-shadow"
-                        style={{ opacity: Math.sin(dragState.ratio * Math.PI) * 0.7 }}
-                      />
-                    </div>
+                        key={iIdx}
+                        className="polaroid-frame"
+                        style={{ width: 110, padding: '4px 4px 14px 4px', flexShrink: 0 }}
+                        onClick={() => setActiveGallery({ images: day.allImages, currentIndex: iIdx })}
+                      >
+                        <SafeMediaImage src={img} alt="" style={{ width: '100%', height: 80, objectFit: 'cover' }} />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-            ) : (
-              /* CHẾ ĐỘ 2: TRANG ĐƠN */
-              <div ref={chassisRef} className="book-3d-chassis">
-                <div className="book-spine-3d" />
-                <div className="book-hardcover-shadow" />
-                <div className="book-page-layer active-layer">
-                  {currentPage === 0
-                    ? renderSpreadSide({ type: 'cover-main' }, 'right')
-                    : currentPage === totalSinglePages - 1
-                    ? renderSpreadSide({ type: 'back-cover' }, 'right')
-                    : renderSpreadSide({ type: 'day-single', day: dayPages[currentPage - 1], images: dayPages[currentPage - 1]?.allImages }, 'right')}
-                </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHI TIẾT HOA 2D */}
+      {selectedFlowerMonth !== null && (
+        <Flower2DDetailModal
+          month={selectedFlowerMonth}
+          year={selectedYear}
+          events={activeYearEvents.filter((e) => {
+            if (!e.event_date) return false
+            return parseInt(e.event_date.slice(5, 7), 10) === selectedFlowerMonth
+          })}
+          onClose={() => setSelectedFlowerMonth(null)}
+          onOpenInBook={(dStr) => {
+            if (dStr) {
+              jumpToDay(dStr)
+            } else {
+              setViewMode('book')
+            }
+          }}
+        />
+      )}
+
+      {/* Modal tìm kiếm nhanh */}
+      {isSearchOpen && (
+        <div className="memory-quick-search-backdrop" onClick={() => setIsSearchOpen(false)}>
+          <div className="memory-quick-search-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="search-modal-header">
+              <div className="search-input-wrap">
+                <Search size={18} className="search-input-icon" />
+                <input
+                  type="text"
+                  placeholder={`Tìm kỷ niệm năm ${selectedYear}...`}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                  className="search-input-field"
+                />
+              </div>
+              <button
+                type="button"
+                className="search-modal-close"
+                onClick={() => setIsSearchOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {availableMonths.length > 0 && (
+              <div className="search-months-filter" style={{ padding: '8px 16px', display: 'flex', gap: 6, overflowX: 'auto' }}>
+                <button
+                  type="button"
+                  className={`month-chip ${selectedMonthFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setSelectedMonthFilter('all')}
+                >
+                  Tất cả ({dayPages.length})
+                </button>
+                {availableMonths.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`month-chip ${selectedMonthFilter === m ? 'active' : ''}`}
+                    onClick={() => setSelectedMonthFilter(m)}
+                  >
+                    Tháng {m}
+                  </button>
+                ))}
               </div>
             )}
 
-            {/* Nút lật trang ngoài lề */}
-            <button
-              type="button"
-              className={`book-turn-arrow next ${(layoutMode === 'spread' ? currentSpread >= totalSpreads - 1 : currentPage >= totalSinglePages - 1) || dragState?.animating ? 'disabled' : ''}`}
-              onClick={goNextPage}
-              disabled={(layoutMode === 'spread' ? currentSpread >= totalSpreads - 1 : currentPage >= totalSinglePages - 1) || dragState?.animating}
-              title="Lật sang trang tiếp theo"
-              aria-label="Trang tiếp theo"
-            >
-              <ChevronRight size={24} />
-            </button>
-          </div>
-
-          {/* THANH ĐIỀU HƯỚNG ĐÁY GỌN GÀNG */}
-          <div className="memory-book-bottom-nav">
-            <button
-              type="button"
-              className="nav-arrow-btn prev"
-              onClick={goPrevPage}
-              disabled={(layoutMode === 'spread' ? currentSpread === 0 : currentPage === 0) || dragState?.animating}
-              title="Lật về trang trước"
-            >
-              <ChevronLeft size={18} />
-              <span className="nav-arrow-label">Trước</span>
-            </button>
-
-            <div className="nav-scrubber-center">
-              <input
-                type="range"
-                min={0}
-                max={layoutMode === 'spread' ? totalSpreads - 1 : totalSinglePages - 1}
-                value={layoutMode === 'spread' ? currentSpread : currentPage}
-                onChange={(e) => {
-                  const val = Number(e.target.value)
-                  if (layoutMode === 'spread') {
-                    setCurrentSpread(val)
-                  } else {
-                    setCurrentPage(val)
-                  }
-                  if (soundEnabled) playPaperTurnSound()
-                }}
-                className="scrubber-slider"
-                aria-label="Thanh trượt trang sách"
-              />
-              <div className="nav-page-badge">
-                <span>
-                  {layoutMode === 'spread'
-                    ? currentSpread === 0
-                      ? `Bìa ${selectedYear}`
-                      : currentSpread === totalSpreads - 1
-                      ? `Hết sổ`
-                      : `Cặp trang ${currentSpread} / ${totalSpreads - 1}`
-                    : currentPage === 0
-                    ? `Bìa ${selectedYear}`
-                    : currentPage === totalSinglePages - 1
-                    ? `Hết sổ`
-                    : `Trang ${currentPage} / ${dayPages.length}`}
-                </span>
-              </div>
+            <div className="search-results-list">
+              {dayPages
+                .filter((p) => {
+                  if (selectedMonthFilter !== 'all' && `${p.monthNum}/${p.yearNum}` !== selectedMonthFilter) return false
+                  if (!searchQuery) return true
+                  return p.dateStr.includes(searchQuery) || p.events.some((e) => e.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+                })
+                .map((p) => (
+                  <div key={p.dateStr} className="search-result-item" onClick={() => jumpToDay(p.dateStr)}>
+                    <div className="result-date-badge">
+                      <span className="r-day">{p.dayNum}</span>
+                      <span className="r-m">{p.monthNum}/{p.yearNum}</span>
+                    </div>
+                    <div className="result-info">
+                      <div className="result-titles">
+                        {p.events.map((e, idx) => (
+                          <span key={idx} className="result-title-pill">{e.title || 'Kỷ niệm'}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <ChevronRight size={16} />
+                  </div>
+                ))}
             </div>
-
-            <button
-              type="button"
-              className="nav-arrow-btn next"
-              onClick={goNextPage}
-              disabled={(layoutMode === 'spread' ? currentSpread >= totalSpreads - 1 : currentPage >= totalSinglePages - 1) || dragState?.animating}
-              title="Lật sang trang tiếp theo"
-            >
-              <span className="nav-arrow-label">Sau</span>
-              <ChevronRight size={18} />
-            </button>
           </div>
-        </>
+        </div>
       )}
 
-      {/* Lightbox xem ảnh / video phóng to */}
+      {/* Lightbox xem ảnh phóng to */}
       {activeGallery && currentPhoto && (
         <div className="scrapbook-photo-modal" onClick={() => setActiveGallery(null)}>
           <div className="scrapbook-photo-popup" onClick={(e) => e.stopPropagation()}>
@@ -1465,8 +1760,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                   type="button"
                   className="popup-btn-icon close-btn"
                   onClick={() => setActiveGallery(null)}
-                  title="Đóng (Esc)"
-                  aria-label="Đóng"
                 >
                   <X size={19} />
                 </button>
@@ -1483,7 +1776,6 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                       g ? { ...g, currentIndex: (g.currentIndex - 1 + g.images.length) % g.images.length } : null
                     )
                   }
-                  title="Ảnh trước"
                 >
                   <ChevronLeft size={24} />
                 </button>
@@ -1491,13 +1783,7 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
 
               <div className="popup-media-container">
                 {currentIsVid ? (
-                  <video
-                    src={currentPhoto}
-                    poster={getVideoPosterUrl(currentPhoto)}
-                    controls
-                    autoPlay
-                    playsInline
-                  />
+                  <video src={currentPhoto} poster={getVideoPosterUrl(currentPhoto)} controls autoPlay playsInline />
                 ) : (
                   <SafeMediaImage src={currentPhoto} alt="" />
                 )}
@@ -1512,24 +1798,11 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                       g ? { ...g, currentIndex: (g.currentIndex + 1) % g.images.length } : null
                     )
                   }
-                  title="Ảnh tiếp theo"
                 >
                   <ChevronRight size={24} />
                 </button>
               )}
             </div>
-
-            {(activeGallery.title || activeGallery.date || activeGallery.note) && (
-              <div className="scrapbook-popup-info">
-                {activeGallery.title && <h4>{activeGallery.title}</h4>}
-                {activeGallery.date && (
-                  <div className="scrapbook-popup-date">
-                    📅 Ngày {activeGallery.date}
-                  </div>
-                )}
-                {activeGallery.note && <p>{activeGallery.note}</p>}
-              </div>
-            )}
           </div>
         </div>
       )}

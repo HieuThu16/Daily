@@ -8,6 +8,7 @@ export interface Interactive3DTreeCanvasProps {
   theme: SeasonTheme
   onOpenBook?: () => void
   onSelectMonth?: (monthNum: number) => void
+  onOpenFlower2D?: (monthNum: number) => void
   compact?: boolean
 }
 
@@ -135,6 +136,7 @@ export function Interactive3DTreeCanvas({
   theme,
   onOpenBook,
   onSelectMonth,
+  onOpenFlower2D,
   compact = false,
 }: Interactive3DTreeCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -168,6 +170,8 @@ export function Interactive3DTreeCanvas({
   onOpenBookRef.current = onOpenBook
   const onSelectMonthRef = useRef(onSelectMonth)
   onSelectMonthRef.current = onSelectMonth
+  const onOpenFlower2DRef = useRef(onOpenFlower2D)
+  onOpenFlower2DRef.current = onOpenFlower2D
   const hoveredMonthRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -263,6 +267,72 @@ export function Interactive3DTreeCanvas({
     ring.position.y = -0.7
     treeGroup.add(ring)
 
+    // ── HÀNG RÀO GỖ HOẠT HÌNH PLAY TOGETHER XINH XẮN ──
+    const fenceGroup = new THREE.Group()
+    const fenceMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.38,
+      metalness: 0.05,
+    })
+    const fencePostGeo = new THREE.BoxGeometry(0.08, 0.42, 0.08)
+    const fenceRailGeo = new THREE.BoxGeometry(0.04, 0.05, 0.85)
+
+    const fenceAngles = [-0.6, -0.2, 0.2, 0.6]
+    for (let i = 0; i < fenceAngles.length; i++) {
+      const fPost = new THREE.Mesh(fencePostGeo, fenceMat)
+      const ang = fenceAngles[i]
+      const dist = 2.05
+      fPost.position.set(Math.sin(ang) * dist, -0.32, Math.cos(ang) * dist)
+      fPost.rotation.y = ang
+      fenceGroup.add(fPost)
+
+      if (i < fenceAngles.length - 1) {
+        const nextAng = fenceAngles[i + 1]
+        const midAng = (ang + nextAng) / 2
+        const topRail = new THREE.Mesh(fenceRailGeo, fenceMat)
+        topRail.position.set(Math.sin(midAng) * dist, -0.22, Math.cos(midAng) * dist)
+        topRail.rotation.y = midAng + Math.PI / 2
+        fenceGroup.add(topRail)
+
+        const bottomRail = new THREE.Mesh(fenceRailGeo, fenceMat)
+        bottomRail.position.set(Math.sin(midAng) * dist, -0.38, Math.cos(midAng) * dist)
+        bottomRail.rotation.y = midAng + Math.PI / 2
+        fenceGroup.add(bottomRail)
+      }
+    }
+    treeGroup.add(fenceGroup)
+
+    // ── ĐÁ DẠO BƯỚC (STEPPING STONES) & ĐÈN LỒNG DÃ NGOẠI ──
+    const stoneMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      roughness: 0.65,
+      metalness: 0.05,
+    })
+    const stoneGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.04, 8)
+    const stonePositions = [
+      [0.6, -0.49, 1.2],
+      [0.95, -0.49, 0.8],
+      [0.4, -0.49, 1.55],
+    ]
+    for (const sp of stonePositions) {
+      const st = new THREE.Mesh(stoneGeo, stoneMat)
+      st.position.set(sp[0], sp[1], sp[2])
+      st.rotation.y = Math.random() * Math.PI
+      treeGroup.add(st)
+    }
+
+    // Đèn lồng dã ngoại ấm áp
+    const lanternGeo = new THREE.CylinderGeometry(0.07, 0.085, 0.15, 8)
+    const lanternMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xfacc15,
+      emissiveIntensity: 1.1,
+      roughness: 0.2,
+    })
+    const lantern = new THREE.Mesh(lanternGeo, lanternMat)
+    lantern.position.set(-1.1, -0.42, 0.9)
+    treeGroup.add(lantern)
+
     // Geometry cánh hoa anh đào có notch đặc trưng
     const petalGeo = createSakuraPetalGeometry(0.16, 0.22)
 
@@ -274,7 +344,7 @@ export function Interactive3DTreeCanvas({
       roughness: 0.4,
       side: THREE.DoubleSide,
     })
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 24; i++) {
       const fPetal = new THREE.Mesh(petalGeo, fallenPetalMat)
       const fAng = Math.random() * Math.PI * 2
       const fDist = 0.35 + Math.random() * 1.55
@@ -288,9 +358,9 @@ export function Interactive3DTreeCanvas({
 
     // ── THÂN CÂY HOẠT HÌNH MỊN MÀNG (Play Together Smooth Stylized Trunk) ──
     const barkMat = new THREE.MeshStandardMaterial({
-      color: 0x7c4a3a, // Màu gỗ ấm áp, mịn màng, thân thiện
-      roughness: 0.55,
-      metalness: 0.04,
+      color: 0x6e3b2b, // Màu gỗ caramel ấm áp, mịn màng, thân thiện
+      roughness: 0.42,
+      metalness: 0.05,
     })
 
     // Thân chính uốn cong nhẹ nhàng, thanh thoát
@@ -304,7 +374,7 @@ export function Interactive3DTreeCanvas({
     const trunk = new THREE.Mesh(trunkGeo, barkMat)
     treeGroup.add(trunk)
 
-    // 3 cành chính vươn ra đỡ lấy các khối mây hoa bồng bềnh
+    // 4 cành chính vươn ra đỡ lấy các khối mây hoa bồng bềnh
     const boughs = [
       {
         curve: [
@@ -330,6 +400,14 @@ export function Interactive3DTreeCanvas({
         ],
         r: 0.12,
       },
+      {
+        curve: [
+          new THREE.Vector3(0.05, 1.85, 0.03),
+          new THREE.Vector3(0.1, 2.45, 0.55),
+          new THREE.Vector3(0.18, 2.85, 0.88),
+        ],
+        r: 0.11,
+      },
     ]
     for (const b of boughs) {
       const bCurve = new THREE.CatmullRomCurve3(b.curve)
@@ -338,8 +416,8 @@ export function Interactive3DTreeCanvas({
       treeGroup.add(bMesh)
     }
 
-    // 3 chân rễ mềm mại bám nhẹ vào mặt cỏ
-    const rootAngles = [0.4, 2.4, 4.5]
+    // 4 chân rễ mềm mại bám nhẹ vào mặt cỏ
+    const rootAngles = [0.4, 2.0, 3.6, 5.2]
     for (const rAng of rootAngles) {
       const rCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, -0.2, 0),
@@ -350,7 +428,7 @@ export function Interactive3DTreeCanvas({
       treeGroup.add(rMesh)
     }
 
-    // ── TÁN HOA BỒNG BỀNH KẸO BÔNG (Play Together Fluffy Cloud Canopy) ──
+    // ── TÁN HOA BỒNG BỀNH KẸO BÔNG (Play Together Fluffy Cloud Canopy — 14 Khối) ──
     const canopyGroup = new THREE.Group()
     treeGroup.add(canopyGroup)
 
@@ -359,40 +437,51 @@ export function Interactive3DTreeCanvas({
       theme.treeCanopy[0] || '#ffaec9', // Hồng sakura chính
       theme.treeCanopy[1] || '#ff9ebb', // Hồng cherry bóng đổ
       theme.treeCanopy[2] || '#ffd4e5', // Hồng phấn highlight
-      '#ffeaf2',                        // Đỉnh mây trắng hồng bồng bềnh
+      '#fff0f5',                        // Đỉnh mây trắng hồng bồng bềnh
+      '#ff8fab',                        // Hồng thắm san hô
     ]
 
     const cloudMaterials = cloudShades.map(
       (c) =>
         new THREE.MeshStandardMaterial({
           color: new THREE.Color(c),
-          roughness: 0.38,
+          roughness: 0.32,
           metalness: 0.02,
           emissive: new THREE.Color(c),
-          emissiveIntensity: 0.26,
+          emissiveIntensity: 0.3,
         })
     )
 
-    // 9 khối búp mây phồng to tròn mịn màng xếp tầng bồng bềnh
+    // 14 khối búp mây phồng to tròn mịn màng xếp tầng bồng bềnh
     const cloudLobes = [
       // Khối vòm trung tâm (Main Center Cloud)
-      { pos: [0, 3.25, 0], r: 1.35, scale: [1.25, 0.95, 1.25], mat: cloudMaterials[0] },
+      { pos: [0, 3.25, 0], r: 1.4, scale: [1.25, 0.95, 1.25], mat: cloudMaterials[0] },
       // Búp mây trước bên trái (Front-Left Lobe)
-      { pos: [-0.95, 3.0, 0.68], r: 1.05, scale: [1.16, 0.88, 1.1], mat: cloudMaterials[1] },
+      { pos: [-0.95, 3.0, 0.68], r: 1.08, scale: [1.16, 0.88, 1.1], mat: cloudMaterials[1] },
       // Búp mây trước bên phải (Front-Right Lobe)
-      { pos: [0.95, 2.95, 0.62], r: 1.1, scale: [1.16, 0.88, 1.1], mat: cloudMaterials[0] },
+      { pos: [0.95, 2.95, 0.62], r: 1.12, scale: [1.16, 0.88, 1.1], mat: cloudMaterials[0] },
       // Búp mây sau bên trái (Back-Left Lobe)
-      { pos: [-0.9, 3.2, -0.7], r: 1.02, scale: [1.1, 0.9, 1.15], mat: cloudMaterials[1] },
+      { pos: [-0.9, 3.2, -0.7], r: 1.05, scale: [1.1, 0.9, 1.15], mat: cloudMaterials[1] },
       // Búp mây sau bên phải (Back-Right Lobe)
-      { pos: [0.85, 3.15, -0.65], r: 1.05, scale: [1.12, 0.9, 1.1], mat: cloudMaterials[2] },
+      { pos: [0.85, 3.15, -0.65], r: 1.08, scale: [1.12, 0.9, 1.1], mat: cloudMaterials[2] },
       // Đỉnh vương miện mây trắng hồng (Top Crown Cloud)
-      { pos: [0, 4.05, 0], r: 0.92, scale: [1.1, 0.86, 1.1], mat: cloudMaterials[3] },
+      { pos: [0, 4.15, 0], r: 0.95, scale: [1.1, 0.86, 1.1], mat: cloudMaterials[3] },
       // Búp mây rủ mềm phía trước (Center-Front Accent Puff)
-      { pos: [0.08, 2.8, 1.18], r: 0.72, scale: [1.08, 0.85, 1.08], mat: cloudMaterials[2] },
+      { pos: [0.08, 2.8, 1.25], r: 0.76, scale: [1.08, 0.85, 1.08], mat: cloudMaterials[2] },
       // Búp mây rủ mềm bên trái
-      { pos: [-1.32, 2.45, 0.2], r: 0.75, scale: [1.1, 0.85, 1.05], mat: cloudMaterials[1] },
+      { pos: [-1.35, 2.45, 0.2], r: 0.78, scale: [1.1, 0.85, 1.05], mat: cloudMaterials[4] },
       // Búp mây rủ mềm bên phải
-      { pos: [1.35, 2.5, -0.2], r: 0.78, scale: [1.1, 0.85, 1.05], mat: cloudMaterials[0] },
+      { pos: [1.38, 2.5, -0.2], r: 0.82, scale: [1.1, 0.85, 1.05], mat: cloudMaterials[0] },
+      // Búp mây phụ rủ thấp trước trái
+      { pos: [-0.55, 2.3, 0.95], r: 0.68, scale: [1.05, 0.85, 1.05], mat: cloudMaterials[1] },
+      // Búp mây phụ rủ thấp trước phải
+      { pos: [0.6, 2.35, 0.92], r: 0.7, scale: [1.05, 0.85, 1.05], mat: cloudMaterials[2] },
+      // Búp mây vòm cao sau
+      { pos: [0, 3.85, -0.65], r: 0.82, scale: [1.1, 0.85, 1.1], mat: cloudMaterials[3] },
+      // Búp mây điểm xuyết đỉnh trái
+      { pos: [-0.65, 3.75, 0.25], r: 0.72, scale: [1.08, 0.88, 1.08], mat: cloudMaterials[0] },
+      // Búp mây điểm xuyết đỉnh phải
+      { pos: [0.65, 3.7, 0.2], r: 0.74, scale: [1.08, 0.88, 1.08], mat: cloudMaterials[2] },
     ]
 
     for (const lobe of cloudLobes) {
@@ -403,33 +492,52 @@ export function Interactive3DTreeCanvas({
       canopyGroup.add(lobeMesh)
     }
 
+    // ── BÚP LÁ NON XANH MƯỚT (Fresh Spring Leaf Accents) ──
+    const leafMat = new THREE.MeshStandardMaterial({
+      color: 0x4ade80,
+      emissive: 0x22c55e,
+      emissiveIntensity: 0.35,
+      roughness: 0.3,
+      side: THREE.DoubleSide,
+    })
+    const leafGeo = new THREE.ConeGeometry(0.12, 0.26, 4)
+    for (let i = 0; i < 22; i++) {
+      const leafMesh = new THREE.Mesh(leafGeo, leafMat)
+      const ang = (i / 22) * Math.PI * 2 + (i % 3) * 0.35
+      const rad = 1.35 + (i % 4) * 0.35
+      const lY = 2.3 + (i % 6) * 0.32
+      leafMesh.position.set(Math.cos(ang) * rad, lY, Math.sin(ang) * rad)
+      leafMesh.rotation.set(Math.random(), Math.random(), Math.random())
+      canopyGroup.add(leafMesh)
+    }
+
     // ── HOA ANH ĐÀO 5 CÁNH SẮC NÉT NỞ TRÊN TÁN CÂY (Play Together Crisp Blossoms) ──
     const flowerPetalMat = new THREE.MeshStandardMaterial({
       color: 0xffffff, // Cánh hoa trắng tinh khôi
       emissive: 0xffe4e6,
-      emissiveIntensity: 0.4,
-      roughness: 0.25,
+      emissiveIntensity: 0.45,
+      roughness: 0.22,
       metalness: 0.04,
       side: THREE.DoubleSide,
     })
     const flowerPistilMat = new THREE.MeshStandardMaterial({
       color: 0xff3b77, // Nhuỵ hồng san hô rực rỡ
       emissive: 0xf43f5e,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 0.7,
       roughness: 0.2,
       metalness: 0.2,
     })
 
-    // 32 bông hoa anh đào đính rải rác trên khắp bề mặt mây hồng
-    const canopyFlowerCount = compact ? 18 : 32
+    // 42 bông hoa anh đào đính rải rác trên khắp bề mặt mây hồng
+    const canopyFlowerCount = compact ? 22 : 42
     for (let i = 0; i < canopyFlowerCount; i++) {
       const ang = (i / canopyFlowerCount) * Math.PI * 2 + (i % 3) * 0.2
-      const radius = 1.35 + (i % 4) * 0.38
-      const fY = 2.45 + (i % 5) * 0.35 + Math.sin(i * 1.5) * 0.35
+      const radius = 1.38 + (i % 5) * 0.35
+      const fY = 2.45 + (i % 6) * 0.34 + Math.sin(i * 1.5) * 0.35
       const fX = Math.cos(ang) * radius
       const fZ = Math.sin(ang) * radius
 
-      const flowerMesh = createSakuraFlowerMesh(petalGeo, flowerPetalMat, flowerPistilMat, 0.85 + (i % 3) * 0.2)
+      const flowerMesh = createSakuraFlowerMesh(petalGeo, flowerPetalMat, flowerPistilMat, 0.88 + (i % 3) * 0.18)
       flowerMesh.position.set(fX, fY, fZ)
 
       // Xoay hoa hướng ra ngoài tâm cây
@@ -692,11 +800,15 @@ export function Interactive3DTreeCanvas({
       if (!hasMoved) {
         const hovM = hoveredMonthRef.current
         if (hovM) {
-          if (onSelectMonthRef.current) {
+          if (onOpenFlower2DRef.current) {
+            onOpenFlower2DRef.current(hovM)
+          } else if (onSelectMonthRef.current) {
             onSelectMonthRef.current(hovM)
           } else if (onOpenBookRef.current) {
             onOpenBookRef.current()
           }
+        } else if (onOpenFlower2DRef.current) {
+          onOpenFlower2DRef.current(new Date().getMonth() + 1)
         } else if (onOpenBookRef.current) {
           onOpenBookRef.current()
         }
