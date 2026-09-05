@@ -1,0 +1,1393 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   QUYỂN SÁCH KỶ NIỆM 3D (REALISTIC 3D MEMORY SCRAPBOOK VIEW)
+   ══════════════════════════════════════════════════════════════════════════ */
+.memory-book-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: radial-gradient(ellipse at center, #2e221b 0%, #17110e 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  animation: bookFadeIn 0.3s ease-out;
+}
+
+@keyframes bookFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── TOP FLOATING BAR ── */
+.memory-book-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: rgba(23, 17, 14, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  z-index: 50;
+  gap: 12px;
+}
+
+.memory-book-top-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.memory-book-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  padding: 7px 13px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.memory-book-back-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(-2px);
+}
+
+/* Nút Đảo chiều thời gian (Hiện tại -> Quá khứ & ngược lại) */
+.memory-book-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fef08a;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.memory-book-sort-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+
+.memory-book-page-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #fef08a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.memory-book-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-book-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e2e8f0;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.memory-book-pill-btn:hover,
+.memory-book-pill-btn.active {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fef08a;
+}
+
+.memory-book-pill-btn.icon-only {
+  padding: 7px;
+  border-radius: 50%;
+}
+
+/* ── MODAL TÌM KIẾM NHANH & BỘ CHỌN THÁNG ── */
+.memory-quick-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 70px 16px 20px;
+  animation: searchFadeIn 0.2s ease-out;
+}
+
+@keyframes searchFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.memory-quick-search-modal {
+  width: 100%;
+  max-width: 540px;
+  max-height: 75vh;
+  background: #1c1512;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: searchSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes searchSlideDown {
+  from { transform: translateY(-16px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.search-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.search-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: #fff;
+}
+
+.search-input-wrap:focus-within {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.search-input-icon {
+  color: #a8a29e;
+  flex-shrink: 0;
+}
+
+.search-input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.search-input-clear {
+  background: transparent;
+  border: none;
+  color: #a8a29e;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+}
+
+.search-modal-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #d6d3d1;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.search-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Bộ lọc tháng */
+.search-months-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.search-months-filter::-webkit-scrollbar {
+  height: 3px;
+}
+
+.month-chip {
+  flex-shrink: 0;
+  padding: 5px 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #d6d3d1;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.month-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.month-chip.active {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #1c1512;
+  font-weight: 800;
+}
+
+/* Danh sách kết quả */
+.search-results-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-results-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.search-results-list::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.3);
+  border-radius: 4px;
+}
+
+.search-empty-state {
+  text-align: center;
+  padding: 30px 16px;
+  color: #a8a29e;
+  font-size: 0.85rem;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.search-result-item:hover {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  transform: translateX(3px);
+}
+
+.search-result-item.current-page {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+}
+
+.result-date-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px dashed rgba(245, 158, 11, 0.45);
+  color: #fef08a;
+  flex-shrink: 0;
+}
+
+.result-date-badge .r-day {
+  font-size: 1.15rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.result-date-badge .r-m {
+  font-size: 0.62rem;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-titles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.result-title-pill {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f5f5f4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.result-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: #a8a29e;
+}
+
+.result-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+/* ── 3D BOOK STAGE ── */
+.memory-book-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  perspective: 2400px;
+  perspective-origin: 50% 50%;
+  padding: 12px 16px 6px;
+}
+
+/* Nút lật trang trái/phải */
+.book-turn-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(245, 158, 11, 0.25);
+  background: rgba(30, 20, 16, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fef08a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 40;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.book-turn-arrow.prev { left: 16px; }
+.book-turn-arrow.next { right: 16px; }
+
+.book-turn-arrow:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.35);
+  border-color: rgba(245, 158, 11, 0.7);
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3);
+}
+
+.book-turn-arrow.disabled {
+  opacity: 0.18;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* KHUNG QUYỂN SỔ 3D (CHASSIS) */
+.book-3d-chassis {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  height: calc(100vh - 145px);
+  max-height: 720px;
+  border-radius: 18px;
+  transform-style: preserve-3d;
+  box-shadow:
+    0 25px 65px rgba(0, 0, 0, 0.75),
+    0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+/* Vỏ bìa cứng dưới đáy sổ (Book Hardcover Edge) */
+.book-hardcover-shadow {
+  position: absolute;
+  inset: -3px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #1c110b 0%, #361f14 50%, #150d09 100%);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+/* Gáy sách nổi 3D (Spine) */
+.book-spine-3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  background: linear-gradient(90deg, #150d09 0%, #4a2d1d 40%, #20130c 85%, #150d09 100%);
+  border-radius: 18px 0 0 18px;
+  z-index: 30;
+  box-shadow:
+    inset 2px 0 4px rgba(255, 255, 255, 0.1),
+    inset -2px 0 4px rgba(0, 0, 0, 0.5),
+    3px 0 10px rgba(0, 0, 0, 0.6);
+}
+
+/* Lớp trang thông thường (Base / Active Layer) */
+.book-page-layer {
+  position: absolute;
+  inset: 0;
+  left: 20px;
+  border-radius: 0 16px 16px 0;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.book-page-layer.base-layer {
+  z-index: 10;
+}
+
+.book-page-layer.active-layer {
+  z-index: 20;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3D PAGE FLIP ENGINE (LẬT TRANG SÁCH 3D ĐÍCH THỰC - QUAY 180° QUANH GÁY)
+   ══════════════════════════════════════════════════════════════════════════ */
+.flipping-leaf {
+  position: absolute;
+  inset: 0;
+  left: 20px;
+  border-radius: 0 16px 16px 0;
+  z-index: 25;
+  transform-style: preserve-3d;
+  transform-origin: 0% 50%; /* Bản lề gáy trái */
+  pointer-events: none;
+}
+
+/* Lật sang trang tiếp theo (Next Page): Lật từ 0° sang -180° */
+.flipping-leaf.leaf-direction-next {
+  animation: pageTurnNext 0.55s cubic-bezier(0.35, 0, 0.25, 1) forwards;
+}
+
+@keyframes pageTurnNext {
+  0% {
+    transform: rotateY(0deg);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: -15px 15px 35px rgba(0, 0, 0, 0.45);
+  }
+  100% {
+    transform: rotateY(-180deg);
+    box-shadow: -5px 5px 20px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Lật về trang trước (Prev Page): Lật từ -180° về 0° */
+.flipping-leaf.leaf-direction-prev {
+  animation: pageTurnPrev 0.55s cubic-bezier(0.35, 0, 0.25, 1) forwards;
+}
+
+@keyframes pageTurnPrev {
+  0% {
+    transform: rotateY(-180deg);
+    box-shadow: -5px 5px 20px rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    box-shadow: -15px 15px 35px rgba(0, 0, 0, 0.45);
+  }
+  100% {
+    transform: rotateY(0deg);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Hai mặt của tờ giấy lật (Front Face & Back Face) */
+.leaf-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 0 16px 16px 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+.leaf-face-front {
+  z-index: 2;
+  transform: rotateY(0deg);
+}
+
+.leaf-face-back {
+  z-index: 1;
+  transform: rotateY(180deg);
+}
+
+/* Lớp bóng uốn cong động (Dynamic Curl Shadow Overlay) */
+.leaf-shadow-curl {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.leaf-shadow-curl.front-shadow {
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.05) 60%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  animation: frontCurlShadow 0.55s ease forwards;
+}
+
+@keyframes frontCurlShadow {
+  0% { opacity: 0; }
+  45% { opacity: 0.85; }
+  100% { opacity: 1; }
+}
+
+.leaf-shadow-curl.back-shadow {
+  background: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.1) 60%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
+  animation: backCurlShadow 0.55s ease forwards;
+}
+
+@keyframes backCurlShadow {
+  0% { opacity: 1; }
+  55% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+/* Mặt sau giấy kraft cổ điển */
+.leaf-back-vintage-sheet {
+  background: #f4ede0;
+  border-left: 2px solid rgba(0, 0, 0, 0.08);
+  display: grid;
+  place-items: center;
+  box-shadow: inset 10px 0 30px rgba(0, 0, 0, 0.1);
+}
+
+.leaf-back-watermark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #b45309;
+  opacity: 0.35;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── NỘI DUNG TỜ GIẤY (Sheet Styles) ── */
+.book-page-sheet {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0 16px 16px 0;
+}
+
+/* TRANG BÌA (Cover) */
+.book-page-sheet.cover-sheet {
+  background: linear-gradient(135deg, #5c2f1f 0%, #3d1c12 50%, #29110a 100%);
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset -5px 0 25px rgba(0,0,0,0.5);
+  cursor: pointer;
+}
+
+.cover-inner-border {
+  margin: 18px;
+  height: calc(100% - 36px);
+  border: 1.5px dashed rgba(245, 158, 11, 0.4);
+  border-radius: 14px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.25);
+}
+
+.cover-badge-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #fef08a;
+  text-transform: uppercase;
+}
+
+.cover-center-content {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.cover-icon-box {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.2);
+  animation: heartPulse 2.5s infinite ease-in-out;
+}
+
+@keyframes heartPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.cover-book-title {
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #fef08a;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+  margin: 0 0 10px;
+}
+
+.cover-author {
+  font-size: 0.88rem;
+  color: #fed7aa;
+  margin-bottom: 12px;
+}
+
+.cover-author strong {
+  color: #ffffff;
+}
+
+.cover-sub-text {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: #d6d3d1;
+  max-width: 320px;
+  margin: 0 auto;
+  font-style: italic;
+}
+
+.cover-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.cover-stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #fef08a;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.cover-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 240px;
+  padding: 11px 20px;
+  border-radius: 24px;
+  border: none;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.4);
+  transition: all 0.2s ease;
+}
+
+.cover-open-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(217, 119, 6, 0.55);
+}
+
+/* ── TRANG SCRAPBOOK NỘI DUNG (Chất liệu giấy ngà ấm áp) ── */
+.book-page-sheet.scrapbook-sheet {
+  background: #fbf8f1;
+  color: #2e2621;
+  box-shadow: inset 18px 0 30px rgba(0,0,0,0.08), -2px 0 10px rgba(0,0,0,0.15);
+}
+
+.scrapbook-binding-edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 18px,
+    rgba(168, 126, 95, 0.25) 18px,
+    rgba(168, 126, 95, 0.25) 20px
+  );
+  border-right: 1px dashed rgba(168, 126, 95, 0.3);
+}
+
+.scrapbook-page-inner {
+  margin-left: 14px;
+  padding: 16px 18px 12px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Tem bưu thiếp ngày tháng vintage */
+.scrapbook-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  border-bottom: 1.5px dashed rgba(168, 126, 95, 0.35);
+  padding-bottom: 10px;
+}
+
+.vintage-date-stamp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px dashed #b91c1c;
+  padding: 4px 10px;
+  border-radius: 8px;
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.04);
+  transform: rotate(-1.5deg);
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.1);
+}
+
+.stamp-day {
+  font-size: 1.55rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.stamp-sub {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.stamp-year {
+  color: #78350f;
+}
+
+.stamp-weekday {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding-left: 6px;
+  border-left: 1px solid rgba(185, 28, 28, 0.35);
+}
+
+.scrapbook-corner-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #854d0e;
+  background: #fef9c3;
+  border: 1px solid #fde047;
+  padding: 3px 9px;
+  border-radius: 12px;
+}
+
+/* Thân trang có thể cuộn */
+.scrapbook-body-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scrapbook-body-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrapbook-body-scroll::-webkit-scrollbar-thumb {
+  background: rgba(168, 126, 95, 0.35);
+  border-radius: 4px;
+}
+
+.scrapbook-entry-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scrapbook-entry-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scrapbook-entry-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #451a03;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.scrapbook-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scrapbook-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #78350f;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.scrapbook-meta-pill.favorite {
+  color: #e11d48;
+  background: rgba(225, 29, 72, 0.1);
+}
+
+.scrapbook-handwritten-note {
+  background: rgba(254, 243, 199, 0.55);
+  border-left: 3px solid #d97706;
+  padding: 8px 12px;
+  border-radius: 0 8px 8px 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: #3f2e24;
+}
+
+.scrapbook-handwritten-note p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── BỐ CỤC ẢNH POLAROID DÁN SCRAPBOOK ── */
+.scrapbook-photos-layout {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.scrapbook-photos-layout.count-1 {
+  grid-template-columns: 1fr;
+  max-width: 320px;
+  margin-inline: auto;
+}
+
+.scrapbook-photos-layout.count-2,
+.scrapbook-photos-layout.count-3,
+.scrapbook-photos-layout.count-4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.polaroid-frame {
+  position: relative;
+  background: #ffffff;
+  padding: 8px 8px 12px;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12), 0 2px 5px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+
+.polaroid-frame:hover {
+  transform: translateY(-6px) rotate(0deg) scale(1.05) !important;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+  z-index: 10;
+}
+
+/* Băng dán Washi tape */
+.washi-tape {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-1deg);
+  width: 55px;
+  height: 16px;
+  background: rgba(245, 158, 11, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-left: 2px dashed rgba(255, 255, 255, 0.4);
+  border-right: 2px dashed rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.washi-tape-1 {
+  background: rgba(236, 72, 153, 0.4);
+  transform: translateX(-50%) rotate(2deg);
+}
+
+.washi-tape-2 {
+  background: rgba(59, 130, 246, 0.4);
+  transform: translateX(-50%) rotate(-2.5deg);
+}
+
+.polaroid-photo-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #1c1917;
+}
+
+.polaroid-photo-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.polaroid-shine-effect {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.polaroid-frame:hover .polaroid-shine-effect {
+  opacity: 1;
+}
+
+.polaroid-video-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.polaroid-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.polaroid-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.polaroid-caption {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #78716c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Đáy trang */
+.scrapbook-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(168, 126, 95, 0.2);
+  font-size: 0.7rem;
+  color: #a8a29e;
+  font-weight: 700;
+}
+
+.scrapbook-hint {
+  font-size: 0.65rem;
+  color: #b45309;
+}
+
+/* ── TRANG BÌA SAU (Back Cover) ── */
+.book-page-sheet.back-cover-sheet {
+  background: linear-gradient(135deg, #29110a 0%, #3d1c12 50%, #5c2f1f 100%);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 30px 20px;
+  color: #fef08a;
+  cursor: pointer;
+}
+
+.back-cover-inner {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.back-cover-seal {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  border: 2px dashed rgba(245, 158, 11, 0.4);
+  display: grid;
+  place-items: center;
+}
+
+.back-cover-inner h2 {
+  font-size: 1.4rem;
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: 0.08em;
+}
+
+.back-cover-inner p {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: #fed7aa;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── THANH TRƯỢT SCRUBBER ĐIỀU HƯỚNG TRANG Ở ĐÁY ── */
+.memory-book-bottom-scrubber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 20px 12px;
+  background: rgba(23, 17, 14, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 30;
+}
+
+.scrubber-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #a8a29e;
+  white-space: nowrap;
+}
+
+.scrubber-slider {
+  flex: 1;
+  max-width: 440px;
+  height: 5px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+}
+
+.scrubber-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.scrubber-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+/* ── MODAL PHÓNG TO ẢNH & XEM GALLERY (Pop-up Lightbox) ── */
+.scrapbook-photo-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: photoModalFade 0.22s ease-out;
+}
+
+@keyframes photoModalFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scrapbook-photo-popup {
+  position: relative;
+  width: 100%;
+  max-width: 92vw;
+  max-height: 92vh;
+  background: #181412;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  animation: photoPopupZoom 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes photoPopupZoom {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.popup-top-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popup-counter {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fef08a;
+}
+
+.popup-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popup-btn-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.popup-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.08);
+}
+
+.popup-btn-icon.close-btn:hover {
+  background: rgba(225, 29, 72, 0.85);
+  border-color: rgba(225, 29, 72, 0.85);
+}
+
+.scrapbook-popup-media {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 68vh;
+  background: #0a0807;
+  overflow: hidden;
+}
+
+.popup-media-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.popup-media-container img,
+.popup-media-container video {
+  max-width: 100%;
+  max-height: 68vh;
+  object-fit: contain;
+  display: block;
+}
+
+.popup-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.18s ease;
+}
+
+.popup-nav-btn.prev { left: 12px; }
+.popup-nav-btn.next { right: 12px; }
+
+.popup-nav-btn:hover {
+  background: rgba(245, 158, 11, 0.4);
+  border-color: rgba(245, 158, 11, 0.7);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.scrapbook-popup-info {
+  padding: 14px 18px;
+  background: #181412;
+  color: #f5f5f4;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scrapbook-popup-info h4 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fef08a;
+}
+
+.scrapbook-popup-date {
+  font-size: 0.74rem;
+  color: #a8a29e;
+  margin-bottom: 6px;
+}
+
+.scrapbook-popup-info p {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: #d6d3d1;
+}
+
+/* ── RESPONSIVE CHO MÀN HÌNH NHỎ / MOBILE ── */
+@media (max-width: 540px) {
+  .memory-book-topbar {
+    padding: 8px 12px;
+  }
+  .topbar-btn-text {
+    display: none;
+  }
+  .memory-book-sort-btn {
+    padding: 5px 10px;
+    font-size: 0.72rem;
+  }
+  .book-3d-chassis {
+    max-height: calc(100vh - 135px);
+    border-radius: 14px;
+  }
+  .book-spine-3d {
+    width: 14px;
+    border-radius: 14px 0 0 14px;
+  }
+  .book-page-layer,
+  .flipping-leaf {
+    left: 12px;
+    border-radius: 0 14px 14px 0;
+  }
+  .book-page-sheet {
+    border-radius: 0 14px 14px 0;
+  }
+  .scrapbook-page-inner {
+    padding: 12px 14px 10px;
+    margin-left: 6px;
+  }
+  .book-turn-arrow {
+    width: 38px;
+    height: 38px;
+  }
+  .book-turn-arrow.prev { left: 8px; }
+  .book-turn-arrow.next { right: 8px; }
+  .cover-inner-border {
+    margin: 10px;
+    padding: 16px 12px;
+  }
+  .cover-book-title {
+    font-size: 1.35rem;
+  }
+  .memory-quick-search-backdrop {
+    padding: 60px 10px 10px;
+  }
+}
