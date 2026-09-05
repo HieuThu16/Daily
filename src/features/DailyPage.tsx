@@ -2035,35 +2035,36 @@ export function DailyPage() {
                   </div>
                 </div>
 
-                {/* 3. Tiện ích & Đính kèm */}
+                {/* 3. Tiện ích & Đính kèm (4 nút nhỏ gọn, cân đối) */}
                 <div style={{ width: '100%', minWidth: 0 }}>
                   <div className="daily-extra-row-title">
-                    <Sparkles size={12} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
+                    <Sparkles size={11} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7, width: '100%', boxSizing: 'border-box' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, width: '100%', boxSizing: 'border-box' }}>
                     {/* Nút Hành động */}
                     <button
                       type="button"
                       onClick={() => setShowActionModal(true)}
                       style={{
-                        padding: '8px 6px',
-                        borderRadius: 10,
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        border: '1px solid rgba(245, 158, 11, 0.35)',
-                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.18))',
+                        padding: '4px 8px',
+                        minHeight: 30,
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.15))',
                         color: 'var(--amber)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 5,
+                        gap: 4,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
                       }}
                     >
-                      <Zap size={13} style={{ flexShrink: 0 }} />
+                      <Zap size={12} style={{ flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Hành động</span>
                     </button>
 
@@ -2072,24 +2073,25 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowVideoModal(true)}
                       style={{
-                        padding: '8px 6px',
-                        borderRadius: 10,
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        border: '1px solid rgba(239, 68, 68, 0.35)',
-                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 63, 94, 0.15))',
+                        padding: '4px 8px',
+                        minHeight: 30,
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(244, 63, 94, 0.12))',
                         color: '#ef4444',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 5,
+                        gap: 4,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
                       }}
                     >
-                      <Youtube size={13} style={{ flexShrink: 0 }} />
+                      <Youtube size={12} style={{ flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube</span>
                     </button>
 
@@ -2099,20 +2101,21 @@ export function DailyPage() {
                       onClick={() => formFileInputRef.current?.click()}
                       disabled={mediaUploading || !supabase}
                       style={{
-                        padding: '8px 6px',
-                        borderRadius: 10,
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
+                        padding: '4px 8px',
+                        minHeight: 30,
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.3)',
                         background: attachedMedias.length > 0
-                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25))'
-                          : 'linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(99, 102, 241, 0.15))',
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.2))'
+                          : 'linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(99, 102, 241, 0.12))',
                         color: attachedMedias.length > 0 ? '#10b981' : '#06b6d4',
                         cursor: mediaUploading ? 'wait' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 5,
+                        gap: 4,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
@@ -2120,57 +2123,60 @@ export function DailyPage() {
                       title="Tải ảnh hoặc video đính kèm"
                     >
                       {mediaUploading ? (
-                        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
                       ) : (
-                        <ImagePlus size={13} style={{ flexShrink: 0 }} />
+                        <ImagePlus size={12} style={{ flexShrink: 0 }} />
                       )}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}
                       </span>
                     </button>
-                    <input
-                      ref={formFileInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        if (e.target.files) void handleUploadFormMedia(e.target.files)
-                        e.target.value = ''
-                      }}
-                    />
 
                     {/* Nút Gắn Người Thân */}
                     <button
                       type="button"
                       onClick={() => setShowPeopleModal(true)}
                       style={{
-                        padding: '8px 6px',
-                        borderRadius: 10,
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
+                        padding: '4px 8px',
+                        minHeight: 30,
+                        borderRadius: 8,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.3)',
                         background: selectedPersonIds.length > 0
-                          ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(168, 85, 247, 0.3))'
-                          : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.15))',
+                          ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.22))'
+                          : 'linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(168, 85, 247, 0.12))',
                         color: '#8b5cf6',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 5,
+                        gap: 4,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
                       }}
                       title="Gắn người thân"
                     >
-                      <Users size={13} style={{ flexShrink: 0 }} />
+                      <Users size={12} style={{ flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Gắn người'}
                       </span>
                     </button>
                   </div>
+
+                  {/* Input upload file được đặt ngoài grid để không ảnh hưởng layout */}
+                  <input
+                    ref={formFileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files) void handleUploadFormMedia(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
                 </div>
 
                 {/* 4. Đánh dấu thẻ 3D */}
