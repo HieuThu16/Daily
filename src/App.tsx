@@ -76,6 +76,7 @@ const YoutubeShortsPage = lazy(() => import('./features/youtube/YoutubeShortsPag
 const ShareTarget = lazy(() => import('./features/ShareTarget').then((m) => ({ default: m.ShareTarget })))
 const CollectionPage = lazy(() => import('./features/collection/CollectionPage').then((m) => ({ default: m.CollectionPage })))
 const GoalsPage = lazy(() => import('./features/goals/GoalsPage').then((m) => ({ default: m.GoalsPage })))
+const MemoriesPage = lazy(() => import('./features/daily/MemoriesPage').then((m) => ({ default: m.MemoriesPage })))
 
 
 const BASE_NAVIGATION: { id: Tab; label: string; icon: typeof Home; colorClass: string }[] = [
@@ -643,6 +644,10 @@ function Protected({ user }: { user: unknown }) {
                       <Route path="/language" element={<LanguagePage />} />
                       <Route path="/knowledge" element={<KnowledgePage />} />
                       <Route path="/people" element={<PeoplePage />} />
+                      <Route path="/memories" element={<MemoriesPage />} />
+                      <Route path="/memories/:personId" element={<MemoriesPage />} />
+                      <Route path="/ky-niem" element={<MemoriesPage />} />
+                      <Route path="/ky-niem/:personId" element={<MemoriesPage />} />
                       <Route path="/watch" element={<WatchTogetherPage />} />
                       <Route path="/library" element={<Navigate to="/books" replace />} />
                       <Route path="/nutrition" element={<NutritionPage />} />

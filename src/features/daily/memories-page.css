@@ -1,0 +1,249 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   TRANG KỶ NIỆM RIÊNG BIỆT (DEDICATED MEMORIES ROUTER PAGE)
+   ══════════════════════════════════════════════════════════════════════════ */
+.memories-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg-main, #f8fafc);
+  color: var(--text-main, #1e293b);
+  width: 100%;
+}
+
+/* ── THANH ĐIỀU HƯỚNG TOP BAR VỚI NÚT QUAY LẠI (STICKY & FROSTED GLASS) ── */
+.memories-page-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  gap: 12px;
+}
+
+[data-theme='dark'] .memories-page-topbar {
+  background: rgba(15, 23, 42, 0.92);
+  border-bottom-color: rgba(51, 65, 85, 0.7);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.memories-topbar-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Nút Back quay về nổi bật, dễ bấm */
+.memories-page-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  background: var(--card-bg, #ffffff);
+  border: 1.5px solid var(--border, #cbd5e1);
+  color: var(--text-main, #1e293b);
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.memories-page-back-btn:hover {
+  background: var(--primary-light, #fef3c7);
+  border-color: var(--primary, #f59e0b);
+  color: var(--primary-dark, #b45309);
+  transform: translateX(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.18);
+}
+
+.memories-page-back-btn:active {
+  transform: scale(0.96);
+}
+
+.memories-topbar-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.memories-title-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.memories-page-heading {
+  font-size: 1.05rem;
+  font-weight: 900;
+  margin: 0;
+  color: var(--text-main, #0f172a);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memories-page-subheading {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.memories-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Nút chuyển đổi nhanh giữa các người thân */
+.memories-person-switcher-wrap {
+  position: relative;
+}
+
+.memories-switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 18px;
+  background: rgba(241, 245, 249, 0.85);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-main, #334155);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+[data-theme='dark'] .memories-switcher-btn {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(71, 85, 105, 0.6);
+  color: #f1f5f9;
+}
+
+.memories-switcher-btn:hover {
+  background: var(--card-bg, #ffffff);
+  border-color: var(--primary, #f59e0b);
+}
+
+.switcher-name {
+  max-width: 85px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dropdown chọn người thân */
+.memories-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.memories-person-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 220px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 101;
+  animation: dropdownPop 0.18s ease-out;
+}
+
+@keyframes dropdownPop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dropdown-title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted, #94a3b8);
+  padding: 4px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dropdown-person-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main, #334155);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.14s ease;
+}
+
+.dropdown-person-item:hover {
+  background: var(--bg-hover, #f1f5f9);
+}
+
+.dropdown-person-item.active {
+  background: var(--primary-light, #fef3c7);
+  color: var(--primary-dark, #b45309);
+}
+
+.dp-badge {
+  font-size: 0.68rem;
+  color: #e11d48;
+  font-weight: 800;
+}
+
+/* ── THÂN TRANG KỶ NIỆM ── */
+.memories-page-body {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 16px 40px;
+}
+
+@media (max-width: 640px) {
+  .memories-page-topbar {
+    padding: 6px 12px;
+  }
+  .memories-page-heading {
+    font-size: 0.95rem;
+  }
+  .memories-page-back-btn {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+  .back-btn-label {
+    display: none;
+  }
+  .memories-page-body {
+    padding: 8px 8px 30px;
+  }
+}

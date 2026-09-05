@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { ArrowLeft, CalendarPlus, Check, Mail, Pencil, Trash2, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, CalendarPlus, Check, ChevronRight, Heart, Mail, Pencil, Sparkles, Trash2, Users } from 'lucide-react'
 import { ageOnNext, isLunar, lunarLabel, nextOccurrence } from '../../lib/occasions'
 import type { Person, PersonGroup, PersonOccasion } from '../../types'
 import { Modal } from '../shared'
 import { avatarStyle, initials } from './avatar'
 import { GROUPS, groupLabel } from './groups'
-import { SharedEventsView } from '../daily/SharedEventsView'
 import { useHideHeader } from '../HeaderAction'
 import { OccasionsSection } from './OccasionsSection'
 import { PersonInterests } from './PersonInterests'
@@ -43,6 +43,7 @@ export function PersonDetail({
 }: Props) {
   // Ẩn Header chung của App khi xem chi tiết người thân, nhấn quay lại sẽ hiện lại
   useHideHeader(true)
+  const navigate = useNavigate()
 
   const isLove = Boolean(
     person.is_partner ||
@@ -176,6 +177,55 @@ export function PersonDetail({
         </button>
       </div>
 
+      {/* Nút vào trang kỷ niệm riêng (1 Router mới, 1 Page mới có nút back về) */}
+      <div style={{ marginBottom: 14 }}>
+        <button
+          type="button"
+          onClick={() => navigate(`/memories/${person.id}`)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 16px',
+            borderRadius: 16,
+            background: isLove
+              ? 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 60%, #fecdd3 100%)'
+              : 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+            border: isLove ? '1.5px solid #fda4af' : '1.5px solid #fcd34d',
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+            textAlign: 'left',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: isLove ? '#f43f5e' : '#f59e0b',
+                color: '#fff',
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0,
+              }}
+            >
+              {isLove ? <Heart size={18} fill="#fff" /> : <Sparkles size={18} />}
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.9rem', color: isLove ? '#9f1239' : '#78350f' }}>
+                {isLove ? '❤️ Mở Trang Kỷ Niệm Chung →' : `🌸 Mở Trang Kỷ Niệm · ${person.name} →`}
+              </div>
+              <div style={{ fontSize: '0.73rem', color: isLove ? '#be123c' : '#92400e', opacity: 0.85 }}>
+                1 Trang riêng biệt toàn màn hình · Có nút quay lại
+              </div>
+            </div>
+          </div>
+          <ChevronRight size={18} style={{ color: isLove ? '#e11d48' : '#b45309', flexShrink: 0 }} />
+        </button>
+      </div>
+
       <div className="segmented" role="tablist" aria-label="Phần thông tin">
         {availableTabs.map(({ key, label }) => (
           <button
@@ -183,7 +233,13 @@ export function PersonDetail({
             role="tab"
             aria-selected={tab === key}
             className={tab === key ? 'active' : ''}
-            onClick={() => setTab(key)}
+            onClick={() => {
+              if (key === 'events') {
+                navigate(`/memories/${person.id}`)
+              } else {
+                setTab(key)
+              }
+            }}
           >
             {label}
           </button>
@@ -193,7 +249,6 @@ export function PersonDetail({
       {tab === 'location' && (
         <CoupleLocationTab partnerPerson={person} />
       )}
-
 
       {tab === 'info' && (
         <>
@@ -232,13 +287,16 @@ export function PersonDetail({
       {tab === 'journal' && <PersonJournal personId={person.id} personName={person.name} />}
 
       {tab === 'events' && (
-        <SharedEventsView
-          personId={person.id}
-          personName={person.name}
-          isPartner={isLove}
-          roomCode={isLove ? (person.room_code || 'HIEU-Y-2026') : null}
-          onSendInvite={isLove && onSendInvite ? () => setInviteModal(true) : undefined}
-        />
+        <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => navigate(`/memories/${person.id}`)}
+            style={{ padding: '10px 22px', borderRadius: 20, fontSize: '0.88rem', fontWeight: 800 }}
+          >
+            {isLove ? '❤️ Chuyển sang Trang Kỷ Niệm Chung →' : `🌸 Chuyển sang Trang Kỷ Niệm ${person.name} →`}
+          </button>
+        </div>
       )}
 
 
