@@ -2041,16 +2041,16 @@ export function DailyPage() {
                   <div className="daily-extra-row-title">
                     <Sparkles size={11} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, width: '100%', boxSizing: 'border-box' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5, width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
                     {/* Nút Hành động */}
                     <button
                       type="button"
                       onClick={() => setShowActionModal(true)}
                       style={{
-                        padding: '4px 8px',
-                        minHeight: 30,
-                        borderRadius: 8,
-                        fontSize: '0.72rem',
+                        padding: '3px 6px',
+                        height: 28,
+                        borderRadius: 7,
+                        fontSize: '0.68rem',
                         fontWeight: 600,
                         border: '1px solid rgba(245, 158, 11, 0.3)',
                         background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.15))',
@@ -2059,13 +2059,14 @@ export function DailyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 4,
+                        gap: 3,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
+                        overflow: 'hidden',
                       }}
                     >
-                      <Zap size={12} style={{ flexShrink: 0 }} />
+                      <Zap size={11} style={{ flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Hành động</span>
                     </button>
 
@@ -2074,10 +2075,10 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowVideoModal(true)}
                       style={{
-                        padding: '4px 8px',
-                        minHeight: 30,
-                        borderRadius: 8,
-                        fontSize: '0.72rem',
+                        padding: '3px 6px',
+                        height: 28,
+                        borderRadius: 7,
+                        fontSize: '0.68rem',
                         fontWeight: 600,
                         border: '1px solid rgba(239, 68, 68, 0.3)',
                         background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(244, 63, 94, 0.12))',
@@ -2086,13 +2087,14 @@ export function DailyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 4,
+                        gap: 3,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
+                        overflow: 'hidden',
                       }}
                     >
-                      <Youtube size={12} style={{ flexShrink: 0 }} />
+                      <Youtube size={11} style={{ flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube</span>
                     </button>
 
@@ -2102,10 +2104,10 @@ export function DailyPage() {
                       onClick={() => formFileInputRef.current?.click()}
                       disabled={mediaUploading || !supabase}
                       style={{
-                        padding: '4px 8px',
-                        minHeight: 30,
-                        borderRadius: 8,
-                        fontSize: '0.72rem',
+                        padding: '3px 6px',
+                        height: 28,
+                        borderRadius: 7,
+                        fontSize: '0.68rem',
                         fontWeight: 600,
                         border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.3)',
                         background: attachedMedias.length > 0
@@ -2116,17 +2118,18 @@ export function DailyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 4,
+                        gap: 3,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
+                        overflow: 'hidden',
                       }}
                       title="Tải ảnh hoặc video đính kèm"
                     >
                       {mediaUploading ? (
-                        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                        <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
                       ) : (
-                        <ImagePlus size={12} style={{ flexShrink: 0 }} />
+                        <ImagePlus size={11} style={{ flexShrink: 0 }} />
                       )}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}
@@ -2138,10 +2141,10 @@ export function DailyPage() {
                       type="button"
                       onClick={() => setShowPeopleModal(true)}
                       style={{
-                        padding: '4px 8px',
-                        minHeight: 30,
-                        borderRadius: 8,
-                        fontSize: '0.72rem',
+                        padding: '3px 6px',
+                        height: 28,
+                        borderRadius: 7,
+                        fontSize: '0.68rem',
                         fontWeight: 600,
                         border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.3)',
                         background: selectedPersonIds.length > 0
@@ -2152,10 +2155,11 @@ export function DailyPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 4,
+                        gap: 3,
                         width: '100%',
                         minWidth: 0,
                         boxSizing: 'border-box',
+                        overflow: 'hidden',
                       }}
                       title="Gắn người thân"
                     >
