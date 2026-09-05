@@ -5,6 +5,7 @@ import {
   BookOpen, Bookmark
 } from 'lucide-react'
 import { isEntryFirstTime, isEntrySpecial, type Entry } from '../../types'
+import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
 
 export function formatCardDate(dateStr: string): string {
   try {
@@ -103,17 +104,17 @@ function BookCoverArt({
         {isVideo ? (
           <video
             src={entry.image_url}
+            poster={getVideoPosterUrl(entry.image_url)}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             muted
             loop
             playsInline
           />
         ) : (
-          <img
+          <SafeMediaImage
             src={entry.image_url}
             alt=""
             loading="lazy"
-            decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         )}

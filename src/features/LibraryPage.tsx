@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Award, BarChart3, BookMarked, BookOpen, CheckCircle2, ChevronDown, Clapperboard, Clock, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
+import { Award, BarChart3, BookMarked, BookOpen, CheckCircle2, ChevronDown, Clapperboard, Clock, Disc3, Eye, FileText, FileUp, Film, FolderCog, Heart, History, ImagePlus, Layers, ListMusic, MoreVertical, Music, Pencil, RefreshCw, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Tv, Volume2, Youtube } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDate } from '../lib/date'
 import { loadImportedMediaItemIds, saveReadingLogEntry } from '../lib/book/repository'
@@ -34,6 +34,8 @@ import { NobelLaureatesView } from './library/NobelLaureatesView'
 import { useLastReadBook, getBookReadingSessionLogs } from '../lib/bookReadingLog'
 import { SkeletonGrid } from './Skeleton'
 import { DilibCrawlerModal } from './audiobook/DilibCrawlerModal'
+import { MusicAlbumView } from './library/MusicAlbumView'
+import { groupSongsByArtist, normalizeMusicArtist, normalizeMusicGenre } from '../lib/musicNormalization'
 
 const categories = [
   { id: 'MUSIC', label: 'Nhạc', icon: Music, colorClass: 'icon-box-cyan', color: 'var(--cyan)', bg: 'var(--cyan-bg)', labels: ['Sẽ nghe', 'Đang nghe', 'Đã nghe'] },
@@ -86,7 +88,7 @@ const STATUS_TONE: Record<Media['status'], string> = {
 const COVER_BUCKET = 'media-covers'
 
 export type Kind = (typeof categories)[number]['id']
-type SubView = 'overview' | 'favorites' | 'queue' | 'review' | 'stats' | 'adaptations' | 'nobel'
+type SubView = 'overview' | 'favorites' | 'albums' | 'queue' | 'review' | 'stats' | 'adaptations' | 'nobel'
 type StatusFilter = 'ALL' | 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'DRAFT'
 
 function getCurrentTimeString() {
@@ -168,7 +170,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   
   useEffect(() => {
     setSelectedType(defaultType)
-    if (defaultType === 'BOOK' && (subView === 'queue' || subView === 'review')) {
+    if (defaultType === 'BOOK' && (subView === 'queue' || subView === 'review' || subView === 'albums')) {
       setSubView('overview')
     }
   }, [defaultType])
@@ -344,26 +346,30 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
   const artists = useMemo(() => {
     const set = new Set<string>()
     musicArtistsQuery.items.forEach((a) => {
-      if (a.name && a.name.trim()) set.add(a.name.trim())
+      if (a.name && a.name.trim()) set.add(normalizeMusicArtist(a.name))
     })
     items.filter((i) => i.type === 'MUSIC').forEach((i) => {
       const val = getItemExtraMeta(i).value || i.artist
-      if (val && val.trim()) set.add(val.trim())
+      if (val && val.trim()) set.add(normalizeMusicArtist(val))
     })
-    return Array.from(set).filter(Boolean).sort()
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, 'vi'))
   }, [items, musicArtistsQuery.items])
 
   const musicGenres = useMemo(() => {
     const set = new Set<string>(DEFAULT_MUSIC_GENRES)
     musicGenresQuery.items.forEach((g) => {
-      if (g.name && g.name.trim()) set.add(g.name.trim())
+      if (g.name && g.name.trim()) set.add(normalizeMusicGenre(g.name))
     })
     items.filter((i) => i.type === 'MUSIC').forEach((i) => {
-      if (i.music_genre && i.music_genre.trim()) set.add(i.music_genre.trim())
-      if (i.genre && i.genre.trim()) set.add(i.genre.trim())
+      if (i.music_genre && i.music_genre.trim()) set.add(normalizeMusicGenre(i.music_genre))
+      if (i.genre && i.genre.trim()) set.add(normalizeMusicGenre(i.genre))
     })
-    return Array.from(set).filter(Boolean).sort()
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, 'vi'))
   }, [items, musicGenresQuery.items, DEFAULT_MUSIC_GENRES])
+
+  const musicAlbumsCount = useMemo(() => {
+    return groupSongsByArtist(items.filter((i) => i.type === 'MUSIC')).length
+  }, [items])
 
   const filteredArtists = useMemo(() => {
     const q = extraVal.trim().toLowerCase()
@@ -618,10 +624,10 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
       log_date: isDone ? (logDate || localDate()) : null,
       log_time: isDone ? effectiveLogTime : null,
       channel: kind === 'YOUTUBE' ? extraVal.trim() || null : null,
-      artist: kind === 'MUSIC' ? extraVal.trim() || null : null,
+      artist: kind === 'MUSIC' ? (normalizeMusicArtist(extraVal) || null) : null,
       author: (kind === 'BOOK' || kind === 'MANGA') ? extraVal.trim() || null : null,
-      genre: kind === 'MOVIE' ? extraVal.trim() || null : (kind === 'BOOK' ? bookGenreVal.trim() || null : null),
-      music_genre: kind === 'MUSIC' ? musicGenreVal.trim() || null : null,
+      genre: kind === 'MOVIE' ? extraVal.trim() || null : (kind === 'BOOK' ? bookGenreVal.trim() || null : (kind === 'MUSIC' ? (normalizeMusicGenre(musicGenreVal) || null) : null)),
+      music_genre: kind === 'MUSIC' ? (normalizeMusicGenre(musicGenreVal) || null) : null,
       youtube_url: youtubeUrlVal.trim() || null,
       audio_url: audioUrlVal.trim() || null,
       // Chuẩn hoá ngay lúc lưu: link copy từ bảng điều khiển Supabase thiếu đoạn
@@ -1394,6 +1400,18 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
           <strong>{favoriteItems.length}</strong>
           <small>{unitLabel}</small>
         </button>
+        {selectedType === 'MUSIC' && (
+          <button
+            role="tab"
+            aria-selected={subView === 'albums'}
+            className={subView === 'albums' ? 'active' : ''}
+            onClick={() => setSubView('albums')}
+          >
+            <span className="library-stat-head"><Disc3 size={13} style={{ color: 'var(--primary)' }} /> Album</span>
+            <strong>{musicAlbumsCount}</strong>
+            <small>theo ca sĩ / thể loại</small>
+          </button>
+        )}
         {selectedType !== 'BOOK' && (
           <button
             role="tab"
@@ -1406,7 +1424,7 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             <small>có MP3</small>
           </button>
         )}
-        {selectedType !== 'BOOK' && (
+        {selectedType !== 'BOOK' && selectedType !== 'MUSIC' && (
           <button
             role="tab"
             aria-selected={subView === 'review'}
@@ -1917,6 +1935,15 @@ export function LibraryPage({ defaultType = 'ALL', hideCategoryBar }: { defaultT
             </Empty>
           )}
         </div>
+      )}
+
+      {/* VIEW 2b: ALBUM NHẠC (Ca sĩ & Dòng nhạc - chỉ bài có MP3) */}
+      {subView === 'albums' && (
+        <MusicAlbumView
+          items={items.filter((i) => i.type === 'MUSIC')}
+          onSelectAudioItem={(id) => setSelectedAudioItemId(id)}
+          onToggleFavorite={(id, isFav) => patchStatusOrFavorite(id, { is_favorite: isFav })}
+        />
       )}
 
       {/* VIEW 3: NGHE LIÊN TỤC — chọn nhiều bài có MP3 rồi nghe lần lượt. */}

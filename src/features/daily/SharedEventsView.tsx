@@ -3,7 +3,7 @@ import {
   ArrowLeft, CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
   Filter, Heart, ImagePlus, LayoutGrid, List, Mail, MapPin, Maximize2,
   MoreVertical, Pencil, Plus, RotateCcw, Trash2,
-  UserPlus, Video, Loader2, X, BookOpen
+  UserPlus, Video, Loader2, X, BookOpen, Image as ImageIcon
 } from 'lucide-react'
 import { MemoryBookView } from './MemoryBookView'
 import { supabase } from '../../lib/supabase'
@@ -25,6 +25,100 @@ export function isMediaVideo(url?: string | null): boolean {
   if (url.startsWith('data:video/')) return true
   const clean = url.split('?')[0].toLowerCase()
   return /\.(mp4|webm|mov|m4v|mkv|avi|3gp|ogv)$/.test(clean)
+}
+
+/** Tự động trích xuất poster / thumbnail JPG từ link video Cloudinary hoặc video URL */
+export function getVideoPosterUrl(url?: string | null): string | undefined {
+  if (!url) return undefined
+  if (url.includes('cloudinary.com')) {
+    return url.replace(/\.(mp4|webm|mov|m4v|mkv|avi|3gp|ogv)(\?.*)?$/i, '.jpg$2')
+  }
+  return undefined
+}
+
+/**
+ * Component hiển thị ảnh an toàn, tự động thử lại khi gặp sự cố cache Service Worker,
+ * có giao diện fallback tao nhã kèm nút bấm tải lại thay vì để trình duyệt hiện icon vỡ ảnh.
+ */
+export function SafeMediaImage({
+  src,
+  alt = '',
+  className,
+  loading = 'lazy',
+  style,
+  onClick,
+}: {
+  src: string
+  alt?: string
+  className?: string
+  loading?: 'lazy' | 'eager'
+  style?: React.CSSProperties
+  onClick?: (e: React.MouseEvent<HTMLImageElement>) => void
+}) {
+  const [imgSrc, setImgSrc] = useState(src)
+  const [retryCount, setRetryCount] = useState(0)
+  const [isFailed, setIsFailed] = useState(false)
+
+  useEffect(() => {
+    setImgSrc(src)
+    setRetryCount(0)
+    setIsFailed(false)
+  }, [src])
+
+  if (isFailed) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#151922',
+          color: '#94a3b8',
+          gap: 4,
+          padding: 6,
+          textAlign: 'center',
+          cursor: 'pointer',
+          boxSizing: 'border-box',
+          ...style,
+        }}
+        onClick={(e) => {
+          e.stopPropagation()
+          setIsFailed(false)
+          setRetryCount(0)
+          const sep = src.includes('?') ? '&' : '?'
+          setImgSrc(`${src}${sep}_retry=${Date.now()}`)
+        }}
+        title="Ảnh chưa hiển thị, bấm để tải lại ngay"
+      >
+        <ImageIcon size={18} style={{ color: '#38bdf8', opacity: 0.8 }} />
+        <span style={{ fontSize: '0.62rem', color: '#cbd5e1', fontWeight: 600 }}>Tải lại</span>
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      className={className}
+      loading={loading}
+      style={style}
+      onClick={onClick}
+      onError={() => {
+        if (retryCount < 2) {
+          setRetryCount((prev) => prev + 1)
+          const sep = src.includes('?') ? '&' : '?'
+          setImgSrc(`${src}${sep}_t=${Date.now()}`)
+        } else {
+          setIsFailed(true)
+        }
+      }}
+    />
+  )
 }
 
 /** Nhận biết File có phải là video hay không */
@@ -1342,13 +1436,19 @@ export function SharedEventsView({
           <div className="memory-thumb">
             {isMediaVideo(allImages[0]) ? (
               <>
-                <video src={allImages[0]} preload="metadata" muted playsInline />
+                <video
+                  src={allImages[0]}
+                  poster={getVideoPosterUrl(allImages[0])}
+                  preload="metadata"
+                  muted
+                  playsInline
+                />
                 <div className="memory-thumb-badge">
                   <Video size={10} />
                 </div>
               </>
             ) : (
-              <img src={allImages[0]} alt="" />
+              <SafeMediaImage src={allImages[0]} alt="" />
             )}
             {allImages.length > 1 && (
               <span>
@@ -1779,13 +1879,19 @@ export function SharedEventsView({
                           >
                             {isVid ? (
                               <>
-                                <video src={mediaUrl} preload="metadata" muted playsInline />
+                                <video
+                                  src={mediaUrl}
+                                  poster={getVideoPosterUrl(mediaUrl)}
+                                  preload="metadata"
+                                  muted
+                                  playsInline
+                                />
                                 <span className="mem-gallery-grid-vid-badge">
                                   <Video size={11} />
                                 </span>
                               </>
                             ) : (
-                              <img src={mediaUrl} alt="" loading="lazy" />
+                              <SafeMediaImage src={mediaUrl} alt="" loading="lazy" />
                             )}
                             <button
                               type="button"
@@ -1944,13 +2050,14 @@ export function SharedEventsView({
                                 {isVid ? (
                                   <video
                                     src={mediaUrl}
+                                    poster={getVideoPosterUrl(mediaUrl)}
                                     controls
                                     playsInline
                                     preload="metadata"
                                     onClick={(e) => e.stopPropagation()}
                                   />
                                 ) : (
-                                  <img src={mediaUrl} alt={`${viewingEvent.title} — ${idx + 1}`} loading="lazy" />
+                                  <SafeMediaImage src={mediaUrl} alt={`${viewingEvent.title} — ${idx + 1}`} loading="lazy" />
                                 )}
                               </div>
                             )
@@ -2304,13 +2411,14 @@ export function SharedEventsView({
                     {isVid ? (
                       <video
                         src={mediaUrl}
+                        poster={getVideoPosterUrl(mediaUrl)}
                         controls
                         autoPlay={idx === fullscreenIdx}
                         playsInline
                         preload="metadata"
                       />
                     ) : (
-                      <img src={mediaUrl} alt={`${curEvent.title} — ảnh ${idx + 1}`} />
+                      <SafeMediaImage src={mediaUrl} alt={`${curEvent.title} — ảnh ${idx + 1}`} />
                     )}
                   </div>
                 )
@@ -2338,13 +2446,19 @@ export function SharedEventsView({
                       >
                         {isVid ? (
                           <>
-                            <video src={mediaUrl} preload="metadata" muted playsInline />
+                            <video
+                              src={mediaUrl}
+                              poster={getVideoPosterUrl(mediaUrl)}
+                              preload="metadata"
+                              muted
+                              playsInline
+                            />
                             <span className="mem-gallery-thumb-badge">
                               <Video size={8} />
                             </span>
                           </>
                         ) : (
-                          <img src={mediaUrl} alt="" loading="lazy" />
+                          <SafeMediaImage src={mediaUrl} alt="" loading="lazy" />
                         )}
                       </div>
                     )

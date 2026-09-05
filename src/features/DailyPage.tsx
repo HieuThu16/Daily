@@ -19,6 +19,7 @@ import { fetchYouTubeMeta, youtubeVideoId } from '../lib/youtubeMeta'
 import { getVideoWatchLogs, type VideoWatchLog } from '../lib/videoWatchLog'
 import { compressForUpload } from '../lib/photo'
 import { Memory3DCard } from './daily/Memory3DCard'
+import { getVideoPosterUrl } from './daily/SharedEventsView'
 import { deleteStorageFile, deleteStorageFiles } from '../lib/storageDelete'
 import { uploadMediaFile } from '../lib/storageService'
 
@@ -2731,9 +2732,28 @@ export function DailyPage() {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, position: 'relative' }}>
                 <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {isVid ? (
-                    <video src={currentUrl} controls autoPlay style={{ width: '100%', maxHeight: '72vh', borderRadius: 12, background: '#000' }} />
+                    <video
+                      src={currentUrl}
+                      poster={getVideoPosterUrl(currentUrl)}
+                      controls
+                      autoPlay
+                      style={{ width: '100%', maxHeight: '72vh', borderRadius: 12, background: '#000' }}
+                    />
                   ) : (
-                    <img src={currentUrl} alt="Phóng to" style={{ width: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: 12 }} />
+                    <img
+                      src={currentUrl}
+                      alt="Phóng to"
+                      style={{ width: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: 12 }}
+                      onError={(e) => {
+                        const target = e.currentTarget
+                        const retry = Number(target.dataset.retry || 0)
+                        if (retry < 2) {
+                          target.dataset.retry = String(retry + 1)
+                          const sep = currentUrl.includes('?') ? '&' : '?'
+                          target.src = `${currentUrl}${sep}_t=${Date.now()}`
+                        }
+                      }}
+                    />
                   )}
 
                   {previewGallery.items.length > 1 && (

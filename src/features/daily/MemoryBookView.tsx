@@ -6,6 +6,7 @@ import {
   Download
 } from 'lucide-react'
 import type { SharedEvent } from '../../types'
+import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
 import './memory-book.css'
 
 interface MemoryBookViewProps {
@@ -488,13 +489,19 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
                             <div className="polaroid-photo-box">
                               {isVid ? (
                                 <div className="polaroid-video-wrap">
-                                  <video src={mediaUrl} preload="metadata" muted playsInline />
+                                  <video
+                                    src={mediaUrl}
+                                    poster={getVideoPosterUrl(mediaUrl)}
+                                    preload="metadata"
+                                    muted
+                                    playsInline
+                                  />
                                   <div className="polaroid-play-overlay">
                                     <Play size={22} fill="#ffffff" color="#ffffff" />
                                   </div>
                                 </div>
                               ) : (
-                                <img src={mediaUrl} alt="" loading="lazy" />
+                                <SafeMediaImage src={mediaUrl} alt="" loading="lazy" />
                               )}
                               <div className="polaroid-shine-effect" />
                             </div>
@@ -875,9 +882,15 @@ export function MemoryBookView({ events, personName, onClose }: MemoryBookViewPr
 
               <div className="popup-media-container">
                 {currentIsVid ? (
-                  <video src={currentPhoto} controls autoPlay playsInline />
+                  <video
+                    src={currentPhoto}
+                    poster={getVideoPosterUrl(currentPhoto)}
+                    controls
+                    autoPlay
+                    playsInline
+                  />
                 ) : (
-                  <img src={currentPhoto} alt="" />
+                  <SafeMediaImage src={currentPhoto} alt="" />
                 )}
               </div>
 

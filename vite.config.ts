@@ -156,16 +156,26 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           cleanupOutdatedCaches: true,
 
-          // Ảnh truyện đã đọc giữ lại trong cache: mất mạng vẫn đọc lại được.
-          // CacheFirst + trần 600 ảnh (~30 ngày) để khỏi phình bộ nhớ máy.
+          // Cache ảnh: tách riêng ảnh kỷ niệm (Cloudinary/Supabase) dùng NetworkFirst / StaleWhileRevalidate
+          // TUYỆT ĐỐI KHÔNG cache status 0 để tránh lưu cache lỗi vĩnh viễn khi mạng chập chờn
           runtimeCaching: [
             {
-              urlPattern: ({ request }: { request: Request }) => request.destination === 'image',
-              handler: 'CacheFirst',
+              urlPattern: ({ url }: { url: URL }) =>
+                url.hostname.includes('cloudinary.com') || url.hostname.includes('supabase.co'),
+              handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'manga-images',
+                cacheName: 'user-media-v4',
+                expiration: { maxEntries: 1000, maxAgeSeconds: 30 * 24 * 60 * 60, purgeOnQuotaError: true },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: ({ request }: { request: Request }) => request.destination === 'image',
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'app-images-v4',
                 expiration: { maxEntries: 600, maxAgeSeconds: 30 * 24 * 60 * 60, purgeOnQuotaError: true },
-                cacheableResponse: { statuses: [0, 200] },
+                cacheableResponse: { statuses: [200] },
               },
             },
           ],
