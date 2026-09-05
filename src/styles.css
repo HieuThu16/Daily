@@ -5508,6 +5508,46 @@ input, select, textarea, button {
   margin-bottom: 6px;
 }
 
+.daily-extra-utils-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 5px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.daily-extra-utils-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 27px !important;
+  padding: 0 4px !important;
+  font-size: 0.66rem !important;
+  font-weight: 700 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+.daily-extra-utils-btn:active {
+  transform: scale(0.97);
+}
+
+.daily-extra-utils-btn span {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
 /* Thẻ Nhật ký phía dưới: Rõ ràng, Sang trọng & Đẹp mắt */
 .daily-card {
   position: relative;

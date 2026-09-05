@@ -2055,88 +2055,50 @@ export function DailyPage() {
                   <div className="daily-extra-row-title">
                     <Sparkles size={11} style={{ color: 'var(--primary)' }} /> Tiện ích & Đính kèm
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                  <div className="daily-extra-utils-grid">
                     {/* Nút Hành động */}
                     <button
                       type="button"
+                      className="daily-extra-utils-btn"
                       onClick={() => setShowActionModal(true)}
                       style={{
-                        padding: '2px 4px',
-                        height: 25,
-                        borderRadius: 6,
-                        fontSize: '0.64rem',
-                        fontWeight: 700,
-                        border: '1px solid rgba(245, 158, 11, 0.3)',
-                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.15))',
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.16))',
                         color: 'var(--amber)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 2,
-                        width: '100%',
-                        minWidth: 0,
-                        boxSizing: 'border-box',
-                        overflow: 'hidden',
                       }}
                     >
                       <Zap size={10} style={{ flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Hành động</span>
+                      <span>Hành động</span>
                     </button>
 
                     {/* Nút YouTube */}
                     <button
                       type="button"
+                      className="daily-extra-utils-btn"
                       onClick={() => setShowVideoModal(true)}
                       style={{
-                        padding: '2px 4px',
-                        height: 25,
-                        borderRadius: 6,
-                        fontSize: '0.64rem',
-                        fontWeight: 700,
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(244, 63, 94, 0.12))',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(244, 63, 94, 0.15))',
                         color: '#ef4444',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 2,
-                        width: '100%',
-                        minWidth: 0,
-                        boxSizing: 'border-box',
-                        overflow: 'hidden',
                       }}
                     >
                       <Youtube size={10} style={{ flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>YouTube</span>
+                      <span>YouTube</span>
                     </button>
 
                     {/* Nút Tải Ảnh / Video */}
                     <button
                       type="button"
+                      className="daily-extra-utils-btn"
                       onClick={() => formFileInputRef.current?.click()}
                       disabled={mediaUploading || !supabase}
                       style={{
-                        padding: '2px 4px',
-                        height: 25,
-                        borderRadius: 6,
-                        fontSize: '0.64rem',
-                        fontWeight: 700,
-                        border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.3)',
+                        border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
                         background: attachedMedias.length > 0
-                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.2))'
-                          : 'linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(99, 102, 241, 0.12))',
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.22))'
+                          : 'linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(99, 102, 241, 0.14))',
                         color: attachedMedias.length > 0 ? '#10b981' : '#06b6d4',
                         cursor: mediaUploading ? 'wait' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 2,
-                        width: '100%',
-                        minWidth: 0,
-                        boxSizing: 'border-box',
-                        overflow: 'hidden',
                       }}
                       title="Tải ảnh hoặc video đính kèm"
                     >
@@ -2145,7 +2107,7 @@ export function DailyPage() {
                       ) : (
                         <ImagePlus size={10} style={{ flexShrink: 0 }} />
                       )}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span>
                         {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh / Video'}
                       </span>
                     </button>
@@ -2153,32 +2115,19 @@ export function DailyPage() {
                     {/* Nút Gắn Người Thân */}
                     <button
                       type="button"
+                      className="daily-extra-utils-btn"
                       onClick={() => setShowPeopleModal(true)}
                       style={{
-                        padding: '2px 4px',
-                        height: 25,
-                        borderRadius: 6,
-                        fontSize: '0.64rem',
-                        fontWeight: 700,
-                        border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.3)',
+                        border: selectedPersonIds.length > 0 ? '1px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
                         background: selectedPersonIds.length > 0
                           ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.22))'
-                          : 'linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(168, 85, 247, 0.12))',
+                          : 'linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(168, 85, 247, 0.14))',
                         color: '#8b5cf6',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 2,
-                        width: '100%',
-                        minWidth: 0,
-                        boxSizing: 'border-box',
-                        overflow: 'hidden',
                       }}
                       title="Gắn người thân"
                     >
                       <Users size={10} style={{ flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span>
                         {selectedPersonIds.length > 0 ? `Người (${selectedPersonIds.length})` : 'Gắn người'}
                       </span>
                     </button>
