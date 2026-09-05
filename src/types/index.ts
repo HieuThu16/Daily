@@ -286,6 +286,9 @@ export type Entry = {
   /** Ảnh đính kèm (bucket daily-photos); image_path để xoá file khi gỡ ảnh. */
   image_url?: string | null
   image_path?: string | null
+  /** Danh sách nhiều ảnh/video đính kèm */
+  images?: string[] | null
+  image_paths?: string[] | null
   /** Đánh dấu "Lần đầu" — hiển thị trong tab Sưu tập thẻ */
   is_first_time?: boolean
   /** Đánh dấu "Đặc biệt" — hiển thị trong tab Sưu tập thẻ */

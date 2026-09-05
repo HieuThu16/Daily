@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BarChart3, Clock, History, ImagePlus,
+  BarChart3, ChevronLeft, ChevronRight, Clock, History, ImagePlus,
   Loader2, NotebookPen, Pencil, Plus, Save,
   Sparkles, Star, Trash2, Youtube, Zap, Settings2, Tag, Play,
   Users, Check, X
@@ -332,16 +332,22 @@ export function DailyPage() {
   const [quickPhrases, setQuickPhrases] = useState<string[]>(() => loadLocal(QUICK_KEY, []))
   const [editQuick, setEditQuick] = useState<string | null>(null) // != null: đang mở hộp sửa danh sách
 
-  // Media đính kèm cho bài viết mới
-  const [attachedMedia, setAttachedMedia] = useState<{
+  // Media đính kèm cho bài viết mới (hỗ trợ nhiều ảnh & video)
+  type AttachedMedia = {
     url: string
     path: string
     type: 'image' | 'video'
     name: string
-  } | null>(null)
+  }
+  const [attachedMedias, setAttachedMedias] = useState<AttachedMedia[]>([])
   const [mediaUploading, setMediaUploading] = useState(false)
   const formFileInputRef = useRef<HTMLInputElement>(null)
-  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null)
+  const [previewGallery, setPreviewGallery] = useState<{ items: string[]; index: number } | null>(null)
+
+  const openMediaGallery = (items: string[], index = 0) => {
+    if (!items.length) return
+    setPreviewGallery({ items, index })
+  }
 
   // Người thân được chọn gắn kèm nhật ký
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([])
@@ -352,64 +358,71 @@ export function DailyPage() {
     return peopleQuery.items.filter((p) => selectedPersonIds.includes(p.id))
   }, [peopleQuery.items, selectedPersonIds])
 
-  const handleUploadFormMedia = async (file: File) => {
+  const handleUploadFormMedia = async (files: FileList | File[]) => {
     if (!supabase) {
       showToast('⚠️ Cần kết nối Supabase để lưu ảnh/video', 'local')
       return
     }
+    const fileArray = Array.from(files)
+    if (fileArray.length === 0) return
+
     setMediaUploading(true)
-    try {
-      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
-      let uploadBlob: Blob | File = file
-      let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
+    const uploadedList: AttachedMedia[] = []
 
-      if (!isVideo) {
-        const compressed = await compressForUpload(file)
-        uploadBlob = compressed.blob
-        ext = compressed.ext
+    for (const file of fileArray) {
+      try {
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
+        let uploadBlob: Blob | File = file
+        let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
+
+        if (!isVideo) {
+          const compressed = await compressForUpload(file)
+          uploadBlob = compressed.blob
+          ext = compressed.ext
+        }
+
+        const path = `${date}/${crypto.randomUUID()}.${ext}`
+        const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+
+        const { error: uploadErr } = await supabase.storage
+          .from(PHOTO_BUCKET)
+          .upload(path, uploadBlob, { contentType, upsert: true })
+
+        if (uploadErr) {
+          console.warn('Lỗi upload file:', uploadErr.message)
+          continue
+        }
+
+        const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+        const publicUrl = pubData.publicUrl
+
+        uploadedList.push({
+          url: publicUrl,
+          path,
+          type: isVideo ? 'video' : 'image',
+          name: file.name,
+        })
+      } catch (err: any) {
+        console.warn('Lỗi upload file:', err)
       }
-
-      const path = `${date}/${crypto.randomUUID()}.${ext}`
-      const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
-
-      const { error: uploadErr } = await supabase.storage
-        .from(PHOTO_BUCKET)
-        .upload(path, uploadBlob, { contentType, upsert: true })
-
-      if (uploadErr) {
-        showToast('❌ Tải file lên thất bại: ' + uploadErr.message, 'delete')
-        setMediaUploading(false)
-        return
-      }
-
-      const { data: pubData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
-      const publicUrl = pubData.publicUrl
-
-      if (attachedMedia?.path) {
-        await supabase.storage.from(PHOTO_BUCKET).remove([attachedMedia.path]).catch(() => {})
-      }
-
-      setAttachedMedia({
-        url: publicUrl,
-        path,
-        type: isVideo ? 'video' : 'image',
-        name: file.name,
-      })
-
-      showToast(`✅ Đã tải ${isVideo ? 'video' : 'ảnh'} lên Supabase Storage!`, 'success')
-    } catch (err: any) {
-      showToast('❌ Lỗi upload: ' + (err?.message || ''), 'delete')
-    } finally {
-      setMediaUploading(false)
     }
+
+    if (uploadedList.length > 0) {
+      setAttachedMedias((prev) => [...prev, ...uploadedList])
+      showToast(`✅ Đã tải ${uploadedList.length} ảnh/video lên Supabase Storage!`, 'success')
+    } else {
+      showToast('❌ Tải file lên thất bại. Vui lòng thử lại.', 'delete')
+    }
+    setMediaUploading(false)
   }
 
-  const handleRemoveFormMedia = async () => {
-    if (!attachedMedia) return
-    if (supabase && attachedMedia.path) {
-      await supabase.storage.from(PHOTO_BUCKET).remove([attachedMedia.path]).catch(() => {})
+  const handleRemoveFormMedia = async (index: number) => {
+    const item = attachedMedias[index]
+    if (!item) return
+    if (supabase && item.path) {
+      await supabase.storage.from(PHOTO_BUCKET).remove([item.path]).catch(() => {})
     }
-    setAttachedMedia(null)
+    setAttachedMedias((prev) => prev.filter((_, i) => i !== index))
     showToast('🗑️ Đã gỡ file đính kèm', 'delete')
   }
   
@@ -696,7 +709,10 @@ export function DailyPage() {
       return prefix ? `${prefix} ${l}` : l
     })
 
-    // Tạo payload chuẩn xác với is_first_time, is_special, category, tags và ảnh/video đính kèm
+    // Tạo payload chuẩn xác với is_first_time, is_special, category, tags và danh sách ảnh/video đính kèm
+    const allUrls = attachedMedias.map((m) => m.url)
+    const allPaths = attachedMedias.map((m) => m.path)
+
     const payload = formattedLines.map((lineText, idx) => ({
       content: lineText,
       entry_date: date,
@@ -706,8 +722,10 @@ export function DailyPage() {
       is_first_time: Boolean(isFirstTime),
       is_special: Boolean(isSpecial),
       tags: tagsList,
-      image_url: idx === 0 ? attachedMedia?.url ?? null : null,
-      image_path: idx === 0 ? attachedMedia?.path ?? null : null,
+      image_url: idx === 0 ? allUrls[0] ?? null : null,
+      image_path: idx === 0 ? allPaths[0] ?? null : null,
+      images: idx === 0 ? (allUrls.length > 0 ? allUrls : null) : null,
+      image_paths: idx === 0 ? (allPaths.length > 0 ? allPaths : null) : null,
     }))
 
     let savedToSupabase = false
@@ -715,7 +733,7 @@ export function DailyPage() {
 
     try {
       if (supabase) {
-        // Tier 1: Insert đầy đủ is_first_time, is_special, tags, category
+        // Tier 1: Insert đầy đủ is_first_time, is_special, tags, category, images
         const { data, error } = await supabase.from('daily_entries').insert(payload).select()
         if (!error && data && data.length > 0) {
           savedToSupabase = true
@@ -725,18 +743,20 @@ export function DailyPage() {
             is_first_time: Boolean(isFirstTime || row.is_first_time),
             is_special: Boolean(isSpecial || row.is_special),
             tags: row.tags && row.tags.length > 0 ? row.tags : tagsList,
+            images: row.images && row.images.length > 0 ? row.images : (row.image_url ? [row.image_url] : allUrls),
+            image_paths: row.image_paths && row.image_paths.length > 0 ? row.image_paths : (row.image_path ? [row.image_path] : allPaths),
           })) as Entry[]
         } else if (error) {
-          console.warn('Lỗi Supabase Tier 1, thử lại phương án Tier 2 (bảo lưu tags):', error)
-          // Tier 2: Thử lại nếu DB chưa chạy migration is_first_time/is_special nhưng có tags
+          console.warn('Lỗi Supabase Tier 1, thử lại phương án Tier 2 (không có cột mảng images):', error)
+          // Tier 2: Thử lại nếu DB chưa chạy migration images hoặc is_first_time
           const tier2Payload = formattedLines.map((lineText, idx) => ({
             content: lineText,
             entry_date: date,
             entry_type: safeEntryType,
             entry_time: currentTimeString,
             tags: tagsList,
-            image_url: idx === 0 ? attachedMedia?.url ?? null : null,
-            image_path: idx === 0 ? attachedMedia?.path ?? null : null,
+            image_url: idx === 0 ? allUrls[0] ?? null : null,
+            image_path: idx === 0 ? allPaths[0] ?? null : null,
           }))
           const { data: retryData, error: retryErr } = await supabase
             .from('daily_entries')
@@ -751,6 +771,8 @@ export function DailyPage() {
               is_first_time: Boolean(isFirstTime),
               is_special: Boolean(isSpecial),
               tags: tagsList,
+              images: allUrls,
+              image_paths: allPaths,
             })) as Entry[]
           } else if (retryErr) {
             console.warn('Lỗi Supabase Tier 2, thử lại Tier 3 (cột cơ bản nhất):', retryErr)
@@ -760,8 +782,8 @@ export function DailyPage() {
               entry_date: date,
               entry_type: safeEntryType,
               entry_time: currentTimeString,
-              image_url: idx === 0 ? attachedMedia?.url ?? null : null,
-              image_path: idx === 0 ? attachedMedia?.path ?? null : null,
+              image_url: idx === 0 ? allUrls[0] ?? null : null,
+              image_path: idx === 0 ? allPaths[0] ?? null : null,
             }))
             const { data: r3Data, error: r3Err } = await supabase
               .from('daily_entries')
@@ -776,6 +798,8 @@ export function DailyPage() {
                 is_first_time: Boolean(isFirstTime),
                 is_special: Boolean(isSpecial),
                 tags: tagsList,
+                images: allUrls,
+                image_paths: allPaths,
               })) as Entry[]
             }
           }
@@ -831,7 +855,7 @@ export function DailyPage() {
       setContent('')
       setIsFirstTime(false)
       setIsSpecial(false)
-      setAttachedMedia(null)
+      setAttachedMedias([])
       setSelectedPersonIds([])
       const peopleMsg = selectedPeople.length > 0 ? ` & nhật ký ${selectedPeople.map(p => p.name).join(', ')}` : ''
       showToast(`☁️ Đã lưu ${lines.length} bài nhật ký${peopleMsg} lên Supabase!`, 'success')
@@ -849,7 +873,7 @@ export function DailyPage() {
       setContent('')
       setIsFirstTime(false)
       setIsSpecial(false)
-      setAttachedMedia(null)
+      setAttachedMedias([])
       setSelectedPersonIds([])
       showToast(`💾 Đã lưu ${lines.length} bài vào Local (Hàng đợi đồng bộ)`, 'local')
       setSaveSuccess(`Đã lưu ${lines.length} nội dung vào Local 💾`)
@@ -974,57 +998,114 @@ export function DailyPage() {
     setEditTime(from && to ? `${from} - ${to}` : from || entry.entry_time || '')
   }
 
-  /** Đính ảnh/video vào dòng nhật ký đang mở; file cũ bị thay và xoá khỏi storage. */
-  const uploadEntryMedia = async (file: File) => {
+  /** Đính nhiều ảnh/video vào dòng nhật ký đang mở; lưu lên Supabase Storage. */
+  const uploadEntryMedia = async (files: FileList | File[]) => {
     if (!editing || !supabase) return
+    const fileArray = Array.from(files)
+    if (!fileArray.length) return
     setUploading(true)
-    try {
-      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
-      let uploadBlob: Blob | File = file
-      let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
 
-      if (!isVideo) {
-        const compressed = await compressForUpload(file)
-        uploadBlob = compressed.blob
-        ext = compressed.ext
-      }
+    const currentImages = editing.images && editing.images.length > 0
+      ? [...editing.images]
+      : (editing.image_url ? [editing.image_url] : [])
+    const currentPaths = editing.image_paths && editing.image_paths.length > 0
+      ? [...editing.image_paths]
+      : (editing.image_path ? [editing.image_path] : [])
 
-      const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
-      const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+    let added = 0
+    for (const file of fileArray) {
+      try {
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(file.name)
+        let uploadBlob: Blob | File = file
+        let ext = file.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')
 
-      const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, uploadBlob, { contentType, upsert: true })
-      if (uploadError) {
-        showToast('❌ Tải file lên thất bại: ' + uploadError.message, 'delete')
-        setUploading(false)
-        return
+        if (!isVideo) {
+          const compressed = await compressForUpload(file)
+          uploadBlob = compressed.blob
+          ext = compressed.ext
+        }
+
+        const path = `${editing.entry_date}/${crypto.randomUUID()}.${ext}`
+        const contentType = file.type || (isVideo ? 'video/mp4' : 'image/jpeg')
+
+        const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, uploadBlob, { contentType, upsert: true })
+        if (uploadError) {
+          console.warn('Lỗi upload:', uploadError)
+          continue
+        }
+        const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
+        currentImages.push(url)
+        currentPaths.push(path)
+        added++
+      } catch (err: any) {
+        console.warn('Lỗi xử lý file:', err)
       }
-      const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
-      const previousPath = editing.image_path
-      const { error } = await supabase.from('daily_entries').update({ image_url: url, image_path: path }).eq('id', editing.id)
-      if (error) {
-        await supabase.storage.from(PHOTO_BUCKET).remove([path])
-        showToast('❌ Chưa lưu được file. Vui lòng thử lại.', 'delete')
-        setUploading(false)
-        return
-      }
-      if (previousPath) await supabase.storage.from(PHOTO_BUCKET).remove([previousPath]).catch(() => {})
-      setEditing((current) => (current ? { ...current, image_url: url, image_path: path } : current))
-      setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: url, image_path: path } : i)))
-      showToast(isVideo ? '🎬 Đã thêm video' : '🖼️ Đã thêm ảnh')
-    } catch (err: any) {
-      showToast('❌ Lỗi upload: ' + (err?.message || ''), 'delete')
-    } finally {
-      setUploading(false)
     }
+
+    if (added > 0) {
+      const updatePayload = {
+        image_url: currentImages[0] || null,
+        image_path: currentPaths[0] || null,
+        images: currentImages,
+        image_paths: currentPaths,
+      }
+      const { error } = await supabase.from('daily_entries').update(updatePayload).eq('id', editing.id)
+      if (error) {
+        await supabase.from('daily_entries').update({
+          image_url: currentImages[0] || null,
+          image_path: currentPaths[0] || null,
+        }).eq('id', editing.id)
+      }
+      const updated = { ...editing, ...updatePayload }
+      setEditing(updated)
+      setItems((prev) => prev.map((i) => (i.id === editing.id ? updated : i)))
+      showToast(`✅ Đã thêm ${added} ảnh/video vào bài viết!`, 'success')
+    } else {
+      showToast('❌ Tải file lên thất bại', 'delete')
+    }
+    setUploading(false)
   }
 
-  const removeEntryMedia = async () => {
+  const removeEntryMedia = async (index?: number) => {
     if (!editing || !supabase) return
-    const path = editing.image_path
-    await supabase.from('daily_entries').update({ image_url: null, image_path: null }).eq('id', editing.id)
-    if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]).catch(() => {})
-    setEditing((current) => (current ? { ...current, image_url: null, image_path: null } : current))
-    setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, image_url: null, image_path: null } : i)))
+    const currentImages = editing.images && editing.images.length > 0
+      ? [...editing.images]
+      : (editing.image_url ? [editing.image_url] : [])
+    const currentPaths = editing.image_paths && editing.image_paths.length > 0
+      ? [...editing.image_paths]
+      : (editing.image_path ? [editing.image_path] : [])
+
+    if (typeof index === 'number') {
+      const path = currentPaths[index]
+      if (path) await supabase.storage.from(PHOTO_BUCKET).remove([path]).catch(() => {})
+      currentImages.splice(index, 1)
+      currentPaths.splice(index, 1)
+    } else {
+      for (const p of currentPaths) {
+        if (p) await supabase.storage.from(PHOTO_BUCKET).remove([p]).catch(() => {})
+      }
+      currentImages.length = 0
+      currentPaths.length = 0
+    }
+
+    const updatePayload = {
+      image_url: currentImages[0] || null,
+      image_path: currentPaths[0] || null,
+      images: currentImages.length > 0 ? currentImages : null,
+      image_paths: currentPaths.length > 0 ? currentPaths : null,
+    }
+
+    const { error } = await supabase.from('daily_entries').update(updatePayload).eq('id', editing.id)
+    if (error) {
+      await supabase.from('daily_entries').update({
+        image_url: currentImages[0] || null,
+        image_path: currentPaths[0] || null,
+      }).eq('id', editing.id)
+    }
+
+    const updated = { ...editing, ...updatePayload }
+    setEditing(updated)
+    setItems((prev) => prev.map((i) => (i.id === editing.id ? updated : i)))
     showToast('🗑️ Đã gỡ file đính kèm', 'delete')
   }
 
@@ -1487,11 +1568,11 @@ export function DailyPage() {
                   borderRadius: 10,
                   fontSize: '0.72rem',
                   fontWeight: 700,
-                  border: attachedMedia ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
-                  background: attachedMedia
+                  border: attachedMedias.length > 0 ? '1px solid #10b981' : '1px solid rgba(6, 182, 212, 0.35)',
+                  background: attachedMedias.length > 0
                     ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25))'
                     : 'linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(99, 102, 241, 0.15))',
-                  color: attachedMedia ? '#10b981' : '#06b6d4',
+                  color: attachedMedias.length > 0 ? '#10b981' : '#06b6d4',
                   cursor: mediaUploading ? 'wait' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1500,7 +1581,7 @@ export function DailyPage() {
                   transition: 'all 0.18s ease',
                   whiteSpace: 'nowrap',
                 }}
-                title="Tải ảnh hoặc video đính kèm"
+                title="Tải ảnh hoặc video đính kèm (hỗ trợ chọn nhiều)"
               >
                 {mediaUploading ? (
                   <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
@@ -1508,17 +1589,17 @@ export function DailyPage() {
                   <ImagePlus size={12} style={{ flexShrink: 0 }} />
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {mediaUploading ? 'Tải...' : attachedMedia ? 'Có file' : 'Ảnh/Video'}
+                  {mediaUploading ? 'Tải...' : attachedMedias.length > 0 ? `${attachedMedias.length} tệp` : 'Ảnh/Video'}
                 </span>
               </button>
               <input
                 ref={formFileInputRef}
                 type="file"
+                multiple
                 accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
                 style={{ display: 'none' }}
                 onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void handleUploadFormMedia(file)
+                  if (e.target.files) void handleUploadFormMedia(e.target.files)
                   e.target.value = ''
                 }}
               />
@@ -1621,74 +1702,105 @@ export function DailyPage() {
               </div>
             )}
 
-            {/* Media Preview Box nếu đã chọn file */}
-            {attachedMedia && (
+            {/* Media Preview Box nếu đã chọn file (nhiều ảnh/video) */}
+            {attachedMedias.length > 0 && (
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
-                  padding: '8px 12px',
+                  gap: 8,
+                  padding: '8px 10px',
                   borderRadius: 12,
                   background: 'rgba(16, 185, 129, 0.08)',
                   border: '1.5px solid rgba(16, 185, 129, 0.35)',
                   marginBottom: 10,
+                  overflowX: 'auto',
                 }}
               >
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    background: '#000',
-                    flexShrink: 0,
-                    display: 'grid',
-                    placeItems: 'center',
-                    cursor: 'pointer',
-                    position: 'relative',
-                  }}
-                  onClick={() => setPreviewMediaUrl(attachedMedia.url)}
-                  title="Nhấn để xem trước toàn màn hình"
-                >
-                  {attachedMedia.type === 'video' ? (
-                    <>
-                      <video src={attachedMedia.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'grid', placeItems: 'center', color: '#fff' }}>
-                        <Play size={16} />
-                      </div>
-                    </>
-                  ) : (
-                    <img src={attachedMedia.url} alt="Đính kèm" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {attachedMedia.name}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ✓ Đã lưu Supabase Storage ({attachedMedia.type === 'video' ? 'Video' : 'Ảnh'})
-                  </span>
-                </div>
+                {attachedMedias.map((media, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'relative',
+                      width: 54,
+                      height: 54,
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      background: '#000',
+                      flexShrink: 0,
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => openMediaGallery(attachedMedias.map((m) => m.url), idx)}
+                    title="Bấm để xem thử toàn màn hình"
+                  >
+                    {media.type === 'video' ? (
+                      <>
+                        <video src={media.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'grid', placeItems: 'center', color: '#fff' }}>
+                          <Play size={14} />
+                        </div>
+                      </>
+                    ) : (
+                      <img src={media.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleRemoveFormMedia(idx)
+                      }}
+                      title="Gỡ file này"
+                      style={{
+                        position: 'absolute',
+                        top: 2,
+                        right: 2,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: 'rgba(239, 68, 68, 0.85)',
+                        color: '#fff',
+                        border: 'none',
+                        display: 'grid',
+                        placeItems: 'center',
+                        cursor: 'pointer',
+                        padding: 0,
+                        zIndex: 2,
+                      }}
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
+                ))}
                 <button
                   type="button"
-                  onClick={() => void handleRemoveFormMedia()}
+                  onClick={() => formFileInputRef.current?.click()}
+                  disabled={mediaUploading}
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
-                    border: '1px solid var(--card-border)',
-                    background: 'var(--card-bg)',
-                    color: 'var(--rose)',
+                    width: 54,
+                    height: 54,
+                    borderRadius: 8,
+                    border: '1.5px dashed #10b981',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    color: '#10b981',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 2,
                     cursor: 'pointer',
-                    display: 'grid',
-                    placeItems: 'center',
-                    transition: 'all 0.15s ease',
+                    flexShrink: 0,
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
                   }}
-                  title="Gỡ file đính kèm này"
+                  title="Thêm ảnh hoặc video khác"
                 >
-                  <Trash2 size={14} />
+                  <Plus size={16} />
+                  <span>Thêm</span>
                 </button>
+                <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700, whiteSpace: 'nowrap', paddingLeft: 4 }}>
+                  ✓ {attachedMedias.length} tệp đã chọn
+                </span>
               </div>
             )}
 
@@ -1886,7 +1998,9 @@ export function DailyPage() {
                   const catInfo = getCategoryInfo(entry, dailyCategories)
                   const attachedPeople = getAttachedPeople(entry, peopleQuery.items)
                   const hasAttachedPeople = attachedPeople.length > 0
-                  const isVideo = entry.image_url && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entry.image_url)
+                  const entryMedias = entry.images && entry.images.length > 0 ? entry.images : (entry.image_url ? [entry.image_url] : [])
+                  const hasMedia = entryMedias.length > 0
+                  const isFirstVideo = hasMedia && /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(entryMedias[0])
                   return (
                     <div
                       key={entry.id}
@@ -1966,12 +2080,13 @@ export function DailyPage() {
                         </span>
                       </button>
 
-                      {/* Thumbnail ảnh hoặc Video badge */}
-                      {entry.image_url && (
+                      {/* Thumbnail ảnh hoặc Video badge (hỗ trợ nhiều ảnh/video) */}
+                      {hasMedia && (
                         <div
                           style={{
-                            width: 26,
-                            height: 26,
+                            position: 'relative',
+                            width: 28,
+                            height: 28,
                             borderRadius: 6,
                             overflow: 'hidden',
                             background: '#000',
@@ -1979,14 +2094,33 @@ export function DailyPage() {
                             cursor: 'pointer',
                             display: 'grid',
                             placeItems: 'center',
+                            border: '1px solid rgba(255,255,255,0.15)',
                           }}
-                          onClick={() => setPreviewMediaUrl(entry.image_url!)}
-                          title="Bấm để xem ảnh / video"
+                          onClick={() => openMediaGallery(entryMedias, 0)}
+                          title={`Bấm để xem ${entryMedias.length} ảnh/video`}
                         >
-                          {isVideo ? (
+                          {isFirstVideo ? (
                             <span style={{ fontSize: '0.7rem' }}>🎬</span>
                           ) : (
-                            <img src={entry.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={entryMedias[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                          {entryMedias.length > 1 && (
+                            <span
+                              style={{
+                                position: 'absolute',
+                                bottom: 0,
+                                right: 0,
+                                background: 'rgba(0,0,0,0.85)',
+                                color: '#fff',
+                                fontSize: '0.55rem',
+                                fontWeight: 800,
+                                padding: '1px 2px',
+                                borderRadius: '3px 0 0 0',
+                                lineHeight: 1,
+                              }}
+                            >
+                              +{entryMedias.length - 1}
+                            </span>
                           )}
                         </div>
                       )}
@@ -2023,26 +2157,128 @@ export function DailyPage() {
         </>
       )}
 
-      {/* Modal phóng to xem ảnh / video toàn màn hình */}
-      {previewMediaUrl && (
-        <Modal title="Xem ảnh / video đính kèm" onClose={() => setPreviewMediaUrl(null)}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            {/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(previewMediaUrl) ? (
-              <video src={previewMediaUrl} controls autoPlay style={{ width: '100%', maxHeight: '75vh', borderRadius: 12, background: '#000' }} />
-            ) : (
-              <img src={previewMediaUrl} alt="Phóng to" style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: 12 }} />
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: 4 }}>
-              <a
-                href={previewMediaUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: '0.78rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: 700 }}
-              >
-                Mở ở tab mới ↗
-              </a>
-            </div>
-          </div>
+      {/* Modal phóng to xem ảnh / video toàn màn hình (hỗ trợ nhiều ảnh/video) */}
+      {previewGallery && (
+        <Modal
+          title={previewGallery.items.length > 1 ? `Xem ảnh / video (${previewGallery.index + 1}/${previewGallery.items.length})` : 'Xem ảnh / video đính kèm'}
+          onClose={() => setPreviewGallery(null)}
+        >
+          {(() => {
+            const currentUrl = previewGallery.items[previewGallery.index]
+            if (!currentUrl) return null
+            const isVid = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(currentUrl)
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, position: 'relative' }}>
+                <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {isVid ? (
+                    <video src={currentUrl} controls autoPlay style={{ width: '100%', maxHeight: '72vh', borderRadius: 12, background: '#000' }} />
+                  ) : (
+                    <img src={currentUrl} alt="Phóng to" style={{ width: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: 12 }} />
+                  )}
+
+                  {previewGallery.items.length > 1 && (
+                    <>
+                      {previewGallery.index > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewGallery((prev) => prev ? { ...prev, index: prev.index - 1 } : null)}
+                          style={{
+                            position: 'absolute',
+                            left: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.65)',
+                            color: '#fff',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            display: 'grid',
+                            placeItems: 'center',
+                            cursor: 'pointer',
+                          }}
+                          title="Ảnh trước"
+                        >
+                          <ChevronLeft size={20} />
+                        </button>
+                      )}
+                      {previewGallery.index < previewGallery.items.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewGallery((prev) => prev ? { ...prev, index: prev.index + 1 } : null)}
+                          style={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.65)',
+                            color: '#fff',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            display: 'grid',
+                            placeItems: 'center',
+                            cursor: 'pointer',
+                          }}
+                          title="Ảnh tiếp theo"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {previewGallery.items.length > 1 && (
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', maxWidth: '100%', padding: '4px 0' }}>
+                    {previewGallery.items.map((url, idx) => {
+                      const itemIsVid = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url)
+                      const isSelected = idx === previewGallery.index
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setPreviewGallery((prev) => prev ? { ...prev, index: idx } : null)}
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                            background: '#000',
+                            flexShrink: 0,
+                            cursor: 'pointer',
+                            border: isSelected ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.2)',
+                            opacity: isSelected ? 1 : 0.6,
+                            position: 'relative',
+                            display: 'grid',
+                            placeItems: 'center',
+                          }}
+                        >
+                          {itemIsVid ? (
+                            <span style={{ fontSize: '0.8rem' }}>🎬</span>
+                          ) : (
+                            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: 4 }}>
+                  <a
+                    href={currentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: '0.78rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: 700 }}
+                  >
+                    Mở ở tab mới ↗
+                  </a>
+                </div>
+              </div>
+            )
+          })()}
         </Modal>
       )}
 
@@ -2568,39 +2804,100 @@ export function DailyPage() {
             <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={5} />
           </label>
 
-          <div style={{ display: 'grid', gap: 8 }}>
-            {editing.image_url && (
-              /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(editing.image_url) ? (
-                <video src={editing.image_url} controls style={{ width: '100%', maxHeight: 300, borderRadius: 12, background: '#000' }} />
-              ) : (
-                <img src={editing.image_url} alt="Ảnh nhật ký" style={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 12, background: 'var(--bg-main)' }} />
-              )
-            )}
-            <input
-              ref={entryFileInput}
-              type="file"
-              accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
-              hidden
-              aria-label="Chọn ảnh hoặc video cho nhật ký"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                e.target.value = ''
-                if (file) void uploadEntryMedia(file)
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" onClick={() => entryFileInput.current?.click()} disabled={!supabase || uploading}>
-                {uploading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <ImagePlus size={14} />}
-                {uploading ? 'Đang tải…' : editing.image_url ? 'Đổi Ảnh / Video' : 'Thêm Ảnh / Video'}
-              </button>
-              {editing.image_url && (
-                <button type="button" className="text-danger" onClick={() => void removeEntryMedia()}>
-                  <Trash2 size={14} /> Gỡ file
-                </button>
-              )}
-            </div>
-            {!supabase && <small className="muted">Chưa cấu hình Supabase nên chưa lưu được ảnh/video.</small>}
-          </div>
+          {/* Danh sách ảnh & video đã lưu của dòng nhật ký */}
+          {(() => {
+            const currentImages = editing.images && editing.images.length > 0
+              ? editing.images
+              : (editing.image_url ? [editing.image_url] : [])
+
+            return (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {currentImages.length > 0 && (
+                  <div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      Ảnh & Video đã lưu ({currentImages.length}):
+                    </span>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                      {currentImages.map((url, idx) => {
+                        const isVid = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url)
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              position: 'relative',
+                              width: 64,
+                              height: 64,
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              border: '1px solid var(--border)',
+                              background: '#000',
+                            }}
+                          >
+                            {isVid ? (
+                              <>
+                                <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                                <div style={{ position: 'absolute', bottom: 2, left: 2, background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 3, padding: '1px 3px', display: 'flex', alignItems: 'center' }}>
+                                  <Play size={10} />
+                                </div>
+                              </>
+                            ) : (
+                              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void removeEntryMedia(idx)}
+                              title="Xoá file này khỏi Supabase"
+                              style={{
+                                position: 'absolute',
+                                top: 2,
+                                right: 2,
+                                width: 20,
+                                height: 20,
+                                padding: 0,
+                                borderRadius: '50%',
+                                background: 'rgba(239, 68, 68, 0.85)',
+                                color: '#fff',
+                                border: 'none',
+                                display: 'grid',
+                                placeItems: 'center',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                <input
+                  ref={entryFileInput}
+                  type="file"
+                  multiple
+                  accept="image/*,video/mp4,video/webm,video/quicktime,video/m4v"
+                  hidden
+                  aria-label="Chọn ảnh hoặc video cho nhật ký"
+                  onChange={(e) => {
+                    if (e.target.files) void uploadEntryMedia(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => entryFileInput.current?.click()} disabled={!supabase || uploading}>
+                    {uploading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <ImagePlus size={14} />}
+                    {uploading ? 'Đang tải…' : '+ Thêm Ảnh / Video'}
+                  </button>
+                  {currentImages.length > 0 && (
+                    <button type="button" className="text-danger" onClick={() => void removeEntryMedia()}>
+                      <Trash2 size={14} /> Gỡ tất cả
+                    </button>
+                  )}
+                </div>
+                {!supabase && <small className="muted">Chưa cấu hình Supabase nên chưa lưu được ảnh/video.</small>}
+              </div>
+            )
+          })()}
 
           {/* Đánh dấu thẻ Sưu tập: Lần đầu / Đặc biệt trong Modal sửa */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 0' }}>
