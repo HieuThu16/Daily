@@ -5024,6 +5024,257 @@ input, select, textarea, button {
 .memory-icon[aria-pressed="true"] { color: #c8706f; }
 @media (max-width: 400px) { .memory-actions { gap: 7px; }.memory-add, .memory-invite { padding-inline: 7px; font-size: .73rem; }.memory-card { gap: 8px; }.memory-thumb { width: 50px; height: 50px; flex-basis: 50px; }.memory-date { width: 35px; flex-basis: 35px; } }
 
+/* ===== Chế độ xem theo tháng trong Kỷ niệm chung ===== */
+.memory-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.mem-view-toggle {
+  display: inline-flex;
+  background: var(--memory-paper, var(--card-bg));
+  border: 1px solid var(--memory-line, var(--border));
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+.mem-view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--memory-muted, var(--text-muted));
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.mem-view-toggle button.active {
+  background: var(--memory-accent, #cf526a);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(207, 82, 106, 0.28);
+}
+.mem-month-pills-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  margin-bottom: 10px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.mem-month-pills-bar::-webkit-scrollbar {
+  height: 4px;
+}
+.mem-month-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--memory-line, var(--border));
+  background: var(--memory-paper, var(--card-bg));
+  color: var(--memory-ink, var(--text-main));
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.mem-month-pill:hover {
+  border-color: var(--memory-accent, #cf526a);
+}
+.mem-month-pill.active {
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(225, 29, 72, 0.25);
+}
+.mem-month-pill-badge {
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+.mem-month-pill.active .mem-month-pill-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+.mem-month-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  background: var(--memory-paper, var(--card-bg));
+  border: 1px solid var(--memory-line, var(--border));
+  border-radius: 13px;
+  margin-bottom: 10px;
+}
+.mem-month-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mem-month-header-title strong {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--memory-ink, var(--text-main));
+}
+.mem-month-header-title span {
+  font-size: 0.72rem;
+  color: var(--memory-muted, var(--text-muted));
+  font-weight: 600;
+}
+.mem-month-nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mem-month-nav-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--memory-line, var(--border));
+  background: var(--memory-paper, var(--card-bg));
+  color: var(--memory-ink, var(--text-main));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mem-month-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.mem-month-nav-btn:not(:disabled):hover {
+  border-color: var(--memory-accent, #cf526a);
+  color: var(--memory-accent, #cf526a);
+}
+.mem-mini-calendar {
+  padding: 10px;
+  background: var(--memory-paper, var(--card-bg));
+  border: 1px solid var(--memory-line, var(--border));
+  border-radius: 13px;
+  margin-bottom: 12px;
+}
+.mem-cal-grid-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--memory-muted, var(--text-muted));
+  margin-bottom: 5px;
+}
+.mem-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.mem-cal-cell {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted, #8e8e93);
+  cursor: default;
+  transition: all 0.15s ease;
+}
+.mem-cal-cell.empty {
+  visibility: hidden;
+}
+.mem-cal-cell.has-memory {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--memory-accent, #e11d48);
+  background: rgba(225, 29, 72, 0.08);
+  border-color: rgba(225, 29, 72, 0.22);
+}
+.mem-cal-cell.has-memory:hover {
+  background: rgba(225, 29, 72, 0.16);
+  transform: translateY(-1px);
+}
+.mem-cal-cell.has-memory.selected {
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.35);
+}
+.mem-cal-dot {
+  position: absolute;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--memory-accent, #e11d48);
+}
+.mem-cal-cell.selected .mem-cal-dot {
+  background: #ffffff;
+}
+.mem-day-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: rgba(225, 29, 72, 0.1);
+  color: var(--rose, #e11d48);
+  font-size: 0.74rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.mem-day-filter-badge button {
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+.mem-month-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--memory-blush, rgba(207, 82, 106, 0.08));
+  color: var(--memory-accent, #cf526a);
+  font-size: 0.8rem;
+  font-weight: 800;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+.mem-month-group-header strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mem-month-group-header span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
 .inline-add { display: flex; align-items: center; gap: 8px; }
 .inline-add input {
   flex: 1;

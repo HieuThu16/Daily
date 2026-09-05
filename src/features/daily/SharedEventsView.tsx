@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
-  Filter, Heart, ImagePlus, LayoutGrid, Mail, MapPin, Maximize2,
+  Filter, Heart, ImagePlus, LayoutGrid, List, Mail, MapPin, Maximize2,
   MoreVertical, Pencil, Plus, RotateCcw, Trash2,
   UserPlus, Video, Loader2, X
 } from 'lucide-react'
@@ -111,6 +111,9 @@ export function SharedEventsView({
 
   const [filterYear, setFilterYear] = useState<string>('ALL')
   const [filterMonth, setFilterMonth] = useState<string>('ALL')
+  const [viewMode, setViewMode] = useState<'timeline' | 'month'>('month')
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string>('ALL')
+  const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null)
 
   const [pendingMedia, setPendingMedia] = useState<PendingMediaItem[]>([])
   const abortUploadRef = useRef(false)
@@ -297,6 +300,91 @@ export function SharedEventsView({
     () => (viewing ? (events.items.find((e) => e.id === viewing.id) ?? viewing) : null),
     [events.items, viewing],
   )
+
+  const monthGroups = useMemo(() => {
+    const map = new Map<string, { key: string; year: number; month: number; label: string; events: SharedEvent[]; totalPhotos: number }>()
+    for (const ev of sorted) {
+      if (!ev.event_date) continue
+      const y = Number(ev.event_date.slice(0, 4))
+      const m = Number(ev.event_date.slice(5, 7))
+      const key = `${y}-${String(m).padStart(2, '0')}`
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          year: y,
+          month: m,
+          label: `Tháng ${m}, ${y}`,
+          events: [],
+          totalPhotos: 0,
+        })
+      }
+      const group = map.get(key)!
+      group.events.push(ev)
+      const count = (ev.images && ev.images.length) || (ev.image_url ? 1 : 0)
+      group.totalPhotos += count
+    }
+    return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key))
+  }, [sorted])
+
+  const activeMonthGroup = useMemo(() => {
+    if (selectedMonthKey === 'ALL') return null
+    return monthGroups.find((g) => g.key === selectedMonthKey) || null
+  }, [monthGroups, selectedMonthKey])
+
+  const calendarDays = useMemo(() => {
+    if (!activeMonthGroup) return []
+    const { year, month } = activeMonthGroup
+    const firstDay = new Date(year, month - 1, 1)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    let startDayOfWeek = firstDay.getDay() - 1
+    if (startDayOfWeek === -1) startDayOfWeek = 6
+
+    const days: Array<{
+      dayNum: number | null
+      dateStr: string | null
+      hasEvents: boolean
+      events: SharedEvent[]
+      photosCount: number
+    }> = []
+
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push({ dayNum: null, dateStr: null, hasEvents: false, events: [], photosCount: 0 })
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      const evs = activeMonthGroup.events.filter((e) => e.event_date === dateStr)
+      let pCount = 0
+      evs.forEach((e) => {
+        pCount += (e.images && e.images.length) || (e.image_url ? 1 : 0)
+      })
+      days.push({
+        dayNum: d,
+        dateStr,
+        hasEvents: evs.length > 0,
+        events: evs,
+        photosCount: pCount,
+      })
+    }
+
+    return days
+  }, [activeMonthGroup])
+
+  const currentMonthIdx = monthGroups.findIndex((g) => g.key === selectedMonthKey)
+  const hasNextMonth = currentMonthIdx > 0
+  const hasPrevMonth = currentMonthIdx >= 0 && currentMonthIdx < monthGroups.length - 1
+  const goNextMonth = () => {
+    if (hasNextMonth) {
+      setSelectedMonthKey(monthGroups[currentMonthIdx - 1].key)
+      setSelectedCalDay(null)
+    }
+  }
+  const goPrevMonth = () => {
+    if (hasPrevMonth) {
+      setSelectedMonthKey(monthGroups[currentMonthIdx + 1].key)
+      setSelectedCalDay(null)
+    }
+  }
 
   const resetForm = () => {
     setTitle('')
@@ -595,12 +683,21 @@ export function SharedEventsView({
     }
 
     try {
-      const next = payload()
       let currentImages = editing.images && editing.images.length ? [...editing.images] : (editing.image_url ? [editing.image_url] : [])
       let currentPaths = editing.image_paths && editing.image_paths.length ? [...editing.image_paths] : (editing.image_path ? [editing.image_path] : [])
 
+      // Giữ nguyên room_code và person_id sẵn có để tránh vi phạm RLS và không làm mất dữ liệu phòng
+      const preservedRoomCode = editing.room_code || (isPartner && roomCode ? roomCode : null)
+      const preservedPersonId = editing.person_id || personId || null
+
       const baseUpdateData = {
-        ...next,
+        title: (title.trim() || getEffectiveTitle()).trim(),
+        note: note.trim() || null,
+        event_date: eventDate,
+        event_time: eventTime || null,
+        location: location.trim() || null,
+        room_code: preservedRoomCode,
+        person_id: preservedPersonId,
         image_url: currentImages[0] || null,
         image_path: currentPaths[0] || null,
       }
@@ -616,12 +713,27 @@ export function SharedEventsView({
         if (!error) {
           savedRemotely = true
         } else {
+          console.warn('Update fullUpdateData failed, retrying baseUpdateData:', error.message)
           if (currentImages.length > 1) warnMissingImagesColumn(showToast)
           const retry = await supabase.from('shared_events').update(baseUpdateData).eq('id', editing.id)
           savedRemotely = !retry.error
-          if (retry.error) console.warn('Không cập nhật được kỷ niệm:', retry.error.message)
+          if (retry.error) {
+            console.error('Không cập nhật được kỷ niệm:', retry.error.message)
+            showToast('⚠️ Lỗi lưu máy chủ: ' + retry.error.message, 'delete')
+          }
         }
       }
+
+      // Cập nhật ngay trên giao diện React & local cache để phản ánh ngày/thông tin mới
+      let updatedEv: SharedEvent = {
+        ...editing,
+        ...fullUpdateData,
+      }
+      events.setItems((prev) => prev.map((e) => (e.id === editing.id ? updatedEv : e)))
+      if (viewing?.id === editing.id) {
+        setViewing(updatedEv)
+      }
+      setEditing(updatedEv)
 
       let newlyUploadedCount = 0
       let stoppedEarly = false
@@ -673,9 +785,9 @@ export function SharedEventsView({
                 }
               }
 
-              // Cập nhật ngay trên giao diện React
-              const updatedEv = {
-                ...editing,
+              // Cập nhật lại giao diện React
+              updatedEv = {
+                ...updatedEv,
                 ...baseUpdateData,
                 images: currentImages,
                 image_paths: currentPaths,
@@ -683,6 +795,9 @@ export function SharedEventsView({
                 image_path: currentPaths[0] || null,
               }
               events.setItems((prev) => prev.map((e) => (e.id === editing.id ? updatedEv : e)))
+              if (viewing?.id === editing.id) {
+                setViewing(updatedEv)
+              }
               setEditing(updatedEv)
 
               if (item.previewUrl) {
@@ -702,13 +817,12 @@ export function SharedEventsView({
       if (stoppedEarly) {
         showToast(`⏸️ Đã dừng tải lên. Đã lưu thêm ${newlyUploadedCount}/${pendingMedia.length} ảnh/video vào kỷ niệm.`)
       } else if (savedRemotely) {
-        showToast(newlyUploadedCount > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${newlyUploadedCount} ảnh/video` : '✏️ Đã cập nhật kỷ niệm')
+        showToast(newlyUploadedCount > 0 ? `✅ Đã cập nhật kỷ niệm, thêm ${newlyUploadedCount} ảnh/video` : '✏️ Đã cập nhật ngày và thông tin kỷ niệm')
       } else {
         showToast('⚠️ Chưa lưu được thay đổi lên máy chủ — kiểm tra kết nối rồi thử lại.', 'delete')
       }
 
       setEditing(null)
-      setViewing(null)
       resetForm()
     } catch (err: any) {
       console.error('Lỗi khi cập nhật kỷ niệm:', err)
@@ -1206,6 +1320,89 @@ export function SharedEventsView({
 
   const partnerDisplayName = personName || 'Người yêu'
 
+  const renderMemoryCard = (ev: SharedEvent, i: number) => {
+    const mine = ev.owner_id === myId
+    const allImages = ev.images && ev.images.length ? ev.images : (ev.image_url ? [ev.image_url] : [])
+    return (
+      <article
+        key={ev.id}
+        className="memory-card"
+        onClick={() => {
+          setSelectedImageIdx(0)
+          setViewing(ev)
+        }}
+      >
+        <time className={`memory-date memory-date-${i % 5}`} dateTime={ev.event_date}>
+          <strong>{ev.event_date.slice(8, 10)}</strong>
+          <span>Thg {Number(ev.event_date.slice(5, 7))}</span>
+        </time>
+        {allImages.length > 0 && (
+          <div className="memory-thumb">
+            {isMediaVideo(allImages[0]) ? (
+              <>
+                <video src={allImages[0]} preload="metadata" muted playsInline />
+                <div className="memory-thumb-badge">
+                  <Video size={10} />
+                </div>
+              </>
+            ) : (
+              <img src={allImages[0]} alt="" />
+            )}
+            {allImages.length > 1 && (
+              <span>
+                +{allImages.length - 1}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="memory-card-body">
+          <div className="memory-card-title">
+            <strong>{ev.title}</strong>
+            {!mine && (
+              <span className="memory-partner">
+                {partnerDisplayName}
+              </span>
+            )}
+          </div>
+          <div className="memory-card-meta">
+            {viDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time}` : ''}
+          </div>
+          {ev.location && (
+            <div className="memory-location">
+              <MapPin size={11} /> {ev.location}
+            </div>
+          )}
+          {ev.note && <p>{ev.note}</p>}
+        </div>
+
+        <div className="memory-card-actions">
+          <button
+            className="memory-icon"
+            aria-label={`${ev.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'} ${ev.title}`}
+            aria-pressed={!!ev.is_favorite}
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleFavorite(ev)
+            }}
+          >
+            <Heart size={16} fill={ev.is_favorite ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            className="memory-icon"
+            aria-label={`Sửa ${ev.title}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              openEdit(ev)
+            }}
+          >
+            <MoreVertical size={17} />
+          </button>
+        </div>
+      </article>
+    )
+  }
+
   return (
     <section className="memory-view">
       <div className="memory-actions">
@@ -1267,46 +1464,70 @@ export function SharedEventsView({
         </div>
       )}
 
-      <div className="memory-filters">
-        <select
-          value={filterYear}
-          onChange={(e) => setFilterYear(e.target.value)}
-          aria-label="Lọc theo năm"
-        >
-          <option value="ALL">🗓️ Tất cả năm</option>
-          {availableYears.map((y) => (
-            <option key={y} value={y}>
-              Năm {y}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filterMonth}
-          onChange={(e) => setFilterMonth(e.target.value)}
-          aria-label="Lọc theo tháng"
-        >
-          <option value="ALL">📅 Tất cả tháng</option>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-            <option key={m} value={String(m)}>
-              Tháng {m}
-            </option>
-          ))}
-        </select>
-
-        {(filterYear !== 'ALL' || filterMonth !== 'ALL') && (
+      {/* Thanh điều khiển chế độ xem: Dạng tháng vs Danh sách timeline */}
+      <div className="memory-controls-row">
+        <div className="mem-view-toggle">
           <button
             type="button"
-            className="memory-reset"
-            onClick={() => {
-              setFilterYear('ALL')
-              setFilterMonth('ALL')
-            }}
-            title="Xoá bộ lọc"
-            aria-label="Xoá bộ lọc"
+            className={viewMode === 'month' ? 'active' : ''}
+            onClick={() => setViewMode('month')}
+            title="Xem theo dạng tháng"
           >
-            <RotateCcw size={13} />
+            <CalendarDays size={14} /> <span>Dạng tháng</span>
           </button>
+          <button
+            type="button"
+            className={viewMode === 'timeline' ? 'active' : ''}
+            onClick={() => setViewMode('timeline')}
+            title="Xem dạng danh sách timeline"
+          >
+            <List size={14} /> <span>Danh sách</span>
+          </button>
+        </div>
+
+        {viewMode === 'timeline' && (
+          <div className="memory-filters" style={{ margin: 0, flex: 1, minWidth: 200, justifyContent: 'flex-end' }}>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              aria-label="Lọc theo năm"
+            >
+              <option value="ALL">🗓️ Tất cả năm</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  Năm {y}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              aria-label="Lọc theo tháng"
+            >
+              <option value="ALL">📅 Tất cả tháng</option>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={String(m)}>
+                  Tháng {m}
+                </option>
+              ))}
+            </select>
+
+            {(filterYear !== 'ALL' || filterMonth !== 'ALL') && (
+              <button
+                type="button"
+                className="memory-reset"
+                onClick={() => {
+                  setFilterYear('ALL')
+                  setFilterMonth('ALL')
+                }}
+                title="Xoá bộ lọc"
+                aria-label="Xoá bộ lọc"
+              >
+                <RotateCcw size={13} />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -1318,94 +1539,147 @@ export function SharedEventsView({
             ? 'Chưa có sự kiện chung nào trong phòng. Thêm kỷ niệm đầu tiên nhé!'
             : `Chưa có kỷ niệm nào với ${partnerDisplayName}. Thêm kỷ niệm đầu tiên nhé!`}
         </Empty>
+      ) : viewMode === 'month' ? (
+        /* ===== GIAO DIỆN THEO THÁNG ===== */
+        <div>
+          {/* Thanh chọn nhanh các tháng có kỷ niệm */}
+          <div className="mem-month-pills-bar">
+            <button
+              type="button"
+              className={`mem-month-pill ${selectedMonthKey === 'ALL' ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedMonthKey('ALL')
+                setSelectedCalDay(null)
+              }}
+            >
+              <span>Tất cả tháng</span>
+              <span className="mem-month-pill-badge">{sorted.length}</span>
+            </button>
+            {monthGroups.map((g) => (
+              <button
+                key={g.key}
+                type="button"
+                className={`mem-month-pill ${selectedMonthKey === g.key ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedMonthKey(g.key)
+                  setSelectedCalDay(null)
+                }}
+              >
+                <span>Thg {g.month}/{g.year}</span>
+                <span className="mem-month-pill-badge">{g.events.length}</span>
+              </button>
+            ))}
+          </div>
+
+          {selectedMonthKey !== 'ALL' && activeMonthGroup ? (
+            /* Xem chi tiết 1 tháng cụ thể */
+            <div>
+              <div className="mem-month-header-bar">
+                <div className="mem-month-header-title">
+                  <strong>Tháng {activeMonthGroup.month}, {activeMonthGroup.year}</strong>
+                  <span>{activeMonthGroup.events.length} kỷ niệm · {activeMonthGroup.totalPhotos} khoảnh khắc</span>
+                </div>
+                <div className="mem-month-nav-btns">
+                  <button
+                    type="button"
+                    className="mem-month-nav-btn"
+                    onClick={goPrevMonth}
+                    disabled={!hasPrevMonth}
+                    title="Tháng trước đó"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="mem-month-nav-btn"
+                    onClick={goNextMonth}
+                    disabled={!hasNextMonth}
+                    title="Tháng tiếp theo"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Lưới mini calendar trực quan */}
+              <div className="mem-mini-calendar">
+                <div className="mem-cal-grid-header">
+                  <span>T2</span>
+                  <span>T3</span>
+                  <span>T4</span>
+                  <span>T5</span>
+                  <span>T6</span>
+                  <span>T7</span>
+                  <span>CN</span>
+                </div>
+                <div className="mem-cal-grid">
+                  {calendarDays.map((cell, idx) => {
+                    if (cell.dayNum === null) {
+                      return <div key={`empty-${idx}`} className="mem-cal-cell empty" />
+                    }
+                    const isSelected = selectedCalDay === cell.dateStr
+                    return (
+                      <button
+                        key={cell.dateStr}
+                        type="button"
+                        className={`mem-cal-cell ${cell.hasEvents ? 'has-memory' : ''} ${isSelected ? 'selected' : ''}`}
+                        onClick={() => {
+                          if (cell.hasEvents && cell.dateStr) {
+                            setSelectedCalDay(isSelected ? null : cell.dateStr)
+                          }
+                        }}
+                        disabled={!cell.hasEvents}
+                        title={cell.hasEvents ? `${cell.dayNum}/${activeMonthGroup.month}: ${cell.events.length} kỷ niệm (${cell.photosCount} ảnh)` : undefined}
+                      >
+                        <span>{cell.dayNum}</span>
+                        {cell.hasEvents && <div className="mem-cal-dot" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Tag lọc theo ngày được chọn */}
+              {selectedCalDay && (
+                <div className="mem-day-filter-badge">
+                  <span>Đang lọc: Ngày {selectedCalDay.slice(8, 10)}/{selectedCalDay.slice(5, 7)}/{selectedCalDay.slice(0, 4)}</span>
+                  <button type="button" onClick={() => setSelectedCalDay(null)} title="Hiện cả tháng">
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+
+              {/* Danh sách kỷ niệm của tháng */}
+              <div className="memory-list">
+                {activeMonthGroup.events
+                  .filter((e) => !selectedCalDay || e.event_date === selectedCalDay)
+                  .map((ev, i) => renderMemoryCard(ev, i))}
+              </div>
+            </div>
+          ) : (
+            /* Gom nhóm theo tất cả các tháng */
+            <div style={{ display: 'grid', gap: 14 }}>
+              {monthGroups.map((g) => (
+                <div key={g.key} className="mem-month-section">
+                  <div className="mem-month-group-header">
+                    <strong><CalendarDays size={14} /> Tháng {g.month}, {g.year}</strong>
+                    <span>{g.events.length} kỷ niệm · {g.totalPhotos} ảnh</span>
+                  </div>
+                  <div className="memory-list">
+                    {g.events.map((ev, i) => renderMemoryCard(ev, i))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : !filtered.length ? (
         <Empty icon={Filter} colorClass="icon-box-amber">
           Không tìm thấy kỷ niệm nào trong thời gian đã chọn.
         </Empty>
       ) : (
         <div className="memory-list">
-          {filtered.map((ev, i) => {
-            const mine = ev.owner_id === myId
-            const allImages = ev.images && ev.images.length ? ev.images : (ev.image_url ? [ev.image_url] : [])
-            return (
-              <article
-                key={ev.id}
-                className="memory-card"
-                onClick={() => {
-                  setSelectedImageIdx(0)
-                  setViewing(ev)
-                }}
-              >
-                <time className={`memory-date memory-date-${i % 5}`} dateTime={ev.event_date}>
-                  <strong>{ev.event_date.slice(8, 10)}</strong>
-                  <span>Thg {Number(ev.event_date.slice(5, 7))}</span>
-                </time>
-                {allImages.length > 0 && (
-                  <div className="memory-thumb">
-                    {isMediaVideo(allImages[0]) ? (
-                      <>
-                        <video src={allImages[0]} preload="metadata" muted playsInline />
-                        <div className="memory-thumb-badge">
-                          <Video size={10} />
-                        </div>
-                      </>
-                    ) : (
-                      <img src={allImages[0]} alt="" />
-                    )}
-                    {allImages.length > 1 && (
-                      <span>
-                        +{allImages.length - 1}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <div className="memory-card-body">
-                  <div className="memory-card-title">
-                    <strong>{ev.title}</strong>
-                    {!mine && (
-                      <span className="memory-partner">
-                        {partnerDisplayName}
-                      </span>
-                    )}
-                  </div>
-                  <div className="memory-card-meta">
-                    {viDate(ev.event_date)}{ev.event_time ? ` · ${ev.event_time}` : ''}
-                  </div>
-                  {ev.location && (
-                    <div className="memory-location">
-                      <MapPin size={11} /> {ev.location}
-                    </div>
-                  )}
-                  {ev.note && <p>{ev.note}</p>}
-                </div>
-
-                <div className="memory-card-actions">
-                  <button
-                    className="memory-icon"
-                    aria-label={`${ev.is_favorite ? 'Bỏ yêu thích' : 'Yêu thích'} ${ev.title}`}
-                    aria-pressed={!!ev.is_favorite}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleFavorite(ev)
-                    }}
-                  >
-                    <Heart size={16} fill={ev.is_favorite ? 'currentColor' : 'none'} />
-                  </button>
-                  <button
-                    className="memory-icon"
-                    aria-label={`Sửa ${ev.title}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(ev)
-                    }}
-                  >
-                    <MoreVertical size={17} />
-                  </button>
-                </div>
-              </article>
-            )
-          })}
+          {filtered.map((ev, i) => renderMemoryCard(ev, i))}
         </div>
       )}
 
