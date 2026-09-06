@@ -604,7 +604,70 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
   const chassisRef = useRef<HTMLDivElement | null>(null)
   const [turningState, setTurningState] = useState<{
     direction: 'next' | 'prev'
+    progress: number
+    isSettling?: boolean
   } | null>(null)
+
+  const dragTrackingRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    lastX: number
+    lastTime: number
+    isDragging: boolean
+    direction: 'next' | 'prev' | null
+    velocity: number
+  } | null>(null)
+
+  const animFrameRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current !== null) {
+        cancelAnimationFrame(animFrameRef.current)
+      }
+    }
+  }, [])
+
+  const animateTurnProgress = useCallback(
+    (
+      fromProgress: number,
+      toProgress: number,
+      direction: 'next' | 'prev',
+      onComplete: (completed: boolean) => void
+    ) => {
+      if (animFrameRef.current !== null) {
+        cancelAnimationFrame(animFrameRef.current)
+      }
+
+      const startTime = performance.now()
+      const distance = Math.abs(toProgress - fromProgress)
+      const duration = Math.max(140, Math.min(360, distance * 360))
+
+      const step = (now: number) => {
+        const elapsed = now - startTime
+        const t = Math.min(1, elapsed / duration)
+        const easedT = 1 - Math.pow(1 - t, 3)
+        const currentProgress = fromProgress + (toProgress - fromProgress) * easedT
+
+        setTurningState({
+          direction,
+          progress: currentProgress,
+          isSettling: true,
+        })
+
+        if (t < 1) {
+          animFrameRef.current = requestAnimationFrame(step)
+        } else {
+          animFrameRef.current = null
+          onComplete(toProgress === 1.0)
+        }
+      }
+
+      animFrameRef.current = requestAnimationFrame(step)
+    },
+    []
+  )
 
   const [activeGallery, setActiveGallery] = useState<{
     images: string[]
@@ -631,22 +694,24 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
   const goNextSpread = useCallback(() => {
     if (currentSpread >= totalSpreads - 1 || turningState) return
     if (soundEnabled) playPaperTurnSound()
-    setTurningState({ direction: 'next' })
-    setTimeout(() => {
-      setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
+    animateTurnProgress(0, 1, 'next', (completed) => {
+      if (completed) {
+        setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
+      }
       setTurningState(null)
-    }, 380)
-  }, [currentSpread, totalSpreads, turningState, soundEnabled])
+    })
+  }, [currentSpread, totalSpreads, turningState, soundEnabled, animateTurnProgress])
 
   const goPrevSpread = useCallback(() => {
     if (currentSpread <= 0 || turningState) return
     if (soundEnabled) playPaperTurnSound()
-    setTurningState({ direction: 'prev' })
-    setTimeout(() => {
-      setCurrentSpread((s) => Math.max(s - 1, 0))
+    animateTurnProgress(0, 1, 'prev', (completed) => {
+      if (completed) {
+        setCurrentSpread((s) => Math.max(s - 1, 0))
+      }
       setTurningState(null)
-    }, 380)
-  }, [currentSpread, turningState, soundEnabled])
+    })
+  }, [currentSpread, turningState, soundEnabled, animateTurnProgress])
 
   const goNextPage = useCallback(() => {
     if (layoutMode === 'spread') {
@@ -654,13 +719,14 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
     } else {
       if (currentPage >= totalSinglePages - 1 || turningState) return
       if (soundEnabled) playPaperTurnSound()
-      setTurningState({ direction: 'next' })
-      setTimeout(() => {
-        setCurrentPage((p) => Math.min(p + 1, totalSinglePages - 1))
+      animateTurnProgress(0, 1, 'next', (completed) => {
+        if (completed) {
+          setCurrentPage((p) => Math.min(p + 1, totalSinglePages - 1))
+        }
         setTurningState(null)
-      }, 250)
+      })
     }
-  }, [layoutMode, goNextSpread, currentPage, totalSinglePages, turningState, soundEnabled])
+  }, [layoutMode, goNextSpread, currentPage, totalSinglePages, turningState, soundEnabled, animateTurnProgress])
 
   const goPrevPage = useCallback(() => {
     if (layoutMode === 'spread') {
@@ -668,13 +734,14 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
     } else {
       if (currentPage <= 0 || turningState) return
       if (soundEnabled) playPaperTurnSound()
-      setTurningState({ direction: 'prev' })
-      setTimeout(() => {
-        setCurrentPage((p) => Math.max(p - 1, 0))
+      animateTurnProgress(0, 1, 'prev', (completed) => {
+        if (completed) {
+          setCurrentPage((p) => Math.max(p - 1, 0))
+        }
         setTurningState(null)
-      }, 250)
+      })
     }
-  }, [layoutMode, goPrevSpread, currentPage, turningState, soundEnabled])
+  }, [layoutMode, goPrevSpread, currentPage, turningState, soundEnabled, animateTurnProgress])
 
   const jumpToDay = useCallback((dateStr: string) => {
     const sIdx = spreads.findIndex(
@@ -723,71 +790,175 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeGallery, selectedFlowerMonth, isSearchOpen, isMenuOpen, goNextPage, goPrevPage, onClose])
 
-  // Cử chỉ vuốt chạm siêu mượt, chuẩn xác trên mọi thiết bị màn hình cảm ứng & chuột
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
-  const touchMovedRef = useRef<boolean>(false)
-
+  // Cử chỉ vuốt chạm 3D thời gian thực (Interactive Hand Gesture Drag-to-Curl)
   const handlePointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement
-    if (target.closest('button, input, a, .search-input-field, .polaroid-zoom-badge, .popup-btn-icon')) return
-    touchStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() }
-    touchMovedRef.current = false
+    if (
+      target.closest(
+        'button, input, a, .search-input-field, .polaroid-zoom-badge, .popup-btn-icon, .month-card, video, audio'
+      )
+    ) {
+      return
+    }
+
+    if (turningState?.isSettling) return
+
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = null
+    }
+
+    dragTrackingRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastTime: performance.now(),
+      isDragging: false,
+      direction: null,
+      velocity: 0,
+    }
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!touchStartRef.current) return
-    const diffX = Math.abs(e.clientX - touchStartRef.current.x)
-    const diffY = Math.abs(e.clientY - touchStartRef.current.y)
-    if (diffX > 6 || diffY > 6) {
-      touchMovedRef.current = true
+    const tracker = dragTrackingRef.current
+    if (!tracker || tracker.pointerId !== e.pointerId) return
+
+    const dx = e.clientX - tracker.startX
+    const dy = e.clientY - tracker.startY
+    const absX = Math.abs(dx)
+    const absY = Math.abs(dy)
+
+    const now = performance.now()
+    const dt = Math.max(1, now - tracker.lastTime)
+    tracker.velocity = (e.clientX - tracker.lastX) / dt
+    tracker.lastX = e.clientX
+    tracker.lastTime = now
+
+    // Bắt đầu chế độ kéo vuốt lật trang khi ngón tay di chuyển ngang rõ rệt
+    if (!tracker.isDragging) {
+      if (absX > 10 && absX > absY * 0.6) {
+        if (dx < 0) {
+          // Vuốt sang trái -> Lật tới trang tiếp theo (Next)
+          const canGoNext =
+            layoutMode === 'spread'
+              ? currentSpread < totalSpreads - 1
+              : currentPage < totalSinglePages - 1
+          if (canGoNext) {
+            tracker.isDragging = true
+            tracker.direction = 'next'
+            try {
+              ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+            } catch {}
+            if (soundEnabled) playPaperTurnSound()
+          }
+        } else {
+          // Vuốt sang phải -> Lật ngược về trang trước (Prev)
+          const canGoPrev =
+            layoutMode === 'spread' ? currentSpread > 0 : currentPage > 0
+          if (canGoPrev) {
+            tracker.isDragging = true
+            tracker.direction = 'prev'
+            try {
+              ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+            } catch {}
+            if (soundEnabled) playPaperTurnSound()
+          }
+        }
+      }
+    }
+
+    // Khi đang kéo: Trang sách 3D uốn cong và bám sát tuyệt đối theo ngón tay (có thể giữ giữa chừng)
+    if (tracker.isDragging && tracker.direction) {
+      const bookWidth = chassisRef.current?.clientWidth || window.innerWidth
+      const turnSpan = Math.max(140, bookWidth * 0.45)
+
+      let progress = 0
+      if (tracker.direction === 'next') {
+        progress = Math.min(1, Math.max(0, -dx / turnSpan))
+      } else {
+        progress = Math.min(1, Math.max(0, dx / turnSpan))
+      }
+
+      setTurningState({
+        direction: tracker.direction,
+        progress,
+        isSettling: false,
+      })
     }
   }
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!touchStartRef.current) return
-    const start = touchStartRef.current
-    touchStartRef.current = null
+    const tracker = dragTrackingRef.current
+    if (!tracker || tracker.pointerId !== e.pointerId) return
 
-    const diffX = e.clientX - start.x
-    const diffY = e.clientY - start.y
-    const elapsed = Date.now() - start.time
-    const absX = Math.abs(diffX)
-    const absY = Math.abs(diffY)
+    dragTrackingRef.current = null
+    try {
+      ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+    } catch {}
 
-    // A. Nếu ở trang bìa (Spread 0): Chạm nhẹ hoặc vuốt đều cho lật thẳng vào Trang 1 luôn!
-    if (layoutMode === 'spread' && currentSpread === 0) {
-      goNextSpread()
-      return
-    }
+    // TRƯỜNG HỢP 1: Người dùng đang vuốt dở và buông tay
+    if (tracker.isDragging && tracker.direction && turningState) {
+      const currentProgress = turningState.progress
+      const vel = tracker.velocity
 
-    // B. Vuốt ngang (Swipe): Cực nhạy trên mobile, góc vuốt tự nhiên của ngón cái
-    if (absX > 20 && absX > absY * 0.5) {
-      if (diffX < 0) {
-        goNextPage()
+      // Nếu kéo qua 35% hoặc quẹt nhanh (flick) thì hoàn tất lật trang
+      let shouldComplete = false
+      if (tracker.direction === 'next') {
+        shouldComplete = currentProgress > 0.35 || vel < -0.35
       } else {
-        goPrevPage()
+        shouldComplete = currentProgress > 0.35 || vel > 0.35
+      }
+
+      if (shouldComplete) {
+        animateTurnProgress(currentProgress, 1.0, tracker.direction, (completed) => {
+          if (completed) {
+            if (layoutMode === 'spread') {
+              if (tracker.direction === 'next') {
+                setCurrentSpread((s) => Math.min(s + 1, totalSpreads - 1))
+              } else {
+                setCurrentSpread((s) => Math.max(s - 1, 0))
+              }
+            } else {
+              if (tracker.direction === 'next') {
+                setCurrentPage((p) => Math.min(p + 1, totalSinglePages - 1))
+              } else {
+                setCurrentPage((p) => Math.max(p - 1, 0))
+              }
+            }
+          }
+          setTurningState(null)
+        })
+      } else {
+        // Kéo chưa đủ xa thì lò xo đàn hồi trả trang về vị trí cũ (snap back)
+        animateTurnProgress(currentProgress, 0.0, tracker.direction, () => {
+          setTurningState(null)
+        })
       }
       return
     }
 
-    // C. Chạm ngón tay lật sách (Tap): Chạm nửa phải lật tới, chạm nửa trái lật lùi
-    if (absX <= 20 && elapsed < 450) {
-      const target = e.target as HTMLElement
-      // Nếu chạm vào nút phóng to ảnh hoặc video controls thì không lật sách
-      if (target.closest('.polaroid-zoom-badge, video, audio')) return
+    // TRƯỜNG HỢP 2: Chạm nhẹ (Tap) - Không được lật bậy khi chạm vào giữa trang đọc sách / xem ảnh!
+    const target = e.target as HTMLElement
+    if (
+      target.closest(
+        'button, input, a, .search-input-field, .polaroid-zoom-badge, .popup-btn-icon, video, audio'
+      )
+    ) {
+      return
+    }
 
+    const dx = Math.abs(e.clientX - tracker.startX)
+    const dy = Math.abs(e.clientY - tracker.startY)
+
+    if (dx <= 14 && dy <= 14) {
       const rect = chassisRef.current?.getBoundingClientRect()
       if (rect) {
-        const clickX = e.clientX - rect.left
-        if (clickX > rect.width * 0.5) {
+        const clickRelX = (e.clientX - rect.left) / rect.width
+        // Chỉ khi chạm hẳn vào mép rìa sách (ngoài cùng 15% trái hoặc 15% phải) mới tự lật trang
+        if (clickRelX > 0.85) {
           goNextPage()
-        } else {
-          goPrevPage()
-        }
-      } else {
-        if (e.clientX > window.innerWidth * 0.5) {
-          goNextPage()
-        } else {
+        } else if (clickRelX < 0.15) {
           goPrevPage()
         }
       }
@@ -1007,17 +1178,49 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
                     <div className="washi-tape-sakura" />
                     
                     <div className="polaroid-media-box">
+                      {/* Ambient Blurred Backdrop: Đảm bảo ảnh dù tỷ lệ dọc hay ngang đều không bị cắt, có nền mờ nghệ thuật */}
+                      <div
+                        className="polaroid-media-blur-bg"
+                        style={{ backgroundImage: `url(${imgUrl})` }}
+                      />
+
                       {isVideo(imgUrl) ? (
-                        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                        <div
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 2,
+                          }}
+                        >
                           <video
                             src={imgUrl}
                             poster={getVideoPosterUrl(imgUrl)}
                             playsInline
                             muted
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            style={{
+                              maxWidth: '100%',
+                              maxHeight: '100%',
+                              width: 'auto',
+                              height: 'auto',
+                              objectFit: 'contain',
+                              borderRadius: 4,
+                              boxShadow: '0 4px 18px rgba(0,0,0,0.45)',
+                            }}
                           />
                           <div
-                            style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.25)', cursor: 'pointer' }}
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              display: 'grid',
+                              placeItems: 'center',
+                              background: 'rgba(0,0,0,0.25)',
+                              cursor: 'pointer',
+                              borderRadius: 4,
+                            }}
                             onClick={(e) => {
                               e.stopPropagation()
                               openGallery(
@@ -1501,36 +1704,92 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
               </div>
 
               {turningState?.direction === 'next' && nextSpread && (
-                <div className="spread-flipping-leaf flip-forward animating">
+                <div
+                  className="spread-flipping-leaf flip-forward"
+                  style={{
+                    transform: `perspective(2400px) rotateY(${-turningState.progress * 180}deg) translateZ(${Math.sin(turningState.progress * Math.PI) * 36}px) rotateZ(${Math.sin(turningState.progress * Math.PI) * -1.5}deg) skewY(${Math.sin(turningState.progress * Math.PI) * (turningState.progress < 0.5 ? -2.5 : 2.5)}deg)`,
+                    transformOrigin: '0% 50%',
+                    left: '50%',
+                  }}
+                >
                   <div className="leaf-face leaf-face-front">
                     {renderSpreadSide(activeSpread.right, 'right')}
-                    <div className="dynamic-curl-shadow" />
+                    <div
+                      className="dynamic-curl-shadow"
+                      style={{
+                        opacity: Math.sin(turningState.progress * Math.PI) * 0.8,
+                        background: `linear-gradient(${90 + (turningState.progress - 0.5) * 20}deg, rgba(0,0,0,0.4) 0%, rgba(255,255,255,0.18) 40%, rgba(0,0,0,0.5) 100%)`,
+                      }}
+                    />
                   </div>
                   <div className="leaf-face leaf-face-back">
                     {renderSpreadSide(nextSpread.left, 'left')}
-                    <div className="dynamic-curl-shadow" />
+                    <div
+                      className="dynamic-curl-shadow"
+                      style={{
+                        opacity: Math.sin(turningState.progress * Math.PI) * 0.8,
+                        background: `linear-gradient(${90 + (turningState.progress - 0.5) * 20}deg, rgba(0,0,0,0.4) 0%, rgba(255,255,255,0.18) 40%, rgba(0,0,0,0.5) 100%)`,
+                      }}
+                    />
                   </div>
                 </div>
               )}
 
               {turningState?.direction === 'prev' && prevSpread && (
-                <div className="spread-flipping-leaf flip-backward animating">
+                <div
+                  className="spread-flipping-leaf flip-backward"
+                  style={{
+                    transform: `perspective(2400px) rotateY(${turningState.progress * 180}deg) translateZ(${Math.sin(turningState.progress * Math.PI) * 36}px) rotateZ(${Math.sin(turningState.progress * Math.PI) * 1.5}deg) skewY(${Math.sin(turningState.progress * Math.PI) * (turningState.progress < 0.5 ? 2.5 : -2.5)}deg)`,
+                    transformOrigin: '100% 50%',
+                    left: 0,
+                  }}
+                >
                   <div className="leaf-face leaf-face-front">
                     {renderSpreadSide(activeSpread.left, 'left')}
-                    <div className="dynamic-curl-shadow" />
+                    <div
+                      className="dynamic-curl-shadow"
+                      style={{
+                        opacity: Math.sin(turningState.progress * Math.PI) * 0.8,
+                        background: `linear-gradient(${90 - (turningState.progress - 0.5) * 20}deg, rgba(0,0,0,0.5) 0%, rgba(255,255,255,0.18) 60%, rgba(0,0,0,0.4) 100%)`,
+                      }}
+                    />
                   </div>
                   <div className="leaf-face leaf-face-back">
                     {renderSpreadSide(prevSpread.right, 'right')}
-                    <div className="dynamic-curl-shadow" />
+                    <div
+                      className="dynamic-curl-shadow"
+                      style={{
+                        opacity: Math.sin(turningState.progress * Math.PI) * 0.8,
+                        background: `linear-gradient(${90 - (turningState.progress - 0.5) * 20}deg, rgba(0,0,0,0.5) 0%, rgba(255,255,255,0.18) 60%, rgba(0,0,0,0.4) 100%)`,
+                      }}
+                    />
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div ref={chassisRef} className={`book-3d-chassis ${turningState ? `single-animating-${turningState.direction}` : ''}`}>
+            <div ref={chassisRef} className="book-3d-chassis">
               <div className="book-spine-3d" />
               <div className="book-hardcover-shadow" />
-              <div className="book-page-layer active-layer">
+              <div
+                className="book-page-layer active-layer"
+                style={
+                  turningState
+                    ? {
+                        transform:
+                          turningState.direction === 'next'
+                            ? `perspective(1600px) rotateY(${-turningState.progress * 65}deg) translateX(${-turningState.progress * 30}%)`
+                            : `perspective(1600px) rotateY(${(1 - turningState.progress) * 65}deg) translateX(${(1 - turningState.progress) * 30}%)`,
+                        opacity:
+                          turningState.direction === 'next'
+                            ? 1 - turningState.progress * 0.35
+                            : 0.65 + turningState.progress * 0.35,
+                        transformOrigin: '0% 50%',
+                        willChange: 'transform, opacity',
+                      }
+                    : undefined
+                }
+              >
                 {currentPage === 0
                   ? renderSpreadSide({ type: 'cover-main' }, 'right')
                   : currentPage === totalSinglePages - 1
