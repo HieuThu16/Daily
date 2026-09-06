@@ -1370,17 +1370,15 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
 
         {/* PHẦN PHẢI: NÚT TOÀN MÀN HÌNH ẢNH + NÚT 3 GẠCH MENU & NÚT ĐÓNG */}
         <div className="memory-book-top-actions">
-          {viewMode === 'book' && (
-            <button
-              type="button"
-              className="memory-book-zen-btn"
-              onClick={() => setIsZenMode(true)}
-              title="Ẩn thanh tiến độ & nút quay về để toàn bộ màn hình là ảnh"
-            >
-              <EyeOff size={15} />
-              <span className="zen-btn-text">Toàn ảnh</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="memory-book-zen-btn"
+            onClick={() => setIsZenMode(true)}
+            title="Ẩn toàn bộ thanh tiến độ & nút quay về để toàn bộ màn hình là 3D/ảnh"
+          >
+            <EyeOff size={15} />
+            <span className="zen-btn-text">Toàn cảnh 3D</span>
+          </button>
 
           <button
             type="button"
@@ -1518,22 +1516,28 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
                     <BookOpen size={14} />
                     <span>📄 1 Trang</span>
                   </button>
-
-                  <button
-                    type="button"
-                    className={`menu-option-btn ${isZenMode ? 'active' : ''}`}
-                    onClick={() => {
-                      setIsZenMode((v) => !v)
-                      setIsMenuOpen(false)
-                    }}
-                    title="Ẩn thanh tiến độ & nút quay về để toàn bộ màn hình là ảnh"
-                  >
-                    {isZenMode ? <Eye size={14} /> : <EyeOff size={14} />}
-                    <span>{isZenMode ? 'Hiện công cụ' : 'Toàn màn hình ảnh'}</span>
-                  </button>
                 </div>
               </div>
             )}
+
+            {/* CHẾ ĐỘ TOÀN CẢNH 3D: ẨN TOÀN BỘ HEADER NÚT */}
+            <div className="menu-dropdown-section">
+              <span className="menu-section-label">Giao diện xem</span>
+              <div className="menu-buttons-grid">
+                <button
+                  type="button"
+                  className={`menu-option-btn ${isZenMode ? 'active' : ''}`}
+                  onClick={() => {
+                    setIsZenMode((v) => !v)
+                    setIsMenuOpen(false)
+                  }}
+                  title="Ẩn toàn bộ header nút, chỉ để lại không gian 3D tràn viền màn hình"
+                >
+                  {isZenMode ? <Eye size={14} /> : <EyeOff size={14} />}
+                  <span>{isZenMode ? '👁️ Hiện thanh công cụ' : '🌌 Toàn cảnh 3D (Ẩn nút)'}</span>
+                </button>
+              </div>
+            </div>
 
             {/* 3. TIỆN ÍCH */}
             <div className="menu-dropdown-section">
@@ -1972,7 +1976,8 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
 
           <GalaxyWheel3DMemoryView
             year={selectedYear}
-            events={activeYearEvents}
+            events={events}
+            onYearChange={(y) => setSelectedYear(y)}
             onOpenPhotoLightbox={(imgs, idx) => {
               openGallery(imgs, idx)
             }}

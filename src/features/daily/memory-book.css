@@ -2437,8 +2437,10 @@
   }
 }
 
-/* ── CHẾ ĐỘ TOÀN MÀN HÌNH ẢNH (ZEN / IMMERSIVE PHOTO MODE) ── */
-.memory-book-fullscreen.zen-mode .memory-book-topbar {
+/* ── CHẾ ĐỘ TOÀN MÀN HÌNH ẢNH & 3D (ZEN / IMMERSIVE 3D MODE) ── */
+.memory-book-fullscreen.zen-mode .memory-book-topbar,
+.memory-book-fullscreen.zen-mode .tree-year-switcher,
+.memory-book-fullscreen.zen-mode .memory-main-tabs-bar {
   display: none !important;
 }
 
