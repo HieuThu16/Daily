@@ -1439,58 +1439,6 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
               }}
             />
           </div>
-
-          <div className="tree-pedestal-card">
-            <div className="tree-pedestal-title">
-              <TreePine size={18} style={{ color: activeYearTheme.accent }} />
-              <span>CÂY KỶ NIỆM 3D · NĂM {selectedYear}</span>
-            </div>
-
-            <div className="tree-pedestal-meta">
-              <span>🌸 Mùa {activeYearTheme.name}</span>
-              <span>·</span>
-              <span>📖 {activeYearEvents.length} kỷ niệm</span>
-              <span>·</span>
-              <span>🖼️ {activeYearMediaCount} ảnh</span>
-              <span>·</span>
-              <span>✨ 12 tháng nở hoa</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 360, marginTop: 4 }}>
-              <button
-                type="button"
-                className="tree-open-book-btn"
-                style={{ flex: 1 }}
-                onClick={() => {
-                  if (soundEnabled) playPaperTurnSound()
-                  setViewMode('book')
-                }}
-              >
-                <BookOpen size={16} />
-                <span>Mở Sách Lật 3D</span>
-              </button>
-
-              <button
-                type="button"
-                className="tree-open-book-btn"
-                style={{
-                  flex: 1,
-                  background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
-                  boxShadow: '0 6px 20px rgba(244, 63, 94, 0.35)',
-                }}
-                onClick={() => {
-                  setSelectedFlowerMonth(new Date().getMonth() + 1)
-                }}
-              >
-                <Flower2 size={16} />
-                <span>Chi Tiết Hoa 2D</span>
-              </button>
-            </div>
-
-            <div className="tree-pedestal-hint">
-              ✨ Vuốt xoay 360° cây hoa · Nhấn vào hoa để mở chi tiết 2D rực rỡ
-            </div>
-          </div>
         </div>
       )}
 
