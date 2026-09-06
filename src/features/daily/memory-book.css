@@ -2941,6 +2941,24 @@
   gap: 8px;
 }
 
+.menu-buttons-grid .menu-option-btn:last-child:nth-child(odd) {
+  grid-column: span 2;
+}
+
+.mem-view-wheel-btn {
+  color: #9333ea;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mem-view-toggle button.mem-view-wheel-btn.active {
+  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 12px rgba(168, 85, 247, 0.4) !important;
+}
+
 .menu-option-btn {
   display: inline-flex;
   align-items: center;

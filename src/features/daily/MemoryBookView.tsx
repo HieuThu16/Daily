@@ -10,6 +10,7 @@ import type { SharedEvent } from '../../types'
 import { getVideoPosterUrl, SafeMediaImage } from './SharedEventsView'
 import { getSeasonTheme } from './YearlyMemoryBook'
 import { Interactive3DTreeCanvas } from './Interactive3DTreeThree'
+import { GalaxyWheel3DMemoryView } from './GalaxyWheel3DMemoryView'
 import './memory-book.css'
 
 export interface MemoryBookViewProps {
@@ -30,7 +31,7 @@ interface BookDayPage {
   allImages: string[]
 }
 
-export type MemoryViewType = 'tree' | 'book' | 'month' | 'list'
+export type MemoryViewType = 'tree' | 'book' | 'month' | 'list' | 'wheel'
 export type LayoutMode = 'spread' | 'single'
 
 export interface SpreadSideContent {
@@ -1158,6 +1159,7 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
         ) : (
           <div className="topbar-title-pill">
             {viewMode === 'tree' && <span>🌸 Cây 3D · Năm {selectedYear}</span>}
+            {viewMode === 'wheel' && <span>🌌 Vòng Xoay 3D · Năm {selectedYear}</span>}
             {viewMode === 'month' && <span>📅 Vườn 12 Tháng · Năm {selectedYear}</span>}
             {viewMode === 'list' && <span>📋 Dòng Kỷ Niệm · Năm {selectedYear}</span>}
           </div>
@@ -1229,6 +1231,19 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
                 >
                   <TreePine size={14} />
                   <span>🌸 Cây 3D</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`menu-option-btn ${viewMode === 'wheel' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (soundEnabled) playPaperTurnSound()
+                    setViewMode('wheel')
+                    setIsMenuOpen(false)
+                  }}
+                >
+                  <Sparkles size={14} />
+                  <span>🌌 Vòng Xoay 3D</span>
                 </button>
 
                 <button
@@ -1665,6 +1680,49 @@ export function MemoryBookView({ events, personName, roomCode: _roomCode, initia
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════
+       * VIEW 5: VÒNG XOAY KÝ ỨC 3D (ĐÔI CHIBI NẮM TAY & 12 THÁNG)
+       * ══════════════════════════════════════════════════════════════ */}
+      {viewMode === 'wheel' && (
+        <div style={{ position: 'relative', width: '100%', height: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {yearlyGroups.length > 1 && (
+            <div className="tree-year-switcher" style={{ zIndex: 30 }}>
+              {yearlyGroups.map((g) => {
+                const isActive = g.year === selectedYear
+                return (
+                  <button
+                    key={g.year}
+                    type="button"
+                    className={`tree-year-pill ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      if (soundEnabled) playPaperTurnSound()
+                      setSelectedYear(g.year)
+                    }}
+                  >
+                    <span>🌌</span>
+                    <span>Năm {g.year}</span>
+                    <span style={{ opacity: 0.7, fontSize: '0.72rem' }}>({g.events.length})</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <GalaxyWheel3DMemoryView
+            year={selectedYear}
+            events={activeYearEvents}
+            onOpenPhotoLightbox={(imgs, idx) => {
+              openGallery(imgs, idx)
+            }}
+            onSelectEvent={(ev) => {
+              if (ev.event_date) {
+                jumpToDay(ev.event_date)
+              }
+            }}
+          />
         </div>
       )}
 

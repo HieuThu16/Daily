@@ -3,7 +3,7 @@ import {
   ArrowLeft, CalendarDays, CalendarHeart, ChevronLeft, ChevronRight,
   Filter, Heart, ImagePlus, LayoutGrid, List, Mail, MapPin, Maximize2,
   MoreVertical, Pencil, Plus, RotateCcw, Trash2,
-  UserPlus, Video, Loader2, X, BookOpen, Image as ImageIcon, TreePine
+  UserPlus, Video, Loader2, X, BookOpen, Image as ImageIcon, TreePine, Sparkles
 } from 'lucide-react'
 import { MemoryBookView } from './MemoryBookView'
 import { supabase } from '../../lib/supabase'
@@ -210,7 +210,7 @@ export function SharedEventsView({
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>('ALL')
   const [selectedCalDay, setSelectedCalDay] = useState<string | null>(null)
   const [showMemoryBook, setShowMemoryBook] = useState(false)
-  const [memoryBookMode, setMemoryBookMode] = useState<'tree' | 'book'>('book')
+  const [memoryBookMode, setMemoryBookMode] = useState<'tree' | 'book' | 'wheel'>('book')
 
   const [pendingMedia, setPendingMedia] = useState<PendingMediaItem[]>([])
   const abortUploadRef = useRef(false)
@@ -1627,6 +1627,24 @@ export function SharedEventsView({
             }}
           >
             <TreePine size={14} /> <span>🌸 Cây 3D</span>
+          </button>
+          <button
+            type="button"
+            className={`mem-view-wheel-btn ${showMemoryBook && memoryBookMode === 'wheel' ? 'active' : ''}`}
+            onClick={() => {
+              setMemoryBookMode('wheel')
+              setShowMemoryBook(true)
+            }}
+            title="Mở Vòng Xoay 3D: Đôi bạn nắm tay cùng 12 tháng ký ức vũ trụ"
+            style={{
+              color: '#9333ea',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <Sparkles size={14} /> <span>🌌 Vòng Xoay 3D</span>
           </button>
         </div>
 
